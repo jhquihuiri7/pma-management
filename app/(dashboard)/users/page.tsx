@@ -29,7 +29,7 @@ export default function UsersPage() {
   const [reporters, setReporters] = useState<User[]>([]);
   const [open, setOpen] = useState(false);
   const [loading, setLoading] = useState(false);
-  const [form, setForm] = useState({ name: "", email: "", password: "" });
+  const [form, setForm] = useState({ name: "", email: "", password: "", unit: "", position: "" });
 
   async function loadReporters() {
     const res = await fetch("/api/users");
@@ -55,28 +55,28 @@ export default function UsersPage() {
     setLoading(false);
 
     if (res.ok) {
-      toast.success("Reporter created successfully");
-      setForm({ name: "", email: "", password: "" });
+      toast.success("Reportero creado correctamente");
+      setForm({ name: "", email: "", password: "", unit: "", position: "" });
       setOpen(false);
       loadReporters();
     } else {
       const data = await res.json();
-      toast.error(data.error || "Failed to create reporter");
+      toast.error(data.error || "Error al crear reportero");
     }
   }
 
   async function handleDelete(userId: string) {
-    if (!confirm("Are you sure you want to delete this reporter?")) return;
+    if (!confirm("¿Estás seguro de que quieres eliminar este reportero?")) return;
 
     const res = await fetch(`/api/users?userId=${userId}`, {
       method: "DELETE",
     });
 
     if (res.ok) {
-      toast.success("Reporter deleted");
+      toast.success("Reportero eliminado");
       loadReporters();
     } else {
-      toast.error("Failed to delete reporter");
+      toast.error("Error al eliminar reportero");
     }
   }
 
@@ -84,24 +84,24 @@ export default function UsersPage() {
     <div>
       <div className="flex items-center justify-between mb-6">
         <div>
-          <h1 className="text-2xl font-bold">Reporters</h1>
+          <h1 className="text-2xl font-bold">Reporteros</h1>
           <p className="text-muted-foreground">
-            Manage reporter accounts for your organization
+            Gestionar cuentas de reporteros de tu organización
           </p>
         </div>
 
         <Dialog open={open} onOpenChange={setOpen}>
           <DialogTrigger render={<Button />}>
             <Plus className="w-4 h-4 mr-2" />
-            Add Reporter
+            Agregar Reportero
           </DialogTrigger>
           <DialogContent>
             <DialogHeader>
-              <DialogTitle>Create Reporter Account</DialogTitle>
+              <DialogTitle>Crear Cuenta de Reportero</DialogTitle>
             </DialogHeader>
             <form onSubmit={handleCreate} className="space-y-4 mt-4">
               <div className="space-y-2">
-                <Label htmlFor="name">Full Name</Label>
+                <Label htmlFor="name">Nombre Completo</Label>
                 <Input
                   id="name"
                   value={form.name}
@@ -112,7 +112,7 @@ export default function UsersPage() {
                 />
               </div>
               <div className="space-y-2">
-                <Label htmlFor="email">Email</Label>
+                <Label htmlFor="email">Correo electrónico</Label>
                 <Input
                   id="email"
                   type="email"
@@ -124,7 +124,7 @@ export default function UsersPage() {
                 />
               </div>
               <div className="space-y-2">
-                <Label htmlFor="password">Password</Label>
+                <Label htmlFor="password">Contraseña</Label>
                 <Input
                   id="password"
                   type="password"
@@ -136,8 +136,28 @@ export default function UsersPage() {
                   required
                 />
               </div>
+              <div className="space-y-2">
+                <Label htmlFor="unit">Dirección</Label>
+                <Input
+                  id="unit"
+                  value={form.unit}
+                  onChange={(e) =>
+                    setForm({ ...form, unit: e.target.value })
+                  }
+                />
+              </div>
+              <div className="space-y-2">
+                <Label htmlFor="position">Cargo</Label>
+                <Input
+                  id="position"
+                  value={form.position}
+                  onChange={(e) =>
+                    setForm({ ...form, position: e.target.value })
+                  }
+                />
+              </div>
               <Button type="submit" className="w-full" disabled={loading}>
-                {loading ? "Creating..." : "Create Reporter"}
+                {loading ? "Creando..." : "Crear Reportero"}
               </Button>
             </form>
           </DialogContent>
@@ -146,21 +166,23 @@ export default function UsersPage() {
 
       <Card>
         <CardHeader>
-          <CardTitle className="text-base">All Reporters</CardTitle>
+          <CardTitle className="text-base">Todos los Reporteros</CardTitle>
         </CardHeader>
         <CardContent>
           {reporters.length === 0 ? (
             <p className="text-sm text-muted-foreground text-center py-8">
-              No reporters yet. Create one to get started.
+              Sin reporteros aún. Crea uno para comenzar.
             </p>
           ) : (
             <Table>
               <TableHeader>
                 <TableRow>
-                  <TableHead>Name</TableHead>
-                  <TableHead>Email</TableHead>
-                  <TableHead>Role</TableHead>
-                  <TableHead>Created</TableHead>
+                  <TableHead>Nombre</TableHead>
+                  <TableHead>Correo</TableHead>
+                  <TableHead>Dirección</TableHead>
+                  <TableHead>Cargo</TableHead>
+                  <TableHead>Rol</TableHead>
+                  <TableHead>Creado</TableHead>
                   <TableHead className="w-[50px]"></TableHead>
                 </TableRow>
               </TableHeader>
@@ -169,6 +191,8 @@ export default function UsersPage() {
                   <TableRow key={user.id}>
                     <TableCell className="font-medium">{user.name}</TableCell>
                     <TableCell>{user.email}</TableCell>
+                    <TableCell>{user.unit || "-"}</TableCell>
+                    <TableCell>{user.position || "-"}</TableCell>
                     <TableCell>
                       <Badge variant="secondary">{user.role}</Badge>
                     </TableCell>

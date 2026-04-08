@@ -7,23 +7,20 @@ import {
   LayoutDashboard,
   FileText,
   Users,
-  Upload,
   LogOut,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Separator } from "@/components/ui/separator";
 
 const adminLinks = [
-  { href: "/dashboard", label: "Dashboard", icon: LayoutDashboard },
-  { href: "/plans", label: "Plans", icon: FileText },
-  { href: "/users", label: "Reporters", icon: Users },
-  { href: "/evidences", label: "Evidence", icon: Upload },
+  { href: "/dashboard", label: "Panel Principal", icon: LayoutDashboard },
+  { href: "/plans", label: "Planes", icon: FileText },
+  { href: "/users", label: "Reporteros", icon: Users },
 ];
 
 const reporterLinks = [
-  { href: "/dashboard", label: "Dashboard", icon: LayoutDashboard },
-  { href: "/plans", label: "My Plans", icon: FileText },
-  { href: "/evidences", label: "My Evidence", icon: Upload },
+  { href: "/dashboard", label: "Panel Principal", icon: LayoutDashboard },
+  { href: "/plans", label: "Mis Planes", icon: FileText },
 ];
 
 export default function Sidebar() {
@@ -37,7 +34,7 @@ export default function Sidebar() {
       <div className="p-6">
         <h1 className="text-lg font-bold text-slate-900">PMA Management</h1>
         <p className="text-xs text-muted-foreground mt-1">
-          Environmental Platform
+          Plataforma Ambiental
         </p>
       </div>
 
@@ -88,7 +85,7 @@ export default function Sidebar() {
           onClick={() => signOut({ callbackUrl: "/login" })}
         >
           <LogOut className="w-4 h-4 mr-2" />
-          Sign Out
+          Cerrar sesión
         </Button>
       </div>
     </aside>

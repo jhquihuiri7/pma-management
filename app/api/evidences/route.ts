@@ -9,7 +9,9 @@ import {
   getEvidencesByPlan,
   getEvidencesByReporter,
   deleteEvidence,
+  updateEvidenceValidation,
 } from "@/services/evidenceService";
+import { EvidenceValidationStatus } from "@/types";
 
 export async function GET(req: NextRequest) {
   const session = await getAuthSession();
@@ -28,6 +30,28 @@ export async function GET(req: NextRequest) {
   }
 
   return NextResponse.json(evidences);
+}
+
+export async function PATCH(req: NextRequest) {
+  const session = await getAuthSession();
+  if (!session?.user) return unauthorizedResponse();
+
+  const { searchParams } = new URL(req.url);
+  const evidenceId = searchParams.get("id");
+  if (!evidenceId) return errorResponse("Evidence id is required");
+
+  const body = await req.json();
+  const status = body.validationStatus as EvidenceValidationStatus;
+  if (!["pending", "valid", "invalid"].includes(status)) {
+    return errorResponse("Invalid validation status");
+  }
+
+  try {
+    await updateEvidenceValidation(evidenceId, status);
+    return NextResponse.json({ success: true });
+  } catch (error: any) {
+    return errorResponse(error.message);
+  }
 }
 
 export async function DELETE(req: NextRequest) {

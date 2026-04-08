@@ -8,7 +8,9 @@ export async function createReporter(
   adminId: string,
   name: string,
   email: string,
-  password: string
+  password: string,
+  unit?: string,
+  position?: string
 ): Promise<User> {
   // Check if email already exists
   const existing = await adminDb
@@ -31,6 +33,8 @@ export async function createReporter(
     password: hashedPassword,
     role: "REPORTER",
     adminId,
+    unit,
+    position,
     createdAt: new Date().toISOString(),
   };
 

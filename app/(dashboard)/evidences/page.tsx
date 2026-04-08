@@ -34,13 +34,13 @@ export default function EvidencesPage() {
   }, []);
 
   async function handleDelete(id: string) {
-    if (!confirm("Delete this evidence?")) return;
+    if (!confirm("¿Eliminar esta evidencia?")) return;
     const res = await fetch(`/api/evidences?id=${id}`, { method: "DELETE" });
     if (res.ok) {
-      toast.success("Evidence deleted");
+      toast.success("Evidencia eliminada");
       loadEvidences();
     } else {
-      toast.error("Failed to delete");
+      toast.error("Error al eliminar");
     }
   }
 
@@ -48,35 +48,35 @@ export default function EvidencesPage() {
     <div>
       <div className="mb-6">
         <h1 className="text-2xl font-bold">
-          {isAdmin ? "All Evidence" : "My Evidence"}
+          {isAdmin ? "Todas las Evidencias" : "Mis Evidencias"}
         </h1>
         <p className="text-muted-foreground">
           {isAdmin
-            ? "View all uploaded evidence files"
-            : "Evidence files you have uploaded"}
+            ? "Ver todos los archivos de evidencia subidos"
+            : "Archivos de evidencia que has subido"}
         </p>
       </div>
 
       <Card>
         <CardHeader>
           <CardTitle className="text-base">
-            Evidence Files ({evidences.length})
+            Archivos de Evidencia ({evidences.length})
           </CardTitle>
         </CardHeader>
         <CardContent>
           {evidences.length === 0 ? (
             <p className="text-sm text-muted-foreground text-center py-8">
-              No evidence files yet.
+              Sin archivos de evidencia aún.
             </p>
           ) : (
             <Table>
               <TableHeader>
                 <TableRow>
-                  <TableHead>File Name</TableHead>
-                  <TableHead>Uploaded By</TableHead>
-                  <TableHead>Description</TableHead>
-                  <TableHead>Date</TableHead>
-                  <TableHead className="w-[80px]">Actions</TableHead>
+                  <TableHead>Nombre del Archivo</TableHead>
+                  <TableHead>Subido por</TableHead>
+                  <TableHead>Descripción</TableHead>
+                  <TableHead>Fecha</TableHead>
+                  <TableHead className="w-[80px]">Acciones</TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>

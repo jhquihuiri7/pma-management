@@ -136,27 +136,33 @@ export async function unassignUserFromPlan(
 }
 
 export async function getPlansForReporter(userId: string): Promise<Plan[]> {
-  const assignments = await adminDb
+  // Collect planIds from plan-level assignments
+  const assignmentSnap = await adminDb
     .collection("assignments")
     .where("userId", "==", userId)
     .get();
+  const planIdSet = new Set<string>(
+    assignmentSnap.docs.map((doc) => doc.data().planId as string)
+  );
 
-  if (assignments.empty) return [];
+  // Also collect planIds from item-level assignments
+  const itemSnap = await adminDb.collection("planItems").get();
+  itemSnap.docs.forEach((doc) => {
+    const users: { userId: string }[] = doc.data().assignedUsers ?? [];
+    if (users.some((u) => u.userId === userId)) {
+      planIdSet.add(doc.data().planId as string);
+    }
+  });
 
-  const planIds = assignments.docs.map((doc) => doc.data().planId);
+  if (planIdSet.size === 0) return [];
 
-  // Firestore 'in' query supports max 30 items
-  const plans: Plan[] = [];
-  for (let i = 0; i < planIds.length; i += 30) {
-    const chunk = planIds.slice(i, i + 30);
-    const snapshot = await adminDb
-      .collection("plans")
-      .where("id", "in", chunk)
-      .get();
-    plans.push(...snapshot.docs.map((doc) => doc.data() as Plan));
-  }
-
-  return plans;
+  const refs = Array.from(planIdSet).map((pid) =>
+    adminDb.collection("plans").doc(pid)
+  );
+  const snapshots = await adminDb.getAll(...refs);
+  return snapshots
+    .filter((doc) => doc.exists)
+    .map((doc) => doc.data() as Plan);
 }
 
 export async function getAssignedUsers(planId: string): Promise<string[]> {

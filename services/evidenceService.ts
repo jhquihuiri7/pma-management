@@ -1,5 +1,5 @@
 import { adminDb } from "@/lib/firebase-admin";
-import { Evidence } from "@/types";
+import { Evidence, EvidenceValidationStatus } from "@/types";
 
 export async function createEvidence(
   planId: string,
@@ -8,19 +8,24 @@ export async function createEvidence(
   fileName: string,
   driveFileId: string,
   driveUrl: string,
-  description: string
+  description: string,
+  planItemId?: string,
+  activityMonth?: string
 ): Promise<Evidence> {
   const ref = adminDb.collection("evidences").doc();
 
   const evidence: Evidence = {
     id: ref.id,
     planId,
+    ...(planItemId ? { planItemId } : {}),
+    ...(activityMonth ? { activityMonth } : {}),
     uploadedBy,
     uploaderName,
     fileName,
     driveFileId,
     driveUrl,
     description,
+    validationStatus: "pending",
     createdAt: new Date().toISOString(),
   };
 
@@ -48,6 +53,16 @@ export async function getEvidencesByReporter(
     .get();
 
   return snapshot.docs.map((doc) => doc.data() as Evidence);
+}
+
+export async function updateEvidenceValidation(
+  evidenceId: string,
+  status: EvidenceValidationStatus
+): Promise<void> {
+  await adminDb
+    .collection("evidences")
+    .doc(evidenceId)
+    .update({ validationStatus: status });
 }
 
 export async function deleteEvidence(

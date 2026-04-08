@@ -7,6 +7,8 @@ export interface User {
   password?: string;
   role: UserRole;
   adminId: string;
+  unit?: string;
+  position?: string;
   createdAt: string;
 }
 
@@ -37,14 +39,45 @@ export interface Assignment {
   createdAt: string;
 }
 
+export type EvidenceValidationStatus = "pending" | "valid" | "invalid";
+
 export interface Evidence {
   id: string;
   planId: string;
+  planItemId?: string;
   uploadedBy: string;
   uploaderName: string;
   fileName: string;
   driveFileId: string;
   driveUrl: string;
   description: string;
+  validationStatus: EvidenceValidationStatus;
+  activityMonth?: string; // format: "YYYY-MM"
+  createdAt: string;
+}
+
+export type ItemAssignmentCategory = "Responsable" | "Colaborador";
+
+export interface ItemAssignment {
+  userId: string;
+  category: ItemAssignmentCategory;
+}
+
+export interface PlanItem {
+  id: string;
+  planId: string;
+  item: string;
+  type: string;
+  subplan: string;
+  environmental_activity: string;
+  identified_environmental_impact: string;
+  proposed_measure: string;
+  indicator: string;
+  verification_method: string;
+  periodicity: string;
+  start_date: string;
+  budget: number;
+  assignedUsers: ItemAssignment[];
+  observation?: string;
   createdAt: string;
 }

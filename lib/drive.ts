@@ -1,5 +1,6 @@
 import { google } from "googleapis";
 import { adminDb } from "./firebase-admin";
+import { Readable } from "stream";
 
 const oauth2Client = new google.auth.OAuth2(
   process.env.GOOGLE_CLIENT_ID,
@@ -105,7 +106,6 @@ export async function uploadFile(
   mimeType: string,
   folderId: string
 ): Promise<{ fileId: string; fileUrl: string }> {
-  const { Readable } = await import("stream");
   const stream = Readable.from(file);
 
   const res = await drive.files.create({

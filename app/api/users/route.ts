@@ -12,8 +12,13 @@ export async function GET() {
   if (!session?.user) return unauthorizedResponse();
   if (session.user.role !== "ADMIN") return forbiddenResponse();
 
-  const reporters = await getReportersByAdmin(session.user.adminId);
-  return NextResponse.json(reporters);
+  try {
+    const reporters = await getReportersByAdmin(session.user.adminId);
+    return NextResponse.json(reporters);
+  } catch (error: any) {
+    console.error("[GET /api/users]", error);
+    return errorResponse(error.message, 500);
+  }
 }
 
 export async function POST(req: NextRequest) {
@@ -22,7 +27,7 @@ export async function POST(req: NextRequest) {
   if (session.user.role !== "ADMIN") return forbiddenResponse();
 
   const body = await req.json();
-  const { name, email, password } = body;
+  const { name, email, password, unit, position } = body;
 
   if (!name || !email || !password) {
     return errorResponse("Name, email, and password are required");
@@ -33,7 +38,7 @@ export async function POST(req: NextRequest) {
   }
 
   try {
-    const user = await createReporter(session.user.adminId, name, email, password);
+    const user = await createReporter(session.user.adminId, name, email, password, unit, position);
     return NextResponse.json(user, { status: 201 });
   } catch (error: any) {
     return errorResponse(error.message);

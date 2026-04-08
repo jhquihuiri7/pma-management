@@ -19,6 +19,8 @@ export async function POST(req: NextRequest) {
     const formData = await req.formData();
     const file = formData.get("file") as File | null;
     const planId = formData.get("planId") as string | null;
+    const planItemId = (formData.get("planItemId") as string) || undefined;
+    const activityMonth = (formData.get("activityMonth") as string) || undefined;
     const description = (formData.get("description") as string) || "";
 
     if (!file) return errorResponse("File is required");
@@ -61,7 +63,9 @@ export async function POST(req: NextRequest) {
       file.name,
       fileId,
       fileUrl,
-      description
+      description,
+      planItemId,
+      activityMonth
     );
 
     return NextResponse.json(evidence, { status: 201 });

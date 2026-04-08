@@ -33,8 +33,10 @@ export default function DashboardPage() {
 
       if (isAdmin) {
         const usersRes = await fetch("/api/users");
-        const users = await usersRes.json();
-        statsData.reporters = Array.isArray(users) ? users.length : 0;
+        if (usersRes.ok) {
+          const users = await usersRes.json();
+          statsData.reporters = Array.isArray(users) ? users.length : 0;
+        }
       }
 
       setStats(statsData);
@@ -44,16 +46,16 @@ export default function DashboardPage() {
 
   return (
     <div>
-      <h1 className="text-2xl font-bold mb-1">Dashboard</h1>
+      <h1 className="text-2xl font-bold mb-1">Panel Principal</h1>
       <p className="text-muted-foreground mb-6">
-        Welcome back, {session?.user?.name}
+        Bienvenido, {session?.user?.name}
       </p>
 
       <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
         <Card>
           <CardHeader className="flex flex-row items-center justify-between pb-2">
             <CardTitle className="text-sm font-medium text-muted-foreground">
-              {isAdmin ? "Total Plans" : "Assigned Plans"}
+              {isAdmin ? "Total de Planes" : "Planes Asignados"}
             </CardTitle>
             <FileText className="w-4 h-4 text-muted-foreground" />
           </CardHeader>
@@ -66,7 +68,7 @@ export default function DashboardPage() {
           <Card>
             <CardHeader className="flex flex-row items-center justify-between pb-2">
               <CardTitle className="text-sm font-medium text-muted-foreground">
-                Reporters
+                Reporteros
               </CardTitle>
               <Users className="w-4 h-4 text-muted-foreground" />
             </CardHeader>
@@ -79,7 +81,7 @@ export default function DashboardPage() {
         <Card>
           <CardHeader className="flex flex-row items-center justify-between pb-2">
             <CardTitle className="text-sm font-medium text-muted-foreground">
-              {isAdmin ? "Total Evidence" : "My Evidence"}
+              {isAdmin ? "Total de Evidencias" : "Mis Evidencias"}
             </CardTitle>
             <Upload className="w-4 h-4 text-muted-foreground" />
           </CardHeader>
