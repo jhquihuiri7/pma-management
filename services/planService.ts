@@ -1,0 +1,169 @@
+import { adminDb } from "@/lib/firebase-admin";
+import { Plan, Assignment } from "@/types";
+
+export async function createPlan(
+  adminId: string,
+  title: string,
+  description: string
+): Promise<Plan> {
+  const planRef = adminDb.collection("plans").doc();
+  const now = new Date().toISOString();
+
+  const plan: Plan = {
+    id: planRef.id,
+    adminId,
+    title,
+    description,
+    createdAt: now,
+    updatedAt: now,
+  };
+
+  await planRef.set(plan);
+  return plan;
+}
+
+export async function getPlansByAdmin(adminId: string): Promise<Plan[]> {
+  const snapshot = await adminDb
+    .collection("plans")
+    .where("adminId", "==", adminId)
+    .orderBy("createdAt", "desc")
+    .get();
+
+  return snapshot.docs.map((doc) => doc.data() as Plan);
+}
+
+export async function getPlanById(planId: string): Promise<Plan | null> {
+  const doc = await adminDb.collection("plans").doc(planId).get();
+  if (!doc.exists) return null;
+  return doc.data() as Plan;
+}
+
+export async function updatePlan(
+  planId: string,
+  adminId: string,
+  updates: { title?: string; description?: string }
+): Promise<Plan> {
+  const doc = await adminDb.collection("plans").doc(planId).get();
+  if (!doc.exists) throw new Error("Plan not found");
+
+  const plan = doc.data() as Plan;
+  if (plan.adminId !== adminId) throw new Error("Unauthorized");
+
+  const updateData = {
+    ...updates,
+    updatedAt: new Date().toISOString(),
+  };
+
+  await adminDb.collection("plans").doc(planId).update(updateData);
+  return { ...plan, ...updateData };
+}
+
+export async function deletePlan(
+  planId: string,
+  adminId: string
+): Promise<void> {
+  const doc = await adminDb.collection("plans").doc(planId).get();
+  if (!doc.exists) throw new Error("Plan not found");
+
+  const plan = doc.data() as Plan;
+  if (plan.adminId !== adminId) throw new Error("Unauthorized");
+
+  // Delete assignments and evidences for this plan
+  const [assignments, evidences] = await Promise.all([
+    adminDb.collection("assignments").where("planId", "==", planId).get(),
+    adminDb.collection("evidences").where("planId", "==", planId).get(),
+  ]);
+
+  const batch = adminDb.batch();
+  assignments.docs.forEach((doc) => batch.delete(doc.ref));
+  evidences.docs.forEach((doc) => batch.delete(doc.ref));
+  batch.delete(adminDb.collection("plans").doc(planId));
+  await batch.commit();
+}
+
+// --- Assignment management ---
+
+export async function assignUserToPlan(
+  userId: string,
+  planId: string,
+  adminId: string
+): Promise<Assignment> {
+  // Verify plan belongs to admin
+  const plan = await getPlanById(planId);
+  if (!plan || plan.adminId !== adminId) throw new Error("Unauthorized");
+
+  // Check for duplicate
+  const existing = await adminDb
+    .collection("assignments")
+    .where("userId", "==", userId)
+    .where("planId", "==", planId)
+    .limit(1)
+    .get();
+
+  if (!existing.empty) {
+    throw new Error("User is already assigned to this plan");
+  }
+
+  const ref = adminDb.collection("assignments").doc();
+  const assignment: Assignment = {
+    id: ref.id,
+    userId,
+    planId,
+    createdAt: new Date().toISOString(),
+  };
+
+  await ref.set(assignment);
+  return assignment;
+}
+
+export async function unassignUserFromPlan(
+  userId: string,
+  planId: string,
+  adminId: string
+): Promise<void> {
+  const plan = await getPlanById(planId);
+  if (!plan || plan.adminId !== adminId) throw new Error("Unauthorized");
+
+  const snapshot = await adminDb
+    .collection("assignments")
+    .where("userId", "==", userId)
+    .where("planId", "==", planId)
+    .limit(1)
+    .get();
+
+  if (snapshot.empty) throw new Error("Assignment not found");
+  await snapshot.docs[0].ref.delete();
+}
+
+export async function getPlansForReporter(userId: string): Promise<Plan[]> {
+  const assignments = await adminDb
+    .collection("assignments")
+    .where("userId", "==", userId)
+    .get();
+
+  if (assignments.empty) return [];
+
+  const planIds = assignments.docs.map((doc) => doc.data().planId);
+
+  // Firestore 'in' query supports max 30 items
+  const plans: Plan[] = [];
+  for (let i = 0; i < planIds.length; i += 30) {
+    const chunk = planIds.slice(i, i + 30);
+    const snapshot = await adminDb
+      .collection("plans")
+      .where("id", "in", chunk)
+      .get();
+    plans.push(...snapshot.docs.map((doc) => doc.data() as Plan));
+  }
+
+  return plans;
+}
+
+export async function getAssignedUsers(planId: string): Promise<string[]> {
+  const snapshot = await adminDb
+    .collection("assignments")
+    .where("planId", "==", planId)
+    .get();
+
+  return snapshot.docs.map((doc) => doc.data().userId);
+}
