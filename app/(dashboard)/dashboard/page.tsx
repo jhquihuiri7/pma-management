@@ -14,6 +14,7 @@ interface Stats {
 export default function DashboardPage() {
   const { data: session } = useSession();
   const isAdmin = session?.user?.role === "ADMIN";
+  const isViewer = session?.user?.role === "VIEWER";
   const [stats, setStats] = useState<Stats>({ plans: 0, reporters: 0, evidences: 0 });
 
   useEffect(() => {
@@ -68,7 +69,7 @@ export default function DashboardPage() {
           <Card>
             <CardHeader className="flex flex-row items-center justify-between pb-2">
               <CardTitle className="text-sm font-medium text-muted-foreground">
-                Reporteros
+                Usuarios
               </CardTitle>
               <Users className="w-4 h-4 text-muted-foreground" />
             </CardHeader>
@@ -78,17 +79,19 @@ export default function DashboardPage() {
           </Card>
         )}
 
-        <Card>
-          <CardHeader className="flex flex-row items-center justify-between pb-2">
-            <CardTitle className="text-sm font-medium text-muted-foreground">
-              {isAdmin ? "Total de Evidencias" : "Mis Evidencias"}
-            </CardTitle>
-            <Upload className="w-4 h-4 text-muted-foreground" />
-          </CardHeader>
-          <CardContent>
-            <div className="text-3xl font-bold">{stats.evidences}</div>
-          </CardContent>
-        </Card>
+        {!isViewer && (
+          <Card>
+            <CardHeader className="flex flex-row items-center justify-between pb-2">
+              <CardTitle className="text-sm font-medium text-muted-foreground">
+                {isAdmin ? "Total de Evidencias" : "Mis Evidencias"}
+              </CardTitle>
+              <Upload className="w-4 h-4 text-muted-foreground" />
+            </CardHeader>
+            <CardContent>
+              <div className="text-3xl font-bold">{stats.evidences}</div>
+            </CardContent>
+          </Card>
+        )}
       </div>
     </div>
   );

@@ -15,7 +15,7 @@ import { Separator } from "@/components/ui/separator";
 const adminLinks = [
   { href: "/dashboard", label: "Panel Principal", icon: LayoutDashboard },
   { href: "/plans", label: "Planes", icon: FileText },
-  { href: "/users", label: "Reporteros", icon: Users },
+  { href: "/users", label: "Usuarios", icon: Users },
 ];
 
 const reporterLinks = [
@@ -23,16 +23,22 @@ const reporterLinks = [
   { href: "/plans", label: "Mis Planes", icon: FileText },
 ];
 
+const viewerLinks = [
+  { href: "/dashboard", label: "Panel Principal", icon: LayoutDashboard },
+  { href: "/plans", label: "Mis Planes", icon: FileText },
+];
+
 export default function Sidebar() {
   const pathname = usePathname();
   const { data: session } = useSession();
-  const isAdmin = session?.user?.role === "ADMIN";
-  const links = isAdmin ? adminLinks : reporterLinks;
+  const role = session?.user?.role;
+  const links =
+    role === "ADMIN" ? adminLinks : role === "VIEWER" ? viewerLinks : reporterLinks;
 
   return (
     <aside className="w-64 h-screen bg-white border-r border-slate-200 flex flex-col fixed left-0 top-0">
       <div className="p-6">
-        <h1 className="text-lg font-bold text-slate-900">PMA Management</h1>
+        <h1 className="text-lg font-bold text-slate-900">Plan de Manejo Ambiental</h1>
         <p className="text-xs text-muted-foreground mt-1">
           Plataforma Ambiental
         </p>

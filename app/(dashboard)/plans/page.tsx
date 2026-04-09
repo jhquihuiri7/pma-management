@@ -21,6 +21,7 @@ import { Plan } from "@/types";
 export default function PlansPage() {
   const { data: session } = useSession();
   const isAdmin = session?.user?.role === "ADMIN";
+  const isViewer = session?.user?.role === "VIEWER";
   const [plans, setPlans] = useState<Plan[]>([]);
   const [open, setOpen] = useState(false);
   const [loading, setLoading] = useState(false);
@@ -70,6 +71,11 @@ export default function PlansPage() {
               ? "Gestionar planes ambientales"
               : "Planes asignados a ti"}
           </p>
+          {isViewer && (
+            <span className="inline-flex items-center rounded-md bg-slate-100 px-2 py-1 text-xs font-medium text-slate-600 mt-1">
+              Solo lectura
+            </span>
+          )}
         </div>
 
         {isAdmin && (
@@ -120,7 +126,8 @@ export default function PlansPage() {
             <p className="text-muted-foreground">
               {isAdmin
                 ? "Sin planes aún. Crea uno para comenzar."
-                : "Aún no tienes planes asignados."}
+                : "Aún no tienes planes asignados."
+              }
             </p>
           </CardContent>
         </Card>

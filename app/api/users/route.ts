@@ -5,7 +5,13 @@ import {
   forbiddenResponse,
   errorResponse,
 } from "@/lib/api-utils";
-import { createReporter, getReportersByAdmin, deleteReporter } from "@/services/userService";
+import {
+  createReporter,
+  createViewer,
+  getManagedUsersByAdmin,
+  deleteReporter,
+  resendInvitation,
+} from "@/services/userService";
 
 export async function GET() {
   const session = await getAuthSession();
@@ -13,8 +19,8 @@ export async function GET() {
   if (session.user.role !== "ADMIN") return forbiddenResponse();
 
   try {
-    const reporters = await getReportersByAdmin(session.user.adminId);
-    return NextResponse.json(reporters);
+    const users = await getManagedUsersByAdmin(session.user.adminId);
+    return NextResponse.json(users);
   } catch (error: any) {
     console.error("[GET /api/users]", error);
     return errorResponse(error.message, 500);
@@ -27,19 +33,38 @@ export async function POST(req: NextRequest) {
   if (session.user.role !== "ADMIN") return forbiddenResponse();
 
   const body = await req.json();
-  const { name, email, password, unit, position } = body;
+  const { name, email, unit, position, role } = body;
 
-  if (!name || !email || !password) {
-    return errorResponse("Name, email, and password are required");
+  if (!name || !email) {
+    return errorResponse("Nombre y correo son requeridos");
   }
 
-  if (password.length < 6) {
-    return errorResponse("Password must be at least 6 characters");
-  }
+  const userRole = role === "VIEWER" ? "VIEWER" : "REPORTER";
 
   try {
-    const user = await createReporter(session.user.adminId, name, email, password, unit, position);
+    const user =
+      userRole === "VIEWER"
+        ? await createViewer(session.user.adminId, name, email, unit, position)
+        : await createReporter(session.user.adminId, name, email, unit, position);
     return NextResponse.json(user, { status: 201 });
+  } catch (error: any) {
+    return errorResponse(error.message);
+  }
+}
+
+export async function PATCH(req: NextRequest) {
+  const session = await getAuthSession();
+  if (!session?.user) return unauthorizedResponse();
+  if (session.user.role !== "ADMIN") return forbiddenResponse();
+
+  const body = await req.json();
+  const { userId } = body;
+
+  if (!userId) return errorResponse("userId es requerido");
+
+  try {
+    await resendInvitation(userId, session.user.adminId);
+    return NextResponse.json({ success: true });
   } catch (error: any) {
     return errorResponse(error.message);
   }

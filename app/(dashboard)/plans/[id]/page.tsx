@@ -51,10 +51,14 @@ export default function PlanDetailPage() {
   const { id } = useParams<{ id: string }>();
   const { data: session } = useSession();
   const isAdmin = session?.user?.role === "ADMIN";
+  const isViewer = session?.user?.role === "VIEWER";
 
   const [plan, setPlan] = useState<Plan | null>(null);
   const [evidences, setEvidences] = useState<Evidence[]>([]);
   const [allReporters, setAllReporters] = useState<User[]>([]);
+  const [allViewers, setAllViewers] = useState<User[]>([]);
+  const [assignedViewerIds, setAssignedViewerIds] = useState<string[]>([]);
+  const [assignViewerOpen, setAssignViewerOpen] = useState(false);
   const [uploading, setUploading] = useState(false);
 
   const [planItems, setPlanItems] = useState<PlanItem[]>([]);
@@ -77,6 +81,9 @@ export default function PlanDetailPage() {
       const data = await res.json();
       setPlan(data.plan);
       setEvidences(data.evidences);
+      if (Array.isArray(data.assignedUsers)) {
+        setAssignedViewerIds(data.assignedUsers);
+      }
     }
   }, [id]);
 
@@ -95,10 +102,41 @@ export default function PlanDetailPage() {
       fetch("/api/users")
         .then((r) => r.json())
         .then((data) => {
-          if (Array.isArray(data)) setAllReporters(data);
+          if (Array.isArray(data)) {
+            setAllReporters(data.filter((u: User) => u.role === "REPORTER"));
+            setAllViewers(data.filter((u: User) => u.role === "VIEWER"));
+          }
         });
     }
   }, [isAdmin]);
+
+  async function handleAssignViewer(viewerId: string) {
+    const res = await fetch(`/api/plans/${id}/assign`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ userId: viewerId }),
+    });
+    if (res.ok) {
+      setAssignedViewerIds((prev) => [...prev, viewerId]);
+      toast.success("Visualizador asignado al plan");
+    } else {
+      toast.error("Error al asignar visualizador");
+    }
+  }
+
+  async function handleUnassignViewer(viewerId: string) {
+    const res = await fetch(`/api/plans/${id}/assign`, {
+      method: "DELETE",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ userId: viewerId }),
+    });
+    if (res.ok) {
+      setAssignedViewerIds((prev) => prev.filter((vid) => vid !== viewerId));
+      toast.success("Visualizador desasignado del plan");
+    } else {
+      toast.error("Error al desasignar visualizador");
+    }
+  }
 
   async function handleUpload(e: React.FormEvent<HTMLFormElement>) {
     e.preventDefault();
@@ -306,12 +344,12 @@ export default function PlanDetailPage() {
 
 
   const userId = session?.user?.id ?? "";
-  const visibleItems = isAdmin
+  const visibleItems = (isAdmin || isViewer)
     ? planItems
     : planItems.filter((pi) =>
         (pi.assignedUsers ?? []).some((a) => a.userId === userId)
       );
-  const visibleEvidences = isAdmin
+  const visibleEvidences = (isAdmin || isViewer)
     ? evidences
     : evidences.filter(
         (ev) => !ev.planItemId || visibleItems.some((pi) => pi.id === ev.planItemId)
@@ -321,7 +359,14 @@ export default function PlanDetailPage() {
     <div className="space-y-6">
       {/* Plan Header */}
       <div>
-        <h1 className="text-2xl font-bold">{plan.title}</h1>
+        <div className="flex items-center gap-2 mb-1">
+          <h1 className="text-2xl font-bold">{plan.title}</h1>
+          {isViewer && (
+            <span className="inline-flex items-center rounded-md bg-slate-100 px-2 py-1 text-xs font-medium text-slate-600">
+              Solo lectura
+            </span>
+          )}
+        </div>
         <p className="text-muted-foreground mt-1">
           {plan.description || "Sin descripción"}
         </p>
@@ -329,6 +374,53 @@ export default function PlanDetailPage() {
           Creado el {new Date(plan.createdAt).toLocaleDateString()}
         </p>
       </div>
+
+      {/* Viewers assigned to this plan (admin only) */}
+      {isAdmin && (
+        <Card>
+          <CardHeader className="flex flex-row items-center justify-between">
+            <CardTitle className="text-base">
+              Visualizadores del Plan ({assignedViewerIds.length})
+            </CardTitle>
+            <Button size="sm" variant="outline" onClick={() => setAssignViewerOpen(true)}>
+              <Users className="w-4 h-4 mr-2" />
+              Gestionar Visualizadores
+            </Button>
+          </CardHeader>
+          <CardContent>
+            {assignedViewerIds.length === 0 ? (
+              <p className="text-sm text-muted-foreground text-center py-4">
+                Sin visualizadores asignados. Agrega uno para que pueda ver este plan.
+              </p>
+            ) : (
+              <div className="space-y-2">
+                {assignedViewerIds.map((vid) => {
+                  const viewer = allViewers.find((v) => v.id === vid);
+                  if (!viewer) return null;
+                  return (
+                    <div
+                      key={vid}
+                      className="flex items-center justify-between p-2 rounded-lg border"
+                    >
+                      <div>
+                        <p className="text-sm font-medium">{viewer.name}</p>
+                        <p className="text-xs text-muted-foreground">{viewer.email}</p>
+                      </div>
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        onClick={() => handleUnassignViewer(vid)}
+                      >
+                        <Trash2 className="w-4 h-4 text-red-500" />
+                      </Button>
+                    </div>
+                  );
+                })}
+              </div>
+            )}
+          </CardContent>
+        </Card>
+      )}
 
       {/* Plan Items */}
       <Card>
@@ -923,8 +1015,9 @@ export default function PlanDetailPage() {
                                     </span>
                                   ) : (
                                     <button
-                                      onClick={() => setCalUpload({ item: pi, month: m })}
-                                      className="w-full rounded flex items-center justify-center font-bold leading-none transition-opacity hover:opacity-75"
+                                      onClick={() => { if (!isViewer) setCalUpload({ item: pi, month: m }); }}
+                                      disabled={isViewer}
+                                      className="w-full rounded flex items-center justify-center font-bold leading-none transition-opacity hover:opacity-75 disabled:cursor-default disabled:opacity-100"
                                       style={{
                                         height: "24px",
                                         backgroundColor: style.bg,
@@ -932,7 +1025,7 @@ export default function PlanDetailPage() {
                                         fontSize: "10px",
                                         border: `1px solid ${style.border}`,
                                       }}
-                                      title={titleText}
+                                      title={isViewer ? titleText.replace("Subir evidencia", "Sin evidencia") : titleText}
                                     >
                                       {evStatus !== "none" ? style.label : periodicLabel}
                                     </button>
@@ -974,6 +1067,83 @@ export default function PlanDetailPage() {
           </Card>
         );
       })()}
+
+      {/* Assign viewers to plan dialog */}
+      <Dialog open={assignViewerOpen} onOpenChange={setAssignViewerOpen}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Gestionar Visualizadores</DialogTitle>
+          </DialogHeader>
+          <div className="space-y-4 mt-2">
+            {/* Assigned viewers */}
+            {assignedViewerIds.length > 0 && (
+              <div>
+                <p className="text-xs font-medium text-muted-foreground mb-2">Asignados</p>
+                <div className="space-y-1">
+                  {assignedViewerIds.map((vid) => {
+                    const viewer = allViewers.find((v) => v.id === vid);
+                    if (!viewer) return null;
+                    return (
+                      <div key={vid} className="flex items-center justify-between p-2 rounded-lg border">
+                        <div>
+                          <p className="text-sm font-medium">{viewer.name}</p>
+                          <p className="text-xs text-muted-foreground">{viewer.email}</p>
+                        </div>
+                        <Button
+                          variant="ghost"
+                          size="sm"
+                          onClick={() => handleUnassignViewer(vid)}
+                        >
+                          <Trash2 className="w-4 h-4 text-red-500" />
+                        </Button>
+                      </div>
+                    );
+                  })}
+                </div>
+              </div>
+            )}
+
+            {/* Available viewers to assign */}
+            {allViewers.filter((v) => !assignedViewerIds.includes(v.id)).length > 0 ? (
+              <div>
+                <p className="text-xs font-medium text-muted-foreground mb-2">Agregar visualizador</p>
+                <div className="space-y-1">
+                  {allViewers
+                    .filter((v) => !assignedViewerIds.includes(v.id))
+                    .map((viewer) => (
+                      <div key={viewer.id} className="flex items-center justify-between p-2 rounded-lg border">
+                        <div>
+                          <p className="text-sm font-medium">{viewer.name}</p>
+                          <p className="text-xs text-muted-foreground">{viewer.email}</p>
+                        </div>
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          onClick={() => handleAssignViewer(viewer.id)}
+                        >
+                          <Plus className="w-4 h-4 mr-1" />
+                          Asignar
+                        </Button>
+                      </div>
+                    ))}
+                </div>
+              </div>
+            ) : (
+              allViewers.length > 0 && (
+                <p className="text-sm text-muted-foreground text-center py-3">
+                  Todos los visualizadores ya están asignados.
+                </p>
+              )
+            )}
+
+            {allViewers.length === 0 && (
+              <p className="text-sm text-muted-foreground text-center py-3">
+                No hay visualizadores creados aún. Crea uno en la sección de Usuarios.
+              </p>
+            )}
+          </div>
+        </DialogContent>
+      </Dialog>
 
       {/* Assign reporters to item dialog */}
       <Dialog open={assignItemOpen} onOpenChange={(open) => { setAssignItemOpen(open); if (!open) setPendingAssign(null); }}>
@@ -1169,32 +1339,46 @@ export default function PlanDetailPage() {
                 {visibleEvidences.map((ev) => (
                   <TableRow key={ev.id}>
                     <TableCell>
-                      <DropdownMenu>
-                        <DropdownMenuTrigger asChild>
-                          <Button variant="ghost" size="sm" className="p-0 h-auto">
-                            {(ev.validationStatus ?? "pending") === "valid" && (
-                              <CheckCircle2 className="w-5 h-5 text-green-500" />
-                            )}
-                            {(ev.validationStatus ?? "pending") === "invalid" && (
-                              <XCircle className="w-5 h-5 text-red-500" />
-                            )}
-                            {(ev.validationStatus ?? "pending") === "pending" && (
-                              <AlertTriangle className="w-5 h-5 text-yellow-500" />
-                            )}
-                          </Button>
-                        </DropdownMenuTrigger>
-                        <DropdownMenuContent align="start">
-                          <DropdownMenuItem onClick={() => handleValidationChange(ev.id, "valid")}>
-                            <CheckCircle2 className="w-4 h-4 text-green-500 mr-2" /> Válido
-                          </DropdownMenuItem>
-                          <DropdownMenuItem onClick={() => handleValidationChange(ev.id, "pending")}>
-                            <AlertTriangle className="w-4 h-4 text-yellow-500 mr-2" /> Pendiente
-                          </DropdownMenuItem>
-                          <DropdownMenuItem onClick={() => handleValidationChange(ev.id, "invalid")}>
-                            <XCircle className="w-4 h-4 text-red-500 mr-2" /> No válido
-                          </DropdownMenuItem>
-                        </DropdownMenuContent>
-                      </DropdownMenu>
+                      {isViewer ? (
+                        <span className="p-0 h-auto inline-flex">
+                          {(ev.validationStatus ?? "pending") === "valid" && (
+                            <CheckCircle2 className="w-5 h-5 text-green-500" />
+                          )}
+                          {(ev.validationStatus ?? "pending") === "invalid" && (
+                            <XCircle className="w-5 h-5 text-red-500" />
+                          )}
+                          {(ev.validationStatus ?? "pending") === "pending" && (
+                            <AlertTriangle className="w-5 h-5 text-yellow-500" />
+                          )}
+                        </span>
+                      ) : (
+                        <DropdownMenu>
+                          <DropdownMenuTrigger asChild>
+                            <Button variant="ghost" size="sm" className="p-0 h-auto">
+                              {(ev.validationStatus ?? "pending") === "valid" && (
+                                <CheckCircle2 className="w-5 h-5 text-green-500" />
+                              )}
+                              {(ev.validationStatus ?? "pending") === "invalid" && (
+                                <XCircle className="w-5 h-5 text-red-500" />
+                              )}
+                              {(ev.validationStatus ?? "pending") === "pending" && (
+                                <AlertTriangle className="w-5 h-5 text-yellow-500" />
+                              )}
+                            </Button>
+                          </DropdownMenuTrigger>
+                          <DropdownMenuContent align="start">
+                            <DropdownMenuItem onClick={() => handleValidationChange(ev.id, "valid")}>
+                              <CheckCircle2 className="w-4 h-4 text-green-500 mr-2" /> Válido
+                            </DropdownMenuItem>
+                            <DropdownMenuItem onClick={() => handleValidationChange(ev.id, "pending")}>
+                              <AlertTriangle className="w-4 h-4 text-yellow-500 mr-2" /> Pendiente
+                            </DropdownMenuItem>
+                            <DropdownMenuItem onClick={() => handleValidationChange(ev.id, "invalid")}>
+                              <XCircle className="w-4 h-4 text-red-500 mr-2" /> No válido
+                            </DropdownMenuItem>
+                          </DropdownMenuContent>
+                        </DropdownMenu>
+                      )}
                     </TableCell>
                     <TableCell className="max-w-[180px] truncate text-sm">
                       {ev.planItemId

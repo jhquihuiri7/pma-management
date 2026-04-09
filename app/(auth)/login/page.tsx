@@ -31,7 +31,11 @@ export default function LoginPage() {
     setLoading(false);
 
     if (result?.error) {
-      setError("Correo o contraseña incorrectos");
+      if (result.error === "PASSWORD_NOT_SET") {
+        setError("Debes establecer tu contraseña usando el enlace enviado a tu correo.");
+      } else {
+        setError("Correo o contraseña incorrectos");
+      }
     } else {
       router.push("/dashboard");
     }
@@ -46,7 +50,7 @@ export default function LoginPage() {
     <div className="min-h-screen flex items-center justify-center bg-slate-50 px-4">
       <Card className="w-full max-w-md">
         <CardHeader className="text-center">
-          <CardTitle className="text-2xl font-bold">PMA Management</CardTitle>
+          <CardTitle className="text-2xl font-bold">Plan de Manejo Ambiental</CardTitle>
           <p className="text-sm text-muted-foreground mt-1">
             Plataforma de Gestión Ambiental
           </p>

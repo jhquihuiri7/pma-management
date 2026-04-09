@@ -5,7 +5,7 @@ import {
   forbiddenResponse,
   errorResponse,
 } from "@/lib/api-utils";
-import { getPlanById } from "@/services/planService";
+import { getPlanById, isUserAssignedToPlan } from "@/services/planService";
 import { createPlanItem, getPlanItems } from "@/services/planItemService";
 
 export async function GET(
@@ -18,6 +18,12 @@ export async function GET(
   const plan = await getPlanById(params.id);
   if (!plan) return errorResponse("Plan not found", 404);
   if (plan.adminId !== session.user.adminId) return forbiddenResponse();
+
+  // VIEWER must be assigned to the plan
+  if (session.user.role === "VIEWER") {
+    const assigned = await isUserAssignedToPlan(session.user.id, params.id);
+    if (!assigned) return forbiddenResponse();
+  }
 
   const items = await getPlanItems(params.id);
   return NextResponse.json(items);

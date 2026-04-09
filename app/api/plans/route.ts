@@ -9,6 +9,7 @@ import {
   createPlan,
   getPlansByAdmin,
   getPlansForReporter,
+  getPlansForViewer,
 } from "@/services/planService";
 
 export async function GET() {
@@ -18,6 +19,8 @@ export async function GET() {
   let plans;
   if (session.user.role === "ADMIN") {
     plans = await getPlansByAdmin(session.user.adminId);
+  } else if (session.user.role === "VIEWER") {
+    plans = await getPlansForViewer(session.user.id);
   } else {
     plans = await getPlansForReporter(session.user.id);
   }

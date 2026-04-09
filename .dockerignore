@@ -1,0 +1,9 @@
+.dockerignore
+Dockerfile
+.git
+.gitignore
+.env*
+node_modules
+.next
+README.md
+deploy.sh

@@ -165,6 +165,34 @@ export async function getPlansForReporter(userId: string): Promise<Plan[]> {
     .map((doc) => doc.data() as Plan);
 }
 
+export async function getPlansForViewer(userId: string): Promise<Plan[]> {
+  // Viewer only sees plans assigned at the plan level (not via items)
+  const assignmentSnap = await adminDb
+    .collection("assignments")
+    .where("userId", "==", userId)
+    .get();
+
+  const planIds = assignmentSnap.docs.map((doc) => doc.data().planId as string);
+
+  if (planIds.length === 0) return [];
+
+  const refs = planIds.map((pid) => adminDb.collection("plans").doc(pid));
+  const snapshots = await adminDb.getAll(...refs);
+  return snapshots
+    .filter((doc) => doc.exists)
+    .map((doc) => doc.data() as Plan);
+}
+
+export async function isUserAssignedToPlan(userId: string, planId: string): Promise<boolean> {
+  const snap = await adminDb
+    .collection("assignments")
+    .where("userId", "==", userId)
+    .where("planId", "==", planId)
+    .limit(1)
+    .get();
+  return !snap.empty;
+}
+
 export async function getAssignedUsers(planId: string): Promise<string[]> {
   const snapshot = await adminDb
     .collection("assignments")

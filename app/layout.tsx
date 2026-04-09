@@ -8,7 +8,7 @@ import { Toaster } from "@/components/ui/sonner";
 const inter = Inter({ subsets: ["latin"], variable: "--font-sans" });
 
 export const metadata: Metadata = {
-  title: "PMA Management",
+  title: "Plan de Manejo Ambiental",
   description: "Environmental Management Platform",
 };
 

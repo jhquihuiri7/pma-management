@@ -1,10 +1,13 @@
-export type UserRole = 'ADMIN' | 'REPORTER';
+export type UserRole = 'ADMIN' | 'REPORTER' | 'VIEWER';
 
 export interface User {
   id: string;
   name: string;
   email: string;
   password?: string;
+  passwordSet?: boolean;
+  passwordSetToken?: string;
+  passwordSetTokenExpiry?: string;
   role: UserRole;
   adminId: string;
   unit?: string;

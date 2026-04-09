@@ -14,7 +14,7 @@ export const authOptions: NextAuthOptions = {
       authorization: {
         params: {
           scope:
-            "openid email profile https://www.googleapis.com/auth/drive.file",
+            "openid email profile https://www.googleapis.com/auth/drive.file https://www.googleapis.com/auth/gmail.send",
           access_type: "offline",
           prompt: "consent",
         },
@@ -34,7 +34,6 @@ export const authOptions: NextAuthOptions = {
         const usersRef = adminDb.collection("users");
         const snapshot = await usersRef
           .where("email", "==", credentials.email)
-          .where("role", "==", "REPORTER")
           .limit(1)
           .get();
 
@@ -44,6 +43,14 @@ export const authOptions: NextAuthOptions = {
 
         const userDoc = snapshot.docs[0];
         const user = userDoc.data();
+
+        if (user.role !== "REPORTER" && user.role !== "VIEWER") {
+          throw new Error("Invalid credentials");
+        }
+
+        if (user.passwordSet === false) {
+          throw new Error("PASSWORD_NOT_SET");
+        }
 
         const isValid = await bcrypt.compare(
           credentials.password,

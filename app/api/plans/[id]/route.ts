@@ -10,6 +10,7 @@ import {
   updatePlan,
   deletePlan,
   getAssignedUsers,
+  isUserAssignedToPlan,
 } from "@/services/planService";
 import { getEvidencesByPlan } from "@/services/evidenceService";
 
@@ -23,6 +24,12 @@ export async function GET(
   const plan = await getPlanById(params.id);
   if (!plan) return errorResponse("Plan not found", 404);
   if (plan.adminId !== session.user.adminId) return forbiddenResponse();
+
+  // VIEWER must be assigned to the plan at plan level
+  if (session.user.role === "VIEWER") {
+    const assigned = await isUserAssignedToPlan(session.user.id, params.id);
+    if (!assigned) return forbiddenResponse();
+  }
 
   const [assignedUsers, evidences] = await Promise.all([
     getAssignedUsers(params.id),
