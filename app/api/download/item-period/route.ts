@@ -6,11 +6,12 @@ import { getAuthenticatedDrive } from "@/lib/drive";
 import { getPlanById } from "@/services/planService";
 import { Evidence, PlanItem } from "@/types";
 
-const PERIOD_MONTHS: Record<string, number> = {
-  "6 meses": 6,
-  "1 año": 12,
-  "2 años": 24,
-};
+function getBlockSize(report_per: string | undefined): number {
+  const s = (report_per ?? "").toLowerCase();
+  if (s.startsWith("2")) return 24;
+  if (s.startsWith("1")) return 12;
+  return 6; // "6 meses" or any unknown value
+}
 
 function getPeriodMonthKeys(periodStart: string, blockSize: number): string[] {
   const [year, month] = periodStart.split("-").map(Number);
@@ -51,7 +52,7 @@ export async function GET(req: NextRequest) {
   if (planItem.planId !== planId) return errorResponse("No autorizado", 403);
 
   // Compute which months belong to this period
-  const blockSize = PERIOD_MONTHS[planItem.report_per ?? "6 meses"] ?? 6;
+  const blockSize = getBlockSize(planItem.report_per);
   const monthKeys = getPeriodMonthKeys(periodStart, blockSize);
   const monthKeySet = new Set(monthKeys);
 

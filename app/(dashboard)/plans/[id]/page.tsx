@@ -922,14 +922,15 @@ export default function PlanDetailPage() {
         }
 
         // Block shading: size comes from report_per, origin is January of the item's start year
-        const reportPerMonths: Record<string, number> = {
-          "6 meses": 6,
-          "1 año": 12,
-          "2 años": 24,
-        };
+        function getBlockSize(report_per: string | undefined): number {
+          const s = (report_per ?? "").toLowerCase();
+          if (s.startsWith("2")) return 24;
+          if (s.startsWith("1")) return 12;
+          return 6;
+        }
 
         function getBlockShade(pi: PlanItem, month: Date): "green" | "red" | "none" {
-          const blockSize = reportPerMonths[pi.report_per ?? "6 meses"];
+          const blockSize = getBlockSize(pi.report_per);
           if (!blockSize) return "none";
 
           // Blocks always start from January of the item's start year
@@ -1487,14 +1488,15 @@ export default function PlanDetailPage() {
 
       {/* Reportería */}
       {visibleItems.length > 0 && (() => {
-        const reportPerMonths: Record<string, number> = {
-          "6 meses": 6,
-          "1 año": 12,
-          "2 años": 24,
-        };
+        function getBlockSize(report_per: string | undefined): number {
+          const s = (report_per ?? "").toLowerCase();
+          if (s.startsWith("2")) return 24;
+          if (s.startsWith("1")) return 12;
+          return 6;
+        }
 
         function getAvailablePeriods(pi: PlanItem): { key: string; label: string }[] {
-          const blockSize = reportPerMonths[pi.report_per ?? "6 meses"] ?? 6;
+          const blockSize = getBlockSize(pi.report_per);
           const startYear = new Date(pi.start_date).getFullYear();
           const blockOrigin = new Date(startYear, 0, 1);
           const today = new Date();
