@@ -1,10 +1,12 @@
 import { adminDb } from "@/lib/firebase-admin";
-import { Plan, Assignment } from "@/types";
+import { Plan, Assignment, PlanReporte } from "@/types";
 
 export async function createPlan(
   adminId: string,
   title: string,
-  description: string
+  description: string,
+  report_per: PlanReporte = "6 meses",
+  driveFolderId?: string
 ): Promise<Plan> {
   const planRef = adminDb.collection("plans").doc();
   const now = new Date().toISOString();
@@ -14,6 +16,8 @@ export async function createPlan(
     adminId,
     title,
     description,
+    report_per,
+    ...(driveFolderId ? { driveFolderId } : {}),
     createdAt: now,
     updatedAt: now,
   };
@@ -29,19 +33,23 @@ export async function getPlansByAdmin(adminId: string): Promise<Plan[]> {
     .orderBy("createdAt", "desc")
     .get();
 
-  return snapshot.docs.map((doc) => doc.data() as Plan);
+  return snapshot.docs.map((doc) => {
+    const data = doc.data();
+    return { ...data, report_per: data.report_per ?? "6 meses" } as Plan;
+  });
 }
 
 export async function getPlanById(planId: string): Promise<Plan | null> {
   const doc = await adminDb.collection("plans").doc(planId).get();
   if (!doc.exists) return null;
-  return doc.data() as Plan;
+  const data = doc.data()!;
+  return { ...data, report_per: data.report_per ?? "6 meses" } as Plan;
 }
 
 export async function updatePlan(
   planId: string,
   adminId: string,
-  updates: { title?: string; description?: string }
+  updates: { title?: string; description?: string; report_per?: PlanReporte }
 ): Promise<Plan> {
   const doc = await adminDb.collection("plans").doc(planId).get();
   if (!doc.exists) throw new Error("Plan not found");
@@ -162,7 +170,10 @@ export async function getPlansForReporter(userId: string): Promise<Plan[]> {
   const snapshots = await adminDb.getAll(...refs);
   return snapshots
     .filter((doc) => doc.exists)
-    .map((doc) => doc.data() as Plan);
+    .map((doc) => {
+      const data = doc.data()!;
+      return { ...data, report_per: data.report_per ?? "6 meses" } as Plan;
+    });
 }
 
 export async function getPlansForViewer(userId: string): Promise<Plan[]> {
@@ -180,7 +191,10 @@ export async function getPlansForViewer(userId: string): Promise<Plan[]> {
   const snapshots = await adminDb.getAll(...refs);
   return snapshots
     .filter((doc) => doc.exists)
-    .map((doc) => doc.data() as Plan);
+    .map((doc) => {
+      const data = doc.data()!;
+      return { ...data, report_per: data.report_per ?? "6 meses" } as Plan;
+    });
 }
 
 export async function isUserAssignedToPlan(userId: string, planId: string): Promise<boolean> {

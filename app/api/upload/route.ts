@@ -8,6 +8,8 @@ import { uploadEvidenceFile } from "@/services/driveService";
 import { createEvidence } from "@/services/evidenceService";
 import { getPlanById } from "@/services/planService";
 import { getUserById } from "@/services/userService";
+import { adminDb } from "@/lib/firebase-admin";
+import { PlanItem } from "@/types";
 
 const MAX_FILE_SIZE = 10 * 1024 * 1024; // 10MB
 
@@ -41,6 +43,20 @@ export async function POST(req: NextRequest) {
     const uploader = await getUserById(session.user.id);
     const uploaderName = uploader?.name || session.user.name || "Unknown";
 
+    // Resolve the target Drive folder: item folder if available, else plan folder
+    let targetDriveFolderId: string | undefined;
+    if (planItemId) {
+      const itemDoc = await adminDb.collection("planItems").doc(planItemId).get();
+      if (itemDoc.exists) {
+        const itemData = itemDoc.data() as PlanItem;
+        targetDriveFolderId = itemData.driveFolderId;
+      }
+    }
+    // Fall back to plan folder if item has no driveFolderId
+    if (!targetDriveFolderId) {
+      targetDriveFolderId = plan.driveFolderId;
+    }
+
     // Convert File to Buffer
     const bytes = await file.arrayBuffer();
     const buffer = Buffer.from(bytes);
@@ -52,7 +68,7 @@ export async function POST(req: NextRequest) {
       file.type || "application/octet-stream",
       session.user.adminId,
       plan.title,
-      uploaderName
+      targetDriveFolderId
     );
 
     // Create evidence record

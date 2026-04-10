@@ -25,7 +25,7 @@ export default function PlansPage() {
   const [plans, setPlans] = useState<Plan[]>([]);
   const [open, setOpen] = useState(false);
   const [loading, setLoading] = useState(false);
-  const [form, setForm] = useState({ title: "", description: "" });
+  const [form, setForm] = useState({ title: "", description: "", report_per: "6 meses" });
 
   async function loadPlans() {
     const res = await fetch("/api/plans");
@@ -50,7 +50,7 @@ export default function PlansPage() {
 
     if (res.ok) {
       toast.success("Plan created successfully");
-      setForm({ title: "", description: "" });
+      setForm({ title: "", description: "", report_per: "6 meses" });
       setOpen(false);
       loadPlans();
     } else {
@@ -111,6 +111,21 @@ export default function PlansPage() {
                     }
                   />
                 </div>
+                <div className="space-y-2">
+                  <Label htmlFor="reporte">Reporte</Label>
+                  <select
+                    id="reporte"
+                    className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                    value={form.report_per}
+                    onChange={(e) =>
+                      setForm({ ...form, report_per: e.target.value })
+                    }
+                  >
+                    <option value="6 meses">6 meses</option>
+                    <option value="1 año">1 año</option>
+                    <option value="2 años">2 años</option>
+                  </select>
+                </div>
                 <Button type="submit" className="w-full" disabled={loading}>
                   {loading ? "Creando..." : "Crear Plan"}
                 </Button>
@@ -142,6 +157,14 @@ export default function PlansPage() {
                 <p className="text-sm text-muted-foreground line-clamp-2 mb-4">
                   {plan.description || "Sin descripción"}
                 </p>
+                <div className="flex items-center justify-between mb-2">
+                  <span className="text-xs text-muted-foreground">
+                    Reporte:
+                  </span>
+                  <span className="text-xs font-medium bg-slate-100 px-2 py-0.5 rounded">
+                    {plan.report_per ?? "6 meses"}
+                  </span>
+                </div>
                 <div className="flex items-center justify-between">
                   <span className="text-xs text-muted-foreground">
                     {new Date(plan.createdAt).toLocaleDateString()}

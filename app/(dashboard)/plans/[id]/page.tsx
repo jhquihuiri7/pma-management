@@ -23,7 +23,7 @@ import {
   DialogTitle,
   DialogTrigger,
 } from "@/components/ui/dialog";
-import { Upload, ExternalLink, Trash2, Plus, Users, CheckCircle2, AlertTriangle, XCircle, Pencil } from "lucide-react";
+import { Upload, ExternalLink, Trash2, Plus, Users, CheckCircle2, AlertTriangle, XCircle, Pencil, Download } from "lucide-react";
 import { toast } from "sonner";
 import { Plan, Evidence, User, PlanItem, ItemAssignmentCategory, EvidenceValidationStatus } from "@/types";
 import {
@@ -45,6 +45,7 @@ const EMPTY_ITEM_FORM = {
   periodicity: "",
   start_date: "",
   budget: "",
+  report_per: "6 meses",
 };
 
 export default function PlanDetailPage() {
@@ -74,6 +75,8 @@ export default function PlanDetailPage() {
   const [editingItem, setEditingItem] = useState<PlanItem | null>(null);
   const [calUpload, setCalUpload] = useState<{ item: PlanItem; month: Date } | null>(null);
   const [uploadingCal, setUploadingCal] = useState(false);
+  const [selectedReportPeriods, setSelectedReportPeriods] = useState<Record<string, string>>({});
+  const [downloadingPeriod, setDownloadingPeriod] = useState<string | null>(null);
 
   const loadPlan = useCallback(async () => {
     const res = await fetch(`/api/plans/${id}`);
@@ -303,6 +306,37 @@ export default function PlanDetailPage() {
     }
   }
 
+  async function handleDownloadPeriod(pi: PlanItem, periodKey: string) {
+    const downloadId = `${pi.id}-${periodKey}`;
+    setDownloadingPeriod(downloadId);
+    try {
+      const params = new URLSearchParams({
+        planItemId: pi.id,
+        periodStart: periodKey,
+        planId: id,
+      });
+      const res = await fetch(`/api/download/item-period?${params}`);
+      if (!res.ok) {
+        const data = await res.json().catch(() => ({}));
+        toast.error(data.error || "No hay archivos para descargar");
+        return;
+      }
+      const blob = await res.blob();
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = `${pi.item}_${periodKey}.zip`;
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      URL.revokeObjectURL(url);
+    } catch {
+      toast.error("Error al descargar");
+    } finally {
+      setDownloadingPeriod(null);
+    }
+  }
+
   async function handleDeleteItem(itemId: string) {
     if (!confirm("¿Eliminar este ítem?")) return;
 
@@ -380,7 +414,7 @@ export default function PlanDetailPage() {
         <Card>
           <CardHeader className="flex flex-row items-center justify-between">
             <CardTitle className="text-base">
-              Visualizadores del Plan ({assignedViewerIds.length})
+              Visualizadores del Plan ({assignedViewerIds.filter(id => allViewers.some(v => v.id === id)).length})
             </CardTitle>
             <Button size="sm" variant="outline" onClick={() => setAssignViewerOpen(true)}>
               <Users className="w-4 h-4 mr-2" />
@@ -450,6 +484,7 @@ export default function PlanDetailPage() {
                       periodicity: last.periodicity,
                       start_date: last.start_date,
                       budget: String(last.budget),
+                      report_per: last.report_per ?? "6 meses",
                     });
                   } else if (open && !editingItem) {
                     setItemForm(EMPTY_ITEM_FORM);
@@ -562,6 +597,21 @@ export default function PlanDetailPage() {
                         required
                       />
                     </div>
+                    <div className="space-y-2">
+                      <Label htmlFor="reporte">Reporte</Label>
+                      <select
+                        id="reporte"
+                        value={itemForm.report_per}
+                        onChange={(e) =>
+                          setItemForm({ ...itemForm, report_per: e.target.value })
+                        }
+                        className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                      >
+                        <option value="6 meses">6 meses</option>
+                        <option value="1 año">1 año</option>
+                        <option value="2 años">2 años</option>
+                      </select>
+                    </div>
                   </div>
 
                   <div className="space-y-2">
@@ -672,6 +722,7 @@ export default function PlanDetailPage() {
                     <TableHead>Periodicidad</TableHead>
                     <TableHead>Fecha Inicio</TableHead>
                     <TableHead>Presupuesto</TableHead>
+                    <TableHead>Reporte</TableHead>
                     <TableHead>Reporteros</TableHead>
                     <TableHead>Observación</TableHead>
                     <TableHead className="w-[60px]"></TableHead>
@@ -716,6 +767,11 @@ export default function PlanDetailPage() {
                           style: "currency",
                           currency: "PEN",
                         })}
+                      </TableCell>
+                      <TableCell className="whitespace-nowrap">
+                        <span className="inline-flex items-center rounded-md bg-slate-100 px-2 py-0.5 text-xs font-medium">
+                          {pi.report_per ?? "6 meses"}
+                        </span>
                       </TableCell>
                       <TableCell>
                         <Button
@@ -771,6 +827,7 @@ export default function PlanDetailPage() {
                                   periodicity: pi.periodicity,
                                   start_date: pi.start_date,
                                   budget: String(pi.budget),
+                                  report_per: pi.report_per ?? "6 meses",
                                 });
                                 setAddItemOpen(true);
                               }}
@@ -864,22 +921,22 @@ export default function PlanDetailPage() {
           return diff % interval === 0;
         }
 
-        // Block shading: Licencia = 6-month blocks, Registro Ambiental = 12-month blocks
-        const blockSizeByType: Record<string, number> = {
-          "Licencia": 6,
-          "Registro Ambiental": 12,
+        // Block shading: size comes from report_per, origin is January of the item's start year
+        const reportPerMonths: Record<string, number> = {
+          "6 meses": 6,
+          "1 año": 12,
+          "2 años": 24,
         };
 
         function getBlockShade(pi: PlanItem, month: Date): "green" | "red" | "none" {
-          const blockSize = blockSizeByType[pi.type];
+          const blockSize = reportPerMonths[pi.report_per ?? "6 meses"];
           if (!blockSize) return "none";
 
-          const sm = new Date(new Date(pi.start_date).getFullYear(), new Date(pi.start_date).getMonth(), 1);
-          // Blocks start from the month AFTER the start month
-          const blockOrigin = new Date(sm.getFullYear(), sm.getMonth() + 1, 1);
+          // Blocks always start from January of the item's start year
+          const startYear = new Date(pi.start_date).getFullYear();
+          const blockOrigin = new Date(startYear, 0, 1);
           const mm = new Date(month.getFullYear(), month.getMonth(), 1);
 
-          // Start month itself has no block shade
           if (mm < blockOrigin) return "none";
 
           const diffFromOrigin =
@@ -917,7 +974,7 @@ export default function PlanDetailPage() {
             <CardHeader>
               <CardTitle className="text-base">Cronograma</CardTitle>
             </CardHeader>
-            <CardContent className="p-0">
+            <CardContent>
               <div className="overflow-x-auto">
                 <table className="text-xs border-collapse w-full">
                   <thead>
@@ -1040,7 +1097,7 @@ export default function PlanDetailPage() {
                   </tbody>
                 </table>
               </div>
-              <div className="flex flex-wrap gap-4 px-4 py-3 border-t text-xs text-muted-foreground">
+              <div className="flex flex-wrap gap-4 py-3 border-t text-xs text-muted-foreground mt-3">
                 <span className="flex items-center gap-1.5">
                   <span className="inline-block w-10 h-4 rounded border" style={{ backgroundColor: "#e0f2fe", borderColor: "#7dd3fc" }} />
                   Sin entregar
@@ -1427,6 +1484,136 @@ export default function PlanDetailPage() {
           )}
         </CardContent>
       </Card>
+
+      {/* Reportería */}
+      {visibleItems.length > 0 && (() => {
+        const reportPerMonths: Record<string, number> = {
+          "6 meses": 6,
+          "1 año": 12,
+          "2 años": 24,
+        };
+
+        function getAvailablePeriods(pi: PlanItem): { key: string; label: string }[] {
+          const blockSize = reportPerMonths[pi.report_per ?? "6 meses"] ?? 6;
+          const startYear = new Date(pi.start_date).getFullYear();
+          const blockOrigin = new Date(startYear, 0, 1);
+          const today = new Date();
+          const todayMonth = new Date(today.getFullYear(), today.getMonth(), 1);
+
+          const periods: { key: string; label: string }[] = [];
+          let blockIndex = 0;
+
+          while (blockIndex < 100) {
+            const blockStart = new Date(
+              blockOrigin.getFullYear(),
+              blockOrigin.getMonth() + blockIndex * blockSize,
+              1
+            );
+            if (blockStart > todayMonth) break;
+            const blockEndMonth = new Date(
+              blockOrigin.getFullYear(),
+              blockOrigin.getMonth() + (blockIndex + 1) * blockSize - 1,
+              1
+            );
+            const key = `${blockStart.getFullYear()}-${String(blockStart.getMonth() + 1).padStart(2, "0")}`;
+            const startLabel = blockStart.toLocaleString("es", { month: "short", year: "numeric" });
+            const endLabel = blockEndMonth.toLocaleString("es", { month: "short", year: "numeric" });
+            periods.push({ key, label: `${startLabel} – ${endLabel}` });
+            blockIndex++;
+          }
+
+          return periods;
+        }
+
+        return (
+          <Card>
+            <CardHeader>
+              <CardTitle className="text-base">Reportería</CardTitle>
+            </CardHeader>
+            <CardContent>
+              <div className="overflow-x-auto">
+                <Table>
+                  <TableHeader>
+                    <TableRow>
+                      <TableHead>Ítem</TableHead>
+                      <TableHead>Tipo</TableHead>
+                      <TableHead>Reporte</TableHead>
+                      <TableHead>Anexos</TableHead>
+                    </TableRow>
+                  </TableHeader>
+                  <TableBody>
+                    {visibleItems.map((pi) => {
+                      const periods = getAvailablePeriods(pi);
+                      return (
+                        <TableRow key={pi.id}>
+                          <TableCell className="font-medium whitespace-nowrap">
+                            {pi.item}
+                          </TableCell>
+                          <TableCell className="whitespace-nowrap">
+                            {pi.type}
+                          </TableCell>
+                          <TableCell className="whitespace-nowrap">
+                            <span className="inline-flex items-center rounded-md bg-slate-100 px-2 py-0.5 text-xs font-medium">
+                              {pi.report_per ?? "6 meses"}
+                            </span>
+                          </TableCell>
+                          <TableCell>
+                            {periods.length === 0 ? (
+                              <span className="text-xs text-muted-foreground">Sin períodos disponibles</span>
+                            ) : (
+                              <div className="flex items-center gap-2">
+                                <select
+                                  className="flex h-9 rounded-md border border-input bg-background px-3 py-1 text-sm ring-offset-background focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring min-w-[200px]"
+                                  value={selectedReportPeriods[pi.id] ?? ""}
+                                  onChange={(e) =>
+                                    setSelectedReportPeriods((prev) => ({
+                                      ...prev,
+                                      [pi.id]: e.target.value,
+                                    }))
+                                  }
+                                >
+                                  <option value="" disabled>Seleccionar período...</option>
+                                  {periods.map((p) => (
+                                    <option key={p.key} value={p.key}>
+                                      {p.label}
+                                    </option>
+                                  ))}
+                                </select>
+                                <Button
+                                  size="sm"
+                                  variant="outline"
+                                  disabled={!selectedReportPeriods[pi.id] || downloadingPeriod === `${pi.id}-${selectedReportPeriods[pi.id]}`}
+                                  onClick={() => {
+                                    const key = selectedReportPeriods[pi.id];
+                                    if (key) handleDownloadPeriod(pi, key);
+                                  }}
+                                  title="Descargar evidencias del período"
+                                >
+                                  {downloadingPeriod === `${pi.id}-${selectedReportPeriods[pi.id]}` ? (
+                                    <span className="flex items-center gap-1 text-xs">
+                                      <svg className="animate-spin h-3 w-3" viewBox="0 0 24 24" fill="none">
+                                        <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
+                                        <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v8z" />
+                                      </svg>
+                                      Descargando...
+                                    </span>
+                                  ) : (
+                                    <Download className="h-4 w-4" />
+                                  )}
+                                </Button>
+                              </div>
+                            )}
+                          </TableCell>
+                        </TableRow>
+                      );
+                    })}
+                  </TableBody>
+                </Table>
+              </div>
+            </CardContent>
+          </Card>
+        );
+      })()}
     </div>
   );
 }

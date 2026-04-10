@@ -26,11 +26,15 @@ export interface Admin {
   createdAt: string;
 }
 
+export type PlanReporte = "6 meses" | "1 año" | "2 años";
+
 export interface Plan {
   id: string;
   adminId: string;
   title: string;
   description: string;
+  report_per: PlanReporte;
+  driveFolderId?: string;
   createdAt: string;
   updatedAt: string;
 }
@@ -80,7 +84,9 @@ export interface PlanItem {
   periodicity: string;
   start_date: string;
   budget: number;
+  report_per: PlanReporte;
   assignedUsers: ItemAssignment[];
   observation?: string;
+  driveFolderId?: string;
   createdAt: string;
 }

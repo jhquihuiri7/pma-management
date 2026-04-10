@@ -3,7 +3,8 @@ import { ItemAssignment, ItemAssignmentCategory, PlanItem } from "@/types";
 
 export async function createPlanItem(
   planId: string,
-  data: Omit<PlanItem, "id" | "planId" | "createdAt">
+  data: Omit<PlanItem, "id" | "planId" | "createdAt" | "assignedUsers" | "driveFolderId">,
+  driveFolderId?: string
 ): Promise<PlanItem> {
   const ref = adminDb.collection("planItems").doc();
   const now = new Date().toISOString();
@@ -13,6 +14,7 @@ export async function createPlanItem(
     planId,
     ...data,
     assignedUsers: [],
+    ...(driveFolderId ? { driveFolderId } : {}),
     createdAt: now,
   };
 
@@ -27,7 +29,10 @@ export async function getPlanItems(planId: string): Promise<PlanItem[]> {
     .orderBy("createdAt", "asc")
     .get();
 
-  return snapshot.docs.map((doc) => doc.data() as PlanItem);
+  return snapshot.docs.map((doc) => {
+    const data = doc.data();
+    return { ...data, report_per: data.report_per ?? "6 meses" } as PlanItem;
+  });
 }
 
 export async function assignReporterToItem(

@@ -11,6 +11,7 @@ import {
   getPlansForReporter,
   getPlansForViewer,
 } from "@/services/planService";
+import { createPlanDriveFolder } from "@/services/driveService";
 
 export async function GET() {
   const session = await getAuthSession();
@@ -34,17 +35,28 @@ export async function POST(req: NextRequest) {
   if (session.user.role !== "ADMIN") return forbiddenResponse();
 
   const body = await req.json();
-  const { title, description } = body;
+  const { title, description, report_per } = body;
 
   if (!title) {
     return errorResponse("Title is required");
   }
 
   try {
+    // Create Drive folder for this plan
+    let driveFolderId: string | undefined;
+    try {
+      driveFolderId = await createPlanDriveFolder(session.user.adminId, title);
+    } catch (driveErr) {
+      console.error("Drive folder creation failed:", driveErr);
+      // Continue without Drive folder — upload will fall back gracefully
+    }
+
     const plan = await createPlan(
       session.user.adminId,
       title,
-      description || ""
+      description || "",
+      report_per || "6 meses",
+      driveFolderId
     );
     return NextResponse.json(plan, { status: 201 });
   } catch (error: any) {

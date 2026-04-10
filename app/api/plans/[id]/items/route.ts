@@ -7,6 +7,7 @@ import {
 } from "@/lib/api-utils";
 import { getPlanById, isUserAssignedToPlan } from "@/services/planService";
 import { createPlanItem, getPlanItems } from "@/services/planItemService";
+import { createItemDriveFolder } from "@/services/driveService";
 
 export async function GET(
   _req: NextRequest,
@@ -54,6 +55,7 @@ export async function POST(
     periodicity,
     start_date,
     budget,
+    report_per,
   } = body;
 
   if (
@@ -75,19 +77,39 @@ export async function POST(
   }
 
   try {
-    const newItem = await createPlanItem(params.id, {
-      item,
-      type,
-      subplan,
-      environmental_activity,
-      identified_environmental_impact,
-      proposed_measure,
-      indicator,
-      verification_method,
-      periodicity,
-      start_date,
-      budget: Number(budget),
-    });
+    // Create Drive subfolder for this item inside the plan's folder
+    let itemDriveFolderId: string | undefined;
+    if (plan.driveFolderId) {
+      try {
+        itemDriveFolderId = await createItemDriveFolder(
+          session.user.adminId,
+          item,
+          plan.driveFolderId
+        );
+      } catch (driveErr) {
+        console.error("Drive item folder creation failed:", driveErr);
+        // Continue without Drive folder — upload will fall back gracefully
+      }
+    }
+
+    const newItem = await createPlanItem(
+      params.id,
+      {
+        item,
+        type,
+        subplan,
+        environmental_activity,
+        identified_environmental_impact,
+        proposed_measure,
+        indicator,
+        verification_method,
+        periodicity,
+        start_date,
+        budget: Number(budget),
+        report_per: report_per || "6 meses",
+      },
+      itemDriveFolderId
+    );
     return NextResponse.json(newItem, { status: 201 });
   } catch (error: any) {
     return errorResponse(error.message);
