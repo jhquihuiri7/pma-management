@@ -1,5 +1,6 @@
 import { adminDb } from "@/lib/firebase-admin";
-import { Plan, Assignment, PlanReporte } from "@/types";
+import { getAuthenticatedDrive } from "@/lib/drive";
+import { Plan, Assignment, PlanReporte, Evidence } from "@/types";
 
 export async function createPlan(
   adminId: string,
@@ -81,6 +82,23 @@ export async function deletePlan(
     adminDb.collection("assignments").where("planId", "==", planId).get(),
     adminDb.collection("evidences").where("planId", "==", planId).get(),
   ]);
+
+  // Delete evidence files from Google Drive
+  if (!evidences.empty) {
+    try {
+      const drive = await getAuthenticatedDrive(adminId);
+      await Promise.all(
+        evidences.docs.map((doc) => {
+          const evidence = doc.data() as Evidence;
+          return drive.files
+            .delete({ fileId: evidence.driveFileId })
+            .catch(() => {});
+        })
+      );
+    } catch {
+      // Continue with Firestore deletion even if Drive deletes fail
+    }
+  }
 
   const batch = adminDb.batch();
   assignments.docs.forEach((doc) => batch.delete(doc.ref));

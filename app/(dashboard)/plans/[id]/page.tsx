@@ -1300,6 +1300,7 @@ export default function PlanDetailPage() {
                 id="cal-desc"
                 name="description"
                 placeholder="Breve descripción de la evidencia"
+                required
               />
             </div>
             <div className="flex gap-2 justify-end">
@@ -1414,7 +1415,7 @@ export default function PlanDetailPage() {
                     </TableCell>
                     <TableCell className="whitespace-nowrap text-sm">
                       {ev.activityMonth
-                        ? new Date(`${ev.activityMonth}-01`).toLocaleDateString("es", { month: "short", year: "numeric" })
+                        ? new Date(`${ev.activityMonth}-01T00:00:00`).toLocaleDateString("es", { month: "short", year: "numeric" })
                         : "-"}
                     </TableCell>
                     <TableCell className="font-medium">{ev.fileName}</TableCell>

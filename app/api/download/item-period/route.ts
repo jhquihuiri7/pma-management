@@ -4,13 +4,20 @@ import { getAuthSession, unauthorizedResponse, errorResponse } from "@/lib/api-u
 import { adminDb } from "@/lib/firebase-admin";
 import { getAuthenticatedDrive } from "@/lib/drive";
 import { getPlanById } from "@/services/planService";
-import { Evidence, PlanItem } from "@/types";
+import { Evidence, Format, PlanItem } from "@/types";
+import {
+  buildPhotosDocx,
+  fileExtension,
+  isImageFile,
+  isPdfFile,
+  PhotoEntry,
+} from "@/lib/wordUtils";
 
 function getBlockSize(report_per: string | undefined): number {
   const s = (report_per ?? "").toLowerCase();
   if (s.startsWith("2")) return 24;
   if (s.startsWith("1")) return 12;
-  return 6; // "6 meses" or any unknown value
+  return 6;
 }
 
 function getPeriodMonthKeys(periodStart: string, blockSize: number): string[] {
@@ -74,45 +81,109 @@ export async function GET(req: NextRequest) {
   // Authenticate Drive with admin credentials
   const drive = await getAuthenticatedDrive(plan.adminId);
 
-  // Build ZIP in memory
-  const zip = new JSZip();
-  const fileNameCount: Record<string, number> = {};
-
-  await Promise.all(
+  // ── Download all evidence files from Drive ──────────────────────────────
+  const downloadedFiles = await Promise.all(
     periodEvidences.map(async (evidence) => {
       try {
         const res = await drive.files.get(
           { fileId: evidence.driveFileId, alt: "media" },
           { responseType: "arraybuffer" }
         );
-
-        const data = res.data as ArrayBuffer;
-
-        // Deduplicate file names within the zip
-        let safeName = evidence.fileName;
-        if (fileNameCount[safeName] !== undefined) {
-          fileNameCount[safeName]++;
-          const dotIdx = safeName.lastIndexOf(".");
-          if (dotIdx !== -1) {
-            safeName = `${safeName.slice(0, dotIdx)}_${fileNameCount[safeName]}${safeName.slice(dotIdx)}`;
-          } else {
-            safeName = `${safeName}_${fileNameCount[safeName]}`;
-          }
-        } else {
-          fileNameCount[safeName] = 0;
-        }
-
-        zip.file(safeName, Buffer.from(data));
+        return {
+          fileName: evidence.fileName,
+          buffer: Buffer.from(res.data as ArrayBuffer),
+        };
       } catch (err) {
         console.error(`Failed to download file ${evidence.driveFileId}:`, err);
-        // Skip files that can't be downloaded
+        return null;
       }
     })
   );
 
+  // ── Classify into PDFs and images ──────────────────────────────────────
+  const pdfFiles: Array<{ fileName: string; buffer: Buffer }> = [];
+  const imageFiles: PhotoEntry[] = [];
+
+  for (const file of downloadedFiles) {
+    if (!file) continue;
+    if (isPdfFile(file.fileName)) {
+      pdfFiles.push(file);
+    } else if (isImageFile(file.fileName)) {
+      imageFiles.push({
+        buffer: file.buffer,
+        ext: fileExtension(file.fileName),
+        name: file.fileName,
+      });
+    }
+    // other types are ignored (per product requirement: only PDFs and images)
+  }
+
+  // ── Build ZIP ──────────────────────────────────────────────────────────
+  const zip = new JSZip();
+
+  // Add PDFs (deduplicate names)
+  const fileNameCount: Record<string, number> = {};
+  for (const pdf of pdfFiles) {
+    let safeName = pdf.fileName;
+    if (fileNameCount[safeName] !== undefined) {
+      fileNameCount[safeName]++;
+      const dotIdx = safeName.lastIndexOf(".");
+      safeName =
+        dotIdx !== -1
+          ? `${safeName.slice(0, dotIdx)}_${fileNameCount[safeName]}${safeName.slice(dotIdx)}`
+          : `${safeName}_${fileNameCount[safeName]}`;
+    } else {
+      fileNameCount[safeName] = 0;
+    }
+    zip.file(safeName, pdf.buffer);
+  }
+
+  // Build Word document with images (if any)
+  if (imageFiles.length > 0) {
+    let templateBuffer: Buffer | undefined;
+
+    // Check if admin has a format for "descargar_anexos"
+    try {
+      const formatSnap = await adminDb
+        .collection("formats")
+        .where("adminId", "==", plan.adminId)
+        .where("functionality", "==", "descargar_anexos")
+        .limit(1)
+        .get();
+
+      if (!formatSnap.empty) {
+        const fmt = formatSnap.docs[0].data() as Format;
+        const templateRes = await drive.files.get(
+          { fileId: fmt.driveFileId, alt: "media" },
+          { responseType: "arraybuffer" }
+        );
+        templateBuffer = Buffer.from(templateRes.data as ArrayBuffer);
+      }
+    } catch (err) {
+      // If format fetch fails, proceed without template
+      console.error("Failed to fetch format template:", err);
+    }
+
+    try {
+      const safeItemName = planItem.item.replace(
+        /[^a-zA-Z0-9_\-\u00C0-\u024F]/g,
+        "_"
+      );
+      const photosDocxName = `fotos_${safeItemName}_${periodStart}.docx`;
+      const photosDocxBuffer = await buildPhotosDocx(imageFiles, templateBuffer);
+      zip.file(photosDocxName, photosDocxBuffer);
+    } catch (err) {
+      console.error("Failed to build photos docx:", err);
+      // Skip photos document if generation fails
+    }
+  }
+
   const zipBuffer = await zip.generateAsync({ type: "nodebuffer" });
 
-  const safeItemName = planItem.item.replace(/[^a-zA-Z0-9_\-\u00C0-\u024F]/g, "_");
+  const safeItemName = planItem.item.replace(
+    /[^a-zA-Z0-9_\-\u00C0-\u024F]/g,
+    "_"
+  );
   const fileName = `${safeItemName}_${periodStart}.zip`;
 
   return new NextResponse(new Uint8Array(zipBuffer), {

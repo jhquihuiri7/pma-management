@@ -1,4 +1,5 @@
 import { adminDb } from "@/lib/firebase-admin";
+import { getAuthenticatedDrive } from "@/lib/drive";
 import { Evidence, EvidenceValidationStatus } from "@/types";
 
 export async function createEvidence(
@@ -81,6 +82,14 @@ export async function deleteEvidence(
     .get();
   if (!planDoc.exists) throw new Error("Plan not found");
   if (planDoc.data()!.adminId !== adminId) throw new Error("Unauthorized");
+
+  // Delete file from Google Drive
+  try {
+    const drive = await getAuthenticatedDrive(adminId);
+    await drive.files.delete({ fileId: evidence.driveFileId });
+  } catch {
+    // Continue with Firestore deletion even if Drive delete fails
+  }
 
   await adminDb.collection("evidences").doc(evidenceId).delete();
 }

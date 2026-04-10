@@ -90,3 +90,17 @@ export interface PlanItem {
   driveFolderId?: string;
   createdAt: string;
 }
+
+export type FormatFunctionality = "descargar_anexos";
+
+export interface Format {
+  id: string;
+  adminId: string;
+  functionality: FormatFunctionality;
+  functionalityLabel: string;
+  driveFileId: string;
+  driveUrl: string;
+  fileName: string;
+  formatsFolderId: string;
+  uploadedAt: string;
+}

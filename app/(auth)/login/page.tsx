@@ -66,7 +66,7 @@ export default function LoginPage() {
               }`}
               onClick={() => setActiveTab("reporter")}
             >
-              Reportero
+              Usuarios
             </button>
             <button
               className={`flex-1 py-2 text-sm font-medium rounded-md transition-colors ${
