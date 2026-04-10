@@ -85,8 +85,8 @@ export async function POST(req: NextRequest) {
     );
 
     return NextResponse.json(evidence, { status: 201 });
-  } catch (error: any) {
+  } catch (error: unknown) {
     console.error("Upload error:", error);
-    return errorResponse(error.message || "Upload failed", 500);
+    return errorResponse((error as Error).message || "Upload failed", 500);
   }
 }

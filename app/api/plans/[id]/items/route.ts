@@ -111,7 +111,7 @@ export async function POST(
       itemDriveFolderId
     );
     return NextResponse.json(newItem, { status: 201 });
-  } catch (error: any) {
-    return errorResponse(error.message);
+  } catch (error: unknown) {
+    return errorResponse((error as Error).message);
   }
 }

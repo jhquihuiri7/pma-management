@@ -49,8 +49,8 @@ export async function PATCH(req: NextRequest) {
   try {
     await updateEvidenceValidation(evidenceId, status);
     return NextResponse.json({ success: true });
-  } catch (error: any) {
-    return errorResponse(error.message);
+  } catch (error: unknown) {
+    return errorResponse((error as Error).message);
   }
 }
 
@@ -66,7 +66,7 @@ export async function DELETE(req: NextRequest) {
   try {
     await deleteEvidence(evidenceId, session.user.adminId);
     return NextResponse.json({ success: true });
-  } catch (error: any) {
-    return errorResponse(error.message);
+  } catch (error: unknown) {
+    return errorResponse((error as Error).message);
   }
 }

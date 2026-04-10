@@ -42,7 +42,7 @@ export async function POST(req: NextRequest) {
   try {
     await setUserPassword(token, password);
     return NextResponse.json({ success: true });
-  } catch (error: any) {
-    return NextResponse.json({ error: error.message }, { status: 400 });
+  } catch (error: unknown) {
+    return NextResponse.json({ error: (error as Error).message }, { status: 400 });
   }
 }

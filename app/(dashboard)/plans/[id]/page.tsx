@@ -60,8 +60,6 @@ export default function PlanDetailPage() {
   const [allViewers, setAllViewers] = useState<User[]>([]);
   const [assignedViewerIds, setAssignedViewerIds] = useState<string[]>([]);
   const [assignViewerOpen, setAssignViewerOpen] = useState(false);
-  const [uploading, setUploading] = useState(false);
-
   const [planItems, setPlanItems] = useState<PlanItem[]>([]);
   const [addItemOpen, setAddItemOpen] = useState(false);
   const [itemForm, setItemForm] = useState(EMPTY_ITEM_FORM);
@@ -138,30 +136,6 @@ export default function PlanDetailPage() {
       toast.success("Visualizador desasignado del plan");
     } else {
       toast.error("Error al desasignar visualizador");
-    }
-  }
-
-  async function handleUpload(e: React.FormEvent<HTMLFormElement>) {
-    e.preventDefault();
-    setUploading(true);
-
-    const formData = new FormData(e.currentTarget);
-    formData.set("planId", id);
-
-    const res = await fetch("/api/upload", {
-      method: "POST",
-      body: formData,
-    });
-
-    setUploading(false);
-
-    if (res.ok) {
-      toast.success("Evidencia subida correctamente");
-      (e.target as HTMLFormElement).reset();
-      loadPlan();
-    } else {
-      const data = await res.json();
-      toast.error(data.error || "Error al subir");
     }
   }
 
@@ -1048,9 +1022,6 @@ export default function PlanDetailPage() {
                               isStart ? `Subir evidencia de inicio — ${new Date(pi.start_date).toLocaleDateString("es")}` :
                               `Subir evidencia — ${m.toLocaleString("es", { month: "long", year: "numeric" })}`;
 
-                            const btnLabel =
-                              evStatus !== "none" ? style.label : isStart ? "INI" : periodicLabel;
-
                             const cellBg =
                               blockShade === "green" ? "#f0fdf4" :
                               blockShade === "red"   ? "#fef2f2" :
@@ -1411,8 +1382,7 @@ export default function PlanDetailPage() {
                         </span>
                       ) : (
                         <DropdownMenu>
-                          <DropdownMenuTrigger asChild>
-                            <Button variant="ghost" size="sm" className="p-0 h-auto">
+                          <DropdownMenuTrigger className="p-0 h-auto bg-transparent border-0 cursor-pointer inline-flex items-center justify-center rounded hover:opacity-75 transition-opacity">
                               {(ev.validationStatus ?? "pending") === "valid" && (
                                 <CheckCircle2 className="w-5 h-5 text-green-500" />
                               )}
@@ -1422,7 +1392,6 @@ export default function PlanDetailPage() {
                               {(ev.validationStatus ?? "pending") === "pending" && (
                                 <AlertTriangle className="w-5 h-5 text-yellow-500" />
                               )}
-                            </Button>
                           </DropdownMenuTrigger>
                           <DropdownMenuContent align="start">
                             <DropdownMenuItem onClick={() => handleValidationChange(ev.id, "valid")}>

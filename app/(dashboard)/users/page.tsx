@@ -62,7 +62,7 @@ export default function UsersPage() {
 
     if (res.ok) {
       const data = await res.json();
-      if ((data as any).emailSent === false) {
+      if ((data as { emailSent?: boolean }).emailSent === false) {
         toast.warning(
           "Usuario creado, pero no se pudo enviar el correo de invitación. Usa 'Reenviar invitación' para intentarlo de nuevo."
         );

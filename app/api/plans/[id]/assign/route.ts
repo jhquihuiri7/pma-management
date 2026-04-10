@@ -25,8 +25,8 @@ export async function POST(
       session.user.adminId
     );
     return NextResponse.json(assignment, { status: 201 });
-  } catch (error: any) {
-    return errorResponse(error.message);
+  } catch (error: unknown) {
+    return errorResponse((error as Error).message);
   }
 }
 
@@ -44,7 +44,7 @@ export async function DELETE(
   try {
     await unassignUserFromPlan(userId, params.id, session.user.adminId);
     return NextResponse.json({ success: true });
-  } catch (error: any) {
-    return errorResponse(error.message);
+  } catch (error: unknown) {
+    return errorResponse((error as Error).message);
   }
 }

@@ -21,9 +21,9 @@ export async function GET() {
   try {
     const users = await getManagedUsersByAdmin(session.user.adminId);
     return NextResponse.json(users);
-  } catch (error: any) {
+  } catch (error: unknown) {
     console.error("[GET /api/users]", error);
-    return errorResponse(error.message, 500);
+    return errorResponse((error as Error).message, 500);
   }
 }
 
@@ -47,8 +47,8 @@ export async function POST(req: NextRequest) {
         ? await createViewer(session.user.adminId, name, email, unit, position)
         : await createReporter(session.user.adminId, name, email, unit, position);
     return NextResponse.json(user, { status: 201 });
-  } catch (error: any) {
-    return errorResponse(error.message);
+  } catch (error: unknown) {
+    return errorResponse((error as Error).message);
   }
 }
 
@@ -65,8 +65,8 @@ export async function PATCH(req: NextRequest) {
   try {
     await resendInvitation(userId, session.user.adminId);
     return NextResponse.json({ success: true });
-  } catch (error: any) {
-    return errorResponse(error.message);
+  } catch (error: unknown) {
+    return errorResponse((error as Error).message);
   }
 }
 
@@ -83,7 +83,7 @@ export async function DELETE(req: NextRequest) {
   try {
     await deleteReporter(userId, session.user.adminId);
     return NextResponse.json({ success: true });
-  } catch (error: any) {
-    return errorResponse(error.message);
+  } catch (error: unknown) {
+    return errorResponse((error as Error).message);
   }
 }

@@ -52,8 +52,8 @@ export async function PUT(
   try {
     const plan = await updatePlan(params.id, session.user.adminId, body);
     return NextResponse.json(plan);
-  } catch (error: any) {
-    return errorResponse(error.message);
+  } catch (error: unknown) {
+    return errorResponse((error as Error).message);
   }
 }
 
@@ -68,7 +68,7 @@ export async function DELETE(
   try {
     await deletePlan(params.id, session.user.adminId);
     return NextResponse.json({ success: true });
-  } catch (error: any) {
-    return errorResponse(error.message);
+  } catch (error: unknown) {
+    return errorResponse((error as Error).message);
   }
 }

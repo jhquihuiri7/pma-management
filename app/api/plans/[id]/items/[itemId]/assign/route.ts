@@ -23,8 +23,8 @@ export async function POST(
   try {
     await assignReporterToItem(params.itemId, userId, category);
     return NextResponse.json({ success: true });
-  } catch (error: any) {
-    return errorResponse(error.message, 500);
+  } catch (error: unknown) {
+    return errorResponse((error as Error).message, 500);
   }
 }
 
@@ -42,7 +42,7 @@ export async function DELETE(
   try {
     await unassignReporterFromItem(params.itemId, userId);
     return NextResponse.json({ success: true });
-  } catch (error: any) {
-    return errorResponse(error.message, 500);
+  } catch (error: unknown) {
+    return errorResponse((error as Error).message, 500);
   }
 }

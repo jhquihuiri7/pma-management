@@ -59,7 +59,7 @@ export async function POST(req: NextRequest) {
       driveFolderId
     );
     return NextResponse.json(plan, { status: 201 });
-  } catch (error: any) {
-    return errorResponse(error.message);
+  } catch (error: unknown) {
+    return errorResponse((error as Error).message);
   }
 }

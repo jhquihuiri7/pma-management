@@ -25,12 +25,13 @@ export async function PATCH(
     if ("observation" in body && Object.keys(body).length === 1) {
       await updatePlanItemObservation(params.itemId, params.id, body.observation ?? "");
     } else {
+      // eslint-disable-next-line @typescript-eslint/no-unused-vars
       const { observation: _obs, ...fields } = body;
       await updatePlanItem(params.itemId, params.id, fields);
     }
     return NextResponse.json({ success: true });
-  } catch (error: any) {
-    return errorResponse(error.message);
+  } catch (error: unknown) {
+    return errorResponse((error as Error).message);
   }
 }
 
@@ -49,7 +50,7 @@ export async function DELETE(
   try {
     await deletePlanItem(params.itemId, params.id);
     return NextResponse.json({ success: true });
-  } catch (error: any) {
-    return errorResponse(error.message);
+  } catch (error: unknown) {
+    return errorResponse((error as Error).message);
   }
 }
