@@ -43,7 +43,6 @@ const EMPTY_ITEM_FORM = {
   indicator: "",
   verification_method: "",
   periodicity: "",
-  start_date: "",
   budget: "",
   report_per: "6 meses",
 };
@@ -456,7 +455,6 @@ export default function PlanDetailPage() {
                       indicator: last.indicator,
                       verification_method: last.verification_method,
                       periodicity: last.periodicity,
-                      start_date: last.start_date,
                       budget: String(last.budget),
                       report_per: last.report_per ?? "6 meses",
                     });
@@ -486,26 +484,6 @@ export default function PlanDetailPage() {
                         }
                         required
                       />
-                    </div>
-                    <div className="space-y-2">
-                      <Label htmlFor="type">Tipo</Label>
-                      <select
-                        id="type"
-                        value={itemForm.type}
-                        onChange={(e) =>
-                          setItemForm({ ...itemForm, type: e.target.value })
-                        }
-                        required
-                        className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
-                      >
-                        <option value="" disabled>
-                          Seleccionar tipo...
-                        </option>
-                        <option value="Licencia">Licencia</option>
-                        <option value="Registro Ambiental">
-                          Registro Ambiental
-                        </option>
-                      </select>
                     </div>
                     <div className="space-y-2">
                       <Label htmlFor="subplan">Subplan</Label>
@@ -543,21 +521,6 @@ export default function PlanDetailPage() {
                       </select>
                     </div>
                     <div className="space-y-2">
-                      <Label htmlFor="start_date">Fecha de Inicio</Label>
-                      <Input
-                        id="start_date"
-                        type="date"
-                        value={itemForm.start_date}
-                        onChange={(e) =>
-                          setItemForm({
-                            ...itemForm,
-                            start_date: e.target.value,
-                          })
-                        }
-                        required
-                      />
-                    </div>
-                    <div className="space-y-2">
                       <Label htmlFor="budget">Presupuesto</Label>
                       <Input
                         id="budget"
@@ -570,21 +533,6 @@ export default function PlanDetailPage() {
                         }
                         required
                       />
-                    </div>
-                    <div className="space-y-2">
-                      <Label htmlFor="reporte">Reporte</Label>
-                      <select
-                        id="reporte"
-                        value={itemForm.report_per}
-                        onChange={(e) =>
-                          setItemForm({ ...itemForm, report_per: e.target.value })
-                        }
-                        className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
-                      >
-                        <option value="6 meses">6 meses</option>
-                        <option value="1 año">1 año</option>
-                        <option value="2 años">2 años</option>
-                      </select>
                     </div>
                   </div>
 
@@ -693,7 +641,6 @@ export default function PlanDetailPage() {
                     <TableHead>Indicador</TableHead>
                     <TableHead>Método Verificación</TableHead>
                     <TableHead>Periodicidad</TableHead>
-                    <TableHead>Fecha Inicio</TableHead>
                     <TableHead>Presupuesto</TableHead>
                     <TableHead>Reporteros</TableHead>
                     <TableHead>Observación</TableHead>
@@ -729,12 +676,9 @@ export default function PlanDetailPage() {
                         {pi.periodicity}
                       </TableCell>
                       <TableCell className="whitespace-nowrap">
-                        {new Date(pi.start_date).toLocaleDateString()}
-                      </TableCell>
-                      <TableCell className="whitespace-nowrap">
-                        {pi.budget.toLocaleString("es-PE", {
+                        {pi.budget.toLocaleString("en-US", {
                           style: "currency",
-                          currency: "PEN",
+                          currency: "USD",
                         })}
                       </TableCell>
                       <TableCell>
@@ -789,7 +733,6 @@ export default function PlanDetailPage() {
                                   indicator: pi.indicator,
                                   verification_method: pi.verification_method,
                                   periodicity: pi.periodicity,
-                                  start_date: pi.start_date,
                                   budget: String(pi.budget),
                                   report_per: pi.report_per ?? "6 meses",
                                 });
@@ -819,6 +762,7 @@ export default function PlanDetailPage() {
 
       {/* Cronograma mensual */}
       {visibleItems.length > 0 && (() => {
+        const p = plan!;
         // Build evidence status lookup: "planItemId-YYYY-MM" → validationStatus of latest evidence
         // Priority for multiple evidences: valid > invalid > pending
         const evidenceMonthStatus = new Map<string, EvidenceValidationStatus>();
@@ -861,9 +805,8 @@ export default function PlanDetailPage() {
         const today = new Date();
         const todayMonth = new Date(today.getFullYear(), today.getMonth(), 1);
 
-        const startDates = visibleItems.map((pi) => new Date(pi.start_date));
-        const minDate = new Date(Math.min(...startDates.map((d) => d.getTime())));
-        const rangeStart = new Date(minDate.getFullYear(), minDate.getMonth(), 1);
+        const planStart = new Date(p.start_date || p.createdAt);
+        const rangeStart = new Date(planStart.getFullYear(), planStart.getMonth(), 1);
         const rangeEnd = new Date(today.getFullYear(), today.getMonth() + 2, 1);
 
         const months: Date[] = [];
@@ -874,7 +817,7 @@ export default function PlanDetailPage() {
         }
 
         function isActive(pi: PlanItem, month: Date): boolean {
-          const s = new Date(pi.start_date);
+          const s = new Date(p.start_date || p.createdAt);
           const sm = new Date(s.getFullYear(), s.getMonth(), 1);
           const mm = new Date(month.getFullYear(), month.getMonth(), 1);
           if (mm < sm) return false;
@@ -897,8 +840,8 @@ export default function PlanDetailPage() {
           const blockSize = getBlockSize(pi.report_per);
           if (!blockSize) return "none";
 
-          // Blocks always start from January of the item's start year
-          const startYear = new Date(pi.start_date).getFullYear();
+          // Blocks always start from January of the plan's start year
+          const startYear = new Date(p.start_date || p.createdAt).getFullYear();
           const blockOrigin = new Date(startYear, 0, 1);
           const mm = new Date(month.getFullYear(), month.getMonth(), 1);
 
@@ -995,9 +938,10 @@ export default function PlanDetailPage() {
                           </td>
                           {months.map((m, i) => {
                             const active = isActive(pi, m);
+                            const planStartDate = new Date(p.start_date || p.createdAt);
                             const isStart =
-                              new Date(pi.start_date).getFullYear() === m.getFullYear() &&
-                              new Date(pi.start_date).getMonth() === m.getMonth();
+                              planStartDate.getFullYear() === m.getFullYear() &&
+                              planStartDate.getMonth() === m.getMonth();
                             const isToday = m.getTime() === todayMonth.getTime();
                             const periodicLabel = periodicityLabel[pi.periodicity] ?? "•";
                             const monthKey = `${m.getFullYear()}-${String(m.getMonth() + 1).padStart(2, "0")}`;
@@ -1009,7 +953,7 @@ export default function PlanDetailPage() {
                               evStatus === "valid"   ? `Válido — ${m.toLocaleString("es", { month: "long", year: "numeric" })}` :
                               evStatus === "invalid" ? `Rechazado — ${m.toLocaleString("es", { month: "long", year: "numeric" })}` :
                               evStatus === "pending" ? `Pendiente de aprobación — ${m.toLocaleString("es", { month: "long", year: "numeric" })}` :
-                              isStart ? `Subir evidencia de inicio — ${new Date(pi.start_date).toLocaleDateString("es")}` :
+                              isStart ? `Subir evidencia de inicio — ${planStartDate.toLocaleDateString("es")}` :
                               `Subir evidencia — ${m.toLocaleString("es", { month: "long", year: "numeric" })}`;
 
                             const cellBg =
@@ -1448,6 +1392,7 @@ export default function PlanDetailPage() {
 
       {/* Reportería */}
       {visibleItems.length > 0 && (() => {
+        const p = plan!;
         function getBlockSize(report_per: string | undefined): number {
           const s = (report_per ?? "").toLowerCase();
           if (s.startsWith("2")) return 24;
@@ -1457,7 +1402,7 @@ export default function PlanDetailPage() {
 
         function getAvailablePeriods(pi: PlanItem): { key: string; label: string }[] {
           const blockSize = getBlockSize(pi.report_per);
-          const startYear = new Date(pi.start_date).getFullYear();
+          const startYear = new Date(p.start_date || p.createdAt).getFullYear();
           const blockOrigin = new Date(startYear, 0, 1);
           const today = new Date();
           const todayMonth = new Date(today.getFullYear(), today.getMonth(), 1);

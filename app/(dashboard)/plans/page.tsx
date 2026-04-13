@@ -14,7 +14,7 @@ import {
   DialogTitle,
   DialogTrigger,
 } from "@/components/ui/dialog";
-import { Plus, ArrowRight } from "lucide-react";
+import { Plus, ArrowRight, Pencil } from "lucide-react";
 import { toast } from "sonner";
 import { Plan } from "@/types";
 
@@ -24,8 +24,11 @@ export default function PlansPage() {
   const isViewer = session?.user?.role === "VIEWER";
   const [plans, setPlans] = useState<Plan[]>([]);
   const [open, setOpen] = useState(false);
+  const [editOpen, setEditOpen] = useState(false);
+  const [editingPlan, setEditingPlan] = useState<Plan | null>(null);
   const [loading, setLoading] = useState(false);
-  const [form, setForm] = useState({ title: "", description: "", tipo: "", report_per: "6 meses" });
+  const [form, setForm] = useState({ title: "", description: "", tipo: "", report_per: "6 meses", start_date: "" });
+  const [editForm, setEditForm] = useState({ title: "", description: "", tipo: "", report_per: "6 meses", start_date: "" });
 
   async function loadPlans() {
     const res = await fetch("/api/plans");
@@ -50,12 +53,48 @@ export default function PlansPage() {
 
     if (res.ok) {
       toast.success("Plan created successfully");
-      setForm({ title: "", description: "", tipo: "", report_per: "6 meses" });
+      setForm({ title: "", description: "", tipo: "", report_per: "6 meses", start_date: "" });
       setOpen(false);
       loadPlans();
     } else {
       const data = await res.json();
       toast.error(data.error || "Failed to create plan");
+    }
+  }
+
+  function openEdit(plan: Plan) {
+    setEditingPlan(plan);
+    setEditForm({
+      title: plan.title,
+      description: plan.description || "",
+      tipo: plan.tipo || "",
+      report_per: plan.report_per ?? "6 meses",
+      start_date: plan.start_date || "",
+    });
+    setEditOpen(true);
+  }
+
+  async function handleEdit(e: React.FormEvent) {
+    e.preventDefault();
+    if (!editingPlan) return;
+    setLoading(true);
+
+    const res = await fetch(`/api/plans/${editingPlan.id}`, {
+      method: "PUT",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(editForm),
+    });
+
+    setLoading(false);
+
+    if (res.ok) {
+      toast.success("Plan actualizado correctamente");
+      setEditOpen(false);
+      setEditingPlan(null);
+      loadPlans();
+    } else {
+      const data = await res.json();
+      toast.error(data.error || "Error al actualizar el plan");
     }
   }
 
@@ -142,6 +181,18 @@ export default function PlansPage() {
                     <option value="2 años">2 años</option>
                   </select>
                 </div>
+                <div className="space-y-2">
+                  <Label htmlFor="start_date">Fecha de Inicio</Label>
+                  <Input
+                    id="start_date"
+                    type="date"
+                    value={form.start_date}
+                    onChange={(e) =>
+                      setForm({ ...form, start_date: e.target.value })
+                    }
+                    required
+                  />
+                </div>
                 <Button type="submit" className="w-full" disabled={loading}>
                   {loading ? "Creando..." : "Crear Plan"}
                 </Button>
@@ -193,17 +244,107 @@ export default function PlansPage() {
                   <span className="text-xs text-muted-foreground">
                     {new Date(plan.createdAt).toLocaleDateString()}
                   </span>
-                  <Link href={`/plans/${plan.id}`}>
-                    <Button variant="ghost" size="sm">
-                      Ver <ArrowRight className="w-4 h-4 ml-1" />
-                    </Button>
-                  </Link>
+                  <div className="flex items-center gap-1">
+                    {isAdmin && (
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        onClick={() => openEdit(plan)}
+                      >
+                        <Pencil className="w-4 h-4" />
+                      </Button>
+                    )}
+                    <Link href={`/plans/${plan.id}`}>
+                      <Button variant="ghost" size="sm">
+                        Ver <ArrowRight className="w-4 h-4 ml-1" />
+                      </Button>
+                    </Link>
+                  </div>
                 </div>
               </CardContent>
             </Card>
           ))}
         </div>
       )}
+
+      {/* Edit Plan Dialog */}
+      <Dialog open={editOpen} onOpenChange={setEditOpen}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Editar Plan</DialogTitle>
+          </DialogHeader>
+          <form onSubmit={handleEdit} className="space-y-4 mt-4">
+            <div className="space-y-2">
+              <Label htmlFor="edit-title">Título</Label>
+              <Input
+                id="edit-title"
+                value={editForm.title}
+                onChange={(e) =>
+                  setEditForm({ ...editForm, title: e.target.value })
+                }
+                required
+              />
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="edit-description">Descripción</Label>
+              <textarea
+                id="edit-description"
+                className="flex min-h-[80px] w-full rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                value={editForm.description}
+                onChange={(e) =>
+                  setEditForm({ ...editForm, description: e.target.value })
+                }
+              />
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="edit-tipo">Tipo</Label>
+              <select
+                id="edit-tipo"
+                className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                value={editForm.tipo}
+                onChange={(e) =>
+                  setEditForm({ ...editForm, tipo: e.target.value })
+                }
+                required
+              >
+                <option value="" disabled>Seleccionar tipo...</option>
+                <option value="Licencia">Licencia</option>
+                <option value="Registro Ambiental">Registro Ambiental</option>
+              </select>
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="edit-reporte">Reporte</Label>
+              <select
+                id="edit-reporte"
+                className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                value={editForm.report_per}
+                onChange={(e) =>
+                  setEditForm({ ...editForm, report_per: e.target.value })
+                }
+              >
+                <option value="6 meses">6 meses</option>
+                <option value="1 año">1 año</option>
+                <option value="2 años">2 años</option>
+              </select>
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="edit-start_date">Fecha de Inicio</Label>
+              <Input
+                id="edit-start_date"
+                type="date"
+                value={editForm.start_date}
+                onChange={(e) =>
+                  setEditForm({ ...editForm, start_date: e.target.value })
+                }
+                required
+              />
+            </div>
+            <Button type="submit" className="w-full" disabled={loading}>
+              {loading ? "Guardando..." : "Guardar cambios"}
+            </Button>
+          </form>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }

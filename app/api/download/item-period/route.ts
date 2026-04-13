@@ -167,7 +167,7 @@ export async function GET(req: NextRequest) {
     }
 
     try {
-      const photosDocxBuffer = await buildPhotosTableDocx(imageFiles, templateBuffer);
+      const photosDocxBuffer = await buildPhotosTableDocx(imageFiles, templateBuffer, planItem.item);
       zip.file("document_fotografías.docx", photosDocxBuffer);
     } catch (err) {
       console.error("Failed to build photos table docx:", err);

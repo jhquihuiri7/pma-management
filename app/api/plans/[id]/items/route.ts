@@ -54,12 +54,10 @@ export async function POST(
     periodicity,
     start_date,
     budget,
-    report_per,
   } = body;
 
   if (
     !item ||
-    !type ||
     !subplan ||
     !environmental_activity ||
     !identified_environmental_impact ||
@@ -67,7 +65,6 @@ export async function POST(
     !indicator ||
     !verification_method ||
     !periodicity ||
-    !start_date ||
     budget === undefined ||
     budget === null ||
     budget === ""
@@ -88,9 +85,9 @@ export async function POST(
         indicator,
         verification_method,
         periodicity,
-        start_date,
+        start_date: start_date || plan.start_date || new Date().toISOString().split("T")[0],
         budget: Number(budget),
-        report_per: report_per || "6 meses",
+        report_per: plan.report_per || "6 meses",
       }
     );
     return NextResponse.json(newItem, { status: 201 });

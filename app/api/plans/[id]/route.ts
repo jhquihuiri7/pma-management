@@ -5,14 +5,9 @@ import {
   forbiddenResponse,
   errorResponse,
 } from "@/lib/api-utils";
-import {
-  getPlanById,
-  updatePlan,
-  deletePlan,
-  getAssignedUsers,
-  isUserAssignedToPlan,
-} from "@/services/planService";
+import { getPlanById, updatePlan, getAssignedUsers } from "@/services/planService";
 import { getEvidencesByPlan } from "@/services/evidenceService";
+import { PlanReporte, PlanTipo } from "@/types";
 
 export async function GET(
   _req: NextRequest,
@@ -25,18 +20,12 @@ export async function GET(
   if (!plan) return errorResponse("Plan not found", 404);
   if (plan.adminId !== session.user.adminId) return forbiddenResponse();
 
-  // VIEWER must be assigned to the plan at plan level
-  if (session.user.role === "VIEWER") {
-    const assigned = await isUserAssignedToPlan(session.user.id, params.id);
-    if (!assigned) return forbiddenResponse();
-  }
-
-  const [assignedUsers, evidences] = await Promise.all([
-    getAssignedUsers(params.id),
+  const [evidences, assignedUsers] = await Promise.all([
     getEvidencesByPlan(params.id),
+    getAssignedUsers(params.id),
   ]);
 
-  return NextResponse.json({ plan, assignedUsers, evidences });
+  return NextResponse.json({ plan, evidences, assignedUsers });
 }
 
 export async function PUT(
@@ -48,26 +37,19 @@ export async function PUT(
   if (session.user.role !== "ADMIN") return forbiddenResponse();
 
   const body = await req.json();
+  const { title, description, report_per, tipo, start_date } = body;
+
+  if (!title) return errorResponse("Title is required");
 
   try {
-    const plan = await updatePlan(params.id, session.user.adminId, body);
+    const plan = await updatePlan(params.id, session.user.adminId, {
+      title,
+      description,
+      report_per: report_per as PlanReporte,
+      tipo: tipo as PlanTipo | undefined,
+      start_date,
+    });
     return NextResponse.json(plan);
-  } catch (error: unknown) {
-    return errorResponse((error as Error).message);
-  }
-}
-
-export async function DELETE(
-  _req: NextRequest,
-  { params }: { params: { id: string } }
-) {
-  const session = await getAuthSession();
-  if (!session?.user) return unauthorizedResponse();
-  if (session.user.role !== "ADMIN") return forbiddenResponse();
-
-  try {
-    await deletePlan(params.id, session.user.adminId);
-    return NextResponse.json({ success: true });
   } catch (error: unknown) {
     return errorResponse((error as Error).message);
   }

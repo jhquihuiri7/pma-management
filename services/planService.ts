@@ -8,7 +8,8 @@ export async function createPlan(
   description: string,
   report_per: PlanReporte = "6 meses",
   driveFolderId?: string,
-  tipo?: PlanTipo
+  tipo?: PlanTipo,
+  start_date?: string
 ): Promise<Plan> {
   const planRef = adminDb.collection("plans").doc();
   const now = new Date().toISOString();
@@ -20,6 +21,7 @@ export async function createPlan(
     description,
     ...(tipo ? { tipo } : {}),
     report_per,
+    ...(start_date ? { start_date } : {}),
     ...(driveFolderId ? { driveFolderId } : {}),
     createdAt: now,
     updatedAt: now,
@@ -52,7 +54,7 @@ export async function getPlanById(planId: string): Promise<Plan | null> {
 export async function updatePlan(
   planId: string,
   adminId: string,
-  updates: { title?: string; description?: string; report_per?: PlanReporte }
+  updates: { title?: string; description?: string; report_per?: PlanReporte; tipo?: PlanTipo; start_date?: string }
 ): Promise<Plan> {
   const doc = await adminDb.collection("plans").doc(planId).get();
   if (!doc.exists) throw new Error("Plan not found");

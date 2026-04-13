@@ -36,6 +36,7 @@ export interface Plan {
   description: string;
   tipo?: PlanTipo;
   report_per: PlanReporte;
+  start_date?: string;
   driveFolderId?: string;
   createdAt: string;
   updatedAt: string;
