@@ -7,7 +7,6 @@ import {
 } from "@/lib/api-utils";
 import { getPlanById, isUserAssignedToPlan } from "@/services/planService";
 import { createPlanItem, getPlanItems } from "@/services/planItemService";
-import { createItemDriveFolder } from "@/services/driveService";
 
 export async function GET(
   _req: NextRequest,
@@ -77,21 +76,6 @@ export async function POST(
   }
 
   try {
-    // Create Drive subfolder for this item inside the plan's folder
-    let itemDriveFolderId: string | undefined;
-    if (plan.driveFolderId) {
-      try {
-        itemDriveFolderId = await createItemDriveFolder(
-          session.user.adminId,
-          item,
-          plan.driveFolderId
-        );
-      } catch (driveErr) {
-        console.error("Drive item folder creation failed:", driveErr);
-        // Continue without Drive folder — upload will fall back gracefully
-      }
-    }
-
     const newItem = await createPlanItem(
       params.id,
       {
@@ -107,8 +91,7 @@ export async function POST(
         start_date,
         budget: Number(budget),
         report_per: report_per || "6 meses",
-      },
-      itemDriveFolderId
+      }
     );
     return NextResponse.json(newItem, { status: 201 });
   } catch (error: unknown) {

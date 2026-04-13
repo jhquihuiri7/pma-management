@@ -6,11 +6,11 @@ import { getAuthenticatedDrive } from "@/lib/drive";
 import { getPlanById } from "@/services/planService";
 import { Evidence, Format, PlanItem } from "@/types";
 import {
-  buildPhotosDocx,
+  buildPhotosTableDocx,
   fileExtension,
   isImageFile,
   isPdfFile,
-  PhotoEntry,
+  PhotoWithDescription,
 } from "@/lib/wordUtils";
 
 function getBlockSize(report_per: string | undefined): number {
@@ -92,6 +92,7 @@ export async function GET(req: NextRequest) {
         return {
           fileName: evidence.fileName,
           buffer: Buffer.from(res.data as ArrayBuffer),
+          description: evidence.description ?? "",
         };
       } catch (err) {
         console.error(`Failed to download file ${evidence.driveFileId}:`, err);
@@ -102,7 +103,7 @@ export async function GET(req: NextRequest) {
 
   // ── Classify into PDFs and images ──────────────────────────────────────
   const pdfFiles: Array<{ fileName: string; buffer: Buffer }> = [];
-  const imageFiles: PhotoEntry[] = [];
+  const imageFiles: PhotoWithDescription[] = [];
 
   for (const file of downloadedFiles) {
     if (!file) continue;
@@ -113,6 +114,7 @@ export async function GET(req: NextRequest) {
         buffer: file.buffer,
         ext: fileExtension(file.fileName),
         name: file.fileName,
+        description: file.description,
       });
     }
     // other types are ignored (per product requirement: only PDFs and images)
@@ -138,7 +140,7 @@ export async function GET(req: NextRequest) {
     zip.file(safeName, pdf.buffer);
   }
 
-  // Build Word document with images (if any)
+  // Build Word document with photos table (if any)
   if (imageFiles.length > 0) {
     let templateBuffer: Buffer | undefined;
 
@@ -165,15 +167,10 @@ export async function GET(req: NextRequest) {
     }
 
     try {
-      const safeItemName = planItem.item.replace(
-        /[^a-zA-Z0-9_\-\u00C0-\u024F]/g,
-        "_"
-      );
-      const photosDocxName = `fotos_${safeItemName}_${periodStart}.docx`;
-      const photosDocxBuffer = await buildPhotosDocx(imageFiles, templateBuffer);
-      zip.file(photosDocxName, photosDocxBuffer);
+      const photosDocxBuffer = await buildPhotosTableDocx(imageFiles, templateBuffer);
+      zip.file("document_fotografías.docx", photosDocxBuffer);
     } catch (err) {
-      console.error("Failed to build photos docx:", err);
+      console.error("Failed to build photos table docx:", err);
       // Skip photos document if generation fails
     }
   }

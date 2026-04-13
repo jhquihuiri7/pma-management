@@ -1,13 +1,14 @@
 import { adminDb } from "@/lib/firebase-admin";
 import { getAuthenticatedDrive } from "@/lib/drive";
-import { Plan, Assignment, PlanReporte, Evidence } from "@/types";
+import { Plan, Assignment, PlanReporte, PlanTipo, Evidence } from "@/types";
 
 export async function createPlan(
   adminId: string,
   title: string,
   description: string,
   report_per: PlanReporte = "6 meses",
-  driveFolderId?: string
+  driveFolderId?: string,
+  tipo?: PlanTipo
 ): Promise<Plan> {
   const planRef = adminDb.collection("plans").doc();
   const now = new Date().toISOString();
@@ -17,6 +18,7 @@ export async function createPlan(
     adminId,
     title,
     description,
+    ...(tipo ? { tipo } : {}),
     report_per,
     ...(driveFolderId ? { driveFolderId } : {}),
     createdAt: now,

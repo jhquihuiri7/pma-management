@@ -111,33 +111,25 @@ export async function POST(req: NextRequest) {
 
     let targetFolderId: string = planFolderId;
 
-    // If uploading for a specific item, resolve: item folder → period subfolder
+    // If uploading for a specific item, resolve: period subfolder → item folder
     if (planItemId) {
       const itemDoc = await adminDb.collection("planItems").doc(planItemId).get();
       if (itemDoc.exists) {
         const planItem = itemDoc.data() as PlanItem;
 
-        // Ensure item folder exists inside plan folder
-        let itemFolderId = planItem.driveFolderId;
-        if (!itemFolderId) {
-          itemFolderId = await getOrCreateFolder(drive, planItem.item, planFolderId);
-          await adminDb
-            .collection("planItems")
-            .doc(planItemId)
-            .update({ driveFolderId: itemFolderId });
-        }
-
-        // Create/get period subfolder inside item folder
+        // Create/get period subfolder inside plan folder
+        let periodFolderId: string = planFolderId;
         if (activityMonth) {
           const periodName = getPeriodFolderName(
             activityMonth,
             planItem.start_date,
             planItem.report_per
           );
-          targetFolderId = await getOrCreateFolder(drive, periodName, itemFolderId);
-        } else {
-          targetFolderId = itemFolderId;
+          periodFolderId = await getOrCreateFolder(drive, periodName, planFolderId);
         }
+
+        // Ensure item folder exists inside period folder
+        targetFolderId = await getOrCreateFolder(drive, planItem.item, periodFolderId);
       }
     }
 

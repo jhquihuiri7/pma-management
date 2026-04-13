@@ -686,7 +686,6 @@ export default function PlanDetailPage() {
                 <TableHeader>
                   <TableRow>
                     <TableHead>Ítem</TableHead>
-                    <TableHead>Tipo</TableHead>
                     <TableHead>Subplan</TableHead>
                     <TableHead>Actividad Ambiental</TableHead>
                     <TableHead>Impacto Identificado</TableHead>
@@ -696,7 +695,6 @@ export default function PlanDetailPage() {
                     <TableHead>Periodicidad</TableHead>
                     <TableHead>Fecha Inicio</TableHead>
                     <TableHead>Presupuesto</TableHead>
-                    <TableHead>Reporte</TableHead>
                     <TableHead>Reporteros</TableHead>
                     <TableHead>Observación</TableHead>
                     <TableHead className="w-[60px]"></TableHead>
@@ -708,9 +706,6 @@ export default function PlanDetailPage() {
                     <TableRow key={pi.id}>
                       <TableCell className="font-medium whitespace-nowrap">
                         {pi.item}
-                      </TableCell>
-                      <TableCell className="whitespace-nowrap">
-                        {pi.type}
                       </TableCell>
                       <TableCell className="whitespace-nowrap">
                         {pi.subplan}
@@ -741,11 +736,6 @@ export default function PlanDetailPage() {
                           style: "currency",
                           currency: "PEN",
                         })}
-                      </TableCell>
-                      <TableCell className="whitespace-nowrap">
-                        <span className="inline-flex items-center rounded-md bg-slate-100 px-2 py-0.5 text-xs font-medium">
-                          {pi.report_per ?? "6 meses"}
-                        </span>
                       </TableCell>
                       <TableCell>
                         <Button
@@ -1508,8 +1498,6 @@ export default function PlanDetailPage() {
                   <TableHeader>
                     <TableRow>
                       <TableHead>Ítem</TableHead>
-                      <TableHead>Tipo</TableHead>
-                      <TableHead>Reporte</TableHead>
                       <TableHead>Anexos</TableHead>
                     </TableRow>
                   </TableHeader>
@@ -1520,14 +1508,6 @@ export default function PlanDetailPage() {
                         <TableRow key={pi.id}>
                           <TableCell className="font-medium whitespace-nowrap">
                             {pi.item}
-                          </TableCell>
-                          <TableCell className="whitespace-nowrap">
-                            {pi.type}
-                          </TableCell>
-                          <TableCell className="whitespace-nowrap">
-                            <span className="inline-flex items-center rounded-md bg-slate-100 px-2 py-0.5 text-xs font-medium">
-                              {pi.report_per ?? "6 meses"}
-                            </span>
                           </TableCell>
                           <TableCell>
                             {periods.length === 0 ? (

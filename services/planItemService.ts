@@ -3,8 +3,7 @@ import { ItemAssignment, ItemAssignmentCategory, PlanItem } from "@/types";
 
 export async function createPlanItem(
   planId: string,
-  data: Omit<PlanItem, "id" | "planId" | "createdAt" | "assignedUsers" | "driveFolderId">,
-  driveFolderId?: string
+  data: Omit<PlanItem, "id" | "planId" | "createdAt" | "assignedUsers" | "driveFolderId">
 ): Promise<PlanItem> {
   const ref = adminDb.collection("planItems").doc();
   const now = new Date().toISOString();
@@ -14,7 +13,6 @@ export async function createPlanItem(
     planId,
     ...data,
     assignedUsers: [],
-    ...(driveFolderId ? { driveFolderId } : {}),
     createdAt: now,
   };
 

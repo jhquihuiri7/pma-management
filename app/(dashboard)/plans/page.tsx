@@ -25,7 +25,7 @@ export default function PlansPage() {
   const [plans, setPlans] = useState<Plan[]>([]);
   const [open, setOpen] = useState(false);
   const [loading, setLoading] = useState(false);
-  const [form, setForm] = useState({ title: "", description: "", report_per: "6 meses" });
+  const [form, setForm] = useState({ title: "", description: "", tipo: "", report_per: "6 meses" });
 
   async function loadPlans() {
     const res = await fetch("/api/plans");
@@ -50,7 +50,7 @@ export default function PlansPage() {
 
     if (res.ok) {
       toast.success("Plan created successfully");
-      setForm({ title: "", description: "", report_per: "6 meses" });
+      setForm({ title: "", description: "", tipo: "", report_per: "6 meses" });
       setOpen(false);
       loadPlans();
     } else {
@@ -112,6 +112,22 @@ export default function PlansPage() {
                   />
                 </div>
                 <div className="space-y-2">
+                  <Label htmlFor="tipo">Tipo</Label>
+                  <select
+                    id="tipo"
+                    className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                    value={form.tipo}
+                    onChange={(e) =>
+                      setForm({ ...form, tipo: e.target.value })
+                    }
+                    required
+                  >
+                    <option value="" disabled>Seleccionar tipo...</option>
+                    <option value="Licencia">Licencia</option>
+                    <option value="Registro Ambiental">Registro Ambiental</option>
+                  </select>
+                </div>
+                <div className="space-y-2">
                   <Label htmlFor="reporte">Reporte</Label>
                   <select
                     id="reporte"
@@ -157,6 +173,14 @@ export default function PlansPage() {
                 <p className="text-sm text-muted-foreground line-clamp-2 mb-4">
                   {plan.description || "Sin descripción"}
                 </p>
+                {plan.tipo && (
+                  <div className="flex items-center justify-between mb-2">
+                    <span className="text-xs text-muted-foreground">Tipo:</span>
+                    <span className="text-xs font-medium bg-slate-100 px-2 py-0.5 rounded">
+                      {plan.tipo}
+                    </span>
+                  </div>
+                )}
                 <div className="flex items-center justify-between mb-2">
                   <span className="text-xs text-muted-foreground">
                     Reporte:

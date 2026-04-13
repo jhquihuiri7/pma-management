@@ -27,12 +27,14 @@ export interface Admin {
 }
 
 export type PlanReporte = "6 meses" | "1 año" | "2 años";
+export type PlanTipo = "Licencia" | "Registro Ambiental";
 
 export interface Plan {
   id: string;
   adminId: string;
   title: string;
   description: string;
+  tipo?: PlanTipo;
   report_per: PlanReporte;
   driveFolderId?: string;
   createdAt: string;
