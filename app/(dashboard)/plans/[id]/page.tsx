@@ -513,11 +513,16 @@ export default function PlanDetailPage() {
                         <option value="" disabled>
                           Seleccionar periodicidad...
                         </option>
-                        <option value="Mensual">Mensual</option>
-                        <option value="Bimensual">Bimensual</option>
-                        <option value="Trimestral">Trimestral</option>
-                        <option value="Semestral">Semestral</option>
+                        <option value="Al finalizar la etapa de operación">Al finalizar la etapa de operación</option>
                         <option value="Anual">Anual</option>
+                        <option value="Bianual">Bianual</option>
+                        <option value="En caso de suceder">En caso de suceder</option>
+                        <option value="Mensual">Mensual</option>
+                        <option value="Permanente">Permanente</option>
+                        <option value="Semanal">Semanal</option>
+                        <option value="Semestral">Semestral</option>
+                        <option value="Trimestral">Trimestral</option>
+                        <option value="Una vez">Una vez</option>
                       </select>
                     </div>
                     <div className="space-y-2">
@@ -787,19 +792,31 @@ export default function PlanDetailPage() {
         };
 
         const periodicityInterval: Record<string, number> = {
+          "Al finalizar la etapa de operación": 9999,
+          "En caso de suceder": 1,
+          Semanal: 1,
           Mensual: 1,
           Bimensual: 2,
+          Bianual: 24,
           Trimestral: 3,
           Semestral: 6,
           Anual: 12,
+          Permanente: 1,
+          "Una vez": 9999,
         };
 
         const periodicityLabel: Record<string, string> = {
+          "Al finalizar la etapa de operación": "Fin",
+          "En caso de suceder": "CS",
+          Semanal: "Sem",
           Mensual: "M",
           Bimensual: "B",
+          Bianual: "Bi",
           Trimestral: "T",
           Semestral: "S",
           Anual: "A",
+          Permanente: "P",
+          "Una vez": "1x",
         };
 
         const today = new Date();
@@ -1021,7 +1038,19 @@ export default function PlanDetailPage() {
                   Válido
                 </span>
                 <span className="ml-auto flex gap-3">
-                  {(["Mensual","Bimensual","Trimestral","Semestral","Anual"] as const).map((p) => (
+                  {([
+                    "Al finalizar la etapa de operación",
+                    "Anual",
+                    "Bianual",
+                    "En caso de suceder",
+                    "Mensual",
+                    "Permanente",
+                    "Semanal",
+                    "Semestral",
+                    "Trimestral",
+                    "Una vez",
+                    "Bimensual",
+                  ] as const).map((p) => (
                     <span key={p}><span className="font-semibold">{periodicityLabel[p]}</span> = {p}</span>
                   ))}
                 </span>
