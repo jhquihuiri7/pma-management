@@ -47,6 +47,19 @@ const EMPTY_ITEM_FORM = {
   report_per: "6 meses",
 };
 
+const SUBPLAN_OPTIONS = [
+  "Plan de Prevención y Mitigación de Impactos",
+  "Plan de Seguridad y Salud Ocupacional",
+  "Plan de Contingencias",
+  "Plan de Manejo de Desechos",
+  "Plan de Monitoreo y Seguimiento",
+  "Plan de rescate de vida silvestre",
+  "Plan de Capacitación",
+  "Plan de Rehabilitación de Áreas Afectadas",
+  "Plan de Relaciones Comunitarias",
+  "Plan de Cierre y Abandono",
+] as const;
+
 export default function PlanDetailPage() {
   const { id } = useParams<{ id: string }>();
   const { data: session } = useSession();
@@ -63,6 +76,9 @@ export default function PlanDetailPage() {
   const [addItemOpen, setAddItemOpen] = useState(false);
   const [itemForm, setItemForm] = useState(EMPTY_ITEM_FORM);
   const [savingItem, setSavingItem] = useState(false);
+  const [itemAssignments, setItemAssignments] = useState<
+    { userId: string; category: ItemAssignmentCategory }[]
+  >([]);
   const [assignItemOpen, setAssignItemOpen] = useState(false);
   const [selectedItem, setSelectedItem] = useState<PlanItem | null>(null);
   const [pendingAssign, setPendingAssign] = useState<{ reporter: User; category: ItemAssignmentCategory } | null>(null);
@@ -172,43 +188,54 @@ export default function PlanDetailPage() {
   async function handleAddItem(e: React.FormEvent) {
     e.preventDefault();
     setSavingItem(true);
+    try {
+      if (editingItem) {
+        const res = await fetch(`/api/plans/${id}/items/${editingItem.id}`, {
+          method: "PATCH",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ ...itemForm, budget: Number(itemForm.budget) }),
+        });
+        if (res.ok) {
+          await syncItemAssignments(
+            editingItem.id,
+            editingItem.assignedUsers ?? [],
+            itemAssignments
+          );
+          toast.success("Item actualizado correctamente");
+          setEditingItem(null);
+          setItemForm(EMPTY_ITEM_FORM);
+          setItemAssignments([]);
+          setAddItemOpen(false);
+          await loadItems();
+        } else {
+          const data = await res.json();
+          toast.error(data.error || "Error al actualizar item");
+        }
+        return;
+      }
 
-    if (editingItem) {
-      const res = await fetch(`/api/plans/${id}/items/${editingItem.id}`, {
-        method: "PATCH",
+      const res = await fetch(`/api/plans/${id}/items`, {
+        method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ ...itemForm, budget: Number(itemForm.budget) }),
       });
-      setSavingItem(false);
+
       if (res.ok) {
-        toast.success("Ítem actualizado correctamente");
-        setEditingItem(null);
+        const createdItem = await res.json();
+        await syncItemAssignments(createdItem.id, [], itemAssignments);
+        toast.success("Item agregado correctamente");
         setItemForm(EMPTY_ITEM_FORM);
+        setItemAssignments([]);
         setAddItemOpen(false);
-        loadItems();
+        await loadItems();
       } else {
         const data = await res.json();
-        toast.error(data.error || "Error al actualizar ítem");
+        toast.error(data.error || "Error al agregar item");
       }
-      return;
-    }
-
-    const res = await fetch(`/api/plans/${id}/items`, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ ...itemForm, budget: Number(itemForm.budget) }),
-    });
-
-    setSavingItem(false);
-
-    if (res.ok) {
-      toast.success("Ítem agregado correctamente");
-      setItemForm(EMPTY_ITEM_FORM);
-      setAddItemOpen(false);
-      loadItems();
-    } else {
-      const data = await res.json();
-      toast.error(data.error || "Error al agregar ítem");
+    } catch {
+      toast.error("Error al guardar asignaciones del item");
+    } finally {
+      setSavingItem(false);
     }
   }
 
@@ -250,6 +277,46 @@ export default function PlanDetailPage() {
       }
     } else {
       toast.error("Error al desasignar");
+    }
+  }
+
+  async function syncItemAssignments(
+    itemId: string,
+    currentAssignments: { userId: string; category: ItemAssignmentCategory }[],
+    desiredAssignments: { userId: string; category: ItemAssignmentCategory }[]
+  ) {
+    const currentByUserId = new Map(
+      currentAssignments.map((a) => [a.userId, a.category])
+    );
+    const desiredByUserId = new Map(
+      desiredAssignments.map((a) => [a.userId, a.category])
+    );
+
+    const toRemove = currentAssignments
+      .filter((a) => !desiredByUserId.has(a.userId))
+      .map((a) => a.userId);
+    const toUpsert = desiredAssignments.filter(
+      (a) => currentByUserId.get(a.userId) !== a.category
+    );
+
+    const responses = await Promise.all([
+      ...toRemove.map((userId) =>
+        fetch(`/api/plans/${id}/items/${itemId}/assign`, {
+          method: "DELETE",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ userId }),
+        })
+      ),
+      ...toUpsert.map(({ userId, category }) =>
+        fetch(`/api/plans/${id}/items/${itemId}/assign`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ userId, category }),
+        })
+      ),
+    ]);
+    if (responses.some((res) => !res.ok)) {
+      throw new Error("No se pudo sincronizar asignaciones del item");
     }
   }
 
@@ -343,6 +410,12 @@ export default function PlanDetailPage() {
     } else {
       toast.error("Error al guardar observación");
     }
+  }
+
+  function autoResizeTextarea(e: React.ChangeEvent<HTMLTextAreaElement>) {
+    const textarea = e.target;
+    textarea.style.height = "auto";
+    textarea.style.height = `${textarea.scrollHeight}px`;
   }
 
   if (!plan) {
@@ -442,6 +515,7 @@ export default function PlanDetailPage() {
                   if (!open) {
                     setEditingItem(null);
                     setItemForm(EMPTY_ITEM_FORM);
+                    setItemAssignments([]);
                   } else if (open && !editingItem && planItems.length > 0) {
                     const last = planItems[planItems.length - 1];
                     setItemForm({
@@ -458,8 +532,10 @@ export default function PlanDetailPage() {
                       budget: String(last.budget),
                       report_per: last.report_per ?? "6 meses",
                     });
+                    setItemAssignments([]);
                   } else if (open && !editingItem) {
                     setItemForm(EMPTY_ITEM_FORM);
+                    setItemAssignments([]);
                   }
                   setAddItemOpen(open);
                 }}
@@ -487,14 +563,24 @@ export default function PlanDetailPage() {
                     </div>
                     <div className="space-y-2">
                       <Label htmlFor="subplan">Subplan</Label>
-                      <Input
+                      <select
                         id="subplan"
                         value={itemForm.subplan}
                         onChange={(e) =>
                           setItemForm({ ...itemForm, subplan: e.target.value })
                         }
                         required
-                      />
+                        className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                      >
+                        <option value="" disabled>
+                          Seleccionar subplan...
+                        </option>
+                        {SUBPLAN_OPTIONS.map((option) => (
+                          <option key={option} value={option}>
+                            {option}
+                          </option>
+                        ))}
+                      </select>
                     </div>
                     <div className="space-y-2">
                       <Label htmlFor="periodicity">Periodicidad</Label>
@@ -577,27 +663,31 @@ export default function PlanDetailPage() {
 
                   <div className="space-y-2">
                     <Label htmlFor="proposed_measure">Medida Propuesta</Label>
-                    <Input
+                    <textarea
                       id="proposed_measure"
+                      className="w-full min-h-[96px] rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring overflow-hidden resize-none"
                       value={itemForm.proposed_measure}
-                      onChange={(e) =>
+                      onChange={(e) => {
+                        autoResizeTextarea(e);
                         setItemForm({
                           ...itemForm,
                           proposed_measure: e.target.value,
-                        })
-                      }
+                        });
+                      }}
                       required
                     />
                   </div>
 
                   <div className="space-y-2">
                     <Label htmlFor="indicator">Indicador</Label>
-                    <Input
+                    <textarea
                       id="indicator"
+                      className="w-full min-h-[96px] rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring overflow-hidden resize-none"
                       value={itemForm.indicator}
-                      onChange={(e) =>
-                        setItemForm({ ...itemForm, indicator: e.target.value })
-                      }
+                      onChange={(e) => {
+                        autoResizeTextarea(e);
+                        setItemForm({ ...itemForm, indicator: e.target.value });
+                      }}
                       required
                     />
                   </div>
@@ -617,6 +707,77 @@ export default function PlanDetailPage() {
                       }
                       required
                     />
+                  </div>
+
+                  <div className="space-y-2">
+                    <Label>Asignar reporteros</Label>
+                    {allReporters.length === 0 ? (
+                      <p className="text-sm text-muted-foreground">
+                        No hay reporteros disponibles para asignar.
+                      </p>
+                    ) : (
+                      <div className="space-y-2 rounded-md border p-3 max-h-56 overflow-y-auto">
+                        {allReporters.map((reporter) => {
+                          const assignment = itemAssignments.find(
+                            (a) => a.userId === reporter.id
+                          );
+                          const isChecked = Boolean(assignment);
+                          return (
+                            <div
+                              key={reporter.id}
+                              className="flex items-center justify-between gap-3"
+                            >
+                              <label className="flex items-center gap-2 text-sm">
+                                <input
+                                  type="checkbox"
+                                  checked={isChecked}
+                                  onChange={(e) => {
+                                    if (e.target.checked) {
+                                      setItemAssignments((prev) => [
+                                        ...prev,
+                                        { userId: reporter.id, category: "Responsable" },
+                                      ]);
+                                    } else {
+                                      setItemAssignments((prev) =>
+                                        prev.filter((a) => a.userId !== reporter.id)
+                                      );
+                                    }
+                                  }}
+                                />
+                                <span>
+                                  {reporter.name}
+                                  <span className="text-xs text-muted-foreground ml-1">
+                                    ({reporter.email})
+                                  </span>
+                                </span>
+                              </label>
+                              {isChecked && (
+                                <select
+                                  className="flex h-9 rounded-md border border-input bg-background px-3 py-1 text-sm ring-offset-background focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                                  value={assignment?.category ?? "Responsable"}
+                                  onChange={(e) =>
+                                    setItemAssignments((prev) =>
+                                      prev.map((a) =>
+                                        a.userId === reporter.id
+                                          ? {
+                                              ...a,
+                                              category: e.target
+                                                .value as ItemAssignmentCategory,
+                                            }
+                                          : a
+                                      )
+                                    )
+                                  }
+                                >
+                                  <option value="Responsable">Responsable</option>
+                                  <option value="Colaborador">Colaborador</option>
+                                </select>
+                              )}
+                            </div>
+                          );
+                        })}
+                      </div>
+                    )}
                   </div>
 
                   <Button type="submit" className="w-full" disabled={savingItem}>
@@ -741,6 +902,12 @@ export default function PlanDetailPage() {
                                   budget: String(pi.budget),
                                   report_per: pi.report_per ?? "6 meses",
                                 });
+                                setItemAssignments(
+                                  (pi.assignedUsers ?? []).map((a) => ({
+                                    userId: a.userId,
+                                    category: a.category,
+                                  }))
+                                );
                                 setAddItemOpen(true);
                               }}
                             >
