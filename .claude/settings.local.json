@@ -3,7 +3,9 @@
     "allow": [
       "Bash(npm run:*)",
       "Bash(npm install *)",
-      "Bash(npx next *)"
+      "Bash(npx next *)",
+      "Bash(echo \"EXIT:$?\")",
+      "Bash(node_modules/.bin/tsc --noEmit)"
     ]
   }
 }

@@ -25,7 +25,7 @@ import {
 } from "@/components/ui/dialog";
 import { Upload, ExternalLink, Trash2, Plus, Users, CheckCircle2, AlertTriangle, XCircle, Pencil, Download, FileSpreadsheet } from "lucide-react";
 import { toast } from "sonner";
-import { Plan, Evidence, User, PlanItem, ItemAssignmentCategory, EvidenceValidationStatus } from "@/types";
+import { Plan, Evidence, User, PlanItem, ItemAssignmentCategory, EvidenceValidationStatus, PeriodCompliance, PeriodComplianceStatus } from "@/types";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -84,6 +84,8 @@ export default function PlanDetailPage() {
   const [bulkFileName, setBulkFileName] = useState<string>("");
   const [bulkParseError, setBulkParseError] = useState<string>("");
   const [bulkUploading, setBulkUploading] = useState(false);
+  const [approvedWarningRows, setApprovedWarningRows] = useState<Set<number>>(new Set());
+  const [complianceRecords, setComplianceRecords] = useState<PeriodCompliance[]>([]);
 
   const loadPlan = useCallback(async () => {
     const res = await fetch(`/api/plans/${id}`);
@@ -102,10 +104,16 @@ export default function PlanDetailPage() {
     if (res.ok) setPlanItems(await res.json());
   }, [id]);
 
+  const loadCompliance = useCallback(async () => {
+    const res = await fetch(`/api/plans/${id}/period-compliance`);
+    if (res.ok) setComplianceRecords(await res.json());
+  }, [id]);
+
   useEffect(() => {
     loadPlan();
     loadItems();
-  }, [loadPlan, loadItems]);
+    loadCompliance();
+  }, [loadPlan, loadItems, loadCompliance]);
 
   useEffect(() => {
     if (isAdmin) {
@@ -272,8 +280,15 @@ export default function PlanDetailPage() {
       return;
     }
 
+    const existingItems = new Set(planItems.map((p) => p.item.trim().toLowerCase()));
+
     const toSend = bulkRows
-      .filter((r) => r.errors.length === 0)
+      .filter((r) => {
+        if (r.errors.length > 0) return false;
+        const isDuplicate = !!r.item && existingItems.has(r.item.trim().toLowerCase());
+        const hasWarn = r.warnings.length > 0 || isDuplicate;
+        return hasWarn ? approvedWarningRows.has(r.rowNumber) : true;
+      })
       .map((r) => ({
         item: r.item,
         subplan: r.subplan,
@@ -493,6 +508,32 @@ export default function PlanDetailPage() {
     }
   }
 
+  async function handleComplianceChange(planItemId: string, periodKey: string, status: PeriodComplianceStatus) {
+    const res = await fetch(`/api/plans/${id}/period-compliance`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ planItemId, periodKey, status }),
+    });
+    if (res.ok) {
+      const updated = await res.json() as PeriodCompliance;
+      setComplianceRecords((prev) => {
+        const exists = prev.some(
+          (r) => r.planItemId === planItemId && r.periodKey === periodKey
+        );
+        if (exists) {
+          return prev.map((r) =>
+            r.planItemId === planItemId && r.periodKey === periodKey
+              ? { ...r, status }
+              : r
+          );
+        }
+        return [...prev, updated];
+      });
+    } else {
+      toast.error("Error al guardar cumplimiento");
+    }
+  }
+
   function autoResizeTextarea(e: React.ChangeEvent<HTMLTextAreaElement>) {
     const textarea = e.target;
     textarea.style.height = "auto";
@@ -699,13 +740,15 @@ export default function PlanDetailPage() {
                         <option value="Al finalizar la etapa de operación">Al finalizar la etapa de operación</option>
                         <option value="Anual">Anual</option>
                         <option value="Bianual">Bianual</option>
+                        <option value="Diaria">Diaria</option>
                         <option value="En caso de suceder">En caso de suceder</option>
                         <option value="Mensual">Mensual</option>
                         <option value="Permanente">Permanente</option>
                         <option value="Semanal">Semanal</option>
                         <option value="Semestral">Semestral</option>
+                        <option value="Trianual">Trianual</option>
                         <option value="Trimestral">Trimestral</option>
-                        <option value="Una vez">Una vez</option>
+                        <option value="Única vez">Única vez</option>
                       </select>
                     </div>
                     <div className="space-y-2">
@@ -1033,8 +1076,8 @@ export default function PlanDetailPage() {
       {/* Cronograma mensual */}
       {visibleItems.length > 0 && (() => {
         const p = plan!;
-        // Build evidence status lookup: "planItemId-YYYY-MM" → validationStatus of latest evidence
-        // Priority for multiple evidences: valid > invalid > pending
+
+        // Build evidence status lookup: "planItemId-YYYY-MM" → validationStatus
         const evidenceMonthStatus = new Map<string, EvidenceValidationStatus>();
         const statusPriority: Record<EvidenceValidationStatus, number> = { valid: 3, invalid: 2, pending: 1 };
         visibleEvidences
@@ -1048,40 +1091,48 @@ export default function PlanDetailPage() {
             }
           });
 
-        // Colors by status
+        // Build compliance lookup: "planItemId::periodKey" → status
+        const complianceMap = new Map(
+          complianceRecords.map((r) => [`${r.planItemId}::${r.periodKey}`, r.status])
+        );
+
         const statusStyle: Record<"none" | EvidenceValidationStatus, { bg: string; color: string; border: string; label: string }> = {
-          none:    { bg: "#e0f2fe", color: "#0369a1", border: "#7dd3fc", label: "" },    // celeste
-          pending: { bg: "#fef9c3", color: "#854d0e", border: "#fde047", label: "⏳" }, // amarillo
-          invalid: { bg: "#fee2e2", color: "#991b1b", border: "#fca5a5", label: "✕" },  // rojo
-          valid:   { bg: "#dcfce7", color: "#166534", border: "#86efac", label: "✓" },  // verde
+          none:    { bg: "#e0f2fe", color: "#0369a1", border: "#7dd3fc", label: "" },
+          pending: { bg: "#fef9c3", color: "#854d0e", border: "#fde047", label: "⏳" },
+          invalid: { bg: "#fee2e2", color: "#991b1b", border: "#fca5a5", label: "✕" },
+          valid:   { bg: "#dcfce7", color: "#166534", border: "#86efac", label: "✓" },
         };
 
         const periodicityInterval: Record<string, number> = {
           "Al finalizar la etapa de operación": 9999,
           "En caso de suceder": 1,
+          Diaria: 1,
           Semanal: 1,
           Mensual: 1,
           Bimensual: 2,
           Bianual: 24,
           Trimestral: 3,
+          Trianual: 36,
           Semestral: 6,
           Anual: 12,
           Permanente: 1,
-          "Una vez": 9999,
+          "Única vez": 9999,
         };
 
         const periodicityLabel: Record<string, string> = {
           "Al finalizar la etapa de operación": "Fin",
           "En caso de suceder": "CS",
+          Diaria: "D",
           Semanal: "Sem",
           Mensual: "M",
           Bimensual: "B",
           Bianual: "Bi",
           Trimestral: "T",
+          Trianual: "3A",
           Semestral: "S",
           Anual: "A",
           Permanente: "P",
-          "Una vez": "1x",
+          "Única vez": "1x",
         };
 
         const today = new Date();
@@ -1110,7 +1161,7 @@ export default function PlanDetailPage() {
           return diff % interval === 0;
         }
 
-        // Block shading: size comes from report_per, origin is January of the item's start year
+        // Period block helpers (based on plan's report_per)
         function getBlockSize(report_per: string | undefined): number {
           const s = (report_per ?? "").toLowerCase();
           if (s.startsWith("2")) return 24;
@@ -1118,46 +1169,63 @@ export default function PlanDetailPage() {
           return 6;
         }
 
-        function getBlockShade(pi: PlanItem, month: Date): "green" | "red" | "none" {
-          const blockSize = getBlockSize(pi.report_per);
-          if (!blockSize) return "none";
+        const blockSize = getBlockSize(p.report_per);
+        const startYear = new Date(p.start_date || p.createdAt).getFullYear();
+        const blockOrigin = new Date(startYear, 0, 1);
 
-          // Blocks always start from January of the plan's start year
-          const startYear = new Date(p.start_date || p.createdAt).getFullYear();
-          const blockOrigin = new Date(startYear, 0, 1);
-          const mm = new Date(month.getFullYear(), month.getMonth(), 1);
-
-          if (mm < blockOrigin) return "none";
-
-          const diffFromOrigin =
-            (mm.getFullYear() - blockOrigin.getFullYear()) * 12 +
-            (mm.getMonth() - blockOrigin.getMonth());
-          const blockIndex = Math.floor(diffFromOrigin / blockSize);
-          const blockStart = new Date(blockOrigin.getFullYear(), blockOrigin.getMonth() + blockIndex * blockSize, 1);
-          const blockEnd   = new Date(blockOrigin.getFullYear(), blockOrigin.getMonth() + (blockIndex + 1) * blockSize, 1);
-
-          // Collect active months in this block that have already passed (≤ today)
-          const dueMonths: Date[] = [];
-          const cur = new Date(blockStart);
-          while (cur < blockEnd) {
-            if (cur <= todayMonth && isActive(pi, cur)) {
-              dueMonths.push(new Date(cur));
-            }
-            cur.setMonth(cur.getMonth() + 1);
-          }
-
-          // If block hasn't started yet → no shade
-          if (blockStart > todayMonth) return "none";
-          // If block started but has no planned activities → automatically green
-          if (dueMonths.length === 0) return "green";
-
-          const allValid = dueMonths.every((d) => {
-            const mk = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}`;
-            return evidenceMonthStatus.get(`${pi.id}-${mk}`) === "valid";
-          });
-
-          return allValid ? "green" : "red";
+        function diffFromOrigin(month: Date): number {
+          return (
+            (month.getFullYear() - blockOrigin.getFullYear()) * 12 +
+            (month.getMonth() - blockOrigin.getMonth())
+          );
         }
+
+        function isBlockEnd(month: Date): boolean {
+          const mm = new Date(month.getFullYear(), month.getMonth(), 1);
+          if (mm < blockOrigin) return false;
+          return (diffFromOrigin(mm) + 1) % blockSize === 0;
+        }
+
+        function getPeriodLabel(blockEndMonth: Date): string {
+          const diff = diffFromOrigin(new Date(blockEndMonth.getFullYear(), blockEndMonth.getMonth(), 1));
+          const blockIndex = Math.floor(diff / blockSize);
+          const blockStart = new Date(blockOrigin.getFullYear(), blockOrigin.getMonth() + blockIndex * blockSize, 1);
+          const startLbl = blockStart.toLocaleString("es", { month: "short" });
+          const endLbl = blockEndMonth.toLocaleString("es", { month: "short" });
+          if (blockStart.getFullYear() !== blockEndMonth.getFullYear()) {
+            return `${startLbl} ${blockStart.getFullYear()}-${endLbl} ${blockEndMonth.getFullYear()}`;
+          }
+          return `${startLbl}-${endLbl} ${blockEndMonth.getFullYear()}`;
+        }
+
+        // Build virtual column list: month columns + compliance columns at period ends
+        type VCol =
+          | { type: "month"; date: Date; year: number }
+          | { type: "compliance"; periodKey: string; periodLabel: string; year: number };
+
+        const vcols: VCol[] = [];
+        for (const m of months) {
+          vcols.push({ type: "month", date: m, year: m.getFullYear() });
+          if (isBlockEnd(m)) {
+            const lbl = getPeriodLabel(m);
+            vcols.push({ type: "compliance", periodKey: lbl, periodLabel: lbl, year: m.getFullYear() });
+          }
+        }
+        // If the last month is not a block-end, add a compliance column for the current in-progress period
+        const lastMonth = months[months.length - 1];
+        if (lastMonth && !isBlockEnd(lastMonth)) {
+          const lbl = getPeriodLabel(lastMonth);
+          vcols.push({ type: "compliance", periodKey: lbl, periodLabel: lbl, year: lastMonth.getFullYear() });
+        }
+
+        // Year header grouping
+        const yearColCount = new Map<number, number>();
+        for (const vc of vcols) {
+          yearColCount.set(vc.year, (yearColCount.get(vc.year) ?? 0) + 1);
+        }
+        const yearHeaders = Array.from(yearColCount.entries())
+          .sort(([a], [b]) => a - b)
+          .map(([year, count]) => ({ year, count }));
 
         return (
           <Card>
@@ -1172,53 +1240,58 @@ export default function PlanDetailPage() {
                       <th className="sticky left-0 z-10 bg-background border border-border px-3 py-2 min-w-[200px] text-left font-medium text-muted-foreground">
                         Ítem
                       </th>
-                      {months.map((m, i) => {
-                        const showYear = i === 0 || m.getMonth() === 0;
-                        const sameYearCount = months.filter(
-                          (x) => x.getFullYear() === m.getFullYear()
-                        ).length;
-                        if (!showYear) return null;
-                        return (
-                          <th
-                            key={`y-${i}`}
-                            colSpan={sameYearCount}
-                            className="border border-border px-2 py-1 text-center font-semibold bg-muted text-muted-foreground"
-                          >
-                            {m.getFullYear()}
-                          </th>
-                        );
-                      })}
+                      {yearHeaders.map(({ year, count }) => (
+                        <th
+                          key={`y-${year}`}
+                          colSpan={count}
+                          className="border border-border px-2 py-1 text-center font-semibold bg-muted text-muted-foreground"
+                        >
+                          {year}
+                        </th>
+                      ))}
                     </tr>
                     <tr>
                       <th className="sticky left-0 z-10 bg-background border border-border" />
-                      {months.map((m, i) => {
-                        const isToday = m.getTime() === todayMonth.getTime();
+                      {vcols.map((vc, i) => {
+                        if (vc.type === "month") {
+                          const isToday = vc.date.getTime() === todayMonth.getTime();
+                          return (
+                            <th
+                              key={`h-${i}`}
+                              className={`border border-border px-1 py-1 text-center font-medium min-w-[48px] ${
+                                isToday
+                                  ? "bg-primary/10 text-primary"
+                                  : "bg-muted/50 text-muted-foreground"
+                              }`}
+                            >
+                              {vc.date.toLocaleString("es", { month: "short" })}
+                            </th>
+                          );
+                        }
                         return (
                           <th
-                            key={`m-${i}`}
-                            className={`border border-border px-1 py-1 text-center font-medium min-w-[48px] ${
-                              isToday
-                                ? "bg-primary/10 text-primary"
-                                : "bg-muted/50 text-muted-foreground"
-                            }`}
+                            key={`h-${i}`}
+                            className="border-2 border-border bg-slate-50 px-1 py-1 text-center font-semibold text-slate-500 min-w-[72px]"
+                            title={vc.periodLabel}
                           >
-                            {m.toLocaleString("es", { month: "short" })}
+                            Cump.
                           </th>
                         );
                       })}
                     </tr>
                   </thead>
                   <tbody>
-                    {visibleItems.map((pi, rowIdx) => {
-                      return (
-                        <tr
-                          key={pi.id}
-                          className={rowIdx % 2 === 0 ? "bg-background" : "bg-muted/20"}
-                        >
-                          <td className="sticky left-0 z-10 border border-border px-3 py-1.5 font-medium truncate max-w-[200px] bg-inherit">
-                            {pi.item}
-                          </td>
-                          {months.map((m, i) => {
+                    {visibleItems.map((pi, rowIdx) => (
+                      <tr
+                        key={pi.id}
+                        className={rowIdx % 2 === 0 ? "bg-background" : "bg-muted/20"}
+                      >
+                        <td className="sticky left-0 z-10 border border-border px-3 py-1.5 font-medium truncate max-w-[200px] bg-inherit">
+                          {pi.item}
+                        </td>
+                        {vcols.map((vc, i) => {
+                          if (vc.type === "month") {
+                            const m = vc.date;
                             const active = isActive(pi, m);
                             const planStartDate = new Date(p.start_date || p.createdAt);
                             const isStart =
@@ -1229,7 +1302,6 @@ export default function PlanDetailPage() {
                             const monthKey = `${m.getFullYear()}-${String(m.getMonth() + 1).padStart(2, "0")}`;
                             const evStatus = evidenceMonthStatus.get(`${pi.id}-${monthKey}`) ?? "none";
                             const style = statusStyle[evStatus];
-                            const blockShade = getBlockShade(pi, m);
 
                             const titleText =
                               evStatus === "valid"   ? `Válido — ${m.toLocaleString("es", { month: "long", year: "numeric" })}` :
@@ -1238,17 +1310,10 @@ export default function PlanDetailPage() {
                               isStart ? `Subir evidencia de inicio — ${planStartDate.toLocaleDateString("es")}` :
                               `Subir evidencia — ${m.toLocaleString("es", { month: "long", year: "numeric" })}`;
 
-                            const cellBg =
-                              blockShade === "green" ? "#f0fdf4" :
-                              blockShade === "red"   ? "#fef2f2" :
-                              isToday               ? "#f0f9ff" :
-                              undefined;
-
                             return (
                               <td
                                 key={i}
-                                className="border border-border p-0.5"
-                                style={cellBg ? { backgroundColor: cellBg } : undefined}
+                                className={`border border-border p-0.5${isToday ? " bg-primary/5" : ""}`}
                               >
                                 {active && (
                                   isStart && evStatus === "none" ? (
@@ -1278,10 +1343,81 @@ export default function PlanDetailPage() {
                                 )}
                               </td>
                             );
-                          })}
-                        </tr>
-                      );
-                    })}
+                          }
+
+                          // Compliance column
+                          const compStatus = complianceMap.get(`${pi.id}::${vc.periodKey}`);
+                          const compBg =
+                            compStatus === "C"                          ? "#dcfce7" :
+                            compStatus === "NC+" || compStatus === "NC-" ? "#fee2e2" :
+                            compStatus === "N/A"                        ? "#fef9c3" :
+                            "#f8fafc";
+                          const compColor =
+                            compStatus === "C"                          ? "#166534" :
+                            compStatus === "NC+" || compStatus === "NC-" ? "#991b1b" :
+                            compStatus === "N/A"                        ? "#854d0e" :
+                            "#94a3b8";
+                          const compBorder =
+                            compStatus === "C"                          ? "#86efac" :
+                            compStatus === "NC+" || compStatus === "NC-" ? "#fca5a5" :
+                            compStatus === "N/A"                        ? "#fde047" :
+                            "#e2e8f0";
+
+                          return (
+                            <td
+                              key={i}
+                              className="border-2 border-border p-0.5"
+                            >
+                              {isAdmin ? (
+                                <DropdownMenu>
+                                  <DropdownMenuTrigger
+                                    className="w-full rounded flex items-center justify-center font-bold leading-none transition-opacity hover:opacity-75 bg-transparent border-0 cursor-pointer"
+                                    style={{
+                                      height: "24px",
+                                      backgroundColor: compBg,
+                                      color: compColor,
+                                      fontSize: "10px",
+                                      border: `1px solid ${compBorder}`,
+                                    }}
+                                    title={vc.periodLabel}
+                                  >
+                                    {compStatus ?? "—"}
+                                  </DropdownMenuTrigger>
+                                  <DropdownMenuContent align="center">
+                                    <DropdownMenuItem onClick={() => handleComplianceChange(pi.id, vc.periodKey, "C")}>
+                                      <span className="font-bold text-green-600 mr-2">C</span> Conforme
+                                    </DropdownMenuItem>
+                                    <DropdownMenuItem onClick={() => handleComplianceChange(pi.id, vc.periodKey, "NC+")}>
+                                      <span className="font-bold text-red-600 mr-2">NC+</span> No conforme mayor
+                                    </DropdownMenuItem>
+                                    <DropdownMenuItem onClick={() => handleComplianceChange(pi.id, vc.periodKey, "NC-")}>
+                                      <span className="font-bold text-red-600 mr-2">NC-</span> No conforme menor
+                                    </DropdownMenuItem>
+                                    <DropdownMenuItem onClick={() => handleComplianceChange(pi.id, vc.periodKey, "N/A")}>
+                                      <span className="font-bold text-yellow-600 mr-2">N/A</span> No aplica
+                                    </DropdownMenuItem>
+                                  </DropdownMenuContent>
+                                </DropdownMenu>
+                              ) : (
+                                <div
+                                  className="w-full rounded flex items-center justify-center font-bold leading-none"
+                                  style={{
+                                    height: "24px",
+                                    backgroundColor: compBg,
+                                    color: compColor,
+                                    fontSize: "10px",
+                                    border: `1px solid ${compBorder}`,
+                                  }}
+                                  title={vc.periodLabel}
+                                >
+                                  {compStatus ?? "—"}
+                                </div>
+                              )}
+                            </td>
+                          );
+                        })}
+                      </tr>
+                    ))}
                   </tbody>
                 </table>
               </div>
@@ -1302,18 +1438,24 @@ export default function PlanDetailPage() {
                   <span className="inline-block w-10 h-4 rounded border" style={{ backgroundColor: "#dcfce7", borderColor: "#86efac" }} />
                   Válido
                 </span>
+                <span className="flex items-center gap-1.5">
+                  <span className="inline-block w-10 h-4 rounded border-2" style={{ backgroundColor: "#f8fafc", borderColor: "#e2e8f0" }} />
+                  Columna de cumplimiento (C / NC+ / NC-)
+                </span>
                 <span className="ml-auto flex gap-3">
                   {([
                     "Al finalizar la etapa de operación",
                     "Anual",
                     "Bianual",
+                    "Diaria",
                     "En caso de suceder",
                     "Mensual",
                     "Permanente",
                     "Semanal",
                     "Semestral",
+                    "Trianual",
                     "Trimestral",
-                    "Una vez",
+                    "Única vez",
                     "Bimensual",
                   ] as const).map((p) => (
                     <span key={p}><span className="font-semibold">{periodicityLabel[p]}</span> = {p}</span>
@@ -1815,6 +1957,7 @@ export default function PlanDetailPage() {
             setBulkRows([]);
             setBulkFileName("");
             setBulkParseError("");
+            setApprovedWarningRows(new Set());
           }
         }}
       >
@@ -1839,7 +1982,7 @@ export default function PlanDetailPage() {
                 duplicate: !!r.item && existing.has(r.item.trim().toLowerCase()),
               }));
               const validCount = withDupes.filter(
-                (x) => x.row.errors.length === 0
+                (x) => x.row.errors.length === 0 && x.row.warnings.length === 0 && !x.duplicate
               ).length;
               const errorCount = withDupes.filter(
                 (x) => x.row.errors.length > 0
@@ -1849,6 +1992,13 @@ export default function PlanDetailPage() {
                   x.row.errors.length === 0 &&
                   (x.row.warnings.length > 0 || x.duplicate)
               ).length;
+              const approvedCount = withDupes.filter(
+                ({ row, duplicate }) =>
+                  row.errors.length === 0 &&
+                  (row.warnings.length > 0 || duplicate) &&
+                  approvedWarningRows.has(row.rowNumber)
+              ).length;
+              const toCreateCount = validCount + approvedCount;
 
               return (
                 <div className="flex flex-col gap-4 mt-2 flex-1 min-h-0">
@@ -1862,6 +2012,11 @@ export default function PlanDetailPage() {
                     {warnCount > 0 && (
                       <Badge className="bg-amber-500 hover:bg-amber-500">
                         {warnCount} con advertencia
+                      </Badge>
+                    )}
+                    {approvedCount > 0 && (
+                      <Badge className="bg-blue-600 hover:bg-blue-600">
+                        {approvedCount} aprobadas
                       </Badge>
                     )}
                     {errorCount > 0 && (
@@ -1953,10 +2108,39 @@ export default function PlanDetailPage() {
                                       Error
                                     </Badge>
                                   ) : hasWarn ? (
-                                    <Badge className="bg-amber-500 hover:bg-amber-500 w-fit">
-                                      <AlertTriangle className="w-3 h-3 mr-1" />
-                                      Advertencia
-                                    </Badge>
+                                    <div className="flex flex-col gap-1">
+                                      {approvedWarningRows.has(row.rowNumber) ? (
+                                        <Badge className="bg-blue-600 hover:bg-blue-600 w-fit">
+                                          <CheckCircle2 className="w-3 h-3 mr-1" />
+                                          Aprobada
+                                        </Badge>
+                                      ) : (
+                                        <Badge className="bg-amber-500 hover:bg-amber-500 w-fit">
+                                          <AlertTriangle className="w-3 h-3 mr-1" />
+                                          Advertencia
+                                        </Badge>
+                                      )}
+                                      <button
+                                        className={`text-xs font-medium underline w-fit ${
+                                          approvedWarningRows.has(row.rowNumber)
+                                            ? "text-muted-foreground"
+                                            : "text-blue-600"
+                                        }`}
+                                        onClick={() =>
+                                          setApprovedWarningRows((prev) => {
+                                            const next = new Set(prev);
+                                            if (next.has(row.rowNumber)) {
+                                              next.delete(row.rowNumber);
+                                            } else {
+                                              next.add(row.rowNumber);
+                                            }
+                                            return next;
+                                          })
+                                        }
+                                      >
+                                        {approvedWarningRows.has(row.rowNumber) ? "Quitar aprobación" : "Aprobar"}
+                                      </button>
+                                    </div>
                                   ) : (
                                     <Badge className="bg-green-600 hover:bg-green-600 w-fit">
                                       <CheckCircle2 className="w-3 h-3 mr-1" />
@@ -2003,11 +2187,11 @@ export default function PlanDetailPage() {
                     </Button>
                     <Button
                       onClick={handleBulkSubmit}
-                      disabled={bulkUploading || validCount === 0 || errorCount > 0}
+                      disabled={bulkUploading || toCreateCount === 0 || errorCount > 0}
                     >
                       {bulkUploading
                         ? "Cargando..."
-                        : `Crear ${validCount} ítem${validCount === 1 ? "" : "s"}`}
+                        : `Crear ${toCreateCount} ítem${toCreateCount === 1 ? "" : "s"}`}
                     </Button>
                   </div>
                 </div>

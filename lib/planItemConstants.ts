@@ -21,7 +21,7 @@ export const PERIODICITY_OPTIONS = [
   "Semanal",
   "Semestral",
   "Trimestral",
-  "Una vez",
+  "Única vez",
 ] as const;
 
 function normalize(value: string): string {

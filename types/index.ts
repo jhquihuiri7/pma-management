@@ -98,6 +98,17 @@ export interface PlanItem {
   createdAt: string;
 }
 
+export type PeriodComplianceStatus = "C" | "NC+" | "NC-" | "N/A";
+
+export interface PeriodCompliance {
+  id: string;
+  planId: string;
+  planItemId: string;
+  periodKey: string;
+  status: PeriodComplianceStatus;
+  updatedAt: string;
+}
+
 export type FormatFunctionality = "descargar_anexos";
 
 export interface Format {

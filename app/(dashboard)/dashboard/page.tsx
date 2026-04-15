@@ -3,7 +3,9 @@
 import { useSession } from "next-auth/react";
 import { useEffect, useState } from "react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { FileText, Users, Upload } from "lucide-react";
+import { FileText, Users, Upload, BarChart2 } from "lucide-react";
+import { Plan, PeriodCompliance } from "@/types";
+import PlanComplianceChart from "@/components/PlanComplianceChart";
 
 interface Stats {
   plans: number;
@@ -11,19 +13,27 @@ interface Stats {
   evidences: number;
 }
 
+interface PlanChartData {
+  plan: Plan;
+  itemCount: number;
+  complianceRecords: PeriodCompliance[];
+}
+
 export default function DashboardPage() {
   const { data: session } = useSession();
   const isAdmin = session?.user?.role === "ADMIN";
   const isViewer = session?.user?.role === "VIEWER";
   const [stats, setStats] = useState<Stats>({ plans: 0, reporters: 0, evidences: 0 });
+  const [planCharts, setPlanCharts] = useState<PlanChartData[]>([]);
+  const [chartsLoading, setChartsLoading] = useState(false);
 
   useEffect(() => {
     async function loadStats() {
       const [plansRes, evidencesRes] = await Promise.all([
         fetch("/api/plans"),
-        fetch("/api/evidences" + (isAdmin ? "" : "")),
+        fetch("/api/evidences"),
       ]);
-      const plans = await plansRes.json();
+      const plans: Plan[] = await plansRes.json();
       const evidences = await evidencesRes.json();
 
       const statsData: Stats = {
@@ -41,56 +51,126 @@ export default function DashboardPage() {
       }
 
       setStats(statsData);
+
+      // Load chart data for each plan in parallel
+      if (Array.isArray(plans) && plans.length > 0) {
+        setChartsLoading(true);
+        try {
+          const chartResults = await Promise.all(
+            plans.map(async (plan) => {
+              const [itemsRes, complianceRes] = await Promise.all([
+                fetch(`/api/plans/${plan.id}/items`),
+                fetch(`/api/plans/${plan.id}/period-compliance`),
+              ]);
+              const items = itemsRes.ok ? await itemsRes.json() : [];
+              const complianceRecords: PeriodCompliance[] = complianceRes.ok
+                ? await complianceRes.json()
+                : [];
+              return {
+                plan,
+                itemCount: Array.isArray(items) ? items.length : 0,
+                complianceRecords,
+              };
+            })
+          );
+          setPlanCharts(chartResults);
+        } finally {
+          setChartsLoading(false);
+        }
+      }
     }
+
     if (session) loadStats();
   }, [session, isAdmin]);
 
   return (
-    <div>
-      <h1 className="text-2xl font-bold mb-1">Panel Principal</h1>
-      <p className="text-muted-foreground mb-6">
-        Bienvenido, {session?.user?.name}
-      </p>
+    <div className="space-y-8">
+      <div>
+        <h1 className="text-2xl font-bold mb-1">Panel Principal</h1>
+        <p className="text-muted-foreground mb-6">
+          Bienvenido, {session?.user?.name}
+        </p>
 
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-        <Card>
-          <CardHeader className="flex flex-row items-center justify-between pb-2">
-            <CardTitle className="text-sm font-medium text-muted-foreground">
-              {isAdmin ? "Total de Planes" : "Planes Asignados"}
-            </CardTitle>
-            <FileText className="w-4 h-4 text-muted-foreground" />
-          </CardHeader>
-          <CardContent>
-            <div className="text-3xl font-bold">{stats.plans}</div>
-          </CardContent>
-        </Card>
-
-        {isAdmin && (
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
           <Card>
             <CardHeader className="flex flex-row items-center justify-between pb-2">
               <CardTitle className="text-sm font-medium text-muted-foreground">
-                Usuarios
+                {isAdmin ? "Total de Planes" : "Planes Asignados"}
               </CardTitle>
-              <Users className="w-4 h-4 text-muted-foreground" />
+              <FileText className="w-4 h-4 text-muted-foreground" />
             </CardHeader>
             <CardContent>
-              <div className="text-3xl font-bold">{stats.reporters}</div>
+              <div className="text-3xl font-bold">{stats.plans}</div>
             </CardContent>
           </Card>
-        )}
 
-        {!isViewer && (
+          {isAdmin && (
+            <Card>
+              <CardHeader className="flex flex-row items-center justify-between pb-2">
+                <CardTitle className="text-sm font-medium text-muted-foreground">
+                  Usuarios
+                </CardTitle>
+                <Users className="w-4 h-4 text-muted-foreground" />
+              </CardHeader>
+              <CardContent>
+                <div className="text-3xl font-bold">{stats.reporters}</div>
+              </CardContent>
+            </Card>
+          )}
+
+          {!isViewer && (
+            <Card>
+              <CardHeader className="flex flex-row items-center justify-between pb-2">
+                <CardTitle className="text-sm font-medium text-muted-foreground">
+                  {isAdmin ? "Total de Evidencias" : "Mis Evidencias"}
+                </CardTitle>
+                <Upload className="w-4 h-4 text-muted-foreground" />
+              </CardHeader>
+              <CardContent>
+                <div className="text-3xl font-bold">{stats.evidences}</div>
+              </CardContent>
+            </Card>
+          )}
+        </div>
+      </div>
+
+      {/* Compliance charts per plan */}
+      <div>
+        <div className="flex items-center gap-2 mb-4">
+          <BarChart2 className="w-5 h-5 text-muted-foreground" />
+          <h2 className="text-lg font-semibold">Cumplimiento por Plan</h2>
+        </div>
+
+        {chartsLoading ? (
+          <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-6">
+            {Array.from({ length: Math.max(stats.plans, 1) }).map((_, i) => (
+              <Card key={i} className="animate-pulse">
+                <CardHeader className="pb-2">
+                  <div className="h-4 bg-muted rounded w-3/4" />
+                </CardHeader>
+                <CardContent>
+                  <div className="h-[200px] bg-muted rounded" />
+                </CardContent>
+              </Card>
+            ))}
+          </div>
+        ) : planCharts.length === 0 ? (
           <Card>
-            <CardHeader className="flex flex-row items-center justify-between pb-2">
-              <CardTitle className="text-sm font-medium text-muted-foreground">
-                {isAdmin ? "Total de Evidencias" : "Mis Evidencias"}
-              </CardTitle>
-              <Upload className="w-4 h-4 text-muted-foreground" />
-            </CardHeader>
-            <CardContent>
-              <div className="text-3xl font-bold">{stats.evidences}</div>
+            <CardContent className="py-12 text-center text-sm text-muted-foreground">
+              No hay planes disponibles.
             </CardContent>
           </Card>
+        ) : (
+          <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-6">
+            {planCharts.map(({ plan, itemCount, complianceRecords }) => (
+              <PlanComplianceChart
+                key={plan.id}
+                plan={plan}
+                itemCount={itemCount}
+                complianceRecords={complianceRecords}
+              />
+            ))}
+          </div>
         )}
       </div>
     </div>
