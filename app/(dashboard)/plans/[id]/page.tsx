@@ -23,7 +23,7 @@ import {
   DialogTitle,
   DialogTrigger,
 } from "@/components/ui/dialog";
-import { Upload, ExternalLink, Trash2, Plus, Users, CheckCircle2, AlertTriangle, XCircle, Pencil, Download } from "lucide-react";
+import { Upload, ExternalLink, Trash2, Plus, Users, CheckCircle2, AlertTriangle, XCircle, Pencil, Download, FileSpreadsheet } from "lucide-react";
 import { toast } from "sonner";
 import { Plan, Evidence, User, PlanItem, ItemAssignmentCategory, EvidenceValidationStatus } from "@/types";
 import {
@@ -32,6 +32,8 @@ import {
   DropdownMenuItem,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
+import { SUBPLAN_OPTIONS } from "@/lib/planItemConstants";
+import { parseExcelFile, ParsedItemRow } from "@/lib/excelImport";
 
 const EMPTY_ITEM_FORM = {
   item: "",
@@ -46,19 +48,6 @@ const EMPTY_ITEM_FORM = {
   budget: "",
   report_per: "6 meses",
 };
-
-const SUBPLAN_OPTIONS = [
-  "Plan de Prevención y Mitigación de Impactos",
-  "Plan de Seguridad y Salud Ocupacional",
-  "Plan de Contingencias",
-  "Plan de Manejo de Desechos",
-  "Plan de Monitoreo y Seguimiento",
-  "Plan de rescate de vida silvestre",
-  "Plan de Capacitación",
-  "Plan de Rehabilitación de Áreas Afectadas",
-  "Plan de Relaciones Comunitarias",
-  "Plan de Cierre y Abandono",
-] as const;
 
 export default function PlanDetailPage() {
   const { id } = useParams<{ id: string }>();
@@ -90,6 +79,11 @@ export default function PlanDetailPage() {
   const [uploadingCal, setUploadingCal] = useState(false);
   const [selectedReportPeriods, setSelectedReportPeriods] = useState<Record<string, string>>({});
   const [downloadingPeriod, setDownloadingPeriod] = useState<string | null>(null);
+  const [bulkOpen, setBulkOpen] = useState(false);
+  const [bulkRows, setBulkRows] = useState<ParsedItemRow[]>([]);
+  const [bulkFileName, setBulkFileName] = useState<string>("");
+  const [bulkParseError, setBulkParseError] = useState<string>("");
+  const [bulkUploading, setBulkUploading] = useState(false);
 
   const loadPlan = useCallback(async () => {
     const res = await fetch(`/api/plans/${id}`);
@@ -236,6 +230,93 @@ export default function PlanDetailPage() {
       toast.error("Error al guardar asignaciones del item");
     } finally {
       setSavingItem(false);
+    }
+  }
+
+  async function handleBulkFileSelected(e: React.ChangeEvent<HTMLInputElement>) {
+    const file = e.target.files?.[0];
+    e.target.value = "";
+    if (!file) return;
+
+    setBulkFileName(file.name);
+    setBulkParseError("");
+    setBulkRows([]);
+
+    const result = await parseExcelFile(file);
+    if (result.fatalError) {
+      setBulkParseError(result.fatalError);
+      setBulkOpen(true);
+      return;
+    }
+    if (result.missingColumns.length > 0) {
+      setBulkParseError(
+        `Faltan columnas requeridas: ${result.missingColumns.join(", ")}`
+      );
+      setBulkOpen(true);
+      return;
+    }
+    if (result.rows.length === 0) {
+      setBulkParseError("No se encontraron filas de datos");
+      setBulkOpen(true);
+      return;
+    }
+
+    setBulkRows(result.rows);
+    setBulkOpen(true);
+  }
+
+  async function handleBulkSubmit() {
+    const hasErrors = bulkRows.some((r) => r.errors.length > 0);
+    if (hasErrors) {
+      toast.error("Corrige las filas con error antes de cargar");
+      return;
+    }
+
+    const toSend = bulkRows
+      .filter((r) => r.errors.length === 0)
+      .map((r) => ({
+        item: r.item,
+        subplan: r.subplan,
+        environmental_activity: r.environmental_activity,
+        identified_environmental_impact: r.identified_environmental_impact,
+        proposed_measure: r.proposed_measure,
+        indicator: r.indicator,
+        verification_method: r.verification_method,
+        periodicity: r.periodicity,
+        budget: r.budget,
+        observation: r.observation,
+      }));
+
+    if (toSend.length === 0) {
+      toast.error("No hay filas válidas para cargar");
+      return;
+    }
+
+    setBulkUploading(true);
+    try {
+      const res = await fetch(`/api/plans/${id}/items/bulk`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ items: toSend }),
+      });
+      if (res.ok) {
+        const data = await res.json();
+        toast.success(`${data.created} ítems cargados correctamente`);
+        if (data.failed?.length > 0) {
+          toast.warning(`${data.failed.length} ítems fallaron al crear`);
+        }
+        setBulkOpen(false);
+        setBulkRows([]);
+        setBulkFileName("");
+        await loadItems();
+      } else {
+        const data = await res.json();
+        toast.error(data.error || "Error al cargar ítems");
+      }
+    } catch {
+      toast.error("Error al cargar ítems");
+    } finally {
+      setBulkUploading(false);
     }
   }
 
@@ -509,6 +590,22 @@ export default function PlanDetailPage() {
             Ítems del Plan ({visibleItems.length})
           </CardTitle>
           {isAdmin && (
+            <div className="flex gap-2">
+            <Button
+              size="sm"
+              variant="outline"
+              onClick={() => document.getElementById("bulk-excel-input")?.click()}
+            >
+              <FileSpreadsheet className="w-4 h-4 mr-2" />
+              Cargar Excel
+            </Button>
+            <input
+              id="bulk-excel-input"
+              type="file"
+              accept=".xlsx,.xls"
+              className="hidden"
+              onChange={handleBulkFileSelected}
+            />
             <Dialog
                 open={addItemOpen}
                 onOpenChange={(open) => {
@@ -786,6 +883,7 @@ export default function PlanDetailPage() {
                 </form>
               </DialogContent>
             </Dialog>
+            </div>
           )}
         </CardHeader>
         <CardContent>
@@ -1707,6 +1805,217 @@ export default function PlanDetailPage() {
           </Card>
         );
       })()}
+
+      {/* Bulk Excel Preview Dialog */}
+      <Dialog
+        open={bulkOpen}
+        onOpenChange={(open) => {
+          setBulkOpen(open);
+          if (!open) {
+            setBulkRows([]);
+            setBulkFileName("");
+            setBulkParseError("");
+          }
+        }}
+      >
+        <DialogContent className="w-[80vw] sm:w-[80vw] max-w-[80vw] sm:max-w-[80vw] h-[80vh] max-h-[80vh] overflow-hidden flex flex-col">
+          <DialogHeader>
+            <DialogTitle>Carga masiva de ítems</DialogTitle>
+          </DialogHeader>
+          {bulkParseError ? (
+            <div className="p-4 border border-destructive/50 bg-destructive/10 rounded-md text-sm">
+              <p className="font-semibold text-destructive">
+                No se pudo procesar el archivo
+              </p>
+              <p className="text-muted-foreground mt-1">{bulkParseError}</p>
+            </div>
+          ) : (
+            (() => {
+              const existing = new Set(
+                planItems.map((p) => p.item.trim().toLowerCase())
+              );
+              const withDupes = bulkRows.map((r) => ({
+                row: r,
+                duplicate: !!r.item && existing.has(r.item.trim().toLowerCase()),
+              }));
+              const validCount = withDupes.filter(
+                (x) => x.row.errors.length === 0
+              ).length;
+              const errorCount = withDupes.filter(
+                (x) => x.row.errors.length > 0
+              ).length;
+              const warnCount = withDupes.filter(
+                (x) =>
+                  x.row.errors.length === 0 &&
+                  (x.row.warnings.length > 0 || x.duplicate)
+              ).length;
+
+              return (
+                <div className="flex flex-col gap-4 mt-2 flex-1 min-h-0">
+                  <div className="flex flex-wrap items-center gap-2 text-sm">
+                    <span className="text-muted-foreground">
+                      Archivo: <span className="font-mono">{bulkFileName}</span>
+                    </span>
+                    <Badge className="bg-green-600 hover:bg-green-600">
+                      {validCount} válidas
+                    </Badge>
+                    {warnCount > 0 && (
+                      <Badge className="bg-amber-500 hover:bg-amber-500">
+                        {warnCount} con advertencia
+                      </Badge>
+                    )}
+                    {errorCount > 0 && (
+                      <Badge variant="destructive">{errorCount} con error</Badge>
+                    )}
+                  </div>
+
+                  <div className="border rounded-md flex-1 min-h-0 overflow-auto">
+                    <Table>
+                      <TableHeader>
+                        <TableRow>
+                          <TableHead className="w-12">#</TableHead>
+                          <TableHead>Ítem</TableHead>
+                          <TableHead>Subplan</TableHead>
+                          <TableHead>Actividad</TableHead>
+                          <TableHead>Impacto</TableHead>
+                          <TableHead>Medida</TableHead>
+                          <TableHead>Indicador</TableHead>
+                          <TableHead>Verificación</TableHead>
+                          <TableHead>Periodicidad</TableHead>
+                          <TableHead className="text-right">
+                            Presupuesto
+                          </TableHead>
+                          <TableHead>Estado</TableHead>
+                        </TableRow>
+                      </TableHeader>
+                      <TableBody>
+                        {withDupes.map(({ row, duplicate }) => {
+                          const hasError = row.errors.length > 0;
+                          const hasWarn = row.warnings.length > 0 || duplicate;
+                          return (
+                            <TableRow
+                              key={row.rowNumber}
+                              className={
+                                hasError
+                                  ? "bg-destructive/5"
+                                  : hasWarn
+                                  ? "bg-amber-500/5"
+                                  : ""
+                              }
+                            >
+                              <TableCell className="font-mono text-xs text-muted-foreground">
+                                {row.rowNumber}
+                              </TableCell>
+                              <TableCell className="max-w-[140px] truncate" title={row.item}>
+                                {row.item || (
+                                  <span className="text-muted-foreground italic">
+                                    vacío
+                                  </span>
+                                )}
+                              </TableCell>
+                              <TableCell className="max-w-[160px] truncate" title={row.subplan}>
+                                {row.subplan || (
+                                  <span className="text-muted-foreground italic">
+                                    —
+                                  </span>
+                                )}
+                              </TableCell>
+                              <TableCell className="max-w-[160px] truncate" title={row.environmental_activity}>
+                                {row.environmental_activity}
+                              </TableCell>
+                              <TableCell className="max-w-[160px] truncate" title={row.identified_environmental_impact}>
+                                {row.identified_environmental_impact}
+                              </TableCell>
+                              <TableCell className="max-w-[200px] truncate" title={row.proposed_measure}>
+                                {row.proposed_measure}
+                              </TableCell>
+                              <TableCell className="max-w-[160px] truncate" title={row.indicator}>
+                                {row.indicator}
+                              </TableCell>
+                              <TableCell className="max-w-[160px] truncate" title={row.verification_method}>
+                                {row.verification_method}
+                              </TableCell>
+                              <TableCell>
+                                {row.periodicity || (
+                                  <span className="text-muted-foreground italic">
+                                    —
+                                  </span>
+                                )}
+                              </TableCell>
+                              <TableCell className="text-right font-mono text-xs">
+                                ${row.budget.toFixed(2)}
+                              </TableCell>
+                              <TableCell>
+                                <div className="flex flex-col gap-1">
+                                  {hasError ? (
+                                    <Badge variant="destructive" className="w-fit">
+                                      <XCircle className="w-3 h-3 mr-1" />
+                                      Error
+                                    </Badge>
+                                  ) : hasWarn ? (
+                                    <Badge className="bg-amber-500 hover:bg-amber-500 w-fit">
+                                      <AlertTriangle className="w-3 h-3 mr-1" />
+                                      Advertencia
+                                    </Badge>
+                                  ) : (
+                                    <Badge className="bg-green-600 hover:bg-green-600 w-fit">
+                                      <CheckCircle2 className="w-3 h-3 mr-1" />
+                                      Válida
+                                    </Badge>
+                                  )}
+                                  {row.errors.map((e, i) => (
+                                    <span
+                                      key={`e-${i}`}
+                                      className="text-xs text-destructive"
+                                    >
+                                      {e}
+                                    </span>
+                                  ))}
+                                  {row.warnings.map((w, i) => (
+                                    <span
+                                      key={`w-${i}`}
+                                      className="text-xs text-amber-600"
+                                    >
+                                      {w}
+                                    </span>
+                                  ))}
+                                  {duplicate && (
+                                    <span className="text-xs text-amber-600">
+                                      Ya existe un ítem con este código en el plan
+                                    </span>
+                                  )}
+                                </div>
+                              </TableCell>
+                            </TableRow>
+                          );
+                        })}
+                      </TableBody>
+                    </Table>
+                  </div>
+
+                  <div className="flex justify-end gap-2 pt-2">
+                    <Button
+                      variant="outline"
+                      onClick={() => setBulkOpen(false)}
+                      disabled={bulkUploading}
+                    >
+                      Cancelar
+                    </Button>
+                    <Button
+                      onClick={handleBulkSubmit}
+                      disabled={bulkUploading || validCount === 0 || errorCount > 0}
+                    >
+                      {bulkUploading
+                        ? "Cargando..."
+                        : `Crear ${validCount} ítem${validCount === 1 ? "" : "s"}`}
+                    </Button>
+                  </div>
+                </div>
+              );
+            })()
+          )}
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }
