@@ -142,7 +142,7 @@ export default function DashboardPage() {
         </div>
 
         {chartsLoading ? (
-          <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-6">
+          <div className="grid grid-cols-1 gap-6">
             {Array.from({ length: Math.max(stats.plans, 1) }).map((_, i) => (
               <Card key={i} className="animate-pulse">
                 <CardHeader className="pb-2">
@@ -161,7 +161,7 @@ export default function DashboardPage() {
             </CardContent>
           </Card>
         ) : (
-          <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-6">
+          <div className="grid grid-cols-1 gap-6">
             {planCharts.map(({ plan, itemCount, complianceRecords }) => (
               <PlanComplianceChart
                 key={plan.id}
