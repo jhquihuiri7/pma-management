@@ -28,6 +28,8 @@ export interface Admin {
 
 export type PlanReporte = "6 meses" | "1 año" | "2 años";
 export type PlanTipo = "Licencia" | "Registro Ambiental";
+export type PlanFase = "Planificación" | "Construcción" | "Operación" | "Cierre";
+export type PlanEnfoque = "Prevenir impactos" | "Controlar impactos" | "Monitorear y optimizar" | "Restaurar el ambiente";
 
 export interface Plan {
   id: string;
@@ -35,6 +37,8 @@ export interface Plan {
   title: string;
   description: string;
   tipo?: PlanTipo;
+  fase?: PlanFase;
+  enfoque?: PlanEnfoque;
   report_per: PlanReporte;
   start_date?: string;
   driveFolderId?: string;

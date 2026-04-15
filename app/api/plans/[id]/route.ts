@@ -7,7 +7,7 @@ import {
 } from "@/lib/api-utils";
 import { getPlanById, updatePlan, getAssignedUsers } from "@/services/planService";
 import { getEvidencesByPlan } from "@/services/evidenceService";
-import { PlanReporte, PlanTipo } from "@/types";
+import { PlanReporte, PlanTipo, PlanFase, PlanEnfoque } from "@/types";
 
 export async function GET(
   _req: NextRequest,
@@ -37,7 +37,7 @@ export async function PUT(
   if (session.user.role !== "ADMIN") return forbiddenResponse();
 
   const body = await req.json();
-  const { title, description, report_per, tipo, start_date } = body;
+  const { title, description, report_per, tipo, start_date, fase, enfoque } = body;
 
   if (!title) return errorResponse("Title is required");
 
@@ -48,6 +48,8 @@ export async function PUT(
       report_per: report_per as PlanReporte,
       tipo: tipo as PlanTipo | undefined,
       start_date,
+      fase: fase as PlanFase | undefined,
+      enfoque: enfoque as PlanEnfoque | undefined,
     });
     return NextResponse.json(plan);
   } catch (error: unknown) {

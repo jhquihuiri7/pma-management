@@ -1,6 +1,6 @@
 import { adminDb } from "@/lib/firebase-admin";
 import { getAuthenticatedDrive } from "@/lib/drive";
-import { Plan, Assignment, PlanReporte, PlanTipo, Evidence } from "@/types";
+import { Plan, Assignment, PlanReporte, PlanTipo, PlanFase, PlanEnfoque, Evidence } from "@/types";
 
 export async function createPlan(
   adminId: string,
@@ -9,7 +9,9 @@ export async function createPlan(
   report_per: PlanReporte = "6 meses",
   driveFolderId?: string,
   tipo?: PlanTipo,
-  start_date?: string
+  start_date?: string,
+  fase?: PlanFase,
+  enfoque?: PlanEnfoque
 ): Promise<Plan> {
   const planRef = adminDb.collection("plans").doc();
   const now = new Date().toISOString();
@@ -20,6 +22,8 @@ export async function createPlan(
     title,
     description,
     ...(tipo ? { tipo } : {}),
+    ...(fase ? { fase } : {}),
+    ...(enfoque ? { enfoque } : {}),
     report_per,
     ...(start_date ? { start_date } : {}),
     ...(driveFolderId ? { driveFolderId } : {}),
@@ -54,7 +58,7 @@ export async function getPlanById(planId: string): Promise<Plan | null> {
 export async function updatePlan(
   planId: string,
   adminId: string,
-  updates: { title?: string; description?: string; report_per?: PlanReporte; tipo?: PlanTipo; start_date?: string }
+  updates: { title?: string; description?: string; report_per?: PlanReporte; tipo?: PlanTipo; start_date?: string; fase?: PlanFase; enfoque?: PlanEnfoque }
 ): Promise<Plan> {
   const doc = await adminDb.collection("plans").doc(planId).get();
   if (!doc.exists) throw new Error("Plan not found");

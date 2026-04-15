@@ -27,8 +27,8 @@ export default function PlansPage() {
   const [editOpen, setEditOpen] = useState(false);
   const [editingPlan, setEditingPlan] = useState<Plan | null>(null);
   const [loading, setLoading] = useState(false);
-  const [form, setForm] = useState({ title: "", description: "", tipo: "", report_per: "6 meses", start_date: "" });
-  const [editForm, setEditForm] = useState({ title: "", description: "", tipo: "", report_per: "6 meses", start_date: "" });
+  const [form, setForm] = useState({ title: "", description: "", tipo: "", fase: "", enfoque: "", report_per: "6 meses", start_date: "" });
+  const [editForm, setEditForm] = useState({ title: "", description: "", tipo: "", fase: "", enfoque: "", report_per: "6 meses", start_date: "" });
 
   async function loadPlans() {
     const res = await fetch("/api/plans");
@@ -53,7 +53,7 @@ export default function PlansPage() {
 
     if (res.ok) {
       toast.success("Plan created successfully");
-      setForm({ title: "", description: "", tipo: "", report_per: "6 meses", start_date: "" });
+      setForm({ title: "", description: "", tipo: "", fase: "", enfoque: "", report_per: "6 meses", start_date: "" });
       setOpen(false);
       loadPlans();
     } else {
@@ -68,6 +68,8 @@ export default function PlansPage() {
       title: plan.title,
       description: plan.description || "",
       tipo: plan.tipo || "",
+      fase: plan.fase || "",
+      enfoque: plan.enfoque || "",
       report_per: plan.report_per ?? "6 meses",
       start_date: plan.start_date || "",
     });
@@ -167,6 +169,38 @@ export default function PlansPage() {
                   </select>
                 </div>
                 <div className="space-y-2">
+                  <Label htmlFor="fase">Fase</Label>
+                  <select
+                    id="fase"
+                    className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                    value={form.fase}
+                    onChange={(e) => setForm({ ...form, fase: e.target.value })}
+                    required
+                  >
+                    <option value="" disabled>Seleccionar fase...</option>
+                    <option value="Planificación">Planificación</option>
+                    <option value="Construcción">Construcción</option>
+                    <option value="Operación">Operación</option>
+                    <option value="Cierre">Cierre</option>
+                  </select>
+                </div>
+                <div className="space-y-2">
+                  <Label htmlFor="enfoque">Enfoque clave</Label>
+                  <select
+                    id="enfoque"
+                    className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                    value={form.enfoque}
+                    onChange={(e) => setForm({ ...form, enfoque: e.target.value })}
+                    required
+                  >
+                    <option value="" disabled>Seleccionar enfoque...</option>
+                    <option value="Prevenir impactos">Prevenir impactos</option>
+                    <option value="Controlar impactos">Controlar impactos</option>
+                    <option value="Monitorear y optimizar">Monitorear y optimizar</option>
+                    <option value="Restaurar el ambiente">Restaurar el ambiente</option>
+                  </select>
+                </div>
+                <div className="space-y-2">
                   <Label htmlFor="reporte">Reporte</Label>
                   <select
                     id="reporte"
@@ -224,26 +258,54 @@ export default function PlansPage() {
                 <p className="text-sm text-muted-foreground line-clamp-2 mb-4">
                   {plan.description || "Sin descripción"}
                 </p>
-                {plan.tipo && (
-                  <div className="flex items-center justify-between mb-2">
-                    <span className="text-xs text-muted-foreground">Tipo:</span>
+                <div className="space-y-1.5 mb-4">
+                  {plan.tipo && (
+                    <div className="flex items-center justify-between">
+                      <span className="text-xs text-muted-foreground">Tipo:</span>
+                      <span className="text-xs font-medium bg-slate-100 px-2 py-0.5 rounded">
+                        {plan.tipo}
+                      </span>
+                    </div>
+                  )}
+                  {plan.fase && (
+                    <div className="flex items-center justify-between">
+                      <span className="text-xs text-muted-foreground">Fase:</span>
+                      <span className="text-xs font-medium bg-blue-100 text-blue-700 px-2 py-0.5 rounded">
+                        {plan.fase}
+                      </span>
+                    </div>
+                  )}
+                  {plan.enfoque && (
+                    <div className="flex items-center justify-between">
+                      <span className="text-xs text-muted-foreground">Enfoque:</span>
+                      <span className="text-xs font-medium bg-green-100 text-green-700 px-2 py-0.5 rounded">
+                        {plan.enfoque}
+                      </span>
+                    </div>
+                  )}
+                  <div className="flex items-center justify-between">
+                    <span className="text-xs text-muted-foreground">Reporte:</span>
                     <span className="text-xs font-medium bg-slate-100 px-2 py-0.5 rounded">
-                      {plan.tipo}
+                      {plan.report_per ?? "6 meses"}
                     </span>
                   </div>
-                )}
-                <div className="flex items-center justify-between mb-2">
-                  <span className="text-xs text-muted-foreground">
-                    Reporte:
-                  </span>
-                  <span className="text-xs font-medium bg-slate-100 px-2 py-0.5 rounded">
-                    {plan.report_per ?? "6 meses"}
-                  </span>
+                  {plan.start_date && (
+                    <div className="flex items-center justify-between">
+                      <span className="text-xs text-muted-foreground">Fecha inicio:</span>
+                      <span className="text-xs font-medium bg-slate-100 px-2 py-0.5 rounded">
+                        {new Date(plan.start_date).toLocaleDateString()}
+                      </span>
+                    </div>
+                  )}
+                  <div className="flex items-center justify-between">
+                    <span className="text-xs text-muted-foreground">Creado:</span>
+                    <span className="text-xs text-muted-foreground">
+                      {new Date(plan.createdAt).toLocaleDateString()}
+                    </span>
+                  </div>
                 </div>
                 <div className="flex items-center justify-between">
-                  <span className="text-xs text-muted-foreground">
-                    {new Date(plan.createdAt).toLocaleDateString()}
-                  </span>
+                  <span />
                   <div className="flex items-center gap-1">
                     {isAdmin && (
                       <Button
@@ -310,6 +372,38 @@ export default function PlansPage() {
                 <option value="" disabled>Seleccionar tipo...</option>
                 <option value="Licencia">Licencia</option>
                 <option value="Registro Ambiental">Registro Ambiental</option>
+              </select>
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="edit-fase">Fase</Label>
+              <select
+                id="edit-fase"
+                className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                value={editForm.fase}
+                onChange={(e) => setEditForm({ ...editForm, fase: e.target.value })}
+                required
+              >
+                <option value="" disabled>Seleccionar fase...</option>
+                <option value="Planificación">Planificación</option>
+                <option value="Construcción">Construcción</option>
+                <option value="Operación">Operación</option>
+                <option value="Cierre">Cierre</option>
+              </select>
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="edit-enfoque">Enfoque clave</Label>
+              <select
+                id="edit-enfoque"
+                className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                value={editForm.enfoque}
+                onChange={(e) => setEditForm({ ...editForm, enfoque: e.target.value })}
+                required
+              >
+                <option value="" disabled>Seleccionar enfoque...</option>
+                <option value="Prevenir impactos">Prevenir impactos</option>
+                <option value="Controlar impactos">Controlar impactos</option>
+                <option value="Monitorear y optimizar">Monitorear y optimizar</option>
+                <option value="Restaurar el ambiente">Restaurar el ambiente</option>
               </select>
             </div>
             <div className="space-y-2">
