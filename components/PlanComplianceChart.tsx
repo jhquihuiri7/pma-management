@@ -4,6 +4,7 @@ import { useRef, useState } from "react";
 import {
   BarChart,
   Bar,
+  LabelList,
   XAxis,
   YAxis,
   CartesianGrid,
