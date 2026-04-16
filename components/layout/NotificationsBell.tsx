@@ -8,6 +8,7 @@ import { Badge } from "@/components/ui/badge";
 import {
   DropdownMenu,
   DropdownMenuContent,
+  DropdownMenuGroup,
   DropdownMenuItem,
   DropdownMenuLabel,
   DropdownMenuSeparator,
@@ -162,12 +163,14 @@ export default function NotificationsBell() {
         )}
       </DropdownMenuTrigger>
       <DropdownMenuContent align="end" className="w-96">
-        <DropdownMenuLabel className="flex items-center justify-between">
-          <span>Notificaciones</span>
-          <span className="text-[10px] text-muted-foreground">
-            {unreadCount} sin leer
-          </span>
-        </DropdownMenuLabel>
+        <DropdownMenuGroup>
+          <DropdownMenuLabel className="flex items-center justify-between">
+            <span>Notificaciones</span>
+            <span className="text-[10px] text-muted-foreground">
+              {unreadCount} sin leer
+            </span>
+          </DropdownMenuLabel>
+        </DropdownMenuGroup>
         <DropdownMenuSeparator />
         {notifications.length === 0 ? (
           <div className="px-3 py-6 text-center text-sm text-muted-foreground">
