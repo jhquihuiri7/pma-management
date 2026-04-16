@@ -211,9 +211,9 @@ export default function PlanComplianceChart({ plan, itemCount, complianceRecords
               Sin datos de períodos disponibles
             </div>
           ) : (
-            <div className="flex gap-2">
+            <div className="flex flex-col md:flex-row gap-3">
               {/* Bar chart */}
-              <div className="flex-1 min-w-0">
+              <div className="min-w-0 md:basis-3/5 md:shrink-0">
                 <p className="text-[10px] text-center text-muted-foreground mb-1 font-medium">
                   Distribución por categoría
                 </p>
@@ -267,7 +267,7 @@ export default function PlanComplianceChart({ plan, itemCount, complianceRecords
               </div>
 
               {/* Pie chart */}
-              <div className="w-[180px] shrink-0">
+              <div className="min-w-0 md:basis-2/5 md:shrink-0">
                 <p className="text-[10px] text-center text-muted-foreground mb-1 font-medium">
                   Cumplido vs No cumplido
                 </p>

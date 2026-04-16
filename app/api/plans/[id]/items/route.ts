@@ -44,7 +44,6 @@ export async function POST(
   const body = await req.json();
   const {
     item,
-    type,
     subplan,
     environmental_activity,
     identified_environmental_impact,
@@ -52,7 +51,6 @@ export async function POST(
     indicator,
     verification_method,
     periodicity,
-    start_date,
     budget,
   } = body;
 
@@ -77,7 +75,6 @@ export async function POST(
       params.id,
       {
         item,
-        type,
         subplan,
         environmental_activity,
         identified_environmental_impact,
@@ -85,7 +82,6 @@ export async function POST(
         indicator,
         verification_method,
         periodicity,
-        start_date: start_date || plan.start_date || new Date().toISOString().split("T")[0],
         budget: Number(budget),
         report_per: plan.report_per || "6 meses",
       }

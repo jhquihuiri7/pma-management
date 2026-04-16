@@ -34,10 +34,10 @@ import {
 } from "@/components/ui/dropdown-menu";
 import { SUBPLAN_OPTIONS } from "@/lib/planItemConstants";
 import { parseExcelFile, ParsedItemRow } from "@/lib/excelImport";
+import { parseDateOnly } from "@/lib/dateOnly";
 
 const EMPTY_ITEM_FORM = {
   item: "",
-  type: "",
   subplan: "",
   environmental_activity: "",
   identified_environmental_impact: "",
@@ -658,7 +658,6 @@ export default function PlanDetailPage() {
                     const last = planItems[planItems.length - 1];
                     setItemForm({
                       item: last.item,
-                      type: last.type,
                       subplan: last.subplan,
                       environmental_activity: last.environmental_activity,
                       identified_environmental_impact:
@@ -1032,7 +1031,6 @@ export default function PlanDetailPage() {
                                 setEditingItem(pi);
                                 setItemForm({
                                   item: pi.item,
-                                  type: pi.type,
                                   subplan: pi.subplan,
                                   environmental_activity: pi.environmental_activity,
                                   identified_environmental_impact: pi.identified_environmental_impact,
@@ -1138,7 +1136,7 @@ export default function PlanDetailPage() {
         const today = new Date();
         const todayMonth = new Date(today.getFullYear(), today.getMonth(), 1);
 
-        const planStart = new Date(p.start_date || p.createdAt);
+        const planStart = parseDateOnly(p.start_date) ?? new Date(p.createdAt);
         const rangeStart = new Date(planStart.getFullYear(), planStart.getMonth(), 1);
         const rangeEnd = new Date(today.getFullYear(), today.getMonth() + 2, 1);
 
@@ -1150,7 +1148,7 @@ export default function PlanDetailPage() {
         }
 
         function isActive(pi: PlanItem, month: Date): boolean {
-          const s = new Date(p.start_date || p.createdAt);
+          const s = parseDateOnly(p.start_date) ?? new Date(p.createdAt);
           const sm = new Date(s.getFullYear(), s.getMonth(), 1);
           const mm = new Date(month.getFullYear(), month.getMonth(), 1);
           if (mm < sm) return false;
@@ -1170,7 +1168,7 @@ export default function PlanDetailPage() {
         }
 
         const blockSize = getBlockSize(p.report_per);
-        const startYear = new Date(p.start_date || p.createdAt).getFullYear();
+        const startYear = (parseDateOnly(p.start_date) ?? new Date(p.createdAt)).getFullYear();
         const blockOrigin = new Date(startYear, 0, 1);
 
         function diffFromOrigin(month: Date): number {
@@ -1293,7 +1291,7 @@ export default function PlanDetailPage() {
                           if (vc.type === "month") {
                             const m = vc.date;
                             const active = isActive(pi, m);
-                            const planStartDate = new Date(p.start_date || p.createdAt);
+                            const planStartDate = parseDateOnly(p.start_date) ?? new Date(p.createdAt);
                             const isStart =
                               planStartDate.getFullYear() === m.getFullYear() &&
                               planStartDate.getMonth() === m.getMonth();
@@ -1838,7 +1836,7 @@ export default function PlanDetailPage() {
 
         function getAvailablePeriods(pi: PlanItem): { key: string; label: string }[] {
           const blockSize = getBlockSize(pi.report_per);
-          const startYear = new Date(p.start_date || p.createdAt).getFullYear();
+          const startYear = (parseDateOnly(p.start_date) ?? new Date(p.createdAt)).getFullYear();
           const blockOrigin = new Date(startYear, 0, 1);
           const today = new Date();
           const todayMonth = new Date(today.getFullYear(), today.getMonth(), 1);

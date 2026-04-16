@@ -38,7 +38,6 @@ export async function POST(
   const items: BulkItemInput[] = Array.isArray(body?.items) ? body.items : [];
   if (items.length === 0) return errorResponse("No items provided");
 
-  const startDate = plan.start_date || new Date().toISOString().split("T")[0];
   const reportPer = plan.report_per || "6 meses";
 
   const created: PlanItem[] = [];
@@ -49,7 +48,6 @@ export async function POST(
     try {
       const newItem = await createPlanItem(params.id, {
         item: input.item,
-        type: "",
         subplan: input.subplan,
         environmental_activity: input.environmental_activity,
         identified_environmental_impact: input.identified_environmental_impact,
@@ -57,7 +55,6 @@ export async function POST(
         indicator: input.indicator,
         verification_method: input.verification_method,
         periodicity: input.periodicity,
-        start_date: startDate,
         budget: Number(input.budget) || 0,
         report_per: reportPer,
         ...(input.observation ? { observation: input.observation } : {}),

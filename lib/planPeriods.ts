@@ -1,4 +1,5 @@
 import { Plan } from "@/types";
+import { parseDateOnly } from "@/lib/dateOnly";
 
 function getBlockSize(report_per: string): number {
   const s = (report_per ?? "").toLowerCase();
@@ -15,12 +16,12 @@ function getBlockSize(report_per: string): number {
  */
 export function getPlanPeriods(plan: Plan): { key: string; label: string }[] {
   const blockSize = getBlockSize(plan.report_per);
-  const startYear = new Date(plan.start_date || plan.createdAt).getFullYear();
+  const planStartDate = parseDateOnly(plan.start_date) ?? new Date(plan.createdAt);
+  const startYear = planStartDate.getFullYear();
   const blockOrigin = new Date(startYear, 0, 1);
 
   const today = new Date();
-  const planStart = new Date(plan.start_date || plan.createdAt);
-  const rangeStart = new Date(planStart.getFullYear(), planStart.getMonth(), 1);
+  const rangeStart = new Date(planStartDate.getFullYear(), planStartDate.getMonth(), 1);
   const rangeEnd = new Date(today.getFullYear(), today.getMonth() + 2, 1);
 
   const months: Date[] = [];

@@ -122,7 +122,7 @@ export async function POST(req: NextRequest) {
         if (activityMonth) {
           const periodName = getPeriodFolderName(
             activityMonth,
-            planItem.start_date,
+            plan.start_date || plan.createdAt,
             planItem.report_per
           );
           periodFolderId = await getOrCreateFolder(drive, periodName, planFolderId);

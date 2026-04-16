@@ -81,7 +81,6 @@ export interface PlanItem {
   id: string;
   planId: string;
   item: string;
-  type: string;
   subplan: string;
   environmental_activity: string;
   identified_environmental_impact: string;
@@ -89,7 +88,6 @@ export interface PlanItem {
   indicator: string;
   verification_method: string;
   periodicity: string;
-  start_date: string;
   budget: number;
   report_per: PlanReporte;
   assignedUsers: ItemAssignment[];

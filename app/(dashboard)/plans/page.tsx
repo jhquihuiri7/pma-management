@@ -17,6 +17,7 @@ import {
 import { Plus, ArrowRight, Pencil } from "lucide-react";
 import { toast } from "sonner";
 import { Plan } from "@/types";
+import { formatDateOnly } from "@/lib/dateOnly";
 
 export default function PlansPage() {
   const { data: session } = useSession();
@@ -293,7 +294,7 @@ export default function PlansPage() {
                     <div className="flex items-center justify-between">
                       <span className="text-xs text-muted-foreground">Fecha inicio:</span>
                       <span className="text-xs font-medium bg-slate-100 px-2 py-0.5 rounded">
-                        {new Date(plan.start_date).toLocaleDateString()}
+                        {formatDateOnly(plan.start_date)}
                       </span>
                     </div>
                   )}
