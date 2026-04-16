@@ -58,12 +58,41 @@ export async function getEvidencesByReporter(
 
 export async function updateEvidenceValidation(
   evidenceId: string,
-  status: EvidenceValidationStatus
-): Promise<void> {
-  await adminDb
-    .collection("evidences")
-    .doc(evidenceId)
-    .update({ validationStatus: status });
+  status: EvidenceValidationStatus,
+  adminId: string,
+  options?: { validationComment?: string | null; validatedBy?: string }
+): Promise<{ evidence: Evidence; previousStatus: EvidenceValidationStatus }> {
+  const ref = adminDb.collection("evidences").doc(evidenceId);
+  const doc = await ref.get();
+  if (!doc.exists) throw new Error("Evidence not found");
+
+  const current = doc.data() as Evidence;
+
+  const planDoc = await adminDb.collection("plans").doc(current.planId).get();
+  if (!planDoc.exists) throw new Error("Plan not found");
+  if (planDoc.data()!.adminId !== adminId) throw new Error("Unauthorized");
+
+  const updateData: Partial<Evidence> = {
+    validationStatus: status,
+    validatedAt: new Date().toISOString(),
+  };
+
+  if (options?.validatedBy) {
+    updateData.validatedBy = options.validatedBy;
+  }
+
+  if (status === "invalid") {
+    updateData.validationComment = (options?.validationComment ?? "").trim();
+  } else {
+    updateData.validationComment = "";
+  }
+
+  await ref.update(updateData);
+
+  return {
+    evidence: { ...current, ...updateData },
+    previousStatus: current.validationStatus ?? "pending",
+  };
 }
 
 export async function deleteEvidence(

@@ -66,8 +66,32 @@ export interface Evidence {
   driveUrl: string;
   description: string;
   validationStatus: EvidenceValidationStatus;
+  validationComment?: string;
+  validatedBy?: string;
+  validatedAt?: string;
   activityMonth?: string; // format: "YYYY-MM"
   createdAt: string;
+}
+
+export type NotificationType =
+  | "evidence_submitted"
+  | "evidence_approved"
+  | "evidence_rejected";
+
+export interface AppNotification {
+  id: string;
+  userId: string;
+  adminId: string;
+  type: NotificationType;
+  title: string;
+  message: string;
+  planId: string;
+  planItemId?: string;
+  evidenceId?: string;
+  metadata?: Record<string, string>;
+  readAt?: string | null;
+  createdAt: string;
+  expiresAt: string;
 }
 
 export type ItemAssignmentCategory = "Responsable" | "Colaborador";

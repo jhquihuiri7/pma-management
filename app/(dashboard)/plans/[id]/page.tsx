@@ -2,7 +2,7 @@
 
 import { useEffect, useState, useCallback } from "react";
 import { useSession } from "next-auth/react";
-import { useParams } from "next/navigation";
+import { useParams, useSearchParams } from "next/navigation";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -51,9 +51,11 @@ const EMPTY_ITEM_FORM = {
 
 export default function PlanDetailPage() {
   const { id } = useParams<{ id: string }>();
+  const searchParams = useSearchParams();
   const { data: session } = useSession();
   const isAdmin = session?.user?.role === "ADMIN";
   const isViewer = session?.user?.role === "VIEWER";
+  const deepLinkEvidenceId = searchParams.get("evidenceId");
 
   const [plan, setPlan] = useState<Plan | null>(null);
   const [evidences, setEvidences] = useState<Evidence[]>([]);
@@ -86,6 +88,7 @@ export default function PlanDetailPage() {
   const [bulkUploading, setBulkUploading] = useState(false);
   const [approvedWarningRows, setApprovedWarningRows] = useState<Set<number>>(new Set());
   const [complianceRecords, setComplianceRecords] = useState<PeriodCompliance[]>([]);
+  const [highlightEvidenceId, setHighlightEvidenceId] = useState<string | null>(null);
 
   const loadPlan = useCallback(async () => {
     const res = await fetch(`/api/plans/${id}`);
@@ -128,6 +131,29 @@ export default function PlanDetailPage() {
     }
   }, [isAdmin]);
 
+  useEffect(() => {
+    if (!deepLinkEvidenceId || evidences.length === 0) return;
+    if (!evidences.some((evidence) => evidence.id === deepLinkEvidenceId)) return;
+
+    setHighlightEvidenceId(deepLinkEvidenceId);
+    const scrollTimeout = window.setTimeout(() => {
+      const row = document.querySelector(
+        `[data-evidence-id="${deepLinkEvidenceId}"]`
+      );
+      row?.scrollIntoView({ behavior: "smooth", block: "center" });
+    }, 120);
+    const clearTimeoutId = window.setTimeout(() => {
+      setHighlightEvidenceId((current) =>
+        current === deepLinkEvidenceId ? null : current
+      );
+    }, 5000);
+
+    return () => {
+      window.clearTimeout(scrollTimeout);
+      window.clearTimeout(clearTimeoutId);
+    };
+  }, [deepLinkEvidenceId, evidences]);
+
   async function handleAssignViewer(viewerId: string) {
     const res = await fetch(`/api/plans/${id}/assign`, {
       method: "POST",
@@ -156,20 +182,39 @@ export default function PlanDetailPage() {
     }
   }
 
-  async function handleValidationChange(evidenceId: string, status: EvidenceValidationStatus) {
+  async function handleValidationChange(
+    evidenceId: string,
+    status: EvidenceValidationStatus,
+    validationComment?: string
+  ) {
     const res = await fetch(`/api/evidences?id=${evidenceId}`, {
       method: "PATCH",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ validationStatus: status }),
+      body: JSON.stringify({
+        validationStatus: status,
+        ...(status === "invalid"
+          ? { validationComment: validationComment?.trim() ?? "" }
+          : {}),
+      }),
     });
 
     if (res.ok) {
       setEvidences((prev) =>
-        prev.map((ev) => (ev.id === evidenceId ? { ...ev, validationStatus: status } : ev))
+        prev.map((ev) =>
+          ev.id === evidenceId
+            ? {
+                ...ev,
+                validationStatus: status,
+                validationComment:
+                  status === "invalid" ? validationComment?.trim() ?? "" : "",
+              }
+            : ev
+        )
       );
       toast.success("Validación actualizada");
     } else {
-      toast.error("Error al actualizar validación");
+      const data = await res.json().catch(() => ({}));
+      toast.error(data.error || "Error al actualizar validación");
     }
   }
 
@@ -1735,21 +1780,17 @@ export default function PlanDetailPage() {
               </TableHeader>
               <TableBody>
                 {visibleEvidences.map((ev) => (
-                  <TableRow key={ev.id}>
+                  <TableRow
+                    key={ev.id}
+                    data-evidence-id={ev.id}
+                    className={
+                      highlightEvidenceId === ev.id
+                        ? "bg-blue-50/70 outline outline-1 outline-blue-200"
+                        : undefined
+                    }
+                  >
                     <TableCell>
-                      {isViewer ? (
-                        <span className="p-0 h-auto inline-flex">
-                          {(ev.validationStatus ?? "pending") === "valid" && (
-                            <CheckCircle2 className="w-5 h-5 text-green-500" />
-                          )}
-                          {(ev.validationStatus ?? "pending") === "invalid" && (
-                            <XCircle className="w-5 h-5 text-red-500" />
-                          )}
-                          {(ev.validationStatus ?? "pending") === "pending" && (
-                            <AlertTriangle className="w-5 h-5 text-yellow-500" />
-                          )}
-                        </span>
-                      ) : (
+                      {isAdmin ? (
                         <DropdownMenu>
                           <DropdownMenuTrigger className="p-0 h-auto bg-transparent border-0 cursor-pointer inline-flex items-center justify-center rounded hover:opacity-75 transition-opacity">
                               {(ev.validationStatus ?? "pending") === "valid" && (
@@ -1769,11 +1810,32 @@ export default function PlanDetailPage() {
                             <DropdownMenuItem onClick={() => handleValidationChange(ev.id, "pending")}>
                               <AlertTriangle className="w-4 h-4 text-yellow-500 mr-2" /> Pendiente
                             </DropdownMenuItem>
-                            <DropdownMenuItem onClick={() => handleValidationChange(ev.id, "invalid")}>
+                            <DropdownMenuItem
+                              onClick={() => {
+                                const reason = window.prompt("Ingresa el motivo del rechazo");
+                                if (!reason || !reason.trim()) {
+                                  toast.error("El motivo es obligatorio para rechazar");
+                                  return;
+                                }
+                                void handleValidationChange(ev.id, "invalid", reason.trim());
+                              }}
+                            >
                               <XCircle className="w-4 h-4 text-red-500 mr-2" /> No válido
                             </DropdownMenuItem>
                           </DropdownMenuContent>
                         </DropdownMenu>
+                      ) : (
+                        <span className="p-0 h-auto inline-flex">
+                          {(ev.validationStatus ?? "pending") === "valid" && (
+                            <CheckCircle2 className="w-5 h-5 text-green-500" />
+                          )}
+                          {(ev.validationStatus ?? "pending") === "invalid" && (
+                            <XCircle className="w-5 h-5 text-red-500" />
+                          )}
+                          {(ev.validationStatus ?? "pending") === "pending" && (
+                            <AlertTriangle className="w-5 h-5 text-yellow-500" />
+                          )}
+                        </span>
                       )}
                     </TableCell>
                     <TableCell className="max-w-[180px] truncate text-sm">
