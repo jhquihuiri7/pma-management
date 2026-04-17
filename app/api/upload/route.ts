@@ -11,54 +11,9 @@ import { getUserById } from "@/services/userService";
 import { adminDb } from "@/lib/firebase-admin";
 import { PlanItem } from "@/types";
 import { createNotifications } from "@/services/notificationService";
+import { createPeriodHelpers } from "@/lib/planPeriods";
 
 const MAX_FILE_SIZE = 10 * 1024 * 1024; // 10MB
-
-function getBlockSize(reportPer: string | undefined): number {
-  const s = (reportPer ?? "").toLowerCase();
-  if (s.startsWith("2")) return 24;
-  if (s.startsWith("1")) return 12;
-  return 6;
-}
-
-function getPeriodFolderName(
-  activityMonth: string,
-  startDate: string,
-  reportPer: string | undefined
-): string {
-  const blockSize = getBlockSize(reportPer);
-  const startYear = new Date(startDate).getFullYear();
-  const blockOrigin = new Date(startYear, 0, 1);
-
-  const [year, month] = activityMonth.split("-").map(Number);
-  const targetDate = new Date(year, month - 1, 1);
-
-  const MONTHS = ["ene", "feb", "mar", "abr", "may", "jun", "jul", "ago", "sep", "oct", "nov", "dic"];
-
-  for (let blockIndex = 0; blockIndex < 200; blockIndex++) {
-    const blockStart = new Date(
-      blockOrigin.getFullYear(),
-      blockOrigin.getMonth() + blockIndex * blockSize,
-      1
-    );
-    const nextBlockStart = new Date(
-      blockOrigin.getFullYear(),
-      blockOrigin.getMonth() + (blockIndex + 1) * blockSize,
-      1
-    );
-
-    if (targetDate >= blockStart && targetDate < nextBlockStart) {
-      const blockEndMonth = new Date(
-        blockOrigin.getFullYear(),
-        blockOrigin.getMonth() + (blockIndex + 1) * blockSize - 1,
-        1
-      );
-      return `${MONTHS[blockStart.getMonth()]}${blockStart.getFullYear()}-${MONTHS[blockEndMonth.getMonth()]}${blockEndMonth.getFullYear()}`;
-    }
-  }
-
-  return activityMonth; // fallback
-}
 
 export async function POST(req: NextRequest) {
   const session = await getAuthSession();
@@ -123,11 +78,12 @@ export async function POST(req: NextRequest) {
         // Create/get period subfolder inside plan folder
         let periodFolderId: string = planFolderId;
         if (activityMonth) {
-          const periodName = getPeriodFolderName(
-            activityMonth,
-            plan.start_date || plan.createdAt,
-            planItem.report_per
-          );
+          const { getActivityPeriodFolder } = createPeriodHelpers({
+            start_date: plan.start_date,
+            createdAt: plan.createdAt,
+            report_per: planItem.report_per,
+          });
+          const periodName = getActivityPeriodFolder(activityMonth);
           periodFolderId = await getOrCreateFolder(drive, periodName, planFolderId);
         }
 

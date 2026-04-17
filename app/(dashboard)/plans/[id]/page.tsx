@@ -35,6 +35,7 @@ import {
 import { SUBPLAN_OPTIONS } from "@/lib/planItemConstants";
 import { parseExcelFile, ParsedItemRow } from "@/lib/excelImport";
 import { parseDateOnly } from "@/lib/dateOnly";
+import { createPeriodHelpers } from "@/lib/planPeriods";
 
 const EMPTY_ITEM_FORM = {
   item: "",
@@ -1224,41 +1225,7 @@ export default function PlanDetailPage() {
         }
 
         // Period block helpers (based on plan's report_per)
-        function getBlockSize(report_per: string | undefined): number {
-          const s = (report_per ?? "").toLowerCase();
-          if (s.startsWith("2")) return 24;
-          if (s.startsWith("1")) return 12;
-          return 6;
-        }
-
-        const blockSize = getBlockSize(p.report_per);
-        const startYear = (parseDateOnly(p.start_date) ?? new Date(p.createdAt)).getFullYear();
-        const blockOrigin = new Date(startYear, 0, 1);
-
-        function diffFromOrigin(month: Date): number {
-          return (
-            (month.getFullYear() - blockOrigin.getFullYear()) * 12 +
-            (month.getMonth() - blockOrigin.getMonth())
-          );
-        }
-
-        function isBlockEnd(month: Date): boolean {
-          const mm = new Date(month.getFullYear(), month.getMonth(), 1);
-          if (mm < blockOrigin) return false;
-          return (diffFromOrigin(mm) + 1) % blockSize === 0;
-        }
-
-        function getPeriodLabel(blockEndMonth: Date): string {
-          const diff = diffFromOrigin(new Date(blockEndMonth.getFullYear(), blockEndMonth.getMonth(), 1));
-          const blockIndex = Math.floor(diff / blockSize);
-          const blockStart = new Date(blockOrigin.getFullYear(), blockOrigin.getMonth() + blockIndex * blockSize, 1);
-          const startLbl = blockStart.toLocaleString("es", { month: "short" });
-          const endLbl = blockEndMonth.toLocaleString("es", { month: "short" });
-          if (blockStart.getFullYear() !== blockEndMonth.getFullYear()) {
-            return `${startLbl} ${blockStart.getFullYear()}-${endLbl} ${blockEndMonth.getFullYear()}`;
-          }
-          return `${startLbl}-${endLbl} ${blockEndMonth.getFullYear()}`;
-        }
+        const { isBlockEnd, getPeriodLabel } = createPeriodHelpers(p);
 
         // Build virtual column list: month columns + compliance columns at period ends
         type VCol =
