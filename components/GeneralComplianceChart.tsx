@@ -170,8 +170,8 @@ const renderCountOnlyPieLabel = (props: {
   );
 };
 
-const renderBarLabel = (total: number) =>
-  (props: { x?: number; y?: number; width?: number; value?: number }) => {
+const renderBarLabel = (total: number) => {
+  const BarLabel = (props: { x?: number; y?: number; width?: number; value?: number }) => {
     const { x = 0, y = 0, width = 0, value = 0 } = props;
     if (value === 0) return null;
     const pct = total > 0 ? ((value / total) * 100).toFixed(0) : "0";
@@ -181,6 +181,8 @@ const renderBarLabel = (total: number) =>
       </text>
     );
   };
+  return BarLabel;
+};
 
 export default function GeneralComplianceChart({ planCharts }: Props) {
   // Collect all unique periods from all plans (union)
