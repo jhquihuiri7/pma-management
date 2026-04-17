@@ -9,6 +9,7 @@ export interface ParsedItemRow {
   rowNumber: number;
   item: string;
   subplan: string;
+  direccion: string;
   environmental_activity: string;
   identified_environmental_impact: string;
   proposed_measure: string;
@@ -24,6 +25,7 @@ export interface ParsedItemRow {
 const COLUMN_ALIASES: Record<keyof Omit<ParsedItemRow, "rowNumber" | "errors" | "warnings">, string[]> = {
   item: ["item", "ítem", "codigo", "código"],
   subplan: ["subplan"],
+  direccion: ["direccion", "direcciÃ³n", "dirección", "dirección responsable", "direccion responsable"],
   environmental_activity: [
     "actividad/aspecto ambiental",
     "actividad ambiental",
@@ -122,6 +124,7 @@ export async function parseExcelFile(file: File): Promise<ParseResult> {
     const required: Array<keyof typeof COLUMN_ALIASES> = [
       "item",
       "subplan",
+      "direccion",
       "environmental_activity",
       "identified_environmental_impact",
       "proposed_measure",
@@ -146,6 +149,7 @@ export async function parseExcelFile(file: File): Promise<ParseResult> {
       };
 
       const item = cellToString(get("item"));
+      const direccion = cellToString(get("direccion"));
       const environmental_activity = cellToString(get("environmental_activity"));
       const identified_environmental_impact = cellToString(get("identified_environmental_impact"));
       const proposed_measure = cellToString(get("proposed_measure"));
@@ -155,6 +159,7 @@ export async function parseExcelFile(file: File): Promise<ParseResult> {
 
       const rowAllEmpty =
         !item &&
+        !direccion &&
         !environmental_activity &&
         !identified_environmental_impact &&
         !proposed_measure &&
@@ -166,6 +171,7 @@ export async function parseExcelFile(file: File): Promise<ParseResult> {
       const warnings: string[] = [];
 
       if (!item) errors.push("Falta Ítem");
+      if (!direccion) errors.push("Falta Dirección");
       if (!environmental_activity) errors.push("Falta Actividad/Aspecto Ambiental");
       if (!identified_environmental_impact) errors.push("Falta Impacto Ambiental Identificado");
       if (!proposed_measure) errors.push("Falta Medida Propuesta");
@@ -213,6 +219,7 @@ export async function parseExcelFile(file: File): Promise<ParseResult> {
         rowNumber: i + 1,
         item,
         subplan,
+        direccion,
         environmental_activity,
         identified_environmental_impact,
         proposed_measure,

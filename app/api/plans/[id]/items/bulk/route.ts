@@ -12,6 +12,7 @@ import { PlanItem } from "@/types";
 interface BulkItemInput {
   item: string;
   subplan: string;
+  direccion: string;
   environmental_activity: string;
   identified_environmental_impact: string;
   proposed_measure: string;
@@ -49,6 +50,7 @@ export async function POST(
       const newItem = await createPlanItem(params.id, {
         item: input.item,
         subplan: input.subplan,
+        direccion: input.direccion,
         environmental_activity: input.environmental_activity,
         identified_environmental_impact: input.identified_environmental_impact,
         proposed_measure: input.proposed_measure,

@@ -39,6 +39,7 @@ import { parseDateOnly } from "@/lib/dateOnly";
 const EMPTY_ITEM_FORM = {
   item: "",
   subplan: "",
+  direccion: "",
   environmental_activity: "",
   identified_environmental_impact: "",
   proposed_measure: "",
@@ -337,6 +338,7 @@ export default function PlanDetailPage() {
       .map((r) => ({
         item: r.item,
         subplan: r.subplan,
+        direccion: r.direccion,
         environmental_activity: r.environmental_activity,
         identified_environmental_impact: r.identified_environmental_impact,
         proposed_measure: r.proposed_measure,
@@ -704,6 +706,7 @@ export default function PlanDetailPage() {
                     setItemForm({
                       item: last.item,
                       subplan: last.subplan,
+                      direccion: last.direccion ?? "",
                       environmental_activity: last.environmental_activity,
                       identified_environmental_impact:
                         last.identified_environmental_impact,
@@ -763,6 +766,17 @@ export default function PlanDetailPage() {
                           </option>
                         ))}
                       </select>
+                    </div>
+                    <div className="space-y-2">
+                      <Label htmlFor="direccion">Dirección</Label>
+                      <Input
+                        id="direccion"
+                        value={itemForm.direccion}
+                        onChange={(e) =>
+                          setItemForm({ ...itemForm, direccion: e.target.value })
+                        }
+                        required
+                      />
                     </div>
                     <div className="space-y-2">
                       <Label htmlFor="periodicity">Periodicidad</Label>
@@ -986,6 +1000,7 @@ export default function PlanDetailPage() {
                   <TableRow>
                     <TableHead>Ítem</TableHead>
                     <TableHead>Subplan</TableHead>
+                    <TableHead>Dirección</TableHead>
                     <TableHead>Actividad Ambiental</TableHead>
                     <TableHead>Impacto Identificado</TableHead>
                     <TableHead>Medida Propuesta</TableHead>
@@ -1007,6 +1022,9 @@ export default function PlanDetailPage() {
                       </TableCell>
                       <TableCell className="whitespace-nowrap">
                         {pi.subplan}
+                      </TableCell>
+                      <TableCell className="max-w-[150px] truncate">
+                        {pi.direccion ?? ""}
                       </TableCell>
                       <TableCell className="max-w-[150px] truncate">
                         {pi.environmental_activity}
@@ -1077,6 +1095,7 @@ export default function PlanDetailPage() {
                                 setItemForm({
                                   item: pi.item,
                                   subplan: pi.subplan,
+                                  direccion: pi.direccion ?? "",
                                   environmental_activity: pi.environmental_activity,
                                   identified_environmental_impact: pi.identified_environmental_impact,
                                   proposed_measure: pi.proposed_measure,
@@ -2091,6 +2110,7 @@ export default function PlanDetailPage() {
                           <TableHead className="w-12">#</TableHead>
                           <TableHead>Ítem</TableHead>
                           <TableHead>Subplan</TableHead>
+                          <TableHead>Dirección</TableHead>
                           <TableHead>Actividad</TableHead>
                           <TableHead>Impacto</TableHead>
                           <TableHead>Medida</TableHead>
@@ -2130,6 +2150,13 @@ export default function PlanDetailPage() {
                               </TableCell>
                               <TableCell className="max-w-[160px] truncate" title={row.subplan}>
                                 {row.subplan || (
+                                  <span className="text-muted-foreground italic">
+                                    —
+                                  </span>
+                                )}
+                              </TableCell>
+                              <TableCell className="max-w-[160px] truncate" title={row.direccion}>
+                                {row.direccion || (
                                   <span className="text-muted-foreground italic">
                                     —
                                   </span>

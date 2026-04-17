@@ -106,6 +106,7 @@ export interface PlanItem {
   planId: string;
   item: string;
   subplan: string;
+  direccion?: string;
   environmental_activity: string;
   identified_environmental_impact: string;
   proposed_measure: string;

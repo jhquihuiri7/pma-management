@@ -9,6 +9,9 @@ export const SUBPLAN_OPTIONS = [
   "Plan de Rehabilitación de Áreas Afectadas",
   "Plan de Relaciones Comunitarias",
   "Plan de Cierre y Abandono",
+  "Plan de Comunicación y Capacitación",
+  "Plan de Rehabilitación",
+  "Plan de Cierre y Entrega del Área"
 ] as const;
 
 export const PERIODICITY_OPTIONS = [

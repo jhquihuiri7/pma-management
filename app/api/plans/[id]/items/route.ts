@@ -45,6 +45,7 @@ export async function POST(
   const {
     item,
     subplan,
+    direccion,
     environmental_activity,
     identified_environmental_impact,
     proposed_measure,
@@ -57,6 +58,7 @@ export async function POST(
   if (
     !item ||
     !subplan ||
+    !direccion ||
     !environmental_activity ||
     !identified_environmental_impact ||
     !proposed_measure ||
@@ -76,6 +78,7 @@ export async function POST(
       {
         item,
         subplan,
+        direccion,
         environmental_activity,
         identified_environmental_impact,
         proposed_measure,
