@@ -5,7 +5,10 @@
       "Bash(npm install *)",
       "Bash(npx next *)",
       "Bash(echo \"EXIT:$?\")",
-      "Bash(node_modules/.bin/tsc --noEmit)"
+      "Bash(node_modules/.bin/tsc --noEmit)",
+      "Bash(npx shadcn@latest add tabs --yes)",
+      "Bash(cat tailwind.config.ts)",
+      "Bash(cat tailwind.config.js)"
     ]
   }
 }
