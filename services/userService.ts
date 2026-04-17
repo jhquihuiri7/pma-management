@@ -2,7 +2,7 @@ import { adminDb } from "@/lib/firebase-admin";
 import { User, UserRole } from "@/types";
 import bcrypt from "bcryptjs";
 import crypto from "crypto";
-import { sendEmailFromAdmin, buildInvitationEmail } from "@/lib/gmail";
+import { sendEmailFromAdmin, buildInvitationEmail, buildPasswordRecoveryEmail } from "@/lib/gmail";
 
 const BCRYPT_ROUNDS = 10;
 
@@ -155,6 +155,78 @@ export async function setUserPassword(
   await adminDb.collection("users").doc(info.userId).update({
     password: hashedPassword,
     passwordSet: true,
+    passwordSetToken: null,
+    passwordSetTokenExpiry: null,
+  });
+}
+
+export async function generatePasswordRecoveryToken(email: string): Promise<void> {
+  const snapshot = await adminDb
+    .collection("users")
+    .where("email", "==", email)
+    .limit(1)
+    .get();
+
+  // Always resolve silently to avoid email enumeration
+  if (snapshot.empty) return;
+
+  const doc = snapshot.docs[0];
+  const user = doc.data() as User;
+
+  // Only reporters and viewers can recover via email
+  if (user.role !== "REPORTER" && user.role !== "VIEWER") return;
+  // Cannot recover if password was never set (still in invite flow)
+  if (user.passwordSet === false) return;
+
+  const token = crypto.randomBytes(32).toString("hex");
+  const tokenExpiry = new Date(Date.now() + 60 * 60 * 1000).toISOString(); // 1 hour
+
+  await doc.ref.update({
+    passwordSetToken: token,
+    passwordSetTokenExpiry: tokenExpiry,
+  });
+
+  const appUrl = process.env.NEXTAUTH_URL ?? "http://localhost:3000";
+  const resetLink = `${appUrl}/reset-password?token=${token}`;
+  const html = buildPasswordRecoveryEmail(user.name, resetLink);
+
+  try {
+    await sendEmailFromAdmin(user.adminId, user.email, "Restablece tu contraseña – Plan de Manejo Ambiental", html);
+  } catch {
+    // Silently fail — token is still stored, admin can resend manually
+  }
+}
+
+export async function verifyPasswordRecoveryToken(
+  token: string
+): Promise<{ userId: string; name: string; email: string } | null> {
+  const snapshot = await adminDb
+    .collection("users")
+    .where("passwordSetToken", "==", token)
+    .where("passwordSet", "==", true)
+    .limit(1)
+    .get();
+
+  if (snapshot.empty) return null;
+
+  const doc = snapshot.docs[0];
+  const user = doc.data() as User;
+
+  if (!user.passwordSetTokenExpiry || new Date(user.passwordSetTokenExpiry) < new Date()) {
+    return null;
+  }
+
+  return { userId: doc.id, name: user.name, email: user.email };
+}
+
+export async function resetUserPassword(token: string, password: string): Promise<void> {
+  const info = await verifyPasswordRecoveryToken(token);
+  if (!info) throw new Error("El enlace es inválido o ha expirado");
+
+  const hashedPassword = await bcrypt.hash(password, BCRYPT_ROUNDS);
+
+  await adminDb.collection("users").doc(info.userId).update({
+    password: hashedPassword,
     passwordSetToken: null,
     passwordSetTokenExpiry: null,
   });

@@ -85,34 +85,43 @@ export async function deletePlan(
   const plan = doc.data() as Plan;
   if (plan.adminId !== adminId) throw new Error("Unauthorized");
 
-  // Delete assignments and evidences for this plan
-  const [assignments, evidences] = await Promise.all([
-    adminDb.collection("assignments").where("planId", "==", planId).get(),
-    adminDb.collection("evidences").where("planId", "==", planId).get(),
-  ]);
-
-  // Delete evidence files from Google Drive
-  if (!evidences.empty) {
+  // Delete the entire plan Drive folder (cascades all subfolders and evidence files)
+  if (plan.driveFolderId) {
     try {
       const drive = await getAuthenticatedDrive(adminId);
-      await Promise.all(
-        evidences.docs.map((doc) => {
-          const evidence = doc.data() as Evidence;
-          return drive.files
-            .delete({ fileId: evidence.driveFileId })
-            .catch(() => {});
-        })
-      );
+      await drive.files.delete({ fileId: plan.driveFolderId });
     } catch {
-      // Continue with Firestore deletion even if Drive deletes fail
+      // Continue with Firestore deletion even if Drive deletion fails
     }
   }
 
-  const batch = adminDb.batch();
-  assignments.docs.forEach((doc) => batch.delete(doc.ref));
-  evidences.docs.forEach((doc) => batch.delete(doc.ref));
-  batch.delete(adminDb.collection("plans").doc(planId));
-  await batch.commit();
+  // Query all related Firestore collections in parallel
+  const [assignments, evidences, planItems, periodCompliance, notifications] =
+    await Promise.all([
+      adminDb.collection("assignments").where("planId", "==", planId).get(),
+      adminDb.collection("evidences").where("planId", "==", planId).get(),
+      adminDb.collection("planItems").where("planId", "==", planId).get(),
+      adminDb.collection("periodCompliance").where("planId", "==", planId).get(),
+      adminDb.collection("notifications").where("planId", "==", planId).get(),
+    ]);
+
+  // Collect all refs to delete (including the plan document itself)
+  const allRefs = [
+    ...assignments.docs.map((d) => d.ref),
+    ...evidences.docs.map((d) => d.ref),
+    ...planItems.docs.map((d) => d.ref),
+    ...periodCompliance.docs.map((d) => d.ref),
+    ...notifications.docs.map((d) => d.ref),
+    adminDb.collection("plans").doc(planId),
+  ];
+
+  // Firestore batch limit is 500 — split into chunks
+  const CHUNK_SIZE = 499;
+  for (let i = 0; i < allRefs.length; i += CHUNK_SIZE) {
+    const batch = adminDb.batch();
+    allRefs.slice(i, i + CHUNK_SIZE).forEach((ref) => batch.delete(ref));
+    await batch.commit();
+  }
 }
 
 // --- Assignment management ---

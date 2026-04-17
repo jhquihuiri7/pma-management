@@ -5,7 +5,7 @@ import {
   forbiddenResponse,
   errorResponse,
 } from "@/lib/api-utils";
-import { getPlanById, updatePlan, getAssignedUsers } from "@/services/planService";
+import { getPlanById, updatePlan, getAssignedUsers, deletePlan } from "@/services/planService";
 import { getEvidencesByPlan } from "@/services/evidenceService";
 import { PlanReporte, PlanTipo, PlanFase, PlanEnfoque } from "@/types";
 
@@ -52,6 +52,22 @@ export async function PUT(
       enfoque: enfoque as PlanEnfoque | undefined,
     });
     return NextResponse.json(plan);
+  } catch (error: unknown) {
+    return errorResponse((error as Error).message);
+  }
+}
+
+export async function DELETE(
+  _req: NextRequest,
+  { params }: { params: { id: string } }
+) {
+  const session = await getAuthSession();
+  if (!session?.user) return unauthorizedResponse();
+  if (session.user.role !== "ADMIN") return forbiddenResponse();
+
+  try {
+    await deletePlan(params.id, session.user.adminId);
+    return NextResponse.json({ success: true });
   } catch (error: unknown) {
     return errorResponse((error as Error).message);
   }

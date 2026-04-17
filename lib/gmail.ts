@@ -71,6 +71,61 @@ export async function sendEmailFromAdmin(
   });
 }
 
+export function buildPasswordRecoveryEmail(
+  userName: string,
+  resetLink: string
+): string {
+  return `
+<!DOCTYPE html>
+<html lang="es">
+<head><meta charset="utf-8" /></head>
+<body style="margin:0;padding:0;background:#f8fafc;font-family:Arial,sans-serif;">
+  <table width="100%" cellpadding="0" cellspacing="0" style="background:#f8fafc;padding:40px 0;">
+    <tr>
+      <td align="center">
+        <table width="600" cellpadding="0" cellspacing="0" style="background:#ffffff;border-radius:8px;overflow:hidden;box-shadow:0 1px 3px rgba(0,0,0,0.1);">
+          <tr>
+            <td style="background:#0f172a;padding:32px 40px;">
+              <h1 style="margin:0;color:#ffffff;font-size:20px;font-weight:600;">Plan de Manejo Ambiental</h1>
+              <p style="margin:4px 0 0;color:#94a3b8;font-size:14px;">Plataforma de Gestión Ambiental</p>
+            </td>
+          </tr>
+          <tr>
+            <td style="padding:40px;">
+              <h2 style="margin:0 0 16px;color:#0f172a;font-size:18px;">Hola, ${userName}</h2>
+              <p style="margin:0 0 16px;color:#475569;font-size:15px;line-height:1.6;">
+                Recibimos una solicitud para restablecer la contraseña de tu cuenta. Haz clic en el siguiente botón para crear una nueva contraseña:
+              </p>
+              <div style="text-align:center;margin:32px 0;">
+                <a href="${resetLink}"
+                   style="display:inline-block;background:#0f172a;color:#ffffff;padding:14px 32px;border-radius:6px;text-decoration:none;font-size:15px;font-weight:600;">
+                  Restablecer contraseña
+                </a>
+              </div>
+              <p style="margin:0 0 8px;color:#94a3b8;font-size:13px;">
+                Este enlace expira en <strong>1 hora</strong>.
+              </p>
+              <p style="margin:0;color:#94a3b8;font-size:13px;">
+                Si no solicitaste restablecer tu contraseña, puedes ignorar este correo.
+              </p>
+            </td>
+          </tr>
+          <tr>
+            <td style="background:#f1f5f9;padding:20px 40px;text-align:center;">
+              <p style="margin:0;color:#94a3b8;font-size:12px;">
+                Plan de Manejo Ambiental &mdash; Plataforma de Gestión
+              </p>
+            </td>
+          </tr>
+        </table>
+      </td>
+    </tr>
+  </table>
+</body>
+</html>
+  `.trim();
+}
+
 export function buildInvitationEmail(
   userName: string,
   setPasswordLink: string

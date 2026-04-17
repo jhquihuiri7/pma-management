@@ -72,6 +72,7 @@ export async function getNotificationsForUser(
   const snapshot = await adminDb
     .collection("notifications")
     .where("userId", "==", userId)
+    .where("adminId", "==", adminId)
     .get();
 
   const nowMs = Date.now();
@@ -82,7 +83,6 @@ export async function getNotificationsForUser(
 
   snapshot.docs.forEach((doc) => {
     const notification = doc.data() as AppNotification;
-    if (notification.adminId !== adminId) return;
 
     const createdAtMs = new Date(notification.createdAt).getTime();
     const expiresAtMs = new Date(notification.expiresAt).getTime();

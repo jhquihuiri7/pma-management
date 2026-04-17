@@ -2,7 +2,7 @@
 
 import { useEffect, useState, useCallback } from "react";
 import { useSession } from "next-auth/react";
-import { useParams, useSearchParams } from "next/navigation";
+import { useParams, useSearchParams, useRouter } from "next/navigation";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -23,7 +23,7 @@ import {
   DialogTitle,
   DialogTrigger,
 } from "@/components/ui/dialog";
-import { Upload, ExternalLink, Trash2, Plus, Users, CheckCircle2, AlertTriangle, XCircle, Pencil, Download, FileSpreadsheet } from "lucide-react";
+import { Upload, ExternalLink, Trash2, Plus, Users, CheckCircle2, AlertTriangle, XCircle, Pencil, Download, FileSpreadsheet, OctagonAlert } from "lucide-react";
 import { toast } from "sonner";
 import { Plan, Evidence, User, PlanItem, ItemAssignmentCategory, EvidenceValidationStatus, PeriodCompliance, PeriodComplianceStatus } from "@/types";
 import {
@@ -32,7 +32,7 @@ import {
   DropdownMenuItem,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
-import { SUBPLAN_OPTIONS } from "@/lib/planItemConstants";
+import { SUBPLAN_OPTIONS, PERIODICITY_OPTIONS } from "@/lib/planItemConstants";
 import { parseExcelFile, ParsedItemRow } from "@/lib/excelImport";
 import { parseDateOnly } from "@/lib/dateOnly";
 import { createPeriodHelpers } from "@/lib/planPeriods";
@@ -55,6 +55,7 @@ export default function PlanDetailPage() {
   const { id } = useParams<{ id: string }>();
   const searchParams = useSearchParams();
   const { data: session } = useSession();
+  const router = useRouter();
   const isAdmin = session?.user?.role === "ADMIN";
   const isViewer = session?.user?.role === "VIEWER";
   const deepLinkEvidenceId = searchParams.get("evidenceId");
@@ -91,6 +92,8 @@ export default function PlanDetailPage() {
   const [approvedWarningRows, setApprovedWarningRows] = useState<Set<number>>(new Set());
   const [complianceRecords, setComplianceRecords] = useState<PeriodCompliance[]>([]);
   const [highlightEvidenceId, setHighlightEvidenceId] = useState<string | null>(null);
+  const [deletePlanOpen, setDeletePlanOpen] = useState(false);
+  const [deletingPlan, setDeletingPlan] = useState(false);
 
   const loadPlan = useCallback(async () => {
     const res = await fetch(`/api/plans/${id}`);
@@ -155,6 +158,23 @@ export default function PlanDetailPage() {
       window.clearTimeout(clearTimeoutId);
     };
   }, [deepLinkEvidenceId, evidences]);
+
+  async function handleDeletePlan() {
+    setDeletingPlan(true);
+    try {
+      const res = await fetch(`/api/plans/${id}`, { method: "DELETE" });
+      if (res.ok) {
+        toast.success("Plan eliminado correctamente");
+        router.push("/plans");
+      } else {
+        const data = await res.json();
+        toast.error(data.error || "Error al eliminar el plan");
+      }
+    } finally {
+      setDeletingPlan(false);
+      setDeletePlanOpen(false);
+    }
+  }
 
   async function handleAssignViewer(viewerId: string) {
     const res = await fetch(`/api/plans/${id}/assign`, {
@@ -609,12 +629,24 @@ export default function PlanDetailPage() {
     <div className="space-y-6">
       {/* Plan Header */}
       <div>
-        <div className="flex items-center gap-2 mb-1">
-          <h1 className="text-2xl font-bold">{plan.title}</h1>
-          {isViewer && (
-            <span className="inline-flex items-center rounded-md bg-slate-100 px-2 py-1 text-xs font-medium text-slate-600">
-              Solo lectura
-            </span>
+        <div className="flex items-center justify-between mb-1">
+          <div className="flex items-center gap-2">
+            <h1 className="text-2xl font-bold">{plan.title}</h1>
+            {isViewer && (
+              <span className="inline-flex items-center rounded-md bg-slate-100 px-2 py-1 text-xs font-medium text-slate-600">
+                Solo lectura
+              </span>
+            )}
+          </div>
+          {isAdmin && (
+            <Button
+              variant="destructive"
+              size="sm"
+              onClick={() => setDeletePlanOpen(true)}
+            >
+              <Trash2 className="w-4 h-4 mr-2" />
+              Eliminar plan
+            </Button>
           )}
         </div>
         <p className="text-muted-foreground mt-1">
@@ -796,18 +828,9 @@ export default function PlanDetailPage() {
                         <option value="" disabled>
                           Seleccionar periodicidad...
                         </option>
-                        <option value="Al finalizar la etapa de operación">Al finalizar la etapa de operación</option>
-                        <option value="Anual">Anual</option>
-                        <option value="Bianual">Bianual</option>
-                        <option value="Diaria">Diaria</option>
-                        <option value="En caso de suceder">En caso de suceder</option>
-                        <option value="Mensual">Mensual</option>
-                        <option value="Permanente">Permanente</option>
-                        <option value="Semanal">Semanal</option>
-                        <option value="Semestral">Semestral</option>
-                        <option value="Trianual">Trianual</option>
-                        <option value="Trimestral">Trimestral</option>
-                        <option value="Única vez">Única vez</option>
+                        {PERIODICITY_OPTIONS.map((option) => (
+                          <option key={option} value={option}>{option}</option>
+                        ))}
                       </select>
                     </div>
                     <div className="space-y-2">
@@ -2252,6 +2275,49 @@ export default function PlanDetailPage() {
               );
             })()
           )}
+        </DialogContent>
+      </Dialog>
+
+      {/* Delete Plan Confirmation Dialog */}
+      <Dialog open={deletePlanOpen} onOpenChange={setDeletePlanOpen}>
+        <DialogContent className="max-w-md">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2 text-destructive">
+              <OctagonAlert className="w-5 h-5" />
+              Eliminar plan permanentemente
+            </DialogTitle>
+          </DialogHeader>
+          <div className="space-y-4 py-2">
+            <p className="text-sm text-muted-foreground">
+              Esta acción es <strong>irreversible</strong>. Se eliminará todo lo relacionado con este plan:
+            </p>
+            <ul className="text-sm space-y-1 list-disc list-inside text-muted-foreground">
+              <li>Todos los ítems del plan</li>
+              <li>Todas las evidencias y archivos en Google Drive</li>
+              <li>Registros de cumplimiento por período</li>
+              <li>Todas las asignaciones de usuarios a los ítems</li>
+              <li>Notificaciones relacionadas al plan</li>
+            </ul>
+            <p className="text-sm font-medium">
+              Los usuarios no serán eliminados.
+            </p>
+          </div>
+          <div className="flex justify-end gap-2 pt-2">
+            <Button
+              variant="outline"
+              onClick={() => setDeletePlanOpen(false)}
+              disabled={deletingPlan}
+            >
+              Cancelar
+            </Button>
+            <Button
+              variant="destructive"
+              onClick={handleDeletePlan}
+              disabled={deletingPlan}
+            >
+              {deletingPlan ? "Eliminando..." : "Sí, eliminar plan"}
+            </Button>
+          </div>
         </DialogContent>
       </Dialog>
     </div>

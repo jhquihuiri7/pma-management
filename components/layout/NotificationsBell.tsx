@@ -39,6 +39,7 @@ export default function NotificationsBell() {
   const router = useRouter();
   const { data: session } = useSession();
   const userId = session?.user?.id;
+  const adminId = session?.user?.adminId;
 
   const [notifications, setNotifications] = useState<AppNotification[]>([]);
 
@@ -57,7 +58,7 @@ export default function NotificationsBell() {
   }, []);
 
   useEffect(() => {
-    if (!userId) return;
+    if (!userId || !adminId) return;
 
     let disposed = false;
     let unsubscribe: (() => void) | null = null;
@@ -86,7 +87,8 @@ export default function NotificationsBell() {
         const db = getFirestore(app);
         const notificationsQuery = query(
           collection(db, "notifications"),
-          where("userId", "==", userId)
+          where("userId", "==", userId),
+          where("adminId", "==", adminId)
         );
 
         unsubscribe = onSnapshot(
@@ -126,7 +128,7 @@ export default function NotificationsBell() {
       if (unsubscribe) unsubscribe();
       stopPolling();
     };
-  }, [fetchNotifications, userId]);
+  }, [fetchNotifications, userId, adminId]);
 
   const handleNotificationClick = async (notification: AppNotification) => {
     const now = new Date().toISOString();

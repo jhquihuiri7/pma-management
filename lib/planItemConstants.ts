@@ -11,18 +11,20 @@ export const SUBPLAN_OPTIONS = [
   "Plan de Cierre y Abandono",
   "Plan de Comunicación y Capacitación",
   "Plan de Rehabilitación",
-  "Plan de Cierre y Entrega del Área"
+  "Plan de Cierre, Abandono y Entrega del Área"
 ] as const;
 
 export const PERIODICITY_OPTIONS = [
   "Al finalizar la etapa de operación",
   "Anual",
   "Bianual",
+  "Diaria",
   "En caso de suceder",
   "Mensual",
   "Permanente",
   "Semanal",
   "Semestral",
+  "Trianual",
   "Trimestral",
   "Única vez",
 ] as const;
