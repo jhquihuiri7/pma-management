@@ -4,7 +4,7 @@ import { useSession } from "next-auth/react";
 import { useEffect, useState } from "react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { FileText, Users, Upload, BarChart2 } from "lucide-react";
-import { Plan, PeriodCompliance } from "@/types";
+import { Plan, PeriodCompliance, PlanItem } from "@/types";
 import PlanComplianceChart from "@/components/PlanComplianceChart";
 
 interface Stats {
@@ -16,6 +16,8 @@ interface Stats {
 interface PlanChartData {
   plan: Plan;
   itemCount: number;
+  directionCounts: { name: string; value: number }[];
+  items: Pick<PlanItem, "id" | "direccion">[];
   complianceRecords: PeriodCompliance[];
 }
 
@@ -62,13 +64,29 @@ export default function DashboardPage() {
                 fetch(`/api/plans/${plan.id}/items`),
                 fetch(`/api/plans/${plan.id}/period-compliance`),
               ]);
-              const items = itemsRes.ok ? await itemsRes.json() : [];
+              const items: PlanItem[] = itemsRes.ok ? await itemsRes.json() : [];
               const complianceRecords: PeriodCompliance[] = complianceRes.ok
                 ? await complianceRes.json()
                 : [];
+
+              const counts = new Map<string, number>();
+              for (const it of Array.isArray(items) ? items : []) {
+                const raw = typeof it?.direccion === "string" ? it.direccion : "";
+                const key = raw.trim() || "Sin dirección";
+                counts.set(key, (counts.get(key) ?? 0) + 1);
+              }
+              const directionCounts = Array.from(counts.entries())
+                .map(([name, value]) => ({ name, value }))
+                .sort((a, b) => b.value - a.value || a.name.localeCompare(b.name));
+
               return {
                 plan,
                 itemCount: Array.isArray(items) ? items.length : 0,
+                directionCounts,
+                items: (Array.isArray(items) ? items : []).map((it) => ({
+                  id: it.id,
+                  direccion: it.direccion,
+                })),
                 complianceRecords,
               };
             })
@@ -162,11 +180,13 @@ export default function DashboardPage() {
           </Card>
         ) : (
           <div className="grid grid-cols-1 gap-6">
-            {planCharts.map(({ plan, itemCount, complianceRecords }) => (
+            {planCharts.map(({ plan, itemCount, directionCounts, items, complianceRecords }) => (
               <PlanComplianceChart
                 key={plan.id}
                 plan={plan}
                 itemCount={itemCount}
+                directionCounts={directionCounts}
+                items={items}
                 complianceRecords={complianceRecords}
               />
             ))}
