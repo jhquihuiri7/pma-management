@@ -36,7 +36,7 @@ async function createManagedUser(
 ): Promise<User> {
   // Check if email already exists
   const existing = await adminDb
-    .collection("users")
+    .collection("pma_users")
     .where("email", "==", email)
     .limit(1)
     .get();
@@ -48,7 +48,7 @@ async function createManagedUser(
   const token = crypto.randomBytes(32).toString("hex");
   const tokenExpiry = new Date(Date.now() + 24 * 60 * 60 * 1000).toISOString();
 
-  const userRef = adminDb.collection("users").doc();
+  const userRef = adminDb.collection("pma_users").doc();
 
   const user: User = {
     id: userRef.id,
@@ -92,7 +92,7 @@ export async function resendInvitation(
   userId: string,
   adminId: string
 ): Promise<void> {
-  const doc = await adminDb.collection("users").doc(userId).get();
+  const doc = await adminDb.collection("pma_users").doc(userId).get();
   if (!doc.exists) throw new Error("Usuario no encontrado");
 
   const user = doc.data() as User;
@@ -103,7 +103,7 @@ export async function resendInvitation(
   const token = crypto.randomBytes(32).toString("hex");
   const tokenExpiry = new Date(Date.now() + 24 * 60 * 60 * 1000).toISOString();
 
-  await adminDb.collection("users").doc(userId).update({
+  await adminDb.collection("pma_users").doc(userId).update({
     passwordSetToken: token,
     passwordSetTokenExpiry: tokenExpiry,
     emailSent: true,
@@ -125,7 +125,7 @@ export async function verifySetPasswordToken(
   token: string
 ): Promise<{ userId: string; name: string; email: string } | null> {
   const snapshot = await adminDb
-    .collection("users")
+    .collection("pma_users")
     .where("passwordSetToken", "==", token)
     .where("passwordSet", "==", false)
     .limit(1)
@@ -152,7 +152,7 @@ export async function setUserPassword(
 
   const hashedPassword = await bcrypt.hash(password, BCRYPT_ROUNDS);
 
-  await adminDb.collection("users").doc(info.userId).update({
+  await adminDb.collection("pma_users").doc(info.userId).update({
     password: hashedPassword,
     passwordSet: true,
     passwordSetToken: null,
@@ -162,7 +162,7 @@ export async function setUserPassword(
 
 export async function generatePasswordRecoveryToken(email: string): Promise<void> {
   const snapshot = await adminDb
-    .collection("users")
+    .collection("pma_users")
     .where("email", "==", email)
     .limit(1)
     .get();
@@ -201,7 +201,7 @@ export async function verifyPasswordRecoveryToken(
   token: string
 ): Promise<{ userId: string; name: string; email: string } | null> {
   const snapshot = await adminDb
-    .collection("users")
+    .collection("pma_users")
     .where("passwordSetToken", "==", token)
     .where("passwordSet", "==", true)
     .limit(1)
@@ -225,7 +225,7 @@ export async function resetUserPassword(token: string, password: string): Promis
 
   const hashedPassword = await bcrypt.hash(password, BCRYPT_ROUNDS);
 
-  await adminDb.collection("users").doc(info.userId).update({
+  await adminDb.collection("pma_users").doc(info.userId).update({
     password: hashedPassword,
     passwordSetToken: null,
     passwordSetTokenExpiry: null,
@@ -233,7 +233,7 @@ export async function resetUserPassword(token: string, password: string): Promis
 }
 
 export async function getUserById(userId: string): Promise<User | null> {
-  const doc = await adminDb.collection("users").doc(userId).get();
+  const doc = await adminDb.collection("pma_users").doc(userId).get();
   if (!doc.exists) return null;
   const data = doc.data() as User;
   return { ...data, password: undefined };
@@ -241,7 +241,7 @@ export async function getUserById(userId: string): Promise<User | null> {
 
 export async function getReportersByAdmin(adminId: string): Promise<User[]> {
   const snapshot = await adminDb
-    .collection("users")
+    .collection("pma_users")
     .where("adminId", "==", adminId)
     .where("role", "==", "REPORTER")
     .orderBy("createdAt", "desc")
@@ -256,13 +256,13 @@ export async function getReportersByAdmin(adminId: string): Promise<User[]> {
 export async function getManagedUsersByAdmin(adminId: string): Promise<User[]> {
   const [reportersSnap, viewersSnap] = await Promise.all([
     adminDb
-      .collection("users")
+      .collection("pma_users")
       .where("adminId", "==", adminId)
       .where("role", "==", "REPORTER")
       .orderBy("createdAt", "desc")
       .get(),
     adminDb
-      .collection("users")
+      .collection("pma_users")
       .where("adminId", "==", adminId)
       .where("role", "==", "VIEWER")
       .orderBy("createdAt", "desc")
@@ -287,7 +287,7 @@ export async function deleteReporter(
   userId: string,
   adminId: string
 ): Promise<void> {
-  const doc = await adminDb.collection("users").doc(userId).get();
+  const doc = await adminDb.collection("pma_users").doc(userId).get();
   if (!doc.exists) throw new Error("User not found");
 
   const user = doc.data() as User;
@@ -296,12 +296,12 @@ export async function deleteReporter(
 
   // Delete assignments for this user
   const assignments = await adminDb
-    .collection("assignments")
+    .collection("pma_assignments")
     .where("userId", "==", userId)
     .get();
 
   const batch = adminDb.batch();
   assignments.docs.forEach((doc) => batch.delete(doc.ref));
-  batch.delete(adminDb.collection("users").doc(userId));
+  batch.delete(adminDb.collection("pma_users").doc(userId));
   await batch.commit();
 }

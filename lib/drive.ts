@@ -14,7 +14,7 @@ interface TokenData {
 }
 
 export async function getAuthenticatedDrive(adminId: string) {
-  const adminDoc = await adminDb.collection("admins").doc(adminId).get();
+  const adminDoc = await adminDb.collection("pma_admins").doc(adminId).get();
   if (!adminDoc.exists) {
     throw new Error("Admin not found");
   }
@@ -28,7 +28,7 @@ export async function getAuthenticatedDrive(adminId: string) {
   // Refresh token if expired
   if (data.tokenExpiresAt < Date.now()) {
     const { credentials } = await oauth2Client.refreshAccessToken();
-    await adminDb.collection("admins").doc(adminId).update({
+    await adminDb.collection("pma_admins").doc(adminId).update({
       googleAccessToken: credentials.access_token,
       tokenExpiresAt: credentials.expiry_date || Date.now() + 3600 * 1000,
     });

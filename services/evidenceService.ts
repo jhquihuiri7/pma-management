@@ -13,7 +13,7 @@ export async function createEvidence(
   planItemId?: string,
   activityMonth?: string
 ): Promise<Evidence> {
-  const ref = adminDb.collection("evidences").doc();
+  const ref = adminDb.collection("pma_evidences").doc();
 
   const evidence: Evidence = {
     id: ref.id,
@@ -36,7 +36,7 @@ export async function createEvidence(
 
 export async function getEvidencesByPlan(planId: string): Promise<Evidence[]> {
   const snapshot = await adminDb
-    .collection("evidences")
+    .collection("pma_evidences")
     .where("planId", "==", planId)
     .orderBy("createdAt", "desc")
     .get();
@@ -48,7 +48,7 @@ export async function getEvidencesByReporter(
   userId: string
 ): Promise<Evidence[]> {
   const snapshot = await adminDb
-    .collection("evidences")
+    .collection("pma_evidences")
     .where("uploadedBy", "==", userId)
     .orderBy("createdAt", "desc")
     .get();
@@ -62,13 +62,13 @@ export async function updateEvidenceValidation(
   adminId: string,
   options?: { validationComment?: string | null; validatedBy?: string }
 ): Promise<{ evidence: Evidence; previousStatus: EvidenceValidationStatus }> {
-  const ref = adminDb.collection("evidences").doc(evidenceId);
+  const ref = adminDb.collection("pma_evidences").doc(evidenceId);
   const doc = await ref.get();
   if (!doc.exists) throw new Error("Evidence not found");
 
   const current = doc.data() as Evidence;
 
-  const planDoc = await adminDb.collection("plans").doc(current.planId).get();
+  const planDoc = await adminDb.collection("pma_plans").doc(current.planId).get();
   if (!planDoc.exists) throw new Error("Plan not found");
   if (planDoc.data()!.adminId !== adminId) throw new Error("Unauthorized");
 
@@ -99,14 +99,14 @@ export async function deleteEvidence(
   evidenceId: string,
   adminId: string
 ): Promise<void> {
-  const doc = await adminDb.collection("evidences").doc(evidenceId).get();
+  const doc = await adminDb.collection("pma_evidences").doc(evidenceId).get();
   if (!doc.exists) throw new Error("Evidence not found");
 
   const evidence = doc.data() as Evidence;
 
   // Verify the plan belongs to this admin
   const planDoc = await adminDb
-    .collection("plans")
+    .collection("pma_plans")
     .doc(evidence.planId)
     .get();
   if (!planDoc.exists) throw new Error("Plan not found");
@@ -120,5 +120,5 @@ export async function deleteEvidence(
     // Continue with Firestore deletion even if Drive delete fails
   }
 
-  await adminDb.collection("evidences").doc(evidenceId).delete();
+  await adminDb.collection("pma_evidences").doc(evidenceId).delete();
 }

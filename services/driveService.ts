@@ -18,7 +18,7 @@ export async function uploadEvidenceFile(
   planName: string,
   itemFolderId?: string
 ): Promise<UploadResult> {
-  const adminDoc = await adminDb.collection("admins").doc(adminId).get();
+  const adminDoc = await adminDb.collection("pma_admins").doc(adminId).get();
   if (!adminDoc.exists) {
     throw new Error("Admin not found");
   }
@@ -46,7 +46,7 @@ export async function createPlanDriveFolder(
   adminId: string,
   planName: string
 ): Promise<string> {
-  const adminDoc = await adminDb.collection("admins").doc(adminId).get();
+  const adminDoc = await adminDb.collection("pma_admins").doc(adminId).get();
   if (!adminDoc.exists) {
     throw new Error("Admin not found");
   }

@@ -32,7 +32,7 @@ export const authOptions: NextAuthOptions = {
           throw new Error("Email and password are required");
         }
 
-        const usersRef = adminDb.collection("users");
+        const usersRef = adminDb.collection("pma_users");
         const snapshot = await usersRef
           .where("email", "==", credentials.email)
           .limit(1)
@@ -82,7 +82,7 @@ export const authOptions: NextAuthOptions = {
     async signIn({ user, account }) {
       // Handle Google OAuth sign-in for ADMIN
       if (account?.provider === "google") {
-        const adminRef = adminDb.collection("admins").doc(user.id);
+        const adminRef = adminDb.collection("pma_admins").doc(user.id);
         const adminDoc = await adminRef.get();
 
         const oauth2Client = new google.auth.OAuth2(
@@ -113,7 +113,7 @@ export const authOptions: NextAuthOptions = {
           });
 
           // Also create a user record for the ADMIN
-          await adminDb.collection("users").doc(user.id).set({
+          await adminDb.collection("pma_users").doc(user.id).set({
             id: user.id,
             name: user.name,
             email: user.email,

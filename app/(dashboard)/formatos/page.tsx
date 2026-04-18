@@ -43,7 +43,7 @@ export default function FormatosPage() {
   async function fetchFormats() {
     setLoading(true);
     try {
-      const res = await fetch("/api/formats");
+      const res = await fetch("/pma/api/formats");
       if (!res.ok) throw new Error("Error al cargar formatos");
       const data: Format[] = await res.json();
       setFormats(data);
@@ -65,7 +65,7 @@ export default function FormatosPage() {
       formData.append("file", file);
       formData.append("functionality", functionality);
 
-      const res = await fetch("/api/formats", {
+      const res = await fetch("/pma/api/formats", {
         method: "POST",
         body: formData,
       });
@@ -89,7 +89,7 @@ export default function FormatosPage() {
   async function handleDelete(format: Format) {
     setDeleting(format.id);
     try {
-      const res = await fetch(`/api/formats/${format.id}`, {
+      const res = await fetch(`/pma/api/formats/${format.id}`, {
         method: "DELETE",
       });
       if (!res.ok) {

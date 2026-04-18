@@ -32,7 +32,7 @@ export default function PlansPage() {
   const [editForm, setEditForm] = useState({ title: "", description: "", tipo: "", fase: "", enfoque: "", report_per: "6 meses", start_date: "" });
 
   async function loadPlans() {
-    const res = await fetch("/api/plans");
+    const res = await fetch("/pma/api/plans");
     if (res.ok) setPlans(await res.json());
   }
 
@@ -44,7 +44,7 @@ export default function PlansPage() {
     e.preventDefault();
     setLoading(true);
 
-    const res = await fetch("/api/plans", {
+    const res = await fetch("/pma/api/plans", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify(form),
@@ -82,7 +82,7 @@ export default function PlansPage() {
     if (!editingPlan) return;
     setLoading(true);
 
-    const res = await fetch(`/api/plans/${editingPlan.id}`, {
+    const res = await fetch(`/pma/api/plans/${editingPlan.id}`, {
       method: "PUT",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify(editForm),

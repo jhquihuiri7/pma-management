@@ -29,7 +29,7 @@ function SetPasswordContent() {
       return;
     }
 
-    fetch(`/api/auth/set-password?token=${token}`)
+    fetch(`/pma/api/auth/set-password?token=${token}`)
       .then((res) => {
         if (!res.ok) throw new Error();
         return res.json();
@@ -58,7 +58,7 @@ function SetPasswordContent() {
 
     setSubmitting(true);
 
-    const res = await fetch("/api/auth/set-password", {
+    const res = await fetch("/pma/api/auth/set-password", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ token, password }),

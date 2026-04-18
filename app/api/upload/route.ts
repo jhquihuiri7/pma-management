@@ -47,7 +47,7 @@ export async function POST(req: NextRequest) {
     const buffer = Buffer.from(bytes);
 
     // ── Resolve Drive folder ────────────────────────────────────────────────
-    const adminDoc = await adminDb.collection("admins").doc(session.user.adminId).get();
+    const adminDoc = await adminDb.collection("pma_admins").doc(session.user.adminId).get();
     const rootFolderId = adminDoc.exists
       ? (adminDoc.data()!.driveRootFolderId as string | undefined)
       : undefined;
@@ -62,7 +62,7 @@ export async function POST(req: NextRequest) {
     let planFolderId = plan.driveFolderId;
     if (!planFolderId) {
       planFolderId = await getOrCreateFolder(drive, plan.title, rootFolderId);
-      await adminDb.collection("plans").doc(planId).update({ driveFolderId: planFolderId });
+      await adminDb.collection("pma_plans").doc(planId).update({ driveFolderId: planFolderId });
     }
 
     let targetFolderId: string = planFolderId;
@@ -70,7 +70,7 @@ export async function POST(req: NextRequest) {
 
     // If uploading for a specific item, resolve: period subfolder → item folder
     if (planItemId) {
-      const itemDoc = await adminDb.collection("planItems").doc(planItemId).get();
+      const itemDoc = await adminDb.collection("pma_planItems").doc(planItemId).get();
       if (itemDoc.exists) {
         const planItem = itemDoc.data() as PlanItem;
         planItemName = planItem.item;

@@ -38,7 +38,7 @@ export async function sendEmailFromAdmin(
   subject: string,
   html: string
 ): Promise<void> {
-  const adminDoc = await adminDb.collection("admins").doc(adminId).get();
+  const adminDoc = await adminDb.collection("pma_admins").doc(adminId).get();
   if (!adminDoc.exists) throw new Error("Admin no encontrado");
 
   const data = adminDoc.data() as AdminTokenData;
@@ -50,7 +50,7 @@ export async function sendEmailFromAdmin(
 
   if (data.tokenExpiresAt < Date.now()) {
     const { credentials } = await oauth2Client.refreshAccessToken();
-    await adminDb.collection("admins").doc(adminId).update({
+    await adminDb.collection("pma_admins").doc(adminId).update({
       googleAccessToken: credentials.access_token,
       tokenExpiresAt: credentials.expiry_date ?? Date.now() + 3600 * 1000,
     });

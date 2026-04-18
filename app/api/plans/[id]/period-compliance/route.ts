@@ -21,7 +21,7 @@ export async function GET(
   if (plan.adminId !== session.user.adminId) return forbiddenResponse();
 
   const snapshot = await adminDb
-    .collection("periodCompliance")
+    .collection("pma_periodCompliance")
     .where("planId", "==", params.id)
     .get();
 
@@ -58,7 +58,7 @@ export async function POST(
   }
 
   const existing = await adminDb
-    .collection("periodCompliance")
+    .collection("pma_periodCompliance")
     .where("planId", "==", params.id)
     .where("planItemId", "==", planItemId)
     .where("periodKey", "==", periodKey)
@@ -72,7 +72,7 @@ export async function POST(
     return NextResponse.json({ id: existing.docs[0].id, planId: params.id, planItemId, periodKey, status, updatedAt: now });
   }
 
-  const ref = adminDb.collection("periodCompliance").doc();
+  const ref = adminDb.collection("pma_periodCompliance").doc();
   const record: PeriodCompliance = {
     id: ref.id,
     planId: params.id,

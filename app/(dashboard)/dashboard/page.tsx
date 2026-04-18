@@ -33,12 +33,11 @@ export default function DashboardPage() {
 
   useEffect(() => {
     async function loadStats() {
-      const [plansRes, evidencesRes] = await Promise.all([
-        fetch("/api/plans"),
-        fetch("/api/evidences"),
-      ]);
-      const plans: Plan[] = await plansRes.json();
-      const evidences = await evidencesRes.json();
+      const requests: Promise<Response>[] = [fetch("/pma/api/plans")];
+      if (!isAdmin) requests.push(fetch("/pma/api/evidences"));
+      const [plansRes, evidencesRes] = await Promise.all(requests);
+      const plans: Plan[] = plansRes.ok ? await plansRes.json() : [];
+      const evidences = evidencesRes?.ok ? await evidencesRes.json() : [];
 
       const statsData: Stats = {
         plans: Array.isArray(plans) ? plans.length : 0,
@@ -47,7 +46,7 @@ export default function DashboardPage() {
       };
 
       if (isAdmin) {
-        const usersRes = await fetch("/api/users");
+        const usersRes = await fetch("/pma/api/users");
         if (usersRes.ok) {
           const users = await usersRes.json();
           statsData.reporters = Array.isArray(users) ? users.length : 0;
@@ -63,8 +62,8 @@ export default function DashboardPage() {
           const chartResults = await Promise.all(
             plans.map(async (plan) => {
               const [itemsRes, complianceRes] = await Promise.all([
-                fetch(`/api/plans/${plan.id}/items`),
-                fetch(`/api/plans/${plan.id}/period-compliance`),
+                fetch(`/pma/api/plans/${plan.id}/items`),
+                fetch(`/pma/api/plans/${plan.id}/period-compliance`),
               ]);
               const items: PlanItem[] = itemsRes.ok ? await itemsRes.json() : [];
               const complianceRecords: PeriodCompliance[] = complianceRes.ok
@@ -138,11 +137,11 @@ export default function DashboardPage() {
             </Card>
           )}
 
-          {!isViewer && (
+          {!isAdmin && !isViewer && (
             <Card>
               <CardHeader className="flex flex-row items-center justify-between pb-2">
                 <CardTitle className="text-sm font-medium text-muted-foreground">
-                  {isAdmin ? "Total de Evidencias" : "Mis Evidencias"}
+                  Mis Evidencias
                 </CardTitle>
                 <Upload className="w-4 h-4 text-muted-foreground" />
               </CardHeader>

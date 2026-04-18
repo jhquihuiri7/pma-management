@@ -17,7 +17,7 @@ type NotificationInput = {
 };
 
 function buildNotification(input: NotificationInput, createdAt: string): AppNotification {
-  const id = adminDb.collection("notifications").doc().id;
+  const id = adminDb.collection("pma_notifications").doc().id;
   const expiresAt = new Date(
     new Date(createdAt).getTime() + NOTIFICATION_RETENTION_DAYS * DAY_IN_MS
   ).toISOString();
@@ -56,7 +56,7 @@ export async function createNotifications(
 
   const batch = adminDb.batch();
   notifications.forEach((notification) => {
-    const ref = adminDb.collection("notifications").doc(notification.id);
+    const ref = adminDb.collection("pma_notifications").doc(notification.id);
     batch.set(ref, notification);
   });
   await batch.commit();
@@ -70,7 +70,7 @@ export async function getNotificationsForUser(
   limit = 30
 ): Promise<AppNotification[]> {
   const snapshot = await adminDb
-    .collection("notifications")
+    .collection("pma_notifications")
     .where("userId", "==", userId)
     .where("adminId", "==", adminId)
     .get();
@@ -114,7 +114,7 @@ export async function markNotificationAsRead(
   userId: string,
   adminId: string
 ): Promise<void> {
-  const ref = adminDb.collection("notifications").doc(notificationId);
+  const ref = adminDb.collection("pma_notifications").doc(notificationId);
   const doc = await ref.get();
   if (!doc.exists) throw new Error("Notification not found");
 

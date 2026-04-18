@@ -20,7 +20,7 @@ export async function DELETE(
 
   try {
     const { id } = params;
-    const docRef = adminDb.collection("formats").doc(id);
+    const docRef = adminDb.collection("pma_formats").doc(id);
     const doc = await docRef.get();
 
     if (!doc.exists) return errorResponse("Format not found", 404);

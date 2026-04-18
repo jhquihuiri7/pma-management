@@ -23,7 +23,7 @@ export async function GET() {
 
   try {
     const snapshot = await adminDb
-      .collection("formats")
+      .collection("pma_formats")
       .where("adminId", "==", session.user.id)
       .orderBy("uploadedAt", "desc")
       .get();
@@ -70,7 +70,7 @@ export async function POST(req: NextRequest) {
     }
 
     // Get admin Drive root folder
-    const adminDoc = await adminDb.collection("admins").doc(session.user.id).get();
+    const adminDoc = await adminDb.collection("pma_admins").doc(session.user.id).get();
     if (!adminDoc.exists) return errorResponse("Admin not found", 404);
     const adminData = adminDoc.data() as { driveRootFolderId: string };
 
@@ -89,7 +89,7 @@ export async function POST(req: NextRequest) {
 
     // Delete previous format for this functionality (if any) from Drive and Firestore
     const existing = await adminDb
-      .collection("formats")
+      .collection("pma_formats")
       .where("adminId", "==", session.user.id)
       .where("functionality", "==", functionality)
       .get();
@@ -131,7 +131,7 @@ export async function POST(req: NextRequest) {
       uploadedAt: now,
     };
 
-    const docRef = await adminDb.collection("formats").add(formatData);
+    const docRef = await adminDb.collection("pma_formats").add(formatData);
 
     return NextResponse.json({ id: docRef.id, ...formatData }, { status: 201 });
   } catch (error: unknown) {

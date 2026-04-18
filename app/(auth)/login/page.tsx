@@ -112,7 +112,7 @@ export default function LoginPage() {
               </Button>
               <div className="text-center">
                 <a
-                  href="/forgot-password"
+                  href="/pma/forgot-password"
                   className="text-sm text-muted-foreground hover:text-slate-900 underline-offset-4 hover:underline"
                 >
                   ¿Olvidaste tu contraseña?

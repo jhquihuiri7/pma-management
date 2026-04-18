@@ -8,7 +8,8 @@
       "Bash(node_modules/.bin/tsc --noEmit)",
       "Bash(npx shadcn@latest add tabs --yes)",
       "Bash(cat tailwind.config.ts)",
-      "Bash(cat tailwind.config.js)"
+      "Bash(cat tailwind.config.js)",
+      "Bash(grep -rl 'fetch.*\"/api/\\\\|fetch.*`/api/' app components --include=\"*.tsx\" --include=\"*.ts\")"
     ]
   }
 }

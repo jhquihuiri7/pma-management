@@ -53,7 +53,7 @@ export async function GET(req: NextRequest) {
   }
 
   // Get the plan item to know its report_per
-  const itemDoc = await adminDb.collection("planItems").doc(planItemId).get();
+  const itemDoc = await adminDb.collection("pma_planItems").doc(planItemId).get();
   if (!itemDoc.exists) return errorResponse("Ítem no encontrado", 404);
   const planItem = itemDoc.data() as PlanItem;
   if (planItem.planId !== planId) return errorResponse("No autorizado", 403);
@@ -65,7 +65,7 @@ export async function GET(req: NextRequest) {
 
   // Fetch evidences for this item within the period
   const evidenceSnap = await adminDb
-    .collection("evidences")
+    .collection("pma_evidences")
     .where("planId", "==", planId)
     .where("planItemId", "==", planItemId)
     .get();
@@ -147,7 +147,7 @@ export async function GET(req: NextRequest) {
     // Check if admin has a format for "descargar_anexos"
     try {
       const formatSnap = await adminDb
-        .collection("formats")
+        .collection("pma_formats")
         .where("adminId", "==", plan.adminId)
         .where("functionality", "==", "descargar_anexos")
         .limit(1)

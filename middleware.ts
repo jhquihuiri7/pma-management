@@ -7,13 +7,13 @@ export default withAuth(
     const pathname = req.nextUrl.pathname;
 
     // Protect admin-only routes
-    const adminOnlyPaths = ["/users"];
+    const adminOnlyPaths = ["/pma/users"];
     const isAdminRoute = adminOnlyPaths.some((path) =>
       pathname.startsWith(path)
     );
 
     if (isAdminRoute && token?.role !== "ADMIN") {
-      return NextResponse.redirect(new URL("/dashboard", req.url));
+      return NextResponse.redirect(new URL("/pma/dashboard", req.url));
     }
 
     return NextResponse.next();

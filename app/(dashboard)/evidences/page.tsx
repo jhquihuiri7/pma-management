@@ -22,7 +22,7 @@ export default function EvidencesPage() {
   const [evidences, setEvidences] = useState<Evidence[]>([]);
 
   async function loadEvidences() {
-    const res = await fetch("/api/evidences");
+    const res = await fetch("/pma/api/evidences");
     if (res.ok) {
       const data = await res.json();
       if (Array.isArray(data)) setEvidences(data);
@@ -35,7 +35,7 @@ export default function EvidencesPage() {
 
   async function handleDelete(id: string) {
     if (!confirm("¿Eliminar esta evidencia?")) return;
-    const res = await fetch(`/api/evidences?id=${id}`, { method: "DELETE" });
+    const res = await fetch(`/pma/api/evidences?id=${id}`, { method: "DELETE" });
     if (res.ok) {
       toast.success("Evidencia eliminada");
       loadEvidences();

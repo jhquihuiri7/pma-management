@@ -96,7 +96,7 @@ export default function PlanDetailPage() {
   const [deletingPlan, setDeletingPlan] = useState(false);
 
   const loadPlan = useCallback(async () => {
-    const res = await fetch(`/api/plans/${id}`);
+    const res = await fetch(`/pma/api/plans/${id}`);
     if (res.ok) {
       const data = await res.json();
       setPlan(data.plan);
@@ -108,12 +108,12 @@ export default function PlanDetailPage() {
   }, [id]);
 
   const loadItems = useCallback(async () => {
-    const res = await fetch(`/api/plans/${id}/items`);
+    const res = await fetch(`/pma/api/plans/${id}/items`);
     if (res.ok) setPlanItems(await res.json());
   }, [id]);
 
   const loadCompliance = useCallback(async () => {
-    const res = await fetch(`/api/plans/${id}/period-compliance`);
+    const res = await fetch(`/pma/api/plans/${id}/period-compliance`);
     if (res.ok) setComplianceRecords(await res.json());
   }, [id]);
 
@@ -125,7 +125,7 @@ export default function PlanDetailPage() {
 
   useEffect(() => {
     if (isAdmin) {
-      fetch("/api/users")
+      fetch("/pma/api/users")
         .then((r) => r.json())
         .then((data) => {
           if (Array.isArray(data)) {
@@ -162,7 +162,7 @@ export default function PlanDetailPage() {
   async function handleDeletePlan() {
     setDeletingPlan(true);
     try {
-      const res = await fetch(`/api/plans/${id}`, { method: "DELETE" });
+      const res = await fetch(`/pma/api/plans/${id}`, { method: "DELETE" });
       if (res.ok) {
         toast.success("Plan eliminado correctamente");
         router.push("/plans");
@@ -177,7 +177,7 @@ export default function PlanDetailPage() {
   }
 
   async function handleAssignViewer(viewerId: string) {
-    const res = await fetch(`/api/plans/${id}/assign`, {
+    const res = await fetch(`/pma/api/plans/${id}/assign`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ userId: viewerId }),
@@ -191,7 +191,7 @@ export default function PlanDetailPage() {
   }
 
   async function handleUnassignViewer(viewerId: string) {
-    const res = await fetch(`/api/plans/${id}/assign`, {
+    const res = await fetch(`/pma/api/plans/${id}/assign`, {
       method: "DELETE",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ userId: viewerId }),
@@ -209,7 +209,7 @@ export default function PlanDetailPage() {
     status: EvidenceValidationStatus,
     validationComment?: string
   ) {
-    const res = await fetch(`/api/evidences?id=${evidenceId}`, {
+    const res = await fetch(`/pma/api/evidences?id=${evidenceId}`, {
       method: "PATCH",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
@@ -242,7 +242,7 @@ export default function PlanDetailPage() {
 
   async function handleDeleteEvidence(evidenceId: string) {
     if (!confirm("¿Eliminar esta evidencia?")) return;
-    const res = await fetch(`/api/evidences?id=${evidenceId}`, {
+    const res = await fetch(`/pma/api/evidences?id=${evidenceId}`, {
       method: "DELETE",
     });
 
@@ -259,7 +259,7 @@ export default function PlanDetailPage() {
     setSavingItem(true);
     try {
       if (editingItem) {
-        const res = await fetch(`/api/plans/${id}/items/${editingItem.id}`, {
+        const res = await fetch(`/pma/api/plans/${id}/items/${editingItem.id}`, {
           method: "PATCH",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({ ...itemForm, budget: Number(itemForm.budget) }),
@@ -283,7 +283,7 @@ export default function PlanDetailPage() {
         return;
       }
 
-      const res = await fetch(`/api/plans/${id}/items`, {
+      const res = await fetch(`/pma/api/plans/${id}/items`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ ...itemForm, budget: Number(itemForm.budget) }),
@@ -377,7 +377,7 @@ export default function PlanDetailPage() {
 
     setBulkUploading(true);
     try {
-      const res = await fetch(`/api/plans/${id}/items/bulk`, {
+      const res = await fetch(`/pma/api/plans/${id}/items/bulk`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ items: toSend }),
@@ -405,7 +405,7 @@ export default function PlanDetailPage() {
 
   async function handleAssignToItem(userId: string, category: ItemAssignmentCategory) {
     if (!selectedItem) return;
-    const res = await fetch(`/api/plans/${id}/items/${selectedItem.id}/assign`, {
+    const res = await fetch(`/pma/api/plans/${id}/items/${selectedItem.id}/assign`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ userId, category }),
@@ -413,7 +413,7 @@ export default function PlanDetailPage() {
     if (res.ok) {
       toast.success("Reportero asignado al ítem");
       setPendingAssign(null);
-      const updated = await fetch(`/api/plans/${id}/items`);
+      const updated = await fetch(`/pma/api/plans/${id}/items`);
       if (updated.ok) {
         const items = await updated.json();
         setPlanItems(items);
@@ -426,14 +426,14 @@ export default function PlanDetailPage() {
 
   async function handleUnassignFromItem(userId: string) {
     if (!selectedItem) return;
-    const res = await fetch(`/api/plans/${id}/items/${selectedItem.id}/assign`, {
+    const res = await fetch(`/pma/api/plans/${id}/items/${selectedItem.id}/assign`, {
       method: "DELETE",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ userId }),
     });
     if (res.ok) {
       toast.success("Reportero desasignado del ítem");
-      const updated = await fetch(`/api/plans/${id}/items`);
+      const updated = await fetch(`/pma/api/plans/${id}/items`);
       if (updated.ok) {
         const items = await updated.json();
         setPlanItems(items);
@@ -465,14 +465,14 @@ export default function PlanDetailPage() {
 
     const responses = await Promise.all([
       ...toRemove.map((userId) =>
-        fetch(`/api/plans/${id}/items/${itemId}/assign`, {
+        fetch(`/pma/api/plans/${id}/items/${itemId}/assign`, {
           method: "DELETE",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({ userId }),
         })
       ),
       ...toUpsert.map(({ userId, category }) =>
-        fetch(`/api/plans/${id}/items/${itemId}/assign`, {
+        fetch(`/pma/api/plans/${id}/items/${itemId}/assign`, {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({ userId, category }),
@@ -496,7 +496,7 @@ export default function PlanDetailPage() {
     formData.set("planItemId", calUpload.item.id);
     formData.set("activityMonth", monthKey);
 
-    const res = await fetch("/api/upload", { method: "POST", body: formData });
+    const res = await fetch("/pma/api/upload", { method: "POST", body: formData });
     setUploadingCal(false);
 
     if (res.ok) {
@@ -519,7 +519,7 @@ export default function PlanDetailPage() {
         periodStart: periodKey,
         planId: id,
       });
-      const res = await fetch(`/api/download/item-period?${params}`);
+      const res = await fetch(`/pma/api/download/item-period?${params}`);
       if (!res.ok) {
         const data = await res.json().catch(() => ({}));
         toast.error(data.error || "No hay archivos para descargar");
@@ -544,7 +544,7 @@ export default function PlanDetailPage() {
   async function handleDeleteItem(itemId: string) {
     if (!confirm("¿Eliminar este ítem?")) return;
 
-    const res = await fetch(`/api/plans/${id}/items/${itemId}`, {
+    const res = await fetch(`/pma/api/plans/${id}/items/${itemId}`, {
       method: "DELETE",
     });
 
@@ -559,7 +559,7 @@ export default function PlanDetailPage() {
   async function handleSaveObservation() {
     if (!obsItem) return;
     setSavingObs(true);
-    const res = await fetch(`/api/plans/${id}/items/${obsItem.id}`, {
+    const res = await fetch(`/pma/api/plans/${id}/items/${obsItem.id}`, {
       method: "PATCH",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ observation: obsText }),
@@ -577,7 +577,7 @@ export default function PlanDetailPage() {
   }
 
   async function handleComplianceChange(planItemId: string, periodKey: string, status: PeriodComplianceStatus) {
-    const res = await fetch(`/api/plans/${id}/period-compliance`, {
+    const res = await fetch(`/pma/api/plans/${id}/period-compliance`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ planItemId, periodKey, status }),
