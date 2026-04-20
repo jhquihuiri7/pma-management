@@ -9,6 +9,13 @@ export default withAuth(
     const isAnyPath = (values: string[]) => values.some((value) => isPath(value));
     const isRgdpPath = isPath("/rgdp");
 
+    // Accept OAuth callbacks without basePath and forward them to the real NextAuth route.
+    if (pathname.startsWith("/api/auth/")) {
+      const rewriteUrl = req.nextUrl.clone();
+      rewriteUrl.pathname = `/pma${pathname}`;
+      return NextResponse.rewrite(rewriteUrl);
+    }
+
     if (isRgdpPath) {
       const rgdpProtectedPaths = [
         "/rgdp/dashboard",
@@ -70,6 +77,7 @@ export default withAuth(
 
 export const config = {
   matcher: [
+    "/api/auth/:path*",
     "/dashboard/:path*",
     "/plans/:path*",
     "/users/:path*",
