@@ -14,18 +14,18 @@ import { Separator } from "@/components/ui/separator";
 
 const adminLinks = [
   { href: "/rgdp/dashboard", label: "Panel Principal", icon: LayoutDashboard },
-  { href: "/rgdp/plans", label: "Planes", icon: FileText },
+  { href: "/rgdp/plans", label: "Proyectos", icon: FileText },
   { href: "/rgdp/users", label: "Usuarios", icon: Users },
 ];
 
 const reporterLinks = [
   { href: "/rgdp/dashboard", label: "Panel Principal", icon: LayoutDashboard },
-  { href: "/rgdp/plans", label: "Mis Planes", icon: FileText },
+  { href: "/rgdp/plans", label: "Mis Proyectos", icon: FileText },
 ];
 
 const viewerLinks = [
   { href: "/rgdp/dashboard", label: "Panel Principal", icon: LayoutDashboard },
-  { href: "/rgdp/plans", label: "Mis Planes", icon: FileText },
+  { href: "/rgdp/plans", label: "Mis Proyectos", icon: FileText },
 ];
 
 export default function SidebarRGDP() {
@@ -38,7 +38,7 @@ export default function SidebarRGDP() {
   return (
     <aside className="w-64 h-screen bg-white border-r border-slate-200 flex flex-col fixed left-0 top-0">
       <div className="p-6">
-        <h1 className="text-lg font-bold text-slate-900">Plan de Manejo Ambiental</h1>
+        <h1 className="text-lg font-bold text-slate-900">Registro Generador de Desechos Peligrosos</h1>
         <p className="text-xs text-muted-foreground mt-1">
           Plataforma Ambiental
         </p>
@@ -109,7 +109,7 @@ export default function SidebarRGDP() {
           variant="ghost"
           size="sm"
           className="w-full justify-start text-slate-600"
-          onClick={() => signOut({ callbackUrl: "/rgdp/login" })}
+          onClick={() => signOut({ callbackUrl: "/login" })}
         >
           <LogOut className="w-4 h-4 mr-2" />
           Cerrar sesión

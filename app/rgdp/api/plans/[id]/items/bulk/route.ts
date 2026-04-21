@@ -1,10 +1,10 @@
-import { NextRequest, NextResponse } from "next/server";
+﻿import { NextRequest, NextResponse } from "next/server";
 import {
   getAuthSession,
   unauthorizedResponse,
   forbiddenResponse,
   errorResponse,
-} from "@/lib/api-utils-rgdp";
+} from "@/lib/api-utils";
 import { getPlanById } from "@/services-rgdp/planService";
 import { createPlanItem } from "@/services-rgdp/planItemService";
 import { PlanItem } from "@/types";
@@ -32,7 +32,7 @@ export async function POST(
   if (session.user.role !== "ADMIN") return forbiddenResponse();
 
   const plan = await getPlanById(params.id);
-  if (!plan) return errorResponse("Plan not found", 404);
+  if (!plan) return errorResponse("Proyecto no encontrado", 404);
   if (plan.adminId !== session.user.adminId) return forbiddenResponse();
 
   const body = await req.json();
@@ -73,3 +73,4 @@ export async function POST(
     failed,
   });
 }
+

@@ -1,11 +1,11 @@
-import { adminDb } from "@/lib/firebase-admin";
+﻿import { adminDb } from "@/lib/firebase-admin";
 import { ItemAssignment, ItemAssignmentCategory, PlanItem } from "@/types";
 
 export async function createPlanItem(
   planId: string,
   data: Omit<PlanItem, "id" | "planId" | "createdAt" | "assignedUsers" | "driveFolderId">
 ): Promise<PlanItem> {
-  const ref = adminDb.collection("rgdp_planItems").doc();
+  const ref = adminDb.collection("rgdp_projectItems").doc();
   const now = new Date().toISOString();
 
   const item: PlanItem = {
@@ -22,7 +22,7 @@ export async function createPlanItem(
 
 export async function getPlanItems(planId: string): Promise<PlanItem[]> {
   const snapshot = await adminDb
-    .collection("rgdp_planItems")
+    .collection("rgdp_projectItems")
     .where("planId", "==", planId)
     .orderBy("createdAt", "asc")
     .get();
@@ -38,7 +38,7 @@ export async function assignReporterToItem(
   userId: string,
   category: ItemAssignmentCategory
 ): Promise<void> {
-  const ref = adminDb.collection("rgdp_planItems").doc(itemId);
+  const ref = adminDb.collection("rgdp_projectItems").doc(itemId);
   const doc = await ref.get();
   if (!doc.exists) throw new Error("Item not found");
 
@@ -49,14 +49,14 @@ export async function assignReporterToItem(
 
   // Ensure a plan-level assignment exists so the reporter can see the plan
   const existing = await adminDb
-    .collection("rgdp_assignments")
+    .collection("rgdp_project_assignments")
     .where("userId", "==", userId)
     .where("planId", "==", item.planId)
     .limit(1)
     .get();
 
   if (existing.empty) {
-    const assignRef = adminDb.collection("rgdp_assignments").doc();
+    const assignRef = adminDb.collection("rgdp_project_assignments").doc();
     await assignRef.set({
       id: assignRef.id,
       userId,
@@ -70,7 +70,7 @@ export async function unassignReporterFromItem(
   itemId: string,
   userId: string
 ): Promise<void> {
-  const ref = adminDb.collection("rgdp_planItems").doc(itemId);
+  const ref = adminDb.collection("rgdp_projectItems").doc(itemId);
   const doc = await ref.get();
   if (!doc.exists) throw new Error("Item not found");
 
@@ -80,7 +80,7 @@ export async function unassignReporterFromItem(
 
   // Check if the user is still assigned to any other item in this plan
   const remainingItems = await adminDb
-    .collection("rgdp_planItems")
+    .collection("rgdp_projectItems")
     .where("planId", "==", item.planId)
     .get();
 
@@ -93,7 +93,7 @@ export async function unassignReporterFromItem(
   // If no more item assignments, remove the plan-level assignment
   if (!stillAssigned) {
     const planAssignment = await adminDb
-      .collection("rgdp_assignments")
+      .collection("rgdp_project_assignments")
       .where("userId", "==", userId)
       .where("planId", "==", item.planId)
       .limit(1)
@@ -110,7 +110,7 @@ export async function updatePlanItem(
   planId: string,
   data: Partial<Omit<PlanItem, "id" | "planId" | "createdAt" | "assignedUsers">>
 ): Promise<void> {
-  const ref = adminDb.collection("rgdp_planItems").doc(itemId);
+  const ref = adminDb.collection("rgdp_projectItems").doc(itemId);
   const doc = await ref.get();
   if (!doc.exists) throw new Error("Item not found");
   if ((doc.data() as PlanItem).planId !== planId) throw new Error("Unauthorized");
@@ -122,7 +122,7 @@ export async function updatePlanItemObservation(
   planId: string,
   observation: string
 ): Promise<void> {
-  const ref = adminDb.collection("rgdp_planItems").doc(itemId);
+  const ref = adminDb.collection("rgdp_projectItems").doc(itemId);
   const doc = await ref.get();
   if (!doc.exists) throw new Error("Item not found");
   if ((doc.data() as PlanItem).planId !== planId) throw new Error("Unauthorized");
@@ -133,7 +133,7 @@ export async function deletePlanItem(
   itemId: string,
   planId: string
 ): Promise<void> {
-  const doc = await adminDb.collection("rgdp_planItems").doc(itemId).get();
+  const doc = await adminDb.collection("rgdp_projectItems").doc(itemId).get();
   if (!doc.exists) throw new Error("Item not found");
 
   const item = doc.data() as PlanItem;
@@ -141,3 +141,4 @@ export async function deletePlanItem(
 
   await doc.ref.delete();
 }
+

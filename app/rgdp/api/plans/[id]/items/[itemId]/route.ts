@@ -1,10 +1,10 @@
-import { NextRequest, NextResponse } from "next/server";
+﻿import { NextRequest, NextResponse } from "next/server";
 import {
   getAuthSession,
   unauthorizedResponse,
   forbiddenResponse,
   errorResponse,
-} from "@/lib/api-utils-rgdp";
+} from "@/lib/api-utils";
 import { getPlanById } from "@/services-rgdp/planService";
 import { deletePlanItem, updatePlanItem, updatePlanItemObservation } from "@/services-rgdp/planItemService";
 
@@ -16,7 +16,7 @@ export async function PATCH(
   if (!session?.user) return unauthorizedResponse();
 
   const plan = await getPlanById(params.id);
-  if (!plan) return errorResponse("Plan not found", 404);
+  if (!plan) return errorResponse("Proyecto no encontrado", 404);
   if (plan.adminId !== session.user.adminId) return forbiddenResponse();
 
   const body = await req.json();
@@ -44,7 +44,7 @@ export async function DELETE(
   if (session.user.role !== "ADMIN") return forbiddenResponse();
 
   const plan = await getPlanById(params.id);
-  if (!plan) return errorResponse("Plan not found", 404);
+  if (!plan) return errorResponse("Proyecto no encontrado", 404);
   if (plan.adminId !== session.user.adminId) return forbiddenResponse();
 
   try {
@@ -54,3 +54,4 @@ export async function DELETE(
     return errorResponse((error as Error).message);
   }
 }
+

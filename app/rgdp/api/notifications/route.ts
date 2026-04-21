@@ -1,9 +1,9 @@
-import { NextRequest, NextResponse } from "next/server";
+﻿import { NextRequest, NextResponse } from "next/server";
 import {
   getAuthSession,
   unauthorizedResponse,
   errorResponse,
-} from "@/lib/api-utils-rgdp";
+} from "@/lib/api-utils";
 import { getNotificationsForUser } from "@/services-rgdp/notificationService";
 
 export async function GET(req: NextRequest) {

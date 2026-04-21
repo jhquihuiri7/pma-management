@@ -1,23 +1,25 @@
-export const SUBPLAN_OPTIONS = [
-  "Plan de Prevención y Mitigación de Impactos",
+﻿export const SUBPLAN_OPTIONS = [
+  "Plan de Prevencion y Mitigacion de Impactos",
   "Plan de Seguridad y Salud Ocupacional",
   "Plan de Contingencias",
   "Plan de Manejo de Desechos",
   "Plan de Monitoreo y Seguimiento",
   "Plan de rescate de vida silvestre",
-  "Plan de Capacitación",
-  "Plan de Rehabilitación de Áreas Afectadas",
+  "Plan de Capacitacion",
+  "Plan de Rehabilitacion de Areas Afectadas",
   "Plan de Relaciones Comunitarias",
   "Plan de Cierre y Abandono",
-  "Plan de Comunicación y Capacitación",
-  "Plan de Comunicación, Capacitación y Educación Ambiental",
-  "Plan de Rehabilitación",
-  "Plan de Cierre, Abandono y Entrega del Área"
+  "Plan de Comunicacion y Capacitacion",
+  "Plan de Comunicacion, Capacitacion y Educacion Ambiental",
+  "Plan de Educacion Ambiental",
+  "Plan de Rehabilitacion",
+  "Plan de Cierre, Abandono y Entrega del Area",
 ] as const;
 
 export const PERIODICITY_OPTIONS = [
-  "Al finalizar la etapa de operación",
+  "Al finalizar la etapa de operacion",
   "Anual",
+  "Bimensual",
   "Bianual",
   "Diaria",
   "En caso de suceder",
@@ -28,7 +30,7 @@ export const PERIODICITY_OPTIONS = [
   "Trianual",
   "Trimestral",
   "Cuatrimestral",
-  "Única vez",
+  "Unica vez",
 ] as const;
 
 function normalize(value: string): string {

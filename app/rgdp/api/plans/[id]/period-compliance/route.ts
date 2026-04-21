@@ -1,10 +1,10 @@
-import { NextRequest, NextResponse } from "next/server";
+﻿import { NextRequest, NextResponse } from "next/server";
 import {
   getAuthSession,
   unauthorizedResponse,
   forbiddenResponse,
   errorResponse,
-} from "@/lib/api-utils-rgdp";
+} from "@/lib/api-utils";
 import { getPlanById } from "@/services-rgdp/planService";
 import { adminDb } from "@/lib/firebase-admin";
 import { PeriodCompliance, PeriodComplianceStatus } from "@/types";
@@ -17,11 +17,11 @@ export async function GET(
   if (!session?.user) return unauthorizedResponse();
 
   const plan = await getPlanById(params.id);
-  if (!plan) return errorResponse("Plan not found", 404);
+  if (!plan) return errorResponse("Proyecto no encontrado", 404);
   if (plan.adminId !== session.user.adminId) return forbiddenResponse();
 
   const snapshot = await adminDb
-    .collection("rgdp_periodCompliance")
+    .collection("rgdp_project_period_compliance")
     .where("planId", "==", params.id)
     .get();
 
@@ -38,7 +38,7 @@ export async function POST(
   if (session.user.role !== "ADMIN") return forbiddenResponse();
 
   const plan = await getPlanById(params.id);
-  if (!plan) return errorResponse("Plan not found", 404);
+  if (!plan) return errorResponse("Proyecto no encontrado", 404);
   if (plan.adminId !== session.user.adminId) return forbiddenResponse();
 
   const body = await req.json();
@@ -58,7 +58,7 @@ export async function POST(
   }
 
   const existing = await adminDb
-    .collection("rgdp_periodCompliance")
+    .collection("rgdp_project_period_compliance")
     .where("planId", "==", params.id)
     .where("planItemId", "==", planItemId)
     .where("periodKey", "==", periodKey)
@@ -72,7 +72,7 @@ export async function POST(
     return NextResponse.json({ id: existing.docs[0].id, planId: params.id, planItemId, periodKey, status, updatedAt: now });
   }
 
-  const ref = adminDb.collection("rgdp_periodCompliance").doc();
+  const ref = adminDb.collection("rgdp_project_period_compliance").doc();
   const record: PeriodCompliance = {
     id: ref.id,
     planId: params.id,
@@ -84,3 +84,5 @@ export async function POST(
   await ref.set(record);
   return NextResponse.json(record, { status: 201 });
 }
+
+

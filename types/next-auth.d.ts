@@ -1,5 +1,5 @@
 import { DefaultSession } from "next-auth";
-import { UserRole } from ".";
+import { AppKey, UserRole } from ".";
 
 declare module "next-auth" {
   interface Session {
@@ -7,7 +7,7 @@ declare module "next-auth" {
       id: string;
       role: UserRole;
       adminId: string;
-      apps: string[];
+      apps: AppKey[];
     } & DefaultSession["user"];
   }
 }
@@ -17,6 +17,6 @@ declare module "next-auth/jwt" {
     id: string;
     role: UserRole;
     adminId: string;
-    apps: string[];
+    apps: AppKey[];
   }
 }

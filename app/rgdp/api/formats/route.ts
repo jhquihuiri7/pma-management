@@ -1,10 +1,10 @@
-import { NextRequest, NextResponse } from "next/server";
+﻿import { NextRequest, NextResponse } from "next/server";
 import {
   getAuthSession,
   unauthorizedResponse,
   errorResponse,
   forbiddenResponse,
-} from "@/lib/api-utils-rgdp";
+} from "@/lib/api-utils";
 import { adminDb } from "@/lib/firebase-admin";
 import { getAuthenticatedDrive, getOrCreateFolder, uploadFile } from "@/lib/drive";
 import { Format, FormatFunctionality } from "@/types";
@@ -15,7 +15,7 @@ const FUNCTIONALITY_LABELS: Record<FormatFunctionality, string> = {
   descargar_anexos: "Descargar Anexos",
 };
 
-// GET /api/formats — list formats for the current admin
+// GET /api/formats â€” list formats for the current admin
 export async function GET() {
   const session = await getAuthSession();
   if (!session?.user) return unauthorizedResponse();
@@ -40,7 +40,7 @@ export async function GET() {
   }
 }
 
-// POST /api/formats — upload a format file for a functionality
+// POST /api/formats â€” upload a format file for a functionality
 export async function POST(req: NextRequest) {
   const session = await getAuthSession();
   if (!session?.user) return unauthorizedResponse();
@@ -75,7 +75,7 @@ export async function POST(req: NextRequest) {
     const adminData = adminDoc.data() as { driveRootFolderId: string };
 
     if (!adminData.driveRootFolderId) {
-      return errorResponse("Drive root folder not configured. Please create a plan first.", 400);
+      return errorResponse("Drive root folder not configured. Please create a project first.", 400);
     }
 
     const drive = await getAuthenticatedDrive(session.user.id);
@@ -139,3 +139,4 @@ export async function POST(req: NextRequest) {
     return errorResponse((error as Error).message || "Upload failed", 500);
   }
 }
+

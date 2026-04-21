@@ -1,15 +1,15 @@
-import { NextRequest, NextResponse } from "next/server";
+﻿import { NextRequest, NextResponse } from "next/server";
 import {
   getAuthSession,
   unauthorizedResponse,
   errorResponse,
   forbiddenResponse,
-} from "@/lib/api-utils-rgdp";
+} from "@/lib/api-utils";
 import { adminDb } from "@/lib/firebase-admin";
 import { getAuthenticatedDrive } from "@/lib/drive";
 import { Format } from "@/types";
 
-// DELETE /api/formats/[id] — remove a format (from Firestore and Drive)
+// DELETE /api/formats/[id] â€” remove a format (from Firestore and Drive)
 export async function DELETE(
   _req: NextRequest,
   { params }: { params: { id: string } }

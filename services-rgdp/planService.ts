@@ -1,4 +1,4 @@
-import { adminDb } from "@/lib/firebase-admin";
+﻿import { adminDb } from "@/lib/firebase-admin";
 import { getAuthenticatedDrive } from "@/lib/drive-rgdp";
 import { Plan, Assignment, PlanReporte, PlanTipo, PlanFase, PlanEnfoque, Evidence } from "@/types";
 
@@ -11,9 +11,10 @@ export async function createPlan(
   tipo?: PlanTipo,
   start_date?: string,
   fase?: PlanFase,
-  enfoque?: PlanEnfoque
+  enfoque?: PlanEnfoque,
+  projectData?: Partial<Plan>
 ): Promise<Plan> {
-  const planRef = adminDb.collection("rgdp_plans").doc();
+  const planRef = adminDb.collection("rgdp_projects").doc();
   const now = new Date().toISOString();
 
   const plan: Plan = {
@@ -27,6 +28,12 @@ export async function createPlan(
     report_per,
     ...(start_date ? { start_date } : {}),
     ...(driveFolderId ? { driveFolderId } : {}),
+    ...(projectData?.location ? { location: projectData.location } : {}),
+    ...(projectData?.ciiu ? { ciiu: projectData.ciiu } : {}),
+    ...(projectData?.zoneType ? { zoneType: projectData.zoneType } : {}),
+    ...(projectData?.coordinateFormat ? { coordinateFormat: projectData.coordinateFormat } : {}),
+    ...(projectData?.geographicArea ? { geographicArea: projectData.geographicArea } : {}),
+    ...(projectData?.implantationArea ? { implantationArea: projectData.implantationArea } : {}),
     createdAt: now,
     updatedAt: now,
   };
@@ -37,7 +44,7 @@ export async function createPlan(
 
 export async function getPlansByAdmin(adminId: string): Promise<Plan[]> {
   const snapshot = await adminDb
-    .collection("rgdp_plans")
+    .collection("rgdp_projects")
     .where("adminId", "==", adminId)
     .orderBy("createdAt", "desc")
     .get();
@@ -49,7 +56,7 @@ export async function getPlansByAdmin(adminId: string): Promise<Plan[]> {
 }
 
 export async function getPlanById(planId: string): Promise<Plan | null> {
-  const doc = await adminDb.collection("rgdp_plans").doc(planId).get();
+  const doc = await adminDb.collection("rgdp_projects").doc(planId).get();
   if (!doc.exists) return null;
   const data = doc.data()!;
   return { ...data, report_per: data.report_per ?? "6 meses" } as Plan;
@@ -58,9 +65,23 @@ export async function getPlanById(planId: string): Promise<Plan | null> {
 export async function updatePlan(
   planId: string,
   adminId: string,
-  updates: { title?: string; description?: string; report_per?: PlanReporte; tipo?: PlanTipo; start_date?: string; fase?: PlanFase; enfoque?: PlanEnfoque }
+  updates: {
+    title?: string;
+    description?: string;
+    report_per?: PlanReporte;
+    tipo?: PlanTipo;
+    start_date?: string;
+    fase?: PlanFase;
+    enfoque?: PlanEnfoque;
+    location?: Plan["location"];
+    ciiu?: Plan["ciiu"];
+    zoneType?: Plan["zoneType"];
+    coordinateFormat?: Plan["coordinateFormat"];
+    geographicArea?: Plan["geographicArea"];
+    implantationArea?: Plan["implantationArea"];
+  }
 ): Promise<Plan> {
-  const doc = await adminDb.collection("rgdp_plans").doc(planId).get();
+  const doc = await adminDb.collection("rgdp_projects").doc(planId).get();
   if (!doc.exists) throw new Error("Plan not found");
 
   const plan = doc.data() as Plan;
@@ -71,7 +92,7 @@ export async function updatePlan(
     updatedAt: new Date().toISOString(),
   };
 
-  await adminDb.collection("rgdp_plans").doc(planId).update(updateData);
+  await adminDb.collection("rgdp_projects").doc(planId).update(updateData);
   return { ...plan, ...updateData };
 }
 
@@ -79,7 +100,7 @@ export async function deletePlan(
   planId: string,
   adminId: string
 ): Promise<void> {
-  const doc = await adminDb.collection("rgdp_plans").doc(planId).get();
+  const doc = await adminDb.collection("rgdp_projects").doc(planId).get();
   if (!doc.exists) throw new Error("Plan not found");
 
   const plan = doc.data() as Plan;
@@ -98,10 +119,10 @@ export async function deletePlan(
   // Query all related Firestore collections in parallel
   const [assignments, evidences, planItems, periodCompliance, notifications] =
     await Promise.all([
-      adminDb.collection("rgdp_assignments").where("planId", "==", planId).get(),
+      adminDb.collection("rgdp_project_assignments").where("planId", "==", planId).get(),
       adminDb.collection("rgdp_evidences").where("planId", "==", planId).get(),
-      adminDb.collection("rgdp_planItems").where("planId", "==", planId).get(),
-      adminDb.collection("rgdp_periodCompliance").where("planId", "==", planId).get(),
+      adminDb.collection("rgdp_projectItems").where("planId", "==", planId).get(),
+      adminDb.collection("rgdp_project_period_compliance").where("planId", "==", planId).get(),
       adminDb.collection("rgdp_notifications").where("planId", "==", planId).get(),
     ]);
 
@@ -112,10 +133,10 @@ export async function deletePlan(
     ...planItems.docs.map((d) => d.ref),
     ...periodCompliance.docs.map((d) => d.ref),
     ...notifications.docs.map((d) => d.ref),
-    adminDb.collection("rgdp_plans").doc(planId),
+    adminDb.collection("rgdp_projects").doc(planId),
   ];
 
-  // Firestore batch limit is 500 — split into chunks
+  // Firestore batch limit is 500 â€” split into chunks
   const CHUNK_SIZE = 499;
   for (let i = 0; i < allRefs.length; i += CHUNK_SIZE) {
     const batch = adminDb.batch();
@@ -137,7 +158,7 @@ export async function assignUserToPlan(
 
   // Check for duplicate
   const existing = await adminDb
-    .collection("rgdp_assignments")
+    .collection("rgdp_project_assignments")
     .where("userId", "==", userId)
     .where("planId", "==", planId)
     .limit(1)
@@ -147,7 +168,7 @@ export async function assignUserToPlan(
     throw new Error("User is already assigned to this plan");
   }
 
-  const ref = adminDb.collection("rgdp_assignments").doc();
+  const ref = adminDb.collection("rgdp_project_assignments").doc();
   const assignment: Assignment = {
     id: ref.id,
     userId,
@@ -168,7 +189,7 @@ export async function unassignUserFromPlan(
   if (!plan || plan.adminId !== adminId) throw new Error("Unauthorized");
 
   const snapshot = await adminDb
-    .collection("rgdp_assignments")
+    .collection("rgdp_project_assignments")
     .where("userId", "==", userId)
     .where("planId", "==", planId)
     .limit(1)
@@ -181,7 +202,7 @@ export async function unassignUserFromPlan(
 export async function getPlansForReporter(userId: string): Promise<Plan[]> {
   // Collect planIds from plan-level assignments
   const assignmentSnap = await adminDb
-    .collection("rgdp_assignments")
+    .collection("rgdp_project_assignments")
     .where("userId", "==", userId)
     .get();
   const planIdSet = new Set<string>(
@@ -189,7 +210,7 @@ export async function getPlansForReporter(userId: string): Promise<Plan[]> {
   );
 
   // Also collect planIds from item-level assignments
-  const itemSnap = await adminDb.collection("rgdp_planItems").get();
+  const itemSnap = await adminDb.collection("rgdp_projectItems").get();
   itemSnap.docs.forEach((doc) => {
     const users: { userId: string }[] = doc.data().assignedUsers ?? [];
     if (users.some((u) => u.userId === userId)) {
@@ -200,7 +221,7 @@ export async function getPlansForReporter(userId: string): Promise<Plan[]> {
   if (planIdSet.size === 0) return [];
 
   const refs = Array.from(planIdSet).map((pid) =>
-    adminDb.collection("rgdp_plans").doc(pid)
+    adminDb.collection("rgdp_projects").doc(pid)
   );
   const snapshots = await adminDb.getAll(...refs);
   return snapshots
@@ -214,7 +235,7 @@ export async function getPlansForReporter(userId: string): Promise<Plan[]> {
 export async function getPlansForViewer(userId: string): Promise<Plan[]> {
   // Viewer only sees plans assigned at the plan level (not via items)
   const assignmentSnap = await adminDb
-    .collection("rgdp_assignments")
+    .collection("rgdp_project_assignments")
     .where("userId", "==", userId)
     .get();
 
@@ -222,7 +243,7 @@ export async function getPlansForViewer(userId: string): Promise<Plan[]> {
 
   if (planIds.length === 0) return [];
 
-  const refs = planIds.map((pid) => adminDb.collection("rgdp_plans").doc(pid));
+  const refs = planIds.map((pid) => adminDb.collection("rgdp_projects").doc(pid));
   const snapshots = await adminDb.getAll(...refs);
   return snapshots
     .filter((doc) => doc.exists)
@@ -234,7 +255,7 @@ export async function getPlansForViewer(userId: string): Promise<Plan[]> {
 
 export async function isUserAssignedToPlan(userId: string, planId: string): Promise<boolean> {
   const snap = await adminDb
-    .collection("rgdp_assignments")
+    .collection("rgdp_project_assignments")
     .where("userId", "==", userId)
     .where("planId", "==", planId)
     .limit(1)
@@ -244,9 +265,10 @@ export async function isUserAssignedToPlan(userId: string, planId: string): Prom
 
 export async function getAssignedUsers(planId: string): Promise<string[]> {
   const snapshot = await adminDb
-    .collection("rgdp_assignments")
+    .collection("rgdp_project_assignments")
     .where("planId", "==", planId)
     .get();
 
   return snapshot.docs.map((doc) => doc.data().userId);
 }
+

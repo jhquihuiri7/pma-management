@@ -1,13 +1,13 @@
-import { NextRequest, NextResponse } from "next/server";
+﻿import { NextRequest, NextResponse } from "next/server";
 import {
   getAuthSession,
   unauthorizedResponse,
   errorResponse,
-} from "@/lib/api-utils-rgdp";
+} from "@/lib/api-utils";
 import { getAuthenticatedDrive, getOrCreateFolder, uploadFile } from "@/lib/drive";
 import { createEvidence } from "@/services-rgdp/evidenceService";
 import { getAssignedUsers, getPlanById } from "@/services-rgdp/planService";
-import { getUserById } from "@/services-rgdp/userService";
+import { getUserById } from "@/services/userService";
 import { adminDb } from "@/lib/firebase-admin";
 import { PlanItem } from "@/types";
 import { createNotifications } from "@/services-rgdp/notificationService";
@@ -28,14 +28,14 @@ export async function POST(req: NextRequest) {
     const description = (formData.get("description") as string) || "";
 
     if (!file) return errorResponse("File is required");
-    if (!planId) return errorResponse("planId is required");
+    if (!planId) return errorResponse("projectId is required");
 
     if (file.size > MAX_FILE_SIZE) {
       return errorResponse("File size exceeds 10MB limit");
     }
 
     const plan = await getPlanById(planId);
-    if (!plan) return errorResponse("Plan not found", 404);
+    if (!plan) return errorResponse("Proyecto no encontrado", 404);
     if (plan.adminId !== session.user.adminId) {
       return errorResponse("Unauthorized", 403);
     }
@@ -46,14 +46,14 @@ export async function POST(req: NextRequest) {
     const bytes = await file.arrayBuffer();
     const buffer = Buffer.from(bytes);
 
-    // ── Resolve Drive folder ────────────────────────────────────────────────
+    // â”€â”€ Resolve Drive folder â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
     const adminDoc = await adminDb.collection("rgdp_admins").doc(session.user.adminId).get();
     const rootFolderId = adminDoc.exists
       ? (adminDoc.data()!.driveRootFolderId as string | undefined)
       : undefined;
 
     if (!rootFolderId) {
-      return errorResponse("Google Drive no está configurado", 500);
+      return errorResponse("Google Drive no estÃ¡ configurado", 500);
     }
 
     const drive = await getAuthenticatedDrive(session.user.adminId);
@@ -62,15 +62,15 @@ export async function POST(req: NextRequest) {
     let planFolderId = plan.driveFolderId;
     if (!planFolderId) {
       planFolderId = await getOrCreateFolder(drive, plan.title, rootFolderId);
-      await adminDb.collection("rgdp_plans").doc(planId).update({ driveFolderId: planFolderId });
+      await adminDb.collection("rgdp_projects").doc(planId).update({ driveFolderId: planFolderId });
     }
 
     let targetFolderId: string = planFolderId;
     let planItemName: string | undefined;
 
-    // If uploading for a specific item, resolve: period subfolder → item folder
+    // If uploading for a specific item, resolve: period subfolder â†’ item folder
     if (planItemId) {
-      const itemDoc = await adminDb.collection("rgdp_planItems").doc(planItemId).get();
+      const itemDoc = await adminDb.collection("rgdp_projectItems").doc(planItemId).get();
       if (itemDoc.exists) {
         const planItem = itemDoc.data() as PlanItem;
         planItemName = planItem.item;
@@ -135,8 +135,8 @@ export async function POST(req: NextRequest) {
               type: "evidence_submitted" as const,
               title: "Nueva evidencia subida",
               message: planItemName
-                ? `${uploaderName} subió "${file.name}" en ${planItemName}.`
-                : `${uploaderName} subió "${file.name}".`,
+                ? `${uploaderName} subiÃ³ "${file.name}" en ${planItemName}.`
+                : `${uploaderName} subiÃ³ "${file.name}".`,
               planId,
               ...(planItemId ? { planItemId } : {}),
               evidenceId: evidence.id,
@@ -160,3 +160,5 @@ export async function POST(req: NextRequest) {
     return errorResponse((error as Error).message || "Upload failed", 500);
   }
 }
+
+

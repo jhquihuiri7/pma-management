@@ -1,10 +1,10 @@
-import { NextRequest, NextResponse } from "next/server";
+﻿import { NextRequest, NextResponse } from "next/server";
 import {
   getAuthSession,
   unauthorizedResponse,
   forbiddenResponse,
   errorResponse,
-} from "@/lib/api-utils-rgdp";
+} from "@/lib/api-utils";
 import { getPlanById, updatePlan, getAssignedUsers, deletePlan } from "@/services-rgdp/planService";
 import { getEvidencesByPlan } from "@/services-rgdp/evidenceService";
 import { PlanReporte, PlanTipo, PlanFase, PlanEnfoque } from "@/types";
@@ -17,7 +17,7 @@ export async function GET(
   if (!session?.user) return unauthorizedResponse();
 
   const plan = await getPlanById(params.id);
-  if (!plan) return errorResponse("Plan not found", 404);
+  if (!plan) return errorResponse("Proyecto no encontrado", 404);
   if (plan.adminId !== session.user.adminId) return forbiddenResponse();
 
   const [evidences, assignedUsers] = await Promise.all([
@@ -37,7 +37,21 @@ export async function PUT(
   if (session.user.role !== "ADMIN") return forbiddenResponse();
 
   const body = await req.json();
-  const { title, description, report_per, tipo, start_date, fase, enfoque } = body;
+  const {
+    title,
+    description,
+    report_per,
+    tipo,
+    start_date,
+    fase,
+    enfoque,
+    location,
+    ciiu,
+    zoneType,
+    coordinateFormat,
+    geographicArea,
+    implantationArea,
+  } = body;
 
   if (!title) return errorResponse("Title is required");
 
@@ -50,6 +64,12 @@ export async function PUT(
       start_date,
       fase: fase as PlanFase | undefined,
       enfoque: enfoque as PlanEnfoque | undefined,
+      location,
+      ciiu,
+      zoneType,
+      coordinateFormat,
+      geographicArea,
+      implantationArea,
     });
     return NextResponse.json(plan);
   } catch (error: unknown) {
@@ -72,3 +92,4 @@ export async function DELETE(
     return errorResponse((error as Error).message);
   }
 }
+

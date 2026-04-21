@@ -114,7 +114,7 @@ export default function DashboardPage() {
           <Card>
             <CardHeader className="flex flex-row items-center justify-between pb-2">
               <CardTitle className="text-sm font-medium text-muted-foreground">
-                {isAdmin ? "Total de Planes" : "Planes Asignados"}
+                {isAdmin ? "Total de Proyectos" : "Proyectos Asignados"}
               </CardTitle>
               <FileText className="w-4 h-4 text-muted-foreground" />
             </CardHeader>
@@ -165,7 +165,7 @@ export default function DashboardPage() {
                 : "text-muted-foreground border-transparent hover:text-foreground"
             }`}
           >
-            Cumplimiento por Plan
+            Cumplimiento por Proyecto
           </button>
           <div className="self-stretch w-px bg-border mx-1 mb-px" />
           <button
@@ -198,7 +198,7 @@ export default function DashboardPage() {
           ) : planCharts.length === 0 ? (
             <Card>
               <CardContent className="py-12 text-center text-sm text-muted-foreground">
-                No hay planes disponibles.
+                No hay proyectos disponibles.
               </CardContent>
             </Card>
           ) : (

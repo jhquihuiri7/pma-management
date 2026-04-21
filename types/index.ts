@@ -1,4 +1,5 @@
 export type UserRole = 'ADMIN' | 'REPORTER' | 'VIEWER';
+export type AppKey = "pma" | "rgdp";
 
 export interface User {
   id: string;
@@ -10,7 +11,7 @@ export interface User {
   passwordSetTokenExpiry?: string;
   role: UserRole;
   adminId: string;
-  apps: string[];
+  apps: AppKey[];
   unit?: string;
   position?: string;
   createdAt: string;
@@ -43,6 +44,31 @@ export interface Plan {
   report_per: PlanReporte;
   start_date?: string;
   driveFolderId?: string;
+  location?: {
+    province: string;
+    canton: string;
+    parish: string;
+    reference?: string;
+  };
+  ciiu?: {
+    principal: { code: string; description: string };
+    complementary1?: { code: string; description: string };
+    complementary2?: { code: string; description: string };
+  };
+  zoneType?: "Urbana" | "Rural" | "Maritima" | "Fluvial";
+  coordinateFormat?: string;
+  geographicArea?: {
+    fileName?: string;
+    pointsCount: number;
+    areaM2: number;
+    areaHa: number;
+  };
+  implantationArea?: {
+    fileName?: string;
+    pointsCount: number;
+    areaM2: number;
+    areaHa: number;
+  };
   createdAt: string;
   updatedAt: string;
 }

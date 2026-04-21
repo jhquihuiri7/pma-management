@@ -170,13 +170,13 @@ export async function parseExcelFile(file: File): Promise<ParseResult> {
       const errors: string[] = [];
       const warnings: string[] = [];
 
-      if (!item) errors.push("Falta Ítem");
-      if (!direccion) errors.push("Falta Dirección");
-      if (!environmental_activity) errors.push("Falta Actividad/Aspecto Ambiental");
-      if (!identified_environmental_impact) errors.push("Falta Impacto Ambiental Identificado");
-      if (!proposed_measure) errors.push("Falta Medida Propuesta");
-      if (!indicator) errors.push("Falta Indicador");
-      if (!verification_method) errors.push("Falta Medio de Verificación");
+      if (!item) warnings.push("Falta Ítem");
+      if (!direccion) warnings.push("Falta Dirección");
+      if (!environmental_activity) warnings.push("Falta Actividad/Aspecto Ambiental");
+      if (!identified_environmental_impact) warnings.push("Falta Impacto Ambiental Identificado");
+      if (!proposed_measure) warnings.push("Falta Medida Propuesta");
+      if (!indicator) warnings.push("Falta Indicador");
+      if (!verification_method) warnings.push("Falta Medio de Verificación");
 
       const rawSubplan = cellToString(get("subplan"));
       let subplan = "";

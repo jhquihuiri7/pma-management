@@ -1,6 +1,6 @@
-"use client";
+﻿"use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { useSession } from "next-auth/react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -13,22 +13,183 @@ import {
   DialogTitle,
   DialogTrigger,
 } from "@/components/ui/dialog";
-import { Plus, ArrowRight, Pencil } from "lucide-react";
+import { Plus, ArrowRight, Pencil, Download, Upload } from "lucide-react";
 import { toast } from "sonner";
 import { Plan } from "@/types";
 import { formatDateOnly } from "@/lib/dateOnly";
+import {
+  CiiuEntry,
+  RGDP_LOCATION_TREE,
+  convertCsvToXlsx,
+  isCoordinateFileNameAllowed,
+  loadCiiuCatalog,
+  parseCoordinateFile,
+  searchCiiu,
+} from "@/lib/rgdpProjectForm";
+
+const COORDINATE_FORMAT_OPTIONS = [
+  "UTM WGS84 Zona 17 Sur",
+  "UTM WGS84 Zona 18 Sur",
+  "Geograficas (Lat/Lon)",
+];
+
+type CiiuSelection = { code: string; description: string } | undefined;
+
+interface ProjectFormState {
+  title: string;
+  description: string;
+  tipo: string;
+  fase: string;
+  enfoque: string;
+  report_per: string;
+  start_date: string;
+  location: {
+    province: string;
+    canton: string;
+    parish: string;
+    reference: string;
+  };
+  ciiu: {
+    principal?: { code: string; description: string };
+    complementary1?: { code: string; description: string };
+    complementary2?: { code: string; description: string };
+  };
+  zoneType: "Urbana" | "Rural" | "Maritima" | "Fluvial" | "";
+  coordinateFormat: string;
+  geographicArea?: {
+    fileName?: string;
+    pointsCount: number;
+    areaM2: number;
+    areaHa: number;
+  };
+  implantationArea?: {
+    fileName?: string;
+    pointsCount: number;
+    areaM2: number;
+    areaHa: number;
+  };
+}
+
+const INITIAL_FORM: ProjectFormState = {
+  title: "",
+  description: "",
+  tipo: "",
+  fase: "",
+  enfoque: "",
+  report_per: "6 meses",
+  start_date: "",
+  location: {
+    province: "Galápagos",
+    canton: "",
+    parish: "",
+    reference: "",
+  },
+  ciiu: {},
+  zoneType: "",
+  coordinateFormat: "UTM WGS84 Zona 17 Sur",
+};
+
+function CiiuPicker({
+  label,
+  value,
+  onChange,
+  entries,
+  excludedCodes,
+  required,
+}: {
+  label: string;
+  value?: { code: string; description: string };
+  onChange: (value: CiiuSelection) => void;
+  entries: CiiuEntry[];
+  excludedCodes: string[];
+  required?: boolean;
+}) {
+  const [query, setQuery] = useState("");
+  const [open, setOpen] = useState(false);
+
+  const filtered = useMemo(() => {
+    const results = searchCiiu(entries, query).filter((entry) => {
+      if (!excludedCodes.includes(entry.code)) return true;
+      return value?.code === entry.code;
+    });
+    console.debug(`🔍 ${label}: Total entries=${entries.length}, Filtered=${results.length}, Query='${query}'`);
+    return results;
+  }, [entries, query, excludedCodes, value, label]);
+
+  return (
+    <div className="space-y-2">
+      <Label>{label}</Label>
+      <div className="space-y-2">
+        <Input
+          value={value ? `${value.code} - ${value.description}` : query}
+          onFocus={() => {
+            console.debug(`📍 ${label}: Input enfocado, total entries disponibles: ${entries.length}`);
+            setOpen(true);
+          }}
+          onChange={(e) => {
+            console.debug(`✏️ ${label}: Escribiendo '${e.target.value}'`);
+            onChange(undefined);
+            setQuery(e.target.value);
+            setOpen(true);
+          }}
+          placeholder="Buscar por codigo o descripcion"
+          required={required}
+        />
+        {open && (
+          <div className="max-h-48 overflow-auto rounded-md border border-slate-200 bg-white">
+            {filtered.length === 0 ? (
+              <p className="p-2 text-xs text-muted-foreground">Sin resultados nivel 6</p>
+            ) : (
+              filtered.map((entry) => (
+                <button
+                  type="button"
+                  key={entry.code}
+                  className="w-full text-left px-3 py-2 text-xs hover:bg-slate-50"
+                  onClick={() => {
+                    console.debug(`✅ ${label}: Seleccionado ${entry.code} - ${entry.description}`);
+                    onChange({ code: entry.code, description: entry.description });
+                    setQuery("");
+                    setOpen(false);
+                  }}
+                >
+                  {entry.code} - {entry.description}
+                </button>
+              ))
+            )}
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
 
 export default function PlansPage() {
   const { data: session } = useSession();
   const isAdmin = session?.user?.role === "ADMIN";
   const isViewer = session?.user?.role === "VIEWER";
+
   const [plans, setPlans] = useState<Plan[]>([]);
   const [open, setOpen] = useState(false);
   const [editOpen, setEditOpen] = useState(false);
   const [editingPlan, setEditingPlan] = useState<Plan | null>(null);
   const [loading, setLoading] = useState(false);
-  const [form, setForm] = useState({ title: "", description: "", tipo: "", fase: "", enfoque: "", report_per: "6 meses", start_date: "" });
-  const [editForm, setEditForm] = useState({ title: "", description: "", tipo: "", fase: "", enfoque: "", report_per: "6 meses", start_date: "" });
+  const [form, setForm] = useState<ProjectFormState>(INITIAL_FORM);
+  const [editForm, setEditForm] = useState({ title: "", description: "" });
+
+  const [ciiuCatalog, setCiiuCatalog] = useState<CiiuEntry[]>([]);
+  const [catalogLoading, setCatalogLoading] = useState(false);
+  const [downloadingTemplate, setDownloadingTemplate] = useState(false);
+
+  const provinces = useMemo(() => Object.keys(RGDP_LOCATION_TREE), []);
+  const cantons = useMemo(() => {
+    return form.location.province
+      ? Object.keys(RGDP_LOCATION_TREE[form.location.province] ?? {})
+      : [];
+  }, [form.location.province]);
+  const parishes = useMemo(() => {
+    if (!form.location.province || !form.location.canton) return [];
+    return RGDP_LOCATION_TREE[form.location.province]?.[form.location.canton] ?? [];
+  }, [form.location.province, form.location.canton]);
 
   async function loadPlans() {
     const res = await fetch("/rgdp/api/plans");
@@ -39,8 +200,119 @@ export default function PlansPage() {
     loadPlans();
   }, []);
 
+  useEffect(() => {
+    if (!open) return;
+    let active = true;
+
+    const run = async () => {
+      setCatalogLoading(true);
+      try {
+        const entries = await loadCiiuCatalog();
+        if (active) setCiiuCatalog(entries);
+      } catch (error) {
+        toast.error((error as Error).message);
+      } finally {
+        if (active) setCatalogLoading(false);
+      }
+    };
+
+    void run();
+    return () => {
+      active = false;
+    };
+  }, [open]);
+
+  function validateProjectForm(state: ProjectFormState): string | null {
+    if (state.title.trim().length < 1 || state.title.trim().length > 500) {
+      return "Nombre del proyecto: 1 a 500 caracteres";
+    }
+
+    if (state.description.trim().length < 25 || state.description.trim().length > 2500) {
+      return "Resumen del proyecto: 25 a 2500 caracteres";
+    }
+
+    if (!state.location.province || !state.location.canton || !state.location.parish) {
+      return "Provincia, canton y parroquia son obligatorios";
+    }
+
+    if (!state.ciiu.principal) {
+      return "Actividad principal CIIU es obligatoria";
+    }
+
+    const codes = [
+      state.ciiu.principal?.code,
+      state.ciiu.complementary1?.code,
+      state.ciiu.complementary2?.code,
+    ].filter((v): v is string => Boolean(v));
+
+    if (new Set(codes).size !== codes.length) {
+      return "No se pueden repetir codigos CIIU";
+    }
+
+    if (!state.zoneType) {
+      return "Tipo de zona es obligatorio";
+    }
+
+    if (!state.coordinateFormat) {
+      return "Formato de coordenadas es obligatorio";
+    }
+
+    return null;
+  }
+
+  async function handleCoordinateUpload(
+    file: File,
+    areaType: "geographicArea" | "implantationArea"
+  ) {
+    if (!isCoordinateFileNameAllowed(file.name)) {
+      toast.error("Formato no permitido. Usa .xlsx, .xls o .csv");
+      return;
+    }
+
+    try {
+      const parsed = await parseCoordinateFile(file);
+      setForm((prev) => ({
+        ...prev,
+        [areaType]: {
+          fileName: file.name,
+          pointsCount: parsed.pointsCount,
+          areaM2: parsed.areaM2,
+          areaHa: parsed.areaHa,
+        },
+      }));
+
+      toast.success(`Archivo procesado: ${parsed.pointsCount} puntos`);
+    } catch (error) {
+      toast.error((error as Error).message);
+    }
+  }
+
+  async function handleDownloadTemplate() {
+    console.log("📥 Usuario solicitó descargar plantilla...");
+    setDownloadingTemplate(true);
+    try {
+      await convertCsvToXlsx(
+        "/templates/plantilla-coordenadas.csv",
+        "plantilla-coordenadas.xlsx"
+      );
+      toast.success("Plantilla descargada correctamente en formato Excel");
+    } catch (error) {
+      console.error("❌ Error descargando plantilla:", error);
+      toast.error("Error al descargar la plantilla");
+    } finally {
+      setDownloadingTemplate(false);
+    }
+  }
+
   async function handleCreate(e: React.FormEvent) {
     e.preventDefault();
+
+    const validationError = validateProjectForm(form);
+    if (validationError) {
+      toast.error(validationError);
+      return;
+    }
+
     setLoading(true);
 
     const res = await fetch("/rgdp/api/plans", {
@@ -52,13 +324,13 @@ export default function PlansPage() {
     setLoading(false);
 
     if (res.ok) {
-      toast.success("Plan created successfully");
-      setForm({ title: "", description: "", tipo: "", fase: "", enfoque: "", report_per: "6 meses", start_date: "" });
+      toast.success("Proyecto creado correctamente");
+      setForm(INITIAL_FORM);
       setOpen(false);
       loadPlans();
     } else {
       const data = await res.json();
-      toast.error(data.error || "Failed to create plan");
+      toast.error(data.error || "Error al crear proyecto");
     }
   }
 
@@ -67,11 +339,6 @@ export default function PlansPage() {
     setEditForm({
       title: plan.title,
       description: plan.description || "",
-      tipo: plan.tipo || "",
-      fase: plan.fase || "",
-      enfoque: plan.enfoque || "",
-      report_per: plan.report_per ?? "6 meses",
-      start_date: plan.start_date || "",
     });
     setEditOpen(true);
   }
@@ -84,33 +351,41 @@ export default function PlansPage() {
     const res = await fetch(`/rgdp/api/plans/${editingPlan.id}`, {
       method: "PUT",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(editForm),
+      body: JSON.stringify({ ...editingPlan, ...editForm }),
     });
 
     setLoading(false);
 
     if (res.ok) {
-      toast.success("Plan actualizado correctamente");
+      toast.success("Proyecto actualizado correctamente");
       setEditOpen(false);
       setEditingPlan(null);
       loadPlans();
     } else {
       const data = await res.json();
-      toast.error(data.error || "Error al actualizar el plan");
+      toast.error(data.error || "Error al actualizar proyecto");
     }
   }
+
+  const excludedForComplementary1 = useMemo(
+    () => [form.ciiu.principal?.code].filter((v): v is string => Boolean(v)),
+    [form.ciiu.principal?.code]
+  );
+
+  const excludedForComplementary2 = useMemo(
+    () => [form.ciiu.principal?.code, form.ciiu.complementary1?.code].filter(
+      (v): v is string => Boolean(v)
+    ),
+    [form.ciiu.principal?.code, form.ciiu.complementary1?.code]
+  );
 
   return (
     <div>
       <div className="flex items-center justify-between mb-6">
         <div>
-          <h1 className="text-2xl font-bold">
-            {isAdmin ? "Planes" : "Mis Planes"}
-          </h1>
+          <h1 className="text-2xl font-bold">{isAdmin ? "Proyectos" : "Mis Proyectos"}</h1>
           <p className="text-muted-foreground">
-            {isAdmin
-              ? "Gestionar planes ambientales"
-              : "Planes asignados a ti"}
+            {isAdmin ? "Gestionar proyectos RGDP" : "Proyectos asignados a ti"}
           </p>
           {isViewer && (
             <span className="inline-flex items-center rounded-md bg-slate-100 px-2 py-1 text-xs font-medium text-slate-600 mt-1">
@@ -123,112 +398,344 @@ export default function PlansPage() {
           <Dialog open={open} onOpenChange={setOpen}>
             <DialogTrigger render={<Button />}>
               <Plus className="w-4 h-4 mr-2" />
-              Crear Plan
+              Agregar Proyecto
             </DialogTrigger>
-            <DialogContent>
+            <DialogContent className="max-h-[90vh] overflow-y-auto sm:max-w-3xl">
               <DialogHeader>
-                <DialogTitle>Crear Nuevo Plan</DialogTitle>
+                <DialogTitle>Agregar Proyecto</DialogTitle>
               </DialogHeader>
               <form onSubmit={handleCreate} className="space-y-4 mt-4">
-                <div className="space-y-2">
-                  <Label htmlFor="title">Título</Label>
-                  <Input
-                    id="title"
-                    value={form.title}
-                    onChange={(e) =>
-                      setForm({ ...form, title: e.target.value })
+                <div className="rounded-md border p-4 space-y-3">
+                  <h3 className="text-sm font-semibold">UBICACION DEL PROYECTO</h3>
+                  <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
+                    <div className="space-y-2">
+                      <Label>Provincia</Label>
+                      <select
+                        className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm"
+                        value={form.location.province}
+                        disabled
+                        required
+                      >
+                        {provinces.map((province) => (
+                          <option key={province} value={province}>
+                            {province}
+                          </option>
+                        ))}
+                      </select>
+                    </div>
+                    <div className="space-y-2">
+                      <Label>Canton</Label>
+                      <select
+                        className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm"
+                        value={form.location.canton}
+                        onChange={(e) =>
+                          setForm((prev) => ({
+                            ...prev,
+                            location: {
+                              ...prev.location,
+                              canton: e.target.value,
+                              parish: "",
+                            },
+                          }))
+                        }
+                        disabled={!form.location.province}
+                        required
+                      >
+                        <option value="">Seleccionar...</option>
+                        {cantons.map((canton) => (
+                          <option key={canton} value={canton}>
+                            {canton}
+                          </option>
+                        ))}
+                      </select>
+                    </div>
+                    <div className="space-y-2">
+                      <Label>Parroquia</Label>
+                      <select
+                        className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm"
+                        value={form.location.parish}
+                        onChange={(e) =>
+                          setForm((prev) => ({
+                            ...prev,
+                            location: {
+                              ...prev.location,
+                              parish: e.target.value,
+                            },
+                          }))
+                        }
+                        disabled={!form.location.canton}
+                        required
+                      >
+                        <option value="">Seleccionar...</option>
+                        {parishes.map((parish) => (
+                          <option key={parish} value={parish}>
+                            {parish}
+                          </option>
+                        ))}
+                      </select>
+                    </div>
+                  </div>
+                  <div className="space-y-2">
+                    <Label>Direccion o referencia (opcional)</Label>
+                    <textarea
+                      className="flex min-h-[72px] w-full rounded-md border border-input bg-background px-3 py-2 text-sm"
+                      value={form.location.reference}
+                      onChange={(e) =>
+                        setForm((prev) => ({
+                          ...prev,
+                          location: { ...prev.location, reference: e.target.value },
+                        }))
+                      }
+                    />
+                  </div>
+                </div>
+
+                <div className="rounded-md border p-4 space-y-3">
+                  <h3 className="text-sm font-semibold">CLASIFICACION DE ACTIVIDAD (CIIU)</h3>
+                  {catalogLoading && <p className="text-xs text-muted-foreground">Cargando catalogo CIIU...</p>}
+                  <CiiuPicker
+                    label="Actividad principal"
+                    value={form.ciiu.principal}
+                    onChange={(value) =>
+                      setForm((prev) => ({ ...prev, ciiu: { ...prev.ciiu, principal: value } }))
                     }
+                    entries={ciiuCatalog}
+                    excludedCodes={[]}
                     required
                   />
-                </div>
-                <div className="space-y-2">
-                  <Label htmlFor="description">Descripción</Label>
-                  <textarea
-                    id="description"
-                    className="flex min-h-[80px] w-full rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
-                    value={form.description}
-                    onChange={(e) =>
-                      setForm({ ...form, description: e.target.value })
+                  <CiiuPicker
+                    label="Actividad complementaria 1"
+                    value={form.ciiu.complementary1}
+                    onChange={(value) =>
+                      setForm((prev) => ({ ...prev, ciiu: { ...prev.ciiu, complementary1: value } }))
                     }
+                    entries={ciiuCatalog}
+                    excludedCodes={excludedForComplementary1}
+                  />
+                  <CiiuPicker
+                    label="Actividad complementaria 2"
+                    value={form.ciiu.complementary2}
+                    onChange={(value) =>
+                      setForm((prev) => ({ ...prev, ciiu: { ...prev.ciiu, complementary2: value } }))
+                    }
+                    entries={ciiuCatalog}
+                    excludedCodes={excludedForComplementary2}
                   />
                 </div>
-                <div className="space-y-2">
-                  <Label htmlFor="tipo">Tipo</Label>
-                  <select
-                    id="tipo"
-                    className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
-                    value={form.tipo}
-                    onChange={(e) =>
-                      setForm({ ...form, tipo: e.target.value })
-                    }
-                    required
-                  >
-                    <option value="" disabled>Seleccionar tipo...</option>
-                    <option value="Licencia">Licencia</option>
-                    <option value="Registro Ambiental">Registro Ambiental</option>
-                  </select>
+
+                <div className="rounded-md border p-4 space-y-3">
+                  <h3 className="text-sm font-semibold">INFORMACION GENERAL DEL PROYECTO</h3>
+                  <div className="space-y-2">
+                    <Label>Nombre del proyecto</Label>
+                    <Input
+                      value={form.title}
+                      onChange={(e) => setForm((prev) => ({ ...prev, title: e.target.value }))}
+                      minLength={1}
+                      maxLength={500}
+                      required
+                    />
+                  </div>
+                  <div className="space-y-2">
+                    <Label>Resumen del proyecto</Label>
+                    <textarea
+                      className="flex min-h-[90px] w-full rounded-md border border-input bg-background px-3 py-2 text-sm"
+                      value={form.description}
+                      onChange={(e) =>
+                        setForm((prev) => ({ ...prev, description: e.target.value }))
+                      }
+                      minLength={25}
+                      maxLength={2500}
+                      required
+                    />
+                  </div>
                 </div>
-                <div className="space-y-2">
-                  <Label htmlFor="fase">Fase</Label>
-                  <select
-                    id="fase"
-                    className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
-                    value={form.fase}
-                    onChange={(e) => setForm({ ...form, fase: e.target.value })}
-                    required
-                  >
-                    <option value="" disabled>Seleccionar fase...</option>
-                    <option value="Planificación">Planificación</option>
-                    <option value="Construcción">Construcción</option>
-                    <option value="Operación">Operación</option>
-                    <option value="Cierre">Cierre</option>
-                  </select>
+
+                <div className="rounded-md border p-4 space-y-3">
+                  <h3 className="text-sm font-semibold">TIPO DE ZONA</h3>
+                  <div className="flex flex-wrap gap-4">
+                    {(["Urbana", "Rural", "Maritima", "Fluvial"] as const).map((zone) => (
+                      <label key={zone} className="inline-flex items-center gap-2 text-sm">
+                        <input
+                          type="radio"
+                          name="zoneType"
+                          checked={form.zoneType === zone}
+                          onChange={() => setForm((prev) => ({ ...prev, zoneType: zone }))}
+                        />
+                        {zone}
+                      </label>
+                    ))}
+                  </div>
                 </div>
-                <div className="space-y-2">
-                  <Label htmlFor="enfoque">Enfoque clave</Label>
-                  <select
-                    id="enfoque"
-                    className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
-                    value={form.enfoque}
-                    onChange={(e) => setForm({ ...form, enfoque: e.target.value })}
-                    required
-                  >
-                    <option value="" disabled>Seleccionar enfoque...</option>
-                    <option value="Prevenir impactos">Prevenir impactos</option>
-                    <option value="Controlar impactos">Controlar impactos</option>
-                    <option value="Monitorear y optimizar">Monitorear y optimizar</option>
-                    <option value="Restaurar el ambiente">Restaurar el ambiente</option>
-                  </select>
+
+                <div className="rounded-md border p-4 space-y-3">
+                  <h3 className="text-sm font-semibold">COORDENADAS DEL AREA GEOGRAFICA</h3>
+                  <div className="space-y-2">
+                    <Label>Formato de coordenadas</Label>
+                    <select
+                      className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm"
+                      value={form.coordinateFormat}
+                      onChange={(e) =>
+                        setForm((prev) => ({ ...prev, coordinateFormat: e.target.value }))
+                      }
+                    >
+                      {COORDINATE_FORMAT_OPTIONS.map((option) => (
+                        <option key={option} value={option}>
+                          {option}
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+                  <div className="flex flex-wrap gap-2">
+                    <Button
+                      type="button"
+                      variant="outline"
+                      disabled={downloadingTemplate}
+                      onClick={(e) => {
+                        e.preventDefault();
+                        void handleDownloadTemplate();
+                      }}
+                    >
+                      <Download className="w-4 h-4 mr-2" />
+                      {downloadingTemplate ? "Descargando..." : "Descargar plantilla Excel"}
+                    </Button>
+                    <label className="inline-flex">
+                      <input
+                        type="file"
+                        className="hidden"
+                        accept=".xlsx,.xls,.csv"
+                        onChange={(e) => {
+                          const file = e.target.files?.[0];
+                          if (file) void handleCoordinateUpload(file, "geographicArea");
+                        }}
+                      />
+                      <span className="inline-flex h-10 cursor-pointer items-center rounded-md border border-input px-4 text-sm">
+                        <Upload className="w-4 h-4 mr-2" /> Adjuntar archivo Excel
+                      </span>
+                    </label>
+                  </div>
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                    <div className="space-y-1">
+                      <Label>Superficie total en hectareas</Label>
+                      <Input value={String(form.geographicArea?.areaHa ?? "")} readOnly />
+                    </div>
+                    <div className="space-y-1">
+                      <Label>Superficie total en metros cuadrados</Label>
+                      <Input value={String(form.geographicArea?.areaM2 ?? "")} readOnly />
+                    </div>
+                  </div>
                 </div>
-                <div className="space-y-2">
-                  <Label htmlFor="reporte">Reporte</Label>
-                  <select
-                    id="reporte"
-                    className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
-                    value={form.report_per}
-                    onChange={(e) =>
-                      setForm({ ...form, report_per: e.target.value })
-                    }
-                  >
-                    <option value="6 meses">6 meses</option>
-                    <option value="1 año">1 año</option>
-                    <option value="2 años">2 años</option>
-                  </select>
+
+                <div className="rounded-md border p-4 space-y-3">
+                  <h3 className="text-sm font-semibold">COORDENADAS DEL AREA DE IMPLANTACION</h3>
+                  <div className="flex flex-wrap gap-2">
+                    <Button
+                      type="button"
+                      variant="outline"
+                      disabled={downloadingTemplate}
+                      onClick={(e) => {
+                        e.preventDefault();
+                        void handleDownloadTemplate();
+                      }}
+                    >
+                      <Download className="w-4 h-4 mr-2" />
+                      {downloadingTemplate ? "Descargando..." : "Descargar plantilla Excel"}
+                    </Button>
+                    <label className="inline-flex">
+                      <input
+                        type="file"
+                        className="hidden"
+                        accept=".xlsx,.xls,.csv"
+                        onChange={(e) => {
+                          const file = e.target.files?.[0];
+                          if (file) void handleCoordinateUpload(file, "implantationArea");
+                        }}
+                      />
+                      <span className="inline-flex h-10 cursor-pointer items-center rounded-md border border-input px-4 text-sm">
+                        <Upload className="w-4 h-4 mr-2" /> Adjuntar archivo Excel
+                      </span>
+                    </label>
+                  </div>
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                    <div className="space-y-1">
+                      <Label>Superficie total en hectareas</Label>
+                      <Input value={String(form.implantationArea?.areaHa ?? "")} readOnly />
+                    </div>
+                    <div className="space-y-1">
+                      <Label>Superficie total en metros cuadrados</Label>
+                      <Input value={String(form.implantationArea?.areaM2 ?? "")} readOnly />
+                    </div>
+                  </div>
                 </div>
-                <div className="space-y-2">
-                  <Label htmlFor="start_date">Fecha de Inicio</Label>
-                  <Input
-                    id="start_date"
-                    type="date"
-                    value={form.start_date}
-                    onChange={(e) =>
-                      setForm({ ...form, start_date: e.target.value })
-                    }
-                    required
-                  />
+
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                  <div className="space-y-2">
+                    <Label>Tipo</Label>
+                    <select
+                      className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm"
+                      value={form.tipo}
+                      onChange={(e) => setForm((prev) => ({ ...prev, tipo: e.target.value }))}
+                      required
+                    >
+                      <option value="" disabled>Seleccionar tipo...</option>
+                      <option value="Licencia">Licencia</option>
+                      <option value="Registro Ambiental">Registro Ambiental</option>
+                    </select>
+                  </div>
+                  <div className="space-y-2">
+                    <Label>Fase</Label>
+                    <select
+                      className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm"
+                      value={form.fase}
+                      onChange={(e) => setForm((prev) => ({ ...prev, fase: e.target.value }))}
+                      required
+                    >
+                      <option value="" disabled>Seleccionar fase...</option>
+                      <option value="Planificación">Planificación</option>
+                      <option value="Construcción">Construcción</option>
+                      <option value="Operación">Operación</option>
+                      <option value="Cierre">Cierre</option>
+                    </select>
+                  </div>
+                  <div className="space-y-2">
+                    <Label>Enfoque clave</Label>
+                    <select
+                      className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm"
+                      value={form.enfoque}
+                      onChange={(e) => setForm((prev) => ({ ...prev, enfoque: e.target.value }))}
+                      required
+                    >
+                      <option value="" disabled>Seleccionar enfoque...</option>
+                      <option value="Prevenir impactos">Prevenir impactos</option>
+                      <option value="Controlar impactos">Controlar impactos</option>
+                      <option value="Monitorear y optimizar">Monitorear y optimizar</option>
+                      <option value="Restaurar el ambiente">Restaurar el ambiente</option>
+                    </select>
+                  </div>
+                  <div className="space-y-2">
+                    <Label>Reporte</Label>
+                    <select
+                      className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm"
+                      value={form.report_per}
+                      onChange={(e) => setForm((prev) => ({ ...prev, report_per: e.target.value }))}
+                    >
+                      <option value="6 meses">6 meses</option>
+                      <option value="1 año">1 año</option>
+                      <option value="2 años">2 años</option>
+                    </select>
+                  </div>
+                  <div className="space-y-2">
+                    <Label>Fecha de inicio</Label>
+                    <Input
+                      type="date"
+                      value={form.start_date}
+                      onChange={(e) => setForm((prev) => ({ ...prev, start_date: e.target.value }))}
+                      required
+                    />
+                  </div>
                 </div>
+
                 <Button type="submit" className="w-full" disabled={loading}>
-                  {loading ? "Creando..." : "Crear Plan"}
+                  {loading ? "Guardando..." : "Siguiente"}
                 </Button>
               </form>
             </DialogContent>
@@ -240,10 +747,7 @@ export default function PlansPage() {
         <Card>
           <CardContent className="py-12 text-center">
             <p className="text-muted-foreground">
-              {isAdmin
-                ? "Sin planes aún. Crea uno para comenzar."
-                : "Aún no tienes planes asignados."
-              }
+              {isAdmin ? "Sin proyectos aun. Crea uno para comenzar." : "Aun no tienes proyectos asignados."}
             </p>
           </CardContent>
         </Card>
@@ -256,37 +760,19 @@ export default function PlansPage() {
               </CardHeader>
               <CardContent>
                 <p className="text-sm text-muted-foreground line-clamp-2 mb-4">
-                  {plan.description || "Sin descripción"}
+                  {plan.description || "Sin resumen"}
                 </p>
                 <div className="space-y-1.5 mb-4">
-                  {plan.tipo && (
-                    <div className="flex items-center justify-between">
-                      <span className="text-xs text-muted-foreground">Tipo:</span>
-                      <span className="text-xs font-medium bg-slate-100 px-2 py-0.5 rounded">
-                        {plan.tipo}
-                      </span>
-                    </div>
-                  )}
-                  {plan.fase && (
-                    <div className="flex items-center justify-between">
-                      <span className="text-xs text-muted-foreground">Fase:</span>
-                      <span className="text-xs font-medium bg-blue-100 text-blue-700 px-2 py-0.5 rounded">
-                        {plan.fase}
-                      </span>
-                    </div>
-                  )}
-                  {plan.enfoque && (
-                    <div className="flex items-center justify-between">
-                      <span className="text-xs text-muted-foreground">Enfoque:</span>
-                      <span className="text-xs font-medium bg-green-100 text-green-700 px-2 py-0.5 rounded">
-                        {plan.enfoque}
-                      </span>
-                    </div>
-                  )}
                   <div className="flex items-center justify-between">
-                    <span className="text-xs text-muted-foreground">Reporte:</span>
+                    <span className="text-xs text-muted-foreground">Provincia:</span>
                     <span className="text-xs font-medium bg-slate-100 px-2 py-0.5 rounded">
-                      {plan.report_per ?? "6 meses"}
+                      {plan.location?.province || "-"}
+                    </span>
+                  </div>
+                  <div className="flex items-center justify-between">
+                    <span className="text-xs text-muted-foreground">CIIU principal:</span>
+                    <span className="text-xs font-medium bg-slate-100 px-2 py-0.5 rounded max-w-[170px] truncate" title={plan.ciiu?.principal?.code}>
+                      {plan.ciiu?.principal?.code || "-"}
                     </span>
                   </div>
                   {plan.start_date && (
@@ -308,11 +794,7 @@ export default function PlansPage() {
                   <span />
                   <div className="flex items-center gap-1">
                     {isAdmin && (
-                      <Button
-                        variant="ghost"
-                        size="sm"
-                        onClick={() => openEdit(plan)}
-                      >
+                      <Button variant="ghost" size="sm" onClick={() => openEdit(plan)}>
                         <Pencil className="w-4 h-4" />
                       </Button>
                     )}
@@ -329,108 +811,26 @@ export default function PlansPage() {
         </div>
       )}
 
-      {/* Edit Plan Dialog */}
       <Dialog open={editOpen} onOpenChange={setEditOpen}>
         <DialogContent>
           <DialogHeader>
-            <DialogTitle>Editar Plan</DialogTitle>
+            <DialogTitle>Editar Proyecto</DialogTitle>
           </DialogHeader>
           <form onSubmit={handleEdit} className="space-y-4 mt-4">
             <div className="space-y-2">
-              <Label htmlFor="edit-title">Título</Label>
+              <Label>Nombre del proyecto</Label>
               <Input
-                id="edit-title"
                 value={editForm.title}
-                onChange={(e) =>
-                  setEditForm({ ...editForm, title: e.target.value })
-                }
+                onChange={(e) => setEditForm((prev) => ({ ...prev, title: e.target.value }))}
                 required
               />
             </div>
             <div className="space-y-2">
-              <Label htmlFor="edit-description">Descripción</Label>
+              <Label>Resumen</Label>
               <textarea
-                id="edit-description"
-                className="flex min-h-[80px] w-full rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                className="flex min-h-[80px] w-full rounded-md border border-input bg-background px-3 py-2 text-sm"
                 value={editForm.description}
-                onChange={(e) =>
-                  setEditForm({ ...editForm, description: e.target.value })
-                }
-              />
-            </div>
-            <div className="space-y-2">
-              <Label htmlFor="edit-tipo">Tipo</Label>
-              <select
-                id="edit-tipo"
-                className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
-                value={editForm.tipo}
-                onChange={(e) =>
-                  setEditForm({ ...editForm, tipo: e.target.value })
-                }
-                required
-              >
-                <option value="" disabled>Seleccionar tipo...</option>
-                <option value="Licencia">Licencia</option>
-                <option value="Registro Ambiental">Registro Ambiental</option>
-              </select>
-            </div>
-            <div className="space-y-2">
-              <Label htmlFor="edit-fase">Fase</Label>
-              <select
-                id="edit-fase"
-                className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
-                value={editForm.fase}
-                onChange={(e) => setEditForm({ ...editForm, fase: e.target.value })}
-                required
-              >
-                <option value="" disabled>Seleccionar fase...</option>
-                <option value="Planificación">Planificación</option>
-                <option value="Construcción">Construcción</option>
-                <option value="Operación">Operación</option>
-                <option value="Cierre">Cierre</option>
-              </select>
-            </div>
-            <div className="space-y-2">
-              <Label htmlFor="edit-enfoque">Enfoque clave</Label>
-              <select
-                id="edit-enfoque"
-                className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
-                value={editForm.enfoque}
-                onChange={(e) => setEditForm({ ...editForm, enfoque: e.target.value })}
-                required
-              >
-                <option value="" disabled>Seleccionar enfoque...</option>
-                <option value="Prevenir impactos">Prevenir impactos</option>
-                <option value="Controlar impactos">Controlar impactos</option>
-                <option value="Monitorear y optimizar">Monitorear y optimizar</option>
-                <option value="Restaurar el ambiente">Restaurar el ambiente</option>
-              </select>
-            </div>
-            <div className="space-y-2">
-              <Label htmlFor="edit-reporte">Reporte</Label>
-              <select
-                id="edit-reporte"
-                className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
-                value={editForm.report_per}
-                onChange={(e) =>
-                  setEditForm({ ...editForm, report_per: e.target.value })
-                }
-              >
-                <option value="6 meses">6 meses</option>
-                <option value="1 año">1 año</option>
-                <option value="2 años">2 años</option>
-              </select>
-            </div>
-            <div className="space-y-2">
-              <Label htmlFor="edit-start_date">Fecha de Inicio</Label>
-              <Input
-                id="edit-start_date"
-                type="date"
-                value={editForm.start_date}
-                onChange={(e) =>
-                  setEditForm({ ...editForm, start_date: e.target.value })
-                }
-                required
+                onChange={(e) => setEditForm((prev) => ({ ...prev, description: e.target.value }))}
               />
             </div>
             <Button type="submit" className="w-full" disabled={loading}>

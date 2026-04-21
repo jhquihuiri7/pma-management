@@ -1,10 +1,10 @@
-import { NextRequest, NextResponse } from "next/server";
+﻿import { NextRequest, NextResponse } from "next/server";
 import {
   getAuthSession,
   unauthorizedResponse,
   forbiddenResponse,
   errorResponse,
-} from "@/lib/api-utils-rgdp";
+} from "@/lib/api-utils";
 import {
   getEvidencesByPlan,
   getEvidencesByReporter,
@@ -27,7 +27,7 @@ export async function GET(req: NextRequest) {
   } else if (session.user.role === "REPORTER") {
     evidences = await getEvidencesByReporter(session.user.id);
   } else {
-    return errorResponse("planId query parameter is required for admin");
+    return errorResponse("projectId query parameter is required for admin");
   }
 
   return NextResponse.json(evidences);
@@ -114,3 +114,4 @@ export async function DELETE(req: NextRequest) {
     return errorResponse((error as Error).message);
   }
 }
+

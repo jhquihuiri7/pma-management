@@ -1,5 +1,5 @@
 import { NextAuthOptions } from "next-auth";
-import { UserRole } from "@/types";
+import { AppKey, UserRole } from "@/types";
 import GoogleProvider from "next-auth/providers/google";
 import CredentialsProvider from "next-auth/providers/credentials";
 import { adminDb } from "./firebase-admin";
@@ -178,7 +178,7 @@ export const authOptions: NextAuthOptions = {
         } else {
           token.role = (user as unknown as { role: UserRole }).role;
           token.adminId = (user as unknown as { adminId: string }).adminId;
-          token.apps = (user as unknown as { apps: string[] }).apps || [];
+          token.apps = (user as unknown as { apps?: AppKey[] }).apps || [];
         }
       }
       return token;

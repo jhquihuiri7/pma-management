@@ -1,6 +1,6 @@
-import { NextRequest, NextResponse } from "next/server";
+﻿import { NextRequest, NextResponse } from "next/server";
 import JSZip from "jszip";
-import { getAuthSession, unauthorizedResponse, errorResponse } from "@/lib/api-utils-rgdp";
+import { getAuthSession, unauthorizedResponse, errorResponse } from "@/lib/api-utils";
 import { adminDb } from "@/lib/firebase-admin";
 import { getAuthenticatedDrive } from "@/lib/drive";
 import { getPlanById } from "@/services-rgdp/planService";
@@ -47,14 +47,14 @@ export async function GET(req: NextRequest) {
 
   // Verify plan access
   const plan = await getPlanById(planId);
-  if (!plan) return errorResponse("Plan not found", 404);
+  if (!plan) return errorResponse("Proyecto no encontrado", 404);
   if (plan.adminId !== session.user.adminId) {
     return errorResponse("No autorizado", 403);
   }
 
   // Get the plan item to know its report_per
-  const itemDoc = await adminDb.collection("rgdp_planItems").doc(planItemId).get();
-  if (!itemDoc.exists) return errorResponse("Ítem no encontrado", 404);
+  const itemDoc = await adminDb.collection("rgdp_projectItems").doc(planItemId).get();
+  if (!itemDoc.exists) return errorResponse("Ãtem no encontrado", 404);
   const planItem = itemDoc.data() as PlanItem;
   if (planItem.planId !== planId) return errorResponse("No autorizado", 403);
 
@@ -75,13 +75,13 @@ export async function GET(req: NextRequest) {
     .filter((e) => e.activityMonth && monthKeySet.has(e.activityMonth));
 
   if (periodEvidences.length === 0) {
-    return errorResponse("No hay archivos para este período", 404);
+    return errorResponse("No hay archivos para este perÃ­odo", 404);
   }
 
   // Authenticate Drive with admin credentials
   const drive = await getAuthenticatedDrive(plan.adminId);
 
-  // ── Download all evidence files from Drive ──────────────────────────────
+  // â”€â”€ Download all evidence files from Drive â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
   const downloadedFiles = await Promise.all(
     periodEvidences.map(async (evidence) => {
       try {
@@ -101,7 +101,7 @@ export async function GET(req: NextRequest) {
     })
   );
 
-  // ── Classify into PDFs and images ──────────────────────────────────────
+  // â”€â”€ Classify into PDFs and images â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
   const pdfFiles: Array<{ fileName: string; buffer: Buffer }> = [];
   const imageFiles: PhotoWithDescription[] = [];
 
@@ -120,7 +120,7 @@ export async function GET(req: NextRequest) {
     // other types are ignored (per product requirement: only PDFs and images)
   }
 
-  // ── Build ZIP ──────────────────────────────────────────────────────────
+  // â”€â”€ Build ZIP â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
   const zip = new JSZip();
 
   // Add PDFs (deduplicate names)
@@ -168,7 +168,7 @@ export async function GET(req: NextRequest) {
 
     try {
       const photosDocxBuffer = await buildPhotosTableDocx(imageFiles, templateBuffer, planItem.item);
-      zip.file("document_fotografías.docx", photosDocxBuffer);
+      zip.file("document_fotografÃ­as.docx", photosDocxBuffer);
     } catch (err) {
       console.error("Failed to build photos table docx:", err);
       // Skip photos document if generation fails
@@ -192,3 +192,5 @@ export async function GET(req: NextRequest) {
     },
   });
 }
+
+

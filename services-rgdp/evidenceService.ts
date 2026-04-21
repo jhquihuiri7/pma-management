@@ -1,4 +1,4 @@
-import { adminDb } from "@/lib/firebase-admin";
+﻿import { adminDb } from "@/lib/firebase-admin";
 import { getAuthenticatedDrive } from "@/lib/drive-rgdp";
 import { Evidence, EvidenceValidationStatus } from "@/types";
 
@@ -68,7 +68,7 @@ export async function updateEvidenceValidation(
 
   const current = doc.data() as Evidence;
 
-  const planDoc = await adminDb.collection("rgdp_plans").doc(current.planId).get();
+  const planDoc = await adminDb.collection("rgdp_projects").doc(current.planId).get();
   if (!planDoc.exists) throw new Error("Plan not found");
   if (planDoc.data()!.adminId !== adminId) throw new Error("Unauthorized");
 
@@ -106,7 +106,7 @@ export async function deleteEvidence(
 
   // Verify the plan belongs to this admin
   const planDoc = await adminDb
-    .collection("rgdp_plans")
+    .collection("rgdp_projects")
     .doc(evidence.planId)
     .get();
   if (!planDoc.exists) throw new Error("Plan not found");
@@ -122,3 +122,4 @@ export async function deleteEvidence(
 
   await adminDb.collection("rgdp_evidences").doc(evidenceId).delete();
 }
+

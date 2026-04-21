@@ -32,7 +32,7 @@ function buildNotificationHref(notification: AppNotification): string {
   if (notification.planItemId) params.set("itemId", notification.planItemId);
   if (notification.evidenceId) params.set("evidenceId", notification.evidenceId);
   const query = params.toString();
-  return `/plans/${notification.planId}${query ? `?${query}` : ""}`;
+  return `/pma/plans/${notification.planId}${query ? `?${query}` : ""}`;
 }
 
 export default function NotificationsBell() {
@@ -49,7 +49,7 @@ export default function NotificationsBell() {
   );
 
   const fetchNotifications = useCallback(async () => {
-    const res = await fetch("/api/notifications?limit=30", { cache: "no-store" });
+    const res = await fetch("/pma/api/notifications?limit=30", { cache: "no-store" });
     if (!res.ok) return;
     const data = (await res.json()) as AppNotification[];
     if (Array.isArray(data)) {
@@ -139,7 +139,7 @@ export default function NotificationsBell() {
         )
       );
 
-      await fetch("/api/notifications/read", {
+      await fetch("/pma/api/notifications/read", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ id: notification.id }),

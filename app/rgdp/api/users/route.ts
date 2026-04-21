@@ -4,14 +4,14 @@ import {
   unauthorizedResponse,
   forbiddenResponse,
   errorResponse,
-} from "@/lib/api-utils-rgdp";
+} from "@/lib/api-utils";
 import {
   createReporter,
   createViewer,
   getManagedUsersByAdmin,
   deleteReporter,
   resendInvitation,
-} from "@/services-rgdp/userService";
+} from "@/services/userService";
 
 export async function GET() {
   const session = await getAuthSession();
@@ -19,7 +19,7 @@ export async function GET() {
   if (session.user.role !== "ADMIN") return forbiddenResponse();
 
   try {
-    const users = await getManagedUsersByAdmin(session.user.adminId);
+    const users = await getManagedUsersByAdmin(session.user.adminId, "rgdp");
     return NextResponse.json(users);
   } catch (error: unknown) {
     console.error("[GET /api/users]", error);
@@ -44,8 +44,8 @@ export async function POST(req: NextRequest) {
   try {
     const user =
       userRole === "VIEWER"
-        ? await createViewer(session.user.adminId, name, email, unit, position)
-        : await createReporter(session.user.adminId, name, email, unit, position);
+        ? await createViewer(session.user.adminId, name, email, unit, position, "rgdp")
+        : await createReporter(session.user.adminId, name, email, unit, position, "rgdp");
     return NextResponse.json(user, { status: 201 });
   } catch (error: unknown) {
     return errorResponse((error as Error).message);
@@ -63,7 +63,7 @@ export async function PATCH(req: NextRequest) {
   if (!userId) return errorResponse("userId es requerido");
 
   try {
-    await resendInvitation(userId, session.user.adminId);
+    await resendInvitation(userId, session.user.adminId, "rgdp");
     return NextResponse.json({ success: true });
   } catch (error: unknown) {
     return errorResponse((error as Error).message);
@@ -81,7 +81,7 @@ export async function DELETE(req: NextRequest) {
   if (!userId) return errorResponse("userId is required");
 
   try {
-    await deleteReporter(userId, session.user.adminId);
+    await deleteReporter(userId, session.user.adminId, "rgdp");
     return NextResponse.json({ success: true });
   } catch (error: unknown) {
     return errorResponse((error as Error).message);

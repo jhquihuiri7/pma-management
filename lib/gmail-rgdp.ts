@@ -1,4 +1,4 @@
-import { google } from "googleapis";
+﻿import { google } from "googleapis";
 import { adminDb } from "./firebase-admin";
 
 const oauth2Client = new google.auth.OAuth2(
@@ -86,34 +86,34 @@ export function buildPasswordRecoveryEmail(
         <table width="600" cellpadding="0" cellspacing="0" style="background:#ffffff;border-radius:8px;overflow:hidden;box-shadow:0 1px 3px rgba(0,0,0,0.1);">
           <tr>
             <td style="background:#0f172a;padding:32px 40px;">
-              <h1 style="margin:0;color:#ffffff;font-size:20px;font-weight:600;">Plan de Manejo Ambiental</h1>
-              <p style="margin:4px 0 0;color:#94a3b8;font-size:14px;">Plataforma de Gestión Ambiental</p>
+              <h1 style="margin:0;color:#ffffff;font-size:20px;font-weight:600;">Registro Generador de Desechos Peligrosos</h1>
+              <p style="margin:4px 0 0;color:#94a3b8;font-size:14px;">Plataforma de GestiÃ³n Ambiental</p>
             </td>
           </tr>
           <tr>
             <td style="padding:40px;">
               <h2 style="margin:0 0 16px;color:#0f172a;font-size:18px;">Hola, ${userName}</h2>
               <p style="margin:0 0 16px;color:#475569;font-size:15px;line-height:1.6;">
-                Recibimos una solicitud para restablecer la contraseña de tu cuenta. Haz clic en el siguiente botón para crear una nueva contraseña:
+                Recibimos una solicitud para restablecer la contraseÃ±a de tu cuenta. Haz clic en el siguiente botÃ³n para crear una nueva contraseÃ±a:
               </p>
               <div style="text-align:center;margin:32px 0;">
                 <a href="${resetLink}"
                    style="display:inline-block;background:#0f172a;color:#ffffff;padding:14px 32px;border-radius:6px;text-decoration:none;font-size:15px;font-weight:600;">
-                  Restablecer contraseña
+                  Restablecer contraseÃ±a
                 </a>
               </div>
               <p style="margin:0 0 8px;color:#94a3b8;font-size:13px;">
                 Este enlace expira en <strong>1 hora</strong>.
               </p>
               <p style="margin:0;color:#94a3b8;font-size:13px;">
-                Si no solicitaste restablecer tu contraseña, puedes ignorar este correo.
+                Si no solicitaste restablecer tu contraseÃ±a, puedes ignorar este correo.
               </p>
             </td>
           </tr>
           <tr>
             <td style="background:#f1f5f9;padding:20px 40px;text-align:center;">
               <p style="margin:0;color:#94a3b8;font-size:12px;">
-                Plan de Manejo Ambiental &mdash; Plataforma de Gestión
+                Registro Generador de Desechos Peligrosos &mdash; Plataforma de GestiÃ³n
               </p>
             </td>
           </tr>
@@ -141,20 +141,20 @@ export function buildInvitationEmail(
         <table width="600" cellpadding="0" cellspacing="0" style="background:#ffffff;border-radius:8px;overflow:hidden;box-shadow:0 1px 3px rgba(0,0,0,0.1);">
           <tr>
             <td style="background:#0f172a;padding:32px 40px;">
-              <h1 style="margin:0;color:#ffffff;font-size:20px;font-weight:600;">Plan de Manejo Ambiental</h1>
-              <p style="margin:4px 0 0;color:#94a3b8;font-size:14px;">Plataforma de Gestión Ambiental</p>
+              <h1 style="margin:0;color:#ffffff;font-size:20px;font-weight:600;">Registro Generador de Desechos Peligrosos</h1>
+              <p style="margin:4px 0 0;color:#94a3b8;font-size:14px;">Plataforma de GestiÃ³n Ambiental</p>
             </td>
           </tr>
           <tr>
             <td style="padding:40px;">
               <h2 style="margin:0 0 16px;color:#0f172a;font-size:18px;">Bienvenido, ${userName}</h2>
               <p style="margin:0 0 16px;color:#475569;font-size:15px;line-height:1.6;">
-                Has sido registrado en la plataforma. Para activar tu cuenta y establecer tu contraseña, haz clic en el siguiente botón:
+                Has sido registrado en la plataforma. Para activar tu cuenta y establecer tu contraseÃ±a, haz clic en el siguiente botÃ³n:
               </p>
               <div style="text-align:center;margin:32px 0;">
                 <a href="${setPasswordLink}"
                    style="display:inline-block;background:#0f172a;color:#ffffff;padding:14px 32px;border-radius:6px;text-decoration:none;font-size:15px;font-weight:600;">
-                  Establecer contraseña
+                  Establecer contraseÃ±a
                 </a>
               </div>
               <p style="margin:0 0 8px;color:#94a3b8;font-size:13px;">
@@ -168,7 +168,7 @@ export function buildInvitationEmail(
           <tr>
             <td style="background:#f1f5f9;padding:20px 40px;text-align:center;">
               <p style="margin:0;color:#94a3b8;font-size:12px;">
-                Plan de Manejo Ambiental &mdash; Plataforma de Gestión
+                Registro Generador de Desechos Peligrosos &mdash; Plataforma de GestiÃ³n
               </p>
             </td>
           </tr>
@@ -180,3 +180,4 @@ export function buildInvitationEmail(
 </html>
   `.trim();
 }
+
