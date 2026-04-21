@@ -3,7 +3,8 @@ import { UserRole } from "@/types";
 import GoogleProvider from "next-auth/providers/google";
 import CredentialsProvider from "next-auth/providers/credentials";
 import { adminDb } from "./firebase-admin";
-import { createRootFolder } from "./drive";
+import { createRootFolder as createPmaRootFolder } from "./drive";
+import { createRootFolder as createRgdpRootFolder } from "./drive-rgdp";
 import { google } from "googleapis";
 import bcrypt from "bcryptjs";
 
@@ -32,8 +33,8 @@ export const authOptions: NextAuthOptions = {
           throw new Error("Email and password are required");
         }
 
-        const usersRef = adminDb.collection("pma_users");
-        const snapshot = await usersRef
+        const snapshot = await adminDb
+          .collection("users")
           .where("email", "==", credentials.email)
           .limit(1)
           .get();
@@ -67,24 +68,21 @@ export const authOptions: NextAuthOptions = {
           name: user.name,
           role: user.role,
           adminId: user.adminId,
+          apps: user.apps || [],
         };
       },
     }),
   ],
   session: {
     strategy: "jwt",
-    maxAge: 24 * 60 * 60, // 24 hours
+    maxAge: 24 * 60 * 60,
   },
   pages: {
     signIn: "/login",
   },
   callbacks: {
     async signIn({ user, account }) {
-      // Handle Google OAuth sign-in for ADMIN
       if (account?.provider === "google") {
-        const adminRef = adminDb.collection("pma_admins").doc(user.id);
-        const adminDoc = await adminRef.get();
-
         const oauth2Client = new google.auth.OAuth2(
           process.env.GOOGLE_CLIENT_ID,
           process.env.GOOGLE_CLIENT_SECRET
@@ -95,53 +93,78 @@ export const authOptions: NextAuthOptions = {
         });
         const drive = google.drive({ version: "v3", auth: oauth2Client });
 
-        if (!adminDoc.exists) {
-          // First-time ADMIN setup
-          const rootFolderId = await createRootFolder(drive);
+        const tokenData: Record<string, unknown> = {
+          googleAccessToken: account.access_token,
+          tokenExpiresAt: account.expires_at
+            ? account.expires_at * 1000
+            : Date.now() + 3600 * 1000,
+        };
+        if (account.refresh_token) {
+          tokenData.googleRefreshToken = account.refresh_token;
+        }
 
-          await adminRef.set({
+        // Ensure entry in pma_admins
+        const pmaAdminRef = adminDb.collection("pma_admins").doc(user.id);
+        const pmaAdminDoc = await pmaAdminRef.get();
+        if (!pmaAdminDoc.exists) {
+          const rootFolderId = await createPmaRootFolder(drive);
+          await pmaAdminRef.set({
             id: user.id,
             email: user.email,
             name: user.name,
-            googleAccessToken: account.access_token,
-            googleRefreshToken: account.refresh_token,
-            tokenExpiresAt: account.expires_at
-              ? account.expires_at * 1000
-              : Date.now() + 3600 * 1000,
+            ...tokenData,
             driveRootFolderId: rootFolderId,
             createdAt: new Date().toISOString(),
           });
+        } else {
+          const existing = pmaAdminDoc.data()!;
+          const update = { ...tokenData };
+          if (!existing.driveRootFolderId) {
+            (update as Record<string, unknown>).driveRootFolderId =
+              await createPmaRootFolder(drive);
+          }
+          await pmaAdminRef.update(update);
+        }
 
-          // Also create a user record for the ADMIN
-          await adminDb.collection("pma_users").doc(user.id).set({
+        // Ensure entry in rgdp_admins
+        const rgdpAdminRef = adminDb.collection("rgdp_admins").doc(user.id);
+        const rgdpAdminDoc = await rgdpAdminRef.get();
+        if (!rgdpAdminDoc.exists) {
+          const rootFolderId = await createRgdpRootFolder(drive);
+          await rgdpAdminRef.set({
             id: user.id,
-            name: user.name,
             email: user.email,
-            role: "ADMIN",
-            adminId: user.id,
+            name: user.name,
+            ...tokenData,
+            driveRootFolderId: rootFolderId,
             createdAt: new Date().toISOString(),
           });
         } else {
-          // Existing ADMIN - update tokens
-          const updateData: Record<string, unknown> = {
-            googleAccessToken: account.access_token,
-            tokenExpiresAt: account.expires_at
-              ? account.expires_at * 1000
-              : Date.now() + 3600 * 1000,
-          };
-          if (account.refresh_token) {
-            updateData.googleRefreshToken = account.refresh_token;
+          const existing = rgdpAdminDoc.data()!;
+          const update = { ...tokenData };
+          if (!existing.driveRootFolderId) {
+            (update as Record<string, unknown>).driveRootFolderId =
+              await createRgdpRootFolder(drive);
           }
-
-          // Ensure root folder still exists
-          const existingData = adminDoc.data()!;
-          if (!existingData.driveRootFolderId) {
-            const rootFolderId = await createRootFolder(drive);
-            updateData.driveRootFolderId = rootFolderId;
-          }
-
-          await adminRef.update(updateData);
+          await rgdpAdminRef.update(update);
         }
+
+        // Ensure unified users record for admin
+        await adminDb
+          .collection("users")
+          .doc(user.id)
+          .set(
+            {
+              id: user.id,
+              name: user.name,
+              email: user.email,
+              role: "ADMIN",
+              adminId: user.id,
+              apps: ["pma", "rgdp"],
+              createdAt: new Date().toISOString(),
+            },
+            { merge: true }
+          );
       }
       return true;
     },
@@ -149,12 +172,13 @@ export const authOptions: NextAuthOptions = {
       if (user) {
         token.id = user.id;
         if (account?.provider === "google") {
-          token.role = "ADMIN";
+          token.role = "ADMIN" as UserRole;
           token.adminId = user.id;
+          token.apps = ["pma", "rgdp"];
         } else {
-          // Credentials provider (REPORTER)
           token.role = (user as unknown as { role: UserRole }).role;
           token.adminId = (user as unknown as { adminId: string }).adminId;
+          token.apps = (user as unknown as { apps: string[] }).apps || [];
         }
       }
       return token;
@@ -164,6 +188,7 @@ export const authOptions: NextAuthOptions = {
         session.user.id = token.id;
         session.user.role = token.role;
         session.user.adminId = token.adminId;
+        session.user.apps = token.apps || [];
       }
       return session;
     },

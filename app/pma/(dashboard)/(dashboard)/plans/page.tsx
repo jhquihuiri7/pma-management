@@ -317,7 +317,7 @@ export default function PlansPage() {
                         <Pencil className="w-4 h-4" />
                       </Button>
                     )}
-                    <Link href={`/plans/${plan.id}`}>
+                    <Link href={`/pma/plans/${plan.id}`}>
                       <Button variant="ghost" size="sm">
                         Ver <ArrowRight className="w-4 h-4 ml-1" />
                       </Button>

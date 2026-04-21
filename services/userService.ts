@@ -34,9 +34,8 @@ async function createManagedUser(
   unit?: string,
   position?: string
 ): Promise<User> {
-  // Check if email already exists
   const existing = await adminDb
-    .collection("pma_users")
+    .collection("users")
     .where("email", "==", email)
     .limit(1)
     .get();
@@ -48,7 +47,7 @@ async function createManagedUser(
   const token = crypto.randomBytes(32).toString("hex");
   const tokenExpiry = new Date(Date.now() + 24 * 60 * 60 * 1000).toISOString();
 
-  const userRef = adminDb.collection("pma_users").doc();
+  const userRef = adminDb.collection("users").doc();
 
   const user: User = {
     id: userRef.id,
@@ -59,6 +58,7 @@ async function createManagedUser(
     passwordSetTokenExpiry: tokenExpiry,
     role,
     adminId,
+    apps: ["pma"],
     unit,
     position,
     createdAt: new Date().toISOString(),
@@ -66,7 +66,6 @@ async function createManagedUser(
 
   await userRef.set(user);
 
-  // Send invitation email
   const appUrl = process.env.NEXTAUTH_URL ?? "http://localhost:3000";
   const setPasswordLink = `${appUrl}/set-password?token=${token}`;
   const html = buildInvitationEmail(name, setPasswordLink);
@@ -80,9 +79,8 @@ async function createManagedUser(
     );
   } catch (emailError) {
     console.error("[createManagedUser] Failed to send invitation email:", emailError);
-    // Mark user with emailSent: false so admin knows to resend
     await userRef.update({ emailSent: false });
-    return { ...user, password: undefined, passwordSetToken: undefined, emailSent: false } as any;
+    return { ...user, password: undefined, passwordSetToken: undefined, emailSent: false } as unknown as User;
   }
 
   return { ...user, password: undefined, passwordSetToken: undefined };
@@ -92,18 +90,17 @@ export async function resendInvitation(
   userId: string,
   adminId: string
 ): Promise<void> {
-  const doc = await adminDb.collection("pma_users").doc(userId).get();
+  const doc = await adminDb.collection("users").doc(userId).get();
   if (!doc.exists) throw new Error("Usuario no encontrado");
 
   const user = doc.data() as User;
   if (user.adminId !== adminId) throw new Error("No autorizado");
   if (user.passwordSet !== false) throw new Error("Este usuario ya estableció su contraseña");
 
-  // Generate a fresh token
   const token = crypto.randomBytes(32).toString("hex");
   const tokenExpiry = new Date(Date.now() + 24 * 60 * 60 * 1000).toISOString();
 
-  await adminDb.collection("pma_users").doc(userId).update({
+  await adminDb.collection("users").doc(userId).update({
     passwordSetToken: token,
     passwordSetTokenExpiry: tokenExpiry,
     emailSent: true,
@@ -125,7 +122,7 @@ export async function verifySetPasswordToken(
   token: string
 ): Promise<{ userId: string; name: string; email: string } | null> {
   const snapshot = await adminDb
-    .collection("pma_users")
+    .collection("users")
     .where("passwordSetToken", "==", token)
     .where("passwordSet", "==", false)
     .limit(1)
@@ -152,7 +149,7 @@ export async function setUserPassword(
 
   const hashedPassword = await bcrypt.hash(password, BCRYPT_ROUNDS);
 
-  await adminDb.collection("pma_users").doc(info.userId).update({
+  await adminDb.collection("users").doc(info.userId).update({
     password: hashedPassword,
     passwordSet: true,
     passwordSetToken: null,
@@ -162,24 +159,21 @@ export async function setUserPassword(
 
 export async function generatePasswordRecoveryToken(email: string): Promise<void> {
   const snapshot = await adminDb
-    .collection("pma_users")
+    .collection("users")
     .where("email", "==", email)
     .limit(1)
     .get();
 
-  // Always resolve silently to avoid email enumeration
   if (snapshot.empty) return;
 
   const doc = snapshot.docs[0];
   const user = doc.data() as User;
 
-  // Only reporters and viewers can recover via email
   if (user.role !== "REPORTER" && user.role !== "VIEWER") return;
-  // Cannot recover if password was never set (still in invite flow)
   if (user.passwordSet === false) return;
 
   const token = crypto.randomBytes(32).toString("hex");
-  const tokenExpiry = new Date(Date.now() + 60 * 60 * 1000).toISOString(); // 1 hour
+  const tokenExpiry = new Date(Date.now() + 60 * 60 * 1000).toISOString();
 
   await doc.ref.update({
     passwordSetToken: token,
@@ -193,7 +187,7 @@ export async function generatePasswordRecoveryToken(email: string): Promise<void
   try {
     await sendEmailFromAdmin(user.adminId, user.email, "Restablece tu contraseña – Plan de Manejo Ambiental", html);
   } catch {
-    // Silently fail — token is still stored, admin can resend manually
+    // Silently fail — token is still stored
   }
 }
 
@@ -201,7 +195,7 @@ export async function verifyPasswordRecoveryToken(
   token: string
 ): Promise<{ userId: string; name: string; email: string } | null> {
   const snapshot = await adminDb
-    .collection("pma_users")
+    .collection("users")
     .where("passwordSetToken", "==", token)
     .where("passwordSet", "==", true)
     .limit(1)
@@ -225,7 +219,7 @@ export async function resetUserPassword(token: string, password: string): Promis
 
   const hashedPassword = await bcrypt.hash(password, BCRYPT_ROUNDS);
 
-  await adminDb.collection("pma_users").doc(info.userId).update({
+  await adminDb.collection("users").doc(info.userId).update({
     password: hashedPassword,
     passwordSetToken: null,
     passwordSetTokenExpiry: null,
@@ -233,7 +227,7 @@ export async function resetUserPassword(token: string, password: string): Promis
 }
 
 export async function getUserById(userId: string): Promise<User | null> {
-  const doc = await adminDb.collection("pma_users").doc(userId).get();
+  const doc = await adminDb.collection("users").doc(userId).get();
   if (!doc.exists) return null;
   const data = doc.data() as User;
   return { ...data, password: undefined };
@@ -241,7 +235,7 @@ export async function getUserById(userId: string): Promise<User | null> {
 
 export async function getReportersByAdmin(adminId: string): Promise<User[]> {
   const snapshot = await adminDb
-    .collection("pma_users")
+    .collection("users")
     .where("adminId", "==", adminId)
     .where("role", "==", "REPORTER")
     .orderBy("createdAt", "desc")
@@ -256,13 +250,13 @@ export async function getReportersByAdmin(adminId: string): Promise<User[]> {
 export async function getManagedUsersByAdmin(adminId: string): Promise<User[]> {
   const [reportersSnap, viewersSnap] = await Promise.all([
     adminDb
-      .collection("pma_users")
+      .collection("users")
       .where("adminId", "==", adminId)
       .where("role", "==", "REPORTER")
       .orderBy("createdAt", "desc")
       .get(),
     adminDb
-      .collection("pma_users")
+      .collection("users")
       .where("adminId", "==", adminId)
       .where("role", "==", "VIEWER")
       .orderBy("createdAt", "desc")
@@ -287,14 +281,13 @@ export async function deleteReporter(
   userId: string,
   adminId: string
 ): Promise<void> {
-  const doc = await adminDb.collection("pma_users").doc(userId).get();
+  const doc = await adminDb.collection("users").doc(userId).get();
   if (!doc.exists) throw new Error("User not found");
 
   const user = doc.data() as User;
   if (user.adminId !== adminId) throw new Error("Unauthorized");
   if (user.role !== "REPORTER" && user.role !== "VIEWER") throw new Error("Cannot delete admin users");
 
-  // Delete assignments for this user
   const assignments = await adminDb
     .collection("pma_assignments")
     .where("userId", "==", userId)
@@ -302,6 +295,6 @@ export async function deleteReporter(
 
   const batch = adminDb.batch();
   assignments.docs.forEach((doc) => batch.delete(doc.ref));
-  batch.delete(adminDb.collection("pma_users").doc(userId));
+  batch.delete(adminDb.collection("users").doc(userId));
   await batch.commit();
 }

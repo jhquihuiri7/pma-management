@@ -14,19 +14,19 @@ import { Button } from "@/components/ui/button";
 import { Separator } from "@/components/ui/separator";
 
 const adminLinks = [
-  { href: "/dashboard", label: "Panel Principal", icon: LayoutDashboard },
-  { href: "/plans", label: "Planes", icon: FileText },
-  { href: "/users", label: "Usuarios", icon: Users },
+  { href: "/pma/dashboard", label: "Panel Principal", icon: LayoutDashboard },
+  { href: "/pma/plans", label: "Planes", icon: FileText },
+  { href: "/pma/users", label: "Usuarios", icon: Users },
 ];
 
 const reporterLinks = [
-  { href: "/dashboard", label: "Panel Principal", icon: LayoutDashboard },
-  { href: "/plans", label: "Mis Planes", icon: FileText },
+  { href: "/pma/dashboard", label: "Panel Principal", icon: LayoutDashboard },
+  { href: "/pma/plans", label: "Mis Planes", icon: FileText },
 ];
 
 const viewerLinks = [
-  { href: "/dashboard", label: "Panel Principal", icon: LayoutDashboard },
-  { href: "/plans", label: "Mis Planes", icon: FileText },
+  { href: "/pma/dashboard", label: "Panel Principal", icon: LayoutDashboard },
+  { href: "/pma/plans", label: "Mis Planes", icon: FileText },
 ];
 
 export default function Sidebar() {
@@ -52,7 +52,7 @@ export default function Sidebar() {
           const Icon = link.icon;
           const isActive =
             pathname === link.href ||
-            (link.href !== "/dashboard" && pathname.startsWith(link.href));
+            (link.href !== "/pma/dashboard" && pathname.startsWith(link.href));
 
           return (
             <Link
@@ -78,9 +78,9 @@ export default function Sidebar() {
               </p>
             </div>
             <Link
-              href="/formatos"
+              href="/pma/formatos"
               className={`flex items-center gap-3 px-3 py-2 rounded-lg text-sm font-medium transition-colors ${
-                pathname === "/formatos" || pathname.startsWith("/formatos")
+                pathname === "/pma/formatos" || pathname.startsWith("/pma/formatos")
                   ? "bg-slate-100 text-slate-900"
                   : "text-slate-600 hover:bg-slate-50 hover:text-slate-900"
               }`}

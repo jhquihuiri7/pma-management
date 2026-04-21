@@ -10,6 +10,7 @@ export interface User {
   passwordSetTokenExpiry?: string;
   role: UserRole;
   adminId: string;
+  apps: string[];
   unit?: string;
   position?: string;
   createdAt: string;

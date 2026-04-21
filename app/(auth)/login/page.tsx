@@ -37,20 +37,20 @@ export default function LoginPage() {
         setError("Correo o contraseña incorrectos");
       }
     } else {
-      router.push("/dashboard");
+      router.push("/select-app");
     }
   }
 
   async function handleGoogleLogin() {
     setLoading(true);
-    await signIn("google", { callbackUrl: "/dashboard" });
+    await signIn("google", { callbackUrl: "/select-app" });
   }
 
   return (
     <div className="min-h-screen flex items-center justify-center bg-slate-50 px-4">
       <Card className="w-full max-w-md">
         <CardHeader className="text-center">
-          <CardTitle className="text-2xl font-bold">Plan de Manejo Ambiental</CardTitle>
+          <CardTitle className="text-2xl font-bold">Gestión Ambiental</CardTitle>
           <p className="text-sm text-muted-foreground mt-1">
             Plataforma de Gestión Ambiental
           </p>
@@ -112,7 +112,7 @@ export default function LoginPage() {
               </Button>
               <div className="text-center">
                 <a
-                  href="/pma/forgot-password"
+                  href="/forgot-password"
                   className="text-sm text-muted-foreground hover:text-slate-900 underline-offset-4 hover:underline"
                 >
                   ¿Olvidaste tu contraseña?

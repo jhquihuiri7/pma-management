@@ -8,7 +8,7 @@ export default function SessionProvider({
   children: React.ReactNode;
 }) {
   return (
-    <NextAuthSessionProvider basePath="/pma/api/auth">
+    <NextAuthSessionProvider basePath="/api/auth">
       {children}
     </NextAuthSessionProvider>
   );

@@ -165,7 +165,7 @@ export default function PlanDetailPage() {
       const res = await fetch(`/pma/api/plans/${id}`, { method: "DELETE" });
       if (res.ok) {
         toast.success("Plan eliminado correctamente");
-        router.push("/plans");
+        router.push("/pma/plans");
       } else {
         const data = await res.json();
         toast.error(data.error || "Error al eliminar el plan");

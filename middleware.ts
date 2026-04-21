@@ -5,16 +5,13 @@ export default withAuth(
   function middleware(req) {
     const token = req.nextauth.token;
     const pathname = req.nextUrl.pathname;
-    const isPath = (value: string) => pathname === value || pathname.startsWith(`${value}/`);
-    const isAnyPath = (values: string[]) => values.some((value) => isPath(value));
+    const isPath = (value: string) =>
+      pathname === value || pathname.startsWith(`${value}/`);
+    const isAnyPath = (values: string[]) => values.some((v) => isPath(v));
     const isRgdpPath = isPath("/rgdp");
 
-    // Accept OAuth callbacks without basePath and forward them to the real NextAuth route.
-    if (pathname.startsWith("/api/auth/")) {
-      const rewriteUrl = req.nextUrl.clone();
-      rewriteUrl.pathname = `/pma${pathname}`;
-      return NextResponse.rewrite(rewriteUrl);
-    }
+    const loginUrl = new URL("/login", req.url);
+    const selectAppUrl = new URL("/select-app", req.url);
 
     if (isRgdpPath) {
       const rgdpProtectedPaths = [
@@ -28,42 +25,48 @@ export default withAuth(
       const isRgdpProtected = isAnyPath(rgdpProtectedPaths);
       const isRgdpAdminRoute = isAnyPath(rgdpAdminOnlyPaths);
 
-      if (isRgdpProtected && !token) {
-        return NextResponse.redirect(new URL("/rgdp/login", req.url));
+      if (isRgdpProtected) {
+        if (!token) return NextResponse.redirect(loginUrl);
+        const apps: string[] = (token as { apps?: string[] }).apps ?? [];
+        if (!apps.includes("rgdp")) return NextResponse.redirect(selectAppUrl);
+        if (isRgdpAdminRoute && token.role !== "ADMIN") {
+          return NextResponse.redirect(new URL("/rgdp/dashboard", req.url));
+        }
       }
 
-      if (isRgdpAdminRoute && token?.role !== "ADMIN") {
-        return NextResponse.redirect(new URL("/rgdp/dashboard", req.url));
+      return NextResponse.next();
+    }
+
+    // PMA protected paths
+    const pmaPath = isPath("/pma");
+    
+    if (pmaPath) {
+      const protectedPaths = [
+        "/pma/dashboard",
+        "/pma/plans",
+        "/pma/users",
+        "/pma/evidences",
+        "/pma/formatos",
+      ];
+      const adminOnlyPaths = ["/pma/users", "/pma/formatos"];
+      const isProtectedPath = isAnyPath(protectedPaths);
+      const isAdminRoute = isAnyPath(adminOnlyPaths);
+
+      if (isProtectedPath) {
+        if (!token) return NextResponse.redirect(loginUrl);
+        const apps: string[] = (token as { apps?: string[] }).apps ?? [];
+        if (!apps.includes("pma")) return NextResponse.redirect(selectAppUrl);
+        if (isAdminRoute && token.role !== "ADMIN") {
+          return NextResponse.redirect(new URL("/pma/dashboard", req.url));
+        }
       }
 
-      const rewriteUrl = req.nextUrl.clone();
-      rewriteUrl.pathname = `/pma${pathname}`;
-      return NextResponse.rewrite(rewriteUrl);
+      return NextResponse.next();
     }
 
-    // Protect admin-only routes
-    const protectedPaths = [
-      "/dashboard",
-      "/plans",
-      "/users",
-      "/evidences",
-      "/formatos",
-      "/pma/dashboard",
-      "/pma/plans",
-      "/pma/users",
-      "/pma/evidences",
-      "/pma/formatos",
-    ];
-    const adminOnlyPaths = ["/users", "/formatos", "/pma/users", "/pma/formatos"];
-    const isProtectedPath = isAnyPath(protectedPaths);
-    const isAdminRoute = isAnyPath(adminOnlyPaths);
-
-    if (isProtectedPath && !token) {
-      return NextResponse.redirect(new URL("/pma/login", req.url));
-    }
-
-    if (isAdminRoute && token?.role !== "ADMIN") {
-      return NextResponse.redirect(new URL("/pma/dashboard", req.url));
+    // Protect select-app — must be authenticated
+    if (isPath("/select-app") && !token) {
+      return NextResponse.redirect(loginUrl);
     }
 
     return NextResponse.next();
@@ -78,11 +81,9 @@ export default withAuth(
 export const config = {
   matcher: [
     "/api/auth/:path*",
-    "/dashboard/:path*",
-    "/plans/:path*",
-    "/users/:path*",
-    "/evidences/:path*",
-    "/formatos/:path*",
+    "/select-app",
+    "/pma",
+    "/pma/:path*",
     "/rgdp",
     "/rgdp/:path*",
   ],
