@@ -132,6 +132,13 @@ export interface PlanItem {
   id: string;
   planId: string;
   item: string;
+  wasteCode?: string;
+  wasteName?: string;
+  wasteDescription?: string;
+  crtib?: string;
+  annualGenerationKg?: number;
+  generationOrigin?: string;
+  selfManagement?: boolean;
   subplan: string;
   direccion?: string;
   environmental_activity: string;

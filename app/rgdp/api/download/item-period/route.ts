@@ -54,7 +54,7 @@ export async function GET(req: NextRequest) {
 
   // Get the plan item to know its report_per
   const itemDoc = await adminDb.collection("rgdp_projectItems").doc(planItemId).get();
-  if (!itemDoc.exists) return errorResponse("Ãtem no encontrado", 404);
+  if (!itemDoc.exists) return errorResponse("Ítem no encontrado", 404);
   const planItem = itemDoc.data() as PlanItem;
   if (planItem.planId !== planId) return errorResponse("No autorizado", 403);
 
@@ -75,13 +75,12 @@ export async function GET(req: NextRequest) {
     .filter((e) => e.activityMonth && monthKeySet.has(e.activityMonth));
 
   if (periodEvidences.length === 0) {
-    return errorResponse("No hay archivos para este perÃ­odo", 404);
+    return errorResponse("No hay archivos para este período", 404);
   }
 
   // Authenticate Drive with admin credentials
   const drive = await getAuthenticatedDrive(plan.adminId);
 
-  // â”€â”€ Download all evidence files from Drive â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
   const downloadedFiles = await Promise.all(
     periodEvidences.map(async (evidence) => {
       try {
@@ -101,7 +100,6 @@ export async function GET(req: NextRequest) {
     })
   );
 
-  // â”€â”€ Classify into PDFs and images â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
   const pdfFiles: Array<{ fileName: string; buffer: Buffer }> = [];
   const imageFiles: PhotoWithDescription[] = [];
 
@@ -120,7 +118,6 @@ export async function GET(req: NextRequest) {
     // other types are ignored (per product requirement: only PDFs and images)
   }
 
-  // â”€â”€ Build ZIP â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
   const zip = new JSZip();
 
   // Add PDFs (deduplicate names)
@@ -168,7 +165,7 @@ export async function GET(req: NextRequest) {
 
     try {
       const photosDocxBuffer = await buildPhotosTableDocx(imageFiles, templateBuffer, planItem.item);
-      zip.file("document_fotografÃ­as.docx", photosDocxBuffer);
+      zip.file("document_fotografías.docx", photosDocxBuffer);
     } catch (err) {
       console.error("Failed to build photos table docx:", err);
       // Skip photos document if generation fails

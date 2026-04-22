@@ -1,0 +1,65 @@
+﻿DESCRIPCION;CRTIB;CODIGO;CODIGO BASILEA;GRUPO
+Aceites dieléctricos usados que no contengan PBC, PCT o PBB;T,I;NE-01;Y8;B2
+Aceites dieléctricos usados u otros aceites minerales con PBC ≥50 ppm;T,I;NE-02;Y10;B2
+Aceites minerales usados o gastados;T,I;NE-03;Y8;B2
+Agroquímicos caducados o fuera de especificaciones;T;NE-04;Y4;B2
+Aguas de sentina;T;NE-05;Y9;B2
+Aguas residuales industriales con metales pesados excedidos;T;NE-06;Y18;B2
+Baterías usadas plomo-ácido;C;NE-07;A1180;B2
+Baterías usadas con Hg, Ni, Cd u otros materiales peligrosos;T;NE-08;A1180;B2
+Chatarra contaminada con materiales peligrosos;T;NE-09;Y18;B2
+Desechos biopeligrosos de atención médica;B;NE-10;Y1;B2
+Desechos contaminados con peróxidos;R;NE-11;A4120;B2
+Desechos de aceites minerales no aptos;T,I;NE-12;Y8;B2
+Desechos de amianto/asbesto;T;NE-13;Y36/A2050;B2
+Desechos de asfalto con alquitrán;T;NE-14;A3200;B2
+Desechos de carácter explosivo;R;NE-15;Y15;B2
+Desechos de catalizadores con metales pesados;T;NE-16;Y18;B2
+Desechos de baños de aceite en tratamiento térmico;T,I;NE-17;Y17;B2
+Desechos de soluciones ácidas pH<2;C;NE-18;Y34;B2
+Desechos de soluciones alcalinas pH>12.5;C;NE-19;Y35;B2
+Desechos metálicos con metales pesados;T;NE-20;Y25-Y31/A1010;B2
+Desechos que contienen mercurio;T;NE-21;Y29;B2
+Desechos con dioxinas y furanos;T;NE-22;A4110;B2
+Desechos químicos de laboratorio;T;NE-23;Y18;B2
+Lodos o sólidos de tratamiento de aguas con metales pesados;T;NE-24;Y18;B2
+Desechos con PCB, PCT, PCN o PBB ≥50 mg/kg;T;NE-25;Y10;B2
+Emulsiones bituminosas;T;NE-26;Y9;B2
+Envases contaminados con materiales peligrosos;T;NE-27;A4130;B2
+Envases vacíos de agroquímicos sin triple lavado;T;NE-28;A4030;B2
+Envases de materiales tóxicos sin tratamiento;T;NE-29;A4130;B2
+EPP contaminado con materiales peligrosos;T;NE-30;Y18;B2
+Escombros contaminados con materiales peligrosos;T;NE-31;Y18;B2
+Filtros usados de aceite mineral;T;NE-32;Y8;B2
+Gases comprimidos o refrigerantes en desuso;T;NE-33;A4140;B2
+Aceites, grasas y ceras usadas;T,I;NE-34;A4140;B2
+Hidrocarburos contaminados;T,I;NE-35;Y9;B2
+Lodos de aceite;T;NE-36;Y8;B2
+Lodos de aguas residuales domésticas con peligrosos;T;NE-37;Y18;B2
+Lodos de tanques de hidrocarburos;T,I;NE-38;Y9;B2
+Lodos de lavado de gases con peligrosos;T;NE-39;Y18;B2
+Luminarias y fluorescentes con mercurio;T;NE-40;A1180;B2
+Material filtrante o carbón activado contaminado;T;NE-41;Y18;B2
+Material adsorbente con hidrocarburos;T;NE-42;Y18;B2
+Material adsorbente con químicos peligrosos;T;NE-43;Y18;B2
+Material de embalaje contaminado;T;NE-44;Y18;B2
+Mezclas oleosas hidrocarburos-agua;T;NE-45;Y9;B2
+Partes de equipos eléctricos/electrónicos contaminados;T;NE-46;A1180;B2
+Productos farmacéuticos caducados (no farmacéuticas);T;NE-47;Y2;B2
+Productos químicos caducados;T,I,C,R;NE-48;A4140;B2
+Residuos de tintas, pinturas, resinas peligrosas;T,I;NE-49;Y12;B2
+Sedimentos de recuperación de solventes;T,I;NE-50;Y6;B2
+Solventes orgánicos gastados;T,I;NE-51;Y6;B2
+Suelos contaminados;T;NE-52;Y18;B2
+Cartuchos de impresión usados;T;NE-53;Y12;B2
+Sustancias químicas no identificadas;T,I,C,R;NE-54;Y14;B2
+Transformadores con PCB;T;NE-55;Y10;B2
+Desechos con material radioactivo;-;NE-56;-;B2
+Envases vacíos de agroquímicos con triple lavado;;ES-01;;C
+Envases/contenedores vacíos de químicos tóxicos luego del tratamiento;;ES-02;;C
+Plásticos de invernadero;;ES-03;;C
+Neumáticos usados o partes de los mismos;;ES-04;;C
+Fundas biflex, corbatines y protectores usados;;ES-05;;C
+Equipos eléctricos y electrónicos en desuso que no han sido desensamblados, separados sus componentes o elementos constitutivos;;ES-06;;C
+Aceites vegetales usados generados en procesos de fritura de alimentos;;ES-07;;C
+Escorias de acería cuyos componentes tóxicos se encuentren bajo los valores establecidos en las normas técnicas correspondientes;;ES-08;;C

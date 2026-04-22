@@ -233,15 +233,15 @@ export default function PlanDetailPage() {
             : ev
         )
       );
-      toast.success("ValidaciÃ³n actualizada");
+      toast.success("Validación actualizada");
     } else {
       const data = await res.json().catch(() => ({}));
-      toast.error(data.error || "Error al actualizar validaciÃ³n");
+      toast.error(data.error || "Error al actualizar validación");
     }
   }
 
   async function handleDeleteEvidence(evidenceId: string) {
-    if (!confirm("Â¿Eliminar esta evidencia?")) return;
+    if (!confirm("¿Eliminar esta evidencia?")) return;
     const res = await fetch(`/pma/api/evidences?id=${evidenceId}`, {
       method: "DELETE",
     });
@@ -371,7 +371,7 @@ export default function PlanDetailPage() {
       }));
 
     if (toSend.length === 0) {
-      toast.error("No hay filas vÃ¡lidas para cargar");
+      toast.error("No hay filas válidas para cargar");
       return;
     }
 
@@ -384,9 +384,9 @@ export default function PlanDetailPage() {
       });
       if (res.ok) {
         const data = await res.json();
-        toast.success(`${data.created} Ã­tems cargados correctamente`);
+        toast.success(`${data.created} ítems cargados correctamente`);
         if (data.failed?.length > 0) {
-          toast.warning(`${data.failed.length} Ã­tems fallaron al crear`);
+          toast.warning(`${data.failed.length} ítems fallaron al crear`);
         }
         setBulkOpen(false);
         setBulkRows([]);
@@ -394,10 +394,10 @@ export default function PlanDetailPage() {
         await loadItems();
       } else {
         const data = await res.json();
-        toast.error(data.error || "Error al cargar Ã­tems");
+        toast.error(data.error || "Error al cargar ítems");
       }
     } catch {
-      toast.error("Error al cargar Ã­tems");
+      toast.error("Error al cargar ítems");
     } finally {
       setBulkUploading(false);
     }
@@ -411,7 +411,7 @@ export default function PlanDetailPage() {
       body: JSON.stringify({ userId, category }),
     });
     if (res.ok) {
-      toast.success("Reportero asignado al Ã­tem");
+      toast.success("Reportero asignado al ítem");
       setPendingAssign(null);
       const updated = await fetch(`/pma/api/plans/${id}/items`);
       if (updated.ok) {
@@ -432,7 +432,7 @@ export default function PlanDetailPage() {
       body: JSON.stringify({ userId }),
     });
     if (res.ok) {
-      toast.success("Reportero desasignado del Ã­tem");
+      toast.success("Reportero desasignado del ítem");
       const updated = await fetch(`/pma/api/plans/${id}/items`);
       if (updated.ok) {
         const items = await updated.json();
@@ -542,17 +542,17 @@ export default function PlanDetailPage() {
   }
 
   async function handleDeleteItem(itemId: string) {
-    if (!confirm("Â¿Eliminar este Ã­tem?")) return;
+    if (!confirm("¿Eliminar este ítem?")) return;
 
     const res = await fetch(`/pma/api/plans/${id}/items/${itemId}`, {
       method: "DELETE",
     });
 
     if (res.ok) {
-      toast.success("Ãtem eliminado");
+      toast.success("Ítem eliminado");
       loadItems();
     } else {
-      toast.error("Error al eliminar Ã­tem");
+      toast.error("Error al eliminar ítem");
     }
   }
 
@@ -569,10 +569,10 @@ export default function PlanDetailPage() {
       setPlanItems((prev) =>
         prev.map((pi) => (pi.id === obsItem.id ? { ...pi, observation: obsText } : pi))
       );
-      toast.success("ObservaciÃ³n guardada");
+      toast.success("Observación guardada");
       setObsItem(null);
     } else {
-      toast.error("Error al guardar observaciÃ³n");
+      toast.error("Error al guardar observación");
     }
   }
 
@@ -650,7 +650,7 @@ export default function PlanDetailPage() {
           )}
         </div>
         <p className="text-muted-foreground mt-1">
-          {plan.description || "Sin descripciÃ³n"}
+          {plan.description || "Sin descripción"}
         </p>
         <p className="text-xs text-muted-foreground mt-2">
           Creado el {new Date(plan.createdAt).toLocaleDateString()}
@@ -708,7 +708,7 @@ export default function PlanDetailPage() {
       <Card>
         <CardHeader className="flex flex-row items-center justify-between">
           <CardTitle className="text-base">
-            Ãtems del Plan ({visibleItems.length})
+            Ítems del Plan ({visibleItems.length})
           </CardTitle>
           {isAdmin && (
             <div className="flex gap-2">
@@ -760,16 +760,16 @@ export default function PlanDetailPage() {
               >
               <DialogTrigger render={<Button size="sm" />}>
                 <Plus className="w-4 h-4 mr-2" />
-                Agregar Ãtem
+                Agregar Ítem
               </DialogTrigger>
               <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
                 <DialogHeader>
-                  <DialogTitle>{editingItem ? "Editar Ãtem" : "Agregar Ãtem al Plan"}</DialogTitle>
+                  <DialogTitle>{editingItem ? "Editar Ítem" : "Agregar Ítem al Plan"}</DialogTitle>
                 </DialogHeader>
                 <form onSubmit={handleAddItem} className="space-y-4 mt-4">
                   <div className="grid grid-cols-2 gap-4">
                     <div className="space-y-2">
-                      <Label htmlFor="item">Ãtem</Label>
+                      <Label htmlFor="item">Ítem</Label>
                       <Input
                         id="item"
                         value={itemForm.item}
@@ -801,7 +801,7 @@ export default function PlanDetailPage() {
                       </select>
                     </div>
                     <div className="space-y-2">
-                      <Label htmlFor="direccion">DirecciÃ³n</Label>
+                      <Label htmlFor="direccion">Dirección</Label>
                       <Input
                         id="direccion"
                         value={itemForm.direccion}
@@ -916,7 +916,7 @@ export default function PlanDetailPage() {
 
                   <div className="space-y-2">
                     <Label htmlFor="verification_method">
-                      MÃ©todo de VerificaciÃ³n
+                      Método de Verificación
                     </Label>
                     <Input
                       id="verification_method"
@@ -1003,7 +1003,7 @@ export default function PlanDetailPage() {
                   </div>
 
                   <Button type="submit" className="w-full" disabled={savingItem}>
-                    {savingItem ? "Guardando..." : editingItem ? "Guardar cambios" : "Agregar Ãtem"}
+                    {savingItem ? "Guardando..." : editingItem ? "Guardar cambios" : "Agregar Ítem"}
                   </Button>
                 </form>
               </DialogContent>
@@ -1014,26 +1014,26 @@ export default function PlanDetailPage() {
         <CardContent>
           {visibleItems.length === 0 ? (
             <p className="text-sm text-muted-foreground text-center py-8">
-              Sin Ã­tems aÃºn.{" "}
-              {isAdmin && "Usa el botÃ³n \"Agregar Ãtem\" para comenzar."}
+              Sin ítems aún.{" "}
+              {isAdmin && "Usa el botón \"Agregar Ítem\" para comenzar."}
             </p>
           ) : (
             <div className="overflow-x-auto">
               <Table>
                 <TableHeader>
                   <TableRow>
-                    <TableHead>Ãtem</TableHead>
+                    <TableHead>Ítem</TableHead>
                     <TableHead>Subplan</TableHead>
-                    <TableHead>DirecciÃ³n</TableHead>
+                    <TableHead>Dirección</TableHead>
                     <TableHead>Actividad Ambiental</TableHead>
                     <TableHead>Impacto Identificado</TableHead>
                     <TableHead>Medida Propuesta</TableHead>
                     <TableHead>Indicador</TableHead>
-                    <TableHead>MÃ©todo VerificaciÃ³n</TableHead>
+                    <TableHead>Método Verificación</TableHead>
                     <TableHead>Periodicidad</TableHead>
                     <TableHead>Presupuesto</TableHead>
                     <TableHead>Reporteros</TableHead>
-                    <TableHead>ObservaciÃ³n</TableHead>
+                    <TableHead>Observación</TableHead>
                     <TableHead className="w-[60px]"></TableHead>
                     {isAdmin && <TableHead className="w-[60px]"></TableHead>}
                   </TableRow>
@@ -1103,7 +1103,7 @@ export default function PlanDetailPage() {
                           </span>
                         ) : (
                           <span className="text-sm text-muted-foreground/50 italic hover:text-muted-foreground transition-colors">
-                            Sin observaciÃ³n
+                            Sin observación
                           </span>
                         )}
                       </TableCell>
@@ -1113,7 +1113,7 @@ export default function PlanDetailPage() {
                             <Button
                               variant="ghost"
                               size="sm"
-                              title="Editar Ã­tem"
+                              title="Editar ítem"
                               onClick={() => {
                                 setEditingItem(pi);
                                 setItemForm({
@@ -1163,7 +1163,7 @@ export default function PlanDetailPage() {
       {visibleItems.length > 0 && (() => {
         const p = plan!;
 
-        // Build evidence status lookup: "planItemId-YYYY-MM" â†’ validationStatus
+        // // Build evidence status lookup: "planItemId-YYYY-MM" -> validationStatus
         const evidenceMonthStatus = new Map<string, EvidenceValidationStatus>();
         const statusPriority: Record<EvidenceValidationStatus, number> = { valid: 3, invalid: 2, pending: 1 };
         visibleEvidences
@@ -1177,20 +1177,20 @@ export default function PlanDetailPage() {
             }
           });
 
-        // Build compliance lookup: "planItemId::periodKey" â†’ status
+        // // Build compliance lookup: "planItemId::periodKey" -> status
         const complianceMap = new Map(
           complianceRecords.map((r) => [`${r.planItemId}::${r.periodKey}`, r.status])
         );
 
         const statusStyle: Record<"none" | EvidenceValidationStatus, { bg: string; color: string; border: string; label: string }> = {
           none:    { bg: "#e0f2fe", color: "#0369a1", border: "#7dd3fc", label: "" },
-          pending: { bg: "#fef9c3", color: "#854d0e", border: "#fde047", label: "â³" },
-          invalid: { bg: "#fee2e2", color: "#991b1b", border: "#fca5a5", label: "âœ•" },
-          valid:   { bg: "#dcfce7", color: "#166534", border: "#86efac", label: "âœ“" },
+          pending: { bg: "#fef9c3", color: "#854d0e", border: "#fde047", label: "⏳" },
+          invalid: { bg: "#fee2e2", color: "#991b1b", border: "#fca5a5", label: "✕" },
+          valid:   { bg: "#dcfce7", color: "#166534", border: "#86efac", label: "✓“" },
         };
 
         const periodicityInterval: Record<string, number> = {
-          "Al finalizar la etapa de operaciÃ³n": 9999,
+          "Al finalizar la etapa de operación": 9999,
           "En caso de suceder": 1,
           Diaria: 1,
           Semanal: 1,
@@ -1202,11 +1202,11 @@ export default function PlanDetailPage() {
           Semestral: 6,
           Anual: 12,
           Permanente: 1,
-          "Ãšnica vez": 9999,
+          "Única vez": 9999,
         };
 
         const periodicityLabel: Record<string, string> = {
-          "Al finalizar la etapa de operaciÃ³n": "Fin",
+          "Al finalizar la etapa de operación": "Fin",
           "En caso de suceder": "CS",
           Diaria: "D",
           Semanal: "Sem",
@@ -1218,7 +1218,7 @@ export default function PlanDetailPage() {
           Semestral: "S",
           Anual: "A",
           Permanente: "P",
-          "Ãšnica vez": "1x",
+          "Única vez": "1x",
         };
 
         const today = new Date();
@@ -1290,7 +1290,7 @@ export default function PlanDetailPage() {
                   <thead>
                     <tr>
                       <th className="sticky left-0 z-10 bg-background border border-border px-3 py-2 min-w-[200px] text-left font-medium text-muted-foreground">
-                        Ãtem
+                        Ítem
                       </th>
                       {yearHeaders.map(({ year, count }) => (
                         <th
@@ -1350,17 +1350,17 @@ export default function PlanDetailPage() {
                               planStartDate.getFullYear() === m.getFullYear() &&
                               planStartDate.getMonth() === m.getMonth();
                             const isToday = m.getTime() === todayMonth.getTime();
-                            const periodicLabel = periodicityLabel[pi.periodicity] ?? "â€¢";
+                            const periodicLabel = periodicityLabel[pi.periodicity] ?? ""¢";
                             const monthKey = `${m.getFullYear()}-${String(m.getMonth() + 1).padStart(2, "0")}`;
                             const evStatus = evidenceMonthStatus.get(`${pi.id}-${monthKey}`) ?? "none";
                             const style = statusStyle[evStatus];
 
                             const titleText =
-                              evStatus === "valid"   ? `VÃ¡lido â€” ${m.toLocaleString("es", { month: "long", year: "numeric" })}` :
-                              evStatus === "invalid" ? `Rechazado â€” ${m.toLocaleString("es", { month: "long", year: "numeric" })}` :
-                              evStatus === "pending" ? `Pendiente de aprobaciÃ³n â€” ${m.toLocaleString("es", { month: "long", year: "numeric" })}` :
-                              isStart ? `Subir evidencia de inicio â€” ${planStartDate.toLocaleDateString("es")}` :
-                              `Subir evidencia â€” ${m.toLocaleString("es", { month: "long", year: "numeric" })}`;
+                              evStatus === "valid"   ? `Válido "” ${m.toLocaleString("es", { month: "long", year: "numeric" })}` :
+                              evStatus === "invalid" ? `Rechazado "” ${m.toLocaleString("es", { month: "long", year: "numeric" })}` :
+                              evStatus === "pending" ? `Pendiente de aprobación "” ${m.toLocaleString("es", { month: "long", year: "numeric" })}` :
+                              isStart ? `Subir evidencia de inicio "” ${planStartDate.toLocaleDateString("es")}` :
+                              `Subir evidencia "” ${m.toLocaleString("es", { month: "long", year: "numeric" })}`;
 
                             return (
                               <td
@@ -1433,7 +1433,7 @@ export default function PlanDetailPage() {
                                     }}
                                     title={vc.periodLabel}
                                   >
-                                    {compStatus ?? "â€”"}
+                                    {compStatus ?? ""”"}
                                   </DropdownMenuTrigger>
                                   <DropdownMenuContent align="center">
                                     <DropdownMenuItem onClick={() => handleComplianceChange(pi.id, vc.periodKey, "C")}>
@@ -1462,7 +1462,7 @@ export default function PlanDetailPage() {
                                   }}
                                   title={vc.periodLabel}
                                 >
-                                  {compStatus ?? "â€”"}
+                                  {compStatus ?? ""”"}
                                 </div>
                               )}
                             </td>
@@ -1480,7 +1480,7 @@ export default function PlanDetailPage() {
                 </span>
                 <span className="flex items-center gap-1.5">
                   <span className="inline-block w-10 h-4 rounded border" style={{ backgroundColor: "#fef9c3", borderColor: "#fde047" }} />
-                  Pendiente aprobaciÃ³n
+                  Pendiente aprobación
                 </span>
                 <span className="flex items-center gap-1.5">
                   <span className="inline-block w-10 h-4 rounded border" style={{ backgroundColor: "#fee2e2", borderColor: "#fca5a5" }} />
@@ -1488,7 +1488,7 @@ export default function PlanDetailPage() {
                 </span>
                 <span className="flex items-center gap-1.5">
                   <span className="inline-block w-10 h-4 rounded border" style={{ backgroundColor: "#dcfce7", borderColor: "#86efac" }} />
-                  VÃ¡lido
+                  Válido
                 </span>
                 <span className="flex items-center gap-1.5">
                   <span className="inline-block w-10 h-4 rounded border-2" style={{ backgroundColor: "#f8fafc", borderColor: "#e2e8f0" }} />
@@ -1496,7 +1496,7 @@ export default function PlanDetailPage() {
                 </span>
                 <span className="ml-auto flex gap-3">
                   {([
-                    "Al finalizar la etapa de operaciÃ³n",
+                    "Al finalizar la etapa de operación",
                     "Anual",
                     "Bianual",
                     "Diaria",
@@ -1507,7 +1507,7 @@ export default function PlanDetailPage() {
                     "Semestral",
                     "Trianual",
                     "Trimestral",
-                    "Ãšnica vez",
+                    "Única vez",
                     "Bimensual",
                   ] as const).map((p) => (
                     <span key={p}><span className="font-semibold">{periodicityLabel[p]}</span> = {p}</span>
@@ -1582,14 +1582,14 @@ export default function PlanDetailPage() {
             ) : (
               allViewers.length > 0 && (
                 <p className="text-sm text-muted-foreground text-center py-3">
-                  Todos los visualizadores ya estÃ¡n asignados.
+                  Todos los visualizadores ya están asignados.
                 </p>
               )
             )}
 
             {allViewers.length === 0 && (
               <p className="text-sm text-muted-foreground text-center py-3">
-                No hay visualizadores creados aÃºn. Crea uno en la secciÃ³n de Usuarios.
+                No hay visualizadores creados aún. Crea uno en la sección de Usuarios.
               </p>
             )}
           </div>
@@ -1600,7 +1600,7 @@ export default function PlanDetailPage() {
       <Dialog open={assignItemOpen} onOpenChange={(open) => { setAssignItemOpen(open); if (!open) setPendingAssign(null); }}>
         <DialogContent>
           <DialogHeader>
-            <DialogTitle>Reporteros â€” {selectedItem?.item}</DialogTitle>
+            <DialogTitle>Reporteros "” {selectedItem?.item}</DialogTitle>
           </DialogHeader>
           <div className="space-y-4 mt-2">
             {/* Assigned */}
@@ -1665,7 +1665,7 @@ export default function PlanDetailPage() {
               <div>
                 <p className="text-xs font-medium text-muted-foreground mb-2">Agregar reportero</p>
                 {allReporters.filter((r) => !(selectedItem?.assignedUsers ?? []).some((a) => a.userId === r.id)).length === 0 ? (
-                  <p className="text-sm text-muted-foreground text-center py-3">Todos los reporteros ya estÃ¡n asignados.</p>
+                  <p className="text-sm text-muted-foreground text-center py-3">Todos los reporteros ya están asignados.</p>
                 ) : (
                   <div className="space-y-1">
                     {allReporters
@@ -1713,15 +1713,15 @@ export default function PlanDetailPage() {
           )}
           <form onSubmit={handleCalUploadSubmit} className="space-y-4">
             <div className="space-y-2">
-              <Label htmlFor="cal-file">Archivo (mÃ¡x 10MB)</Label>
+              <Label htmlFor="cal-file">Archivo (máx 10MB)</Label>
               <Input id="cal-file" name="file" type="file" required />
             </div>
             <div className="space-y-2">
-              <Label htmlFor="cal-desc">DescripciÃ³n</Label>
+              <Label htmlFor="cal-desc">Descripción</Label>
               <Input
                 id="cal-desc"
                 name="description"
-                placeholder="Breve descripciÃ³n de la evidencia"
+                placeholder="Breve descripción de la evidencia"
                 required
               />
             </div>
@@ -1742,11 +1742,11 @@ export default function PlanDetailPage() {
       <Dialog open={!!obsItem} onOpenChange={(open) => { if (!open) setObsItem(null); }}>
         <DialogContent className="max-w-lg">
           <DialogHeader>
-            <DialogTitle>ObservaciÃ³n â€” {obsItem?.item}</DialogTitle>
+            <DialogTitle>Observación "” {obsItem?.item}</DialogTitle>
           </DialogHeader>
           <textarea
             className="w-full min-h-[140px] rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring resize-y"
-            placeholder="Escribe una observaciÃ³n..."
+            placeholder="Escribe una observación..."
             value={obsText}
             onChange={(e) => setObsText(e.target.value)}
           />
@@ -1771,7 +1771,7 @@ export default function PlanDetailPage() {
         <CardContent>
           {visibleEvidences.length === 0 ? (
             <p className="text-sm text-muted-foreground text-center py-8">
-              Sin evidencias subidas aÃºn.
+              Sin evidencias subidas aún.
             </p>
           ) : (
             <Table>
@@ -1779,10 +1779,10 @@ export default function PlanDetailPage() {
                 <TableRow>
                   <TableHead className="w-[48px]"></TableHead>
                   <TableHead>Item</TableHead>
-                  <TableHead>Mes-AÃ±o</TableHead>
+                  <TableHead>Mes-AÍ±o</TableHead>
                   <TableHead>Archivo</TableHead>
                   <TableHead>Subido por</TableHead>
-                  <TableHead>DescripciÃ³n</TableHead>
+                  <TableHead>Descripción</TableHead>
                   <TableHead>Fecha</TableHead>
                   <TableHead className="w-[80px]">Acciones</TableHead>
                 </TableRow>
@@ -1814,7 +1814,7 @@ export default function PlanDetailPage() {
                           </DropdownMenuTrigger>
                           <DropdownMenuContent align="start">
                             <DropdownMenuItem onClick={() => handleValidationChange(ev.id, "valid")}>
-                              <CheckCircle2 className="w-4 h-4 text-green-500 mr-2" /> VÃ¡lido
+                              <CheckCircle2 className="w-4 h-4 text-green-500 mr-2" /> Válido
                             </DropdownMenuItem>
                             <DropdownMenuItem onClick={() => handleValidationChange(ev.id, "pending")}>
                               <AlertTriangle className="w-4 h-4 text-yellow-500 mr-2" /> Pendiente
@@ -1829,7 +1829,7 @@ export default function PlanDetailPage() {
                                 void handleValidationChange(ev.id, "invalid", reason.trim());
                               }}
                             >
-                              <XCircle className="w-4 h-4 text-red-500 mr-2" /> No vÃ¡lido
+                              <XCircle className="w-4 h-4 text-red-500 mr-2" /> No válido
                             </DropdownMenuItem>
                           </DropdownMenuContent>
                         </DropdownMenu>
@@ -1895,7 +1895,7 @@ export default function PlanDetailPage() {
         </CardContent>
       </Card>
 
-      {/* ReporterÃ­a */}
+      {/* Reportería */}
       {visibleItems.length > 0 && (() => {
         const p = plan!;
         function getBlockSize(report_per: string | undefined): number {
@@ -1930,7 +1930,7 @@ export default function PlanDetailPage() {
             const key = `${blockStart.getFullYear()}-${String(blockStart.getMonth() + 1).padStart(2, "0")}`;
             const startLabel = blockStart.toLocaleString("es", { month: "short", year: "numeric" });
             const endLabel = blockEndMonth.toLocaleString("es", { month: "short", year: "numeric" });
-            periods.push({ key, label: `${startLabel} â€“ ${endLabel}` });
+            periods.push({ key, label: `${startLabel} "“ ${endLabel}` });
             blockIndex++;
           }
 
@@ -1940,14 +1940,14 @@ export default function PlanDetailPage() {
         return (
           <Card>
             <CardHeader>
-              <CardTitle className="text-base">ReporterÃ­a</CardTitle>
+              <CardTitle className="text-base">Reportería</CardTitle>
             </CardHeader>
             <CardContent>
               <div className="overflow-x-auto">
                 <Table>
                   <TableHeader>
                     <TableRow>
-                      <TableHead>Ãtem</TableHead>
+                      <TableHead>Ítem</TableHead>
                       <TableHead>Anexos</TableHead>
                     </TableRow>
                   </TableHeader>
@@ -1961,7 +1961,7 @@ export default function PlanDetailPage() {
                           </TableCell>
                           <TableCell>
                             {periods.length === 0 ? (
-                              <span className="text-xs text-muted-foreground">Sin perÃ­odos disponibles</span>
+                              <span className="text-xs text-muted-foreground">Sin períodos disponibles</span>
                             ) : (
                               <div className="flex items-center gap-2">
                                 <select
@@ -1974,7 +1974,7 @@ export default function PlanDetailPage() {
                                     }))
                                   }
                                 >
-                                  <option value="" disabled>Seleccionar perÃ­odo...</option>
+                                  <option value="" disabled>Seleccionar período...</option>
                                   {periods.map((p) => (
                                     <option key={p.key} value={p.key}>
                                       {p.label}
@@ -1989,7 +1989,7 @@ export default function PlanDetailPage() {
                                     const key = selectedReportPeriods[pi.id];
                                     if (key) handleDownloadPeriod(pi, key);
                                   }}
-                                  title="Descargar evidencias del perÃ­odo"
+                                  title="Descargar evidencias del período"
                                 >
                                   {downloadingPeriod === `${pi.id}-${selectedReportPeriods[pi.id]}` ? (
                                     <span className="flex items-center gap-1 text-xs">
@@ -2032,7 +2032,7 @@ export default function PlanDetailPage() {
       >
         <DialogContent className="w-[80vw] sm:w-[80vw] max-w-[80vw] sm:max-w-[80vw] h-[80vh] max-h-[80vh] overflow-hidden flex flex-col">
           <DialogHeader>
-            <DialogTitle>Carga masiva de Ã­tems</DialogTitle>
+            <DialogTitle>Carga masiva de ítems</DialogTitle>
           </DialogHeader>
           {bulkParseError ? (
             <div className="p-4 border border-destructive/50 bg-destructive/10 rounded-md text-sm">
@@ -2076,7 +2076,7 @@ export default function PlanDetailPage() {
                       Archivo: <span className="font-mono">{bulkFileName}</span>
                     </span>
                     <Badge className="bg-green-600 hover:bg-green-600">
-                      {validCount} vÃ¡lidas
+                      {validCount} válidas
                     </Badge>
                     {warnCount > 0 && (
                       <Badge className="bg-amber-500 hover:bg-amber-500">
@@ -2098,14 +2098,14 @@ export default function PlanDetailPage() {
                       <TableHeader>
                         <TableRow>
                           <TableHead className="w-12">#</TableHead>
-                          <TableHead>Ãtem</TableHead>
+                          <TableHead>Ítem</TableHead>
                           <TableHead>Subplan</TableHead>
-                          <TableHead>DirecciÃ³n</TableHead>
+                          <TableHead>Dirección</TableHead>
                           <TableHead>Actividad</TableHead>
                           <TableHead>Impacto</TableHead>
                           <TableHead>Medida</TableHead>
                           <TableHead>Indicador</TableHead>
-                          <TableHead>VerificaciÃ³n</TableHead>
+                          <TableHead>Verificación</TableHead>
                           <TableHead>Periodicidad</TableHead>
                           <TableHead className="text-right">
                             Presupuesto
@@ -2134,21 +2134,21 @@ export default function PlanDetailPage() {
                               <TableCell className="max-w-[140px] truncate" title={row.item}>
                                 {row.item || (
                                   <span className="text-muted-foreground italic">
-                                    vacÃ­o
+                                    vacío
                                   </span>
                                 )}
                               </TableCell>
                               <TableCell className="max-w-[160px] truncate" title={row.subplan}>
                                 {row.subplan || (
                                   <span className="text-muted-foreground italic">
-                                    â€”
+                                    "”
                                   </span>
                                 )}
                               </TableCell>
                               <TableCell className="max-w-[160px] truncate" title={row.direccion}>
                                 {row.direccion || (
                                   <span className="text-muted-foreground italic">
-                                    â€”
+                                    "”
                                   </span>
                                 )}
                               </TableCell>
@@ -2170,7 +2170,7 @@ export default function PlanDetailPage() {
                               <TableCell>
                                 {row.periodicity || (
                                   <span className="text-muted-foreground italic">
-                                    â€”
+                                    "”
                                   </span>
                                 )}
                               </TableCell>
@@ -2215,13 +2215,13 @@ export default function PlanDetailPage() {
                                           })
                                         }
                                       >
-                                        {approvedWarningRows.has(row.rowNumber) ? "Quitar aprobaciÃ³n" : "Aprobar"}
+                                        {approvedWarningRows.has(row.rowNumber) ? "Quitar aprobación" : "Aprobar"}
                                       </button>
                                     </div>
                                   ) : (
                                     <Badge className="bg-green-600 hover:bg-green-600 w-fit">
                                       <CheckCircle2 className="w-3 h-3 mr-1" />
-                                      VÃ¡lida
+                                      Válida
                                     </Badge>
                                   )}
                                   {row.errors.map((e, i) => (
@@ -2242,7 +2242,7 @@ export default function PlanDetailPage() {
                                   ))}
                                   {duplicate && (
                                     <span className="text-xs text-amber-600">
-                                      Ya existe un Ã­tem con este cÃ³digo en el plan
+                                      Ya existe un ítem con este código en el plan
                                     </span>
                                   )}
                                 </div>
@@ -2268,7 +2268,7 @@ export default function PlanDetailPage() {
                     >
                       {bulkUploading
                         ? "Cargando..."
-                        : `Crear ${toCreateCount} Ã­tem${toCreateCount === 1 ? "" : "s"}`}
+                        : `Crear ${toCreateCount} ítem${toCreateCount === 1 ? "" : "s"}`}
                     </Button>
                   </div>
                 </div>
@@ -2289,17 +2289,17 @@ export default function PlanDetailPage() {
           </DialogHeader>
           <div className="space-y-4 py-2">
             <p className="text-sm text-muted-foreground">
-              Esta acciÃ³n es <strong>irreversible</strong>. Se eliminarÃ¡ todo lo relacionado con este plan:
+              Esta acción es <strong>irreversible</strong>. Se eliminará todo lo relacionado con este plan:
             </p>
             <ul className="text-sm space-y-1 list-disc list-inside text-muted-foreground">
-              <li>Todos los Ã­tems del plan</li>
+              <li>Todos los ítems del plan</li>
               <li>Todas las evidencias y archivos en Google Drive</li>
-              <li>Registros de cumplimiento por perÃ­odo</li>
-              <li>Todas las asignaciones de usuarios a los Ã­tems</li>
+              <li>Registros de cumplimiento por período</li>
+              <li>Todas las asignaciones de usuarios a los ítems</li>
               <li>Notificaciones relacionadas al plan</li>
             </ul>
             <p className="text-sm font-medium">
-              Los usuarios no serÃ¡n eliminados.
+              Los usuarios no serán eliminados.
             </p>
           </div>
           <div className="flex justify-end gap-2 pt-2">
@@ -2315,7 +2315,7 @@ export default function PlanDetailPage() {
               onClick={handleDeletePlan}
               disabled={deletingPlan}
             >
-              {deletingPlan ? "Eliminando..." : "SÃ­, eliminar plan"}
+              {deletingPlan ? "Eliminando..." : "Sí, eliminar plan"}
             </Button>
           </div>
         </DialogContent>

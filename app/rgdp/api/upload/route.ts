@@ -46,14 +46,13 @@ export async function POST(req: NextRequest) {
     const bytes = await file.arrayBuffer();
     const buffer = Buffer.from(bytes);
 
-    // â”€â”€ Resolve Drive folder â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
     const adminDoc = await adminDb.collection("rgdp_admins").doc(session.user.adminId).get();
     const rootFolderId = adminDoc.exists
       ? (adminDoc.data()!.driveRootFolderId as string | undefined)
       : undefined;
 
     if (!rootFolderId) {
-      return errorResponse("Google Drive no estÃ¡ configurado", 500);
+      return errorResponse("Google Drive no está configurado", 500);
     }
 
     const drive = await getAuthenticatedDrive(session.user.adminId);
@@ -68,7 +67,7 @@ export async function POST(req: NextRequest) {
     let targetFolderId: string = planFolderId;
     let planItemName: string | undefined;
 
-    // If uploading for a specific item, resolve: period subfolder â†’ item folder
+    // If uploading for a specific item, resolve: period subfolder →�� item folder
     if (planItemId) {
       const itemDoc = await adminDb.collection("rgdp_projectItems").doc(planItemId).get();
       if (itemDoc.exists) {
@@ -135,8 +134,8 @@ export async function POST(req: NextRequest) {
               type: "evidence_submitted" as const,
               title: "Nueva evidencia subida",
               message: planItemName
-                ? `${uploaderName} subiÃ³ "${file.name}" en ${planItemName}.`
-                : `${uploaderName} subiÃ³ "${file.name}".`,
+                ? `${uploaderName} subió "${file.name}" en ${planItemName}.`
+                : `${uploaderName} subió "${file.name}".`,
               planId,
               ...(planItemId ? { planItemId } : {}),
               evidenceId: evidence.id,

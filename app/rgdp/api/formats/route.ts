@@ -15,7 +15,7 @@ const FUNCTIONALITY_LABELS: Record<FormatFunctionality, string> = {
   descargar_anexos: "Descargar Anexos",
 };
 
-// GET /api/formats â€” list formats for the current admin
+// GET /api/formats "” list formats for the current admin
 export async function GET() {
   const session = await getAuthSession();
   if (!session?.user) return unauthorizedResponse();
@@ -40,7 +40,7 @@ export async function GET() {
   }
 }
 
-// POST /api/formats â€” upload a format file for a functionality
+// POST /api/formats "” upload a format file for a functionality
 export async function POST(req: NextRequest) {
   const session = await getAuthSession();
   if (!session?.user) return unauthorizedResponse();
