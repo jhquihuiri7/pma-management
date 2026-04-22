@@ -1,4 +1,4 @@
-﻿import { NextRequest, NextResponse } from "next/server";
+import { NextRequest, NextResponse } from "next/server";
 import {
   getAuthSession,
   unauthorizedResponse,
@@ -7,6 +7,8 @@ import {
 } from "@/lib/api-utils";
 import { getPlanById, isUserAssignedToPlan } from "@/services-rgdp/planService";
 import { createPlanItem, getPlanItems } from "@/services-rgdp/planItemService";
+import { ensureItemDriveFolder, ensurePlanDriveFolder } from "@/services-rgdp/driveService";
+import { adminDb } from "@/lib/firebase-admin";
 
 export async function GET(
   _req: NextRequest,
@@ -19,7 +21,6 @@ export async function GET(
   if (!plan) return errorResponse("Proyecto no encontrado", 404);
   if (plan.adminId !== session.user.adminId) return forbiddenResponse();
 
-  // VIEWER must be assigned to the plan
   if (session.user.role === "VIEWER") {
     const assigned = await isUserAssignedToPlan(session.user.id, params.id);
     if (!assigned) return forbiddenResponse();
@@ -89,9 +90,36 @@ export async function POST(
         report_per: plan.report_per || "6 meses",
       }
     );
+
+    try {
+      const planFolderId = await ensurePlanDriveFolder(
+        session.user.adminId,
+        plan.title,
+        subplan,
+        plan.driveFolderId
+      );
+
+      if (plan.driveFolderId !== planFolderId) {
+        await adminDb.collection("rgdp_projects").doc(params.id).update({ driveFolderId: planFolderId });
+      }
+
+      const itemFolderId = await ensureItemDriveFolder(
+        session.user.adminId,
+        item,
+        planFolderId,
+        newItem.driveFolderId
+      );
+
+      if (newItem.driveFolderId !== itemFolderId) {
+        await adminDb.collection("rgdp_projectItems").doc(newItem.id).update({ driveFolderId: itemFolderId });
+        newItem.driveFolderId = itemFolderId;
+      }
+    } catch (driveErr) {
+      console.error("Drive folder creation for item failed:", driveErr);
+    }
+
     return NextResponse.json(newItem, { status: 201 });
   } catch (error: unknown) {
     return errorResponse((error as Error).message);
   }
 }
-

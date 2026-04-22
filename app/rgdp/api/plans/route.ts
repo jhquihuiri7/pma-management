@@ -11,9 +11,10 @@ import {
   getPlansForReporter,
   getPlansForViewer,
 } from "@/services-rgdp/planService";
-import { createPlanDriveFolder } from "@/services-rgdp/driveService";
 import { Plan } from "@/types";
 import { RGDP_LOCATION_TREE } from "@/lib/rgdpProjectForm";
+
+const GALAPAGOS = "Gal\u00e1pagos";
 
 function isFilled(value: unknown): value is string {
   return typeof value === "string" && value.trim().length > 0;
@@ -69,18 +70,18 @@ export async function POST(req: NextRequest) {
     return errorResponse("Provincia, canton y parroquia son obligatorios");
   }
 
-  if (location.province !== "Galápagos") {
-    return errorResponse("La provincia debe ser Galápagos");
+  if (location.province !== GALAPAGOS) {
+    return errorResponse("La provincia debe ser Gal\u00e1pagos");
   }
 
-  const allowedCantons = Object.keys(RGDP_LOCATION_TREE["Galápagos"] ?? {});
+  const allowedCantons = Object.keys(RGDP_LOCATION_TREE[GALAPAGOS] ?? {});
   if (!allowedCantons.includes(location.canton)) {
-    return errorResponse("Cantón inválido para la provincia Galápagos");
+    return errorResponse("Cant\u00f3n inv\u00e1lido para la provincia Gal\u00e1pagos");
   }
 
-  const allowedParishes = RGDP_LOCATION_TREE["Galápagos"]?.[location.canton] ?? [];
+  const allowedParishes = RGDP_LOCATION_TREE[GALAPAGOS]?.[location.canton] ?? [];
   if (!allowedParishes.includes(location.parish)) {
-    return errorResponse("Parroquia inválida para el cantón seleccionado");
+    return errorResponse("Parroquia inv\u00e1lida para el cant\u00f3n seleccionado");
   }
 
   if (!ciiu?.principal?.code || !ciiu.principal.description) {
@@ -106,19 +107,12 @@ export async function POST(req: NextRequest) {
   }
 
   try {
-    let driveFolderId: string | undefined;
-    try {
-      driveFolderId = await createPlanDriveFolder(session.user.adminId, title);
-    } catch (driveErr) {
-      console.error("Drive folder creation failed:", driveErr);
-    }
-
     const plan = await createPlan(
       session.user.adminId,
       title,
       description,
       report_per as Plan["report_per"],
-      driveFolderId,
+      undefined,
       tipo,
       start_date,
       fase,

@@ -1,4 +1,4 @@
-﻿import { NextRequest, NextResponse } from "next/server";
+import { NextRequest, NextResponse } from "next/server";
 import {
   getAuthSession,
   unauthorizedResponse,
@@ -8,6 +8,8 @@ import {
 import { getPlanById } from "@/services-rgdp/planService";
 import { createPlanItem } from "@/services-rgdp/planItemService";
 import { PlanItem } from "@/types";
+import { ensureItemDriveFolder, ensurePlanDriveFolder } from "@/services-rgdp/driveService";
+import { adminDb } from "@/lib/firebase-admin";
 
 interface BulkItemInput {
   item: string;
@@ -44,6 +46,23 @@ export async function POST(
   const created: PlanItem[] = [];
   const failed: { index: number; error: string }[] = [];
 
+  let planFolderId = plan.driveFolderId;
+  try {
+    const subsystemName = items[0]?.subplan || "Sin proceso";
+    planFolderId = await ensurePlanDriveFolder(
+      session.user.adminId,
+      plan.title,
+      subsystemName,
+      plan.driveFolderId
+    );
+
+    if (plan.driveFolderId !== planFolderId) {
+      await adminDb.collection("rgdp_projects").doc(params.id).update({ driveFolderId: planFolderId });
+    }
+  } catch (driveErr) {
+    console.error("Drive folder creation for bulk plan failed:", driveErr);
+  }
+
   for (let i = 0; i < items.length; i++) {
     const input = items[i];
     try {
@@ -61,6 +80,25 @@ export async function POST(
         report_per: reportPer,
         ...(input.observation ? { observation: input.observation } : {}),
       });
+
+      if (planFolderId) {
+        try {
+          const itemFolderId = await ensureItemDriveFolder(
+            session.user.adminId,
+            input.item,
+            planFolderId,
+            newItem.driveFolderId
+          );
+
+          if (newItem.driveFolderId !== itemFolderId) {
+            await adminDb.collection("rgdp_projectItems").doc(newItem.id).update({ driveFolderId: itemFolderId });
+            newItem.driveFolderId = itemFolderId;
+          }
+        } catch (itemDriveErr) {
+          console.error(`Drive folder creation failed for bulk item index ${i}:`, itemDriveErr);
+        }
+      }
+
       created.push(newItem);
     } catch (err) {
       failed.push({ index: i, error: (err as Error).message });
@@ -73,4 +111,3 @@ export async function POST(
     failed,
   });
 }
-

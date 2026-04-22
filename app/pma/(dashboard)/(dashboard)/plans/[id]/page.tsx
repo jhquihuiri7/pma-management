@@ -1350,7 +1350,7 @@ export default function PlanDetailPage() {
                               planStartDate.getFullYear() === m.getFullYear() &&
                               planStartDate.getMonth() === m.getMonth();
                             const isToday = m.getTime() === todayMonth.getTime();
-                            const periodicLabel = periodicityLabel[pi.periodicity] ?? ""¢";
+                            const periodicLabel = periodicityLabel[pi.periodicity] ?? "";
                             const monthKey = `${m.getFullYear()}-${String(m.getMonth() + 1).padStart(2, "0")}`;
                             const evStatus = evidenceMonthStatus.get(`${pi.id}-${monthKey}`) ?? "none";
                             const style = statusStyle[evStatus];
@@ -1433,7 +1433,7 @@ export default function PlanDetailPage() {
                                     }}
                                     title={vc.periodLabel}
                                   >
-                                    {compStatus ?? ""”"}
+                                    {compStatus ?? ""}
                                   </DropdownMenuTrigger>
                                   <DropdownMenuContent align="center">
                                     <DropdownMenuItem onClick={() => handleComplianceChange(pi.id, vc.periodKey, "C")}>
@@ -1462,7 +1462,7 @@ export default function PlanDetailPage() {
                                   }}
                                   title={vc.periodLabel}
                                 >
-                                  {compStatus ?? ""”"}
+                                  {compStatus ?? ""}
                                 </div>
                               )}
                             </td>
@@ -1600,7 +1600,7 @@ export default function PlanDetailPage() {
       <Dialog open={assignItemOpen} onOpenChange={(open) => { setAssignItemOpen(open); if (!open) setPendingAssign(null); }}>
         <DialogContent>
           <DialogHeader>
-            <DialogTitle>Reporteros "” {selectedItem?.item}</DialogTitle>
+            <DialogTitle>Reporteros - {selectedItem?.item}</DialogTitle>
           </DialogHeader>
           <div className="space-y-4 mt-2">
             {/* Assigned */}
@@ -1742,7 +1742,7 @@ export default function PlanDetailPage() {
       <Dialog open={!!obsItem} onOpenChange={(open) => { if (!open) setObsItem(null); }}>
         <DialogContent className="max-w-lg">
           <DialogHeader>
-            <DialogTitle>Observación "” {obsItem?.item}</DialogTitle>
+            <DialogTitle>Observación - {obsItem?.item}</DialogTitle>
           </DialogHeader>
           <textarea
             className="w-full min-h-[140px] rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring resize-y"
@@ -2141,14 +2141,14 @@ export default function PlanDetailPage() {
                               <TableCell className="max-w-[160px] truncate" title={row.subplan}>
                                 {row.subplan || (
                                   <span className="text-muted-foreground italic">
-                                    "”
+                                    -
                                   </span>
                                 )}
                               </TableCell>
                               <TableCell className="max-w-[160px] truncate" title={row.direccion}>
                                 {row.direccion || (
                                   <span className="text-muted-foreground italic">
-                                    "”
+                                    -
                                   </span>
                                 )}
                               </TableCell>
@@ -2170,7 +2170,7 @@ export default function PlanDetailPage() {
                               <TableCell>
                                 {row.periodicity || (
                                   <span className="text-muted-foreground italic">
-                                    "”
+                                    -
                                   </span>
                                 )}
                               </TableCell>
@@ -2323,4 +2323,3 @@ export default function PlanDetailPage() {
     </div>
   );
 }
-

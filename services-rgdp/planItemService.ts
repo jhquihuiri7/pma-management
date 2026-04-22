@@ -3,7 +3,7 @@ import { ItemAssignment, ItemAssignmentCategory, PlanItem } from "@/types";
 
 export async function createPlanItem(
   planId: string,
-  data: Omit<PlanItem, "id" | "planId" | "createdAt" | "assignedUsers" | "driveFolderId">
+  data: Omit<PlanItem, "id" | "planId" | "createdAt" | "assignedUsers">
 ): Promise<PlanItem> {
   const ref = adminDb.collection("rgdp_projectItems").doc();
   const now = new Date().toISOString();

@@ -12,6 +12,7 @@ import { adminDb } from "@/lib/firebase-admin";
 import { PlanItem } from "@/types";
 import { createNotifications } from "@/services/notificationService";
 import { createPeriodHelpers } from "@/lib/planPeriods";
+import { ensureItemDriveFolder, ensurePlanDriveFolder } from "@/services/driveService";
 
 const MAX_FILE_SIZE = 10 * 1024 * 1024; // 10MB
 
@@ -46,53 +47,70 @@ export async function POST(req: NextRequest) {
     const bytes = await file.arrayBuffer();
     const buffer = Buffer.from(bytes);
 
-    // ── Resolve Drive folder ────────────────────────────────────────────────
-    const adminDoc = await adminDb.collection("pma_admins").doc(session.user.adminId).get();
-    const rootFolderId = adminDoc.exists
-      ? (adminDoc.data()!.driveRootFolderId as string | undefined)
-      : undefined;
-
-    if (!rootFolderId) {
-      return errorResponse("Google Drive no está configurado", 500);
-    }
-
     const drive = await getAuthenticatedDrive(session.user.adminId);
 
-    // Ensure plan folder exists
-    let planFolderId = plan.driveFolderId;
-    if (!planFolderId) {
-      planFolderId = await getOrCreateFolder(drive, plan.title, rootFolderId);
+    let planItem: PlanItem | null = null;
+    let subsystemName = "Sin proceso";
+
+    if (planItemId) {
+      const itemDoc = await adminDb.collection("pma_planItems").doc(planItemId).get();
+      if (itemDoc.exists) {
+        planItem = itemDoc.data() as PlanItem;
+        subsystemName = planItem.subplan || subsystemName;
+      }
+    } else {
+      const firstItemSnap = await adminDb
+        .collection("pma_planItems")
+        .where("planId", "==", planId)
+        .limit(1)
+        .get();
+
+      if (!firstItemSnap.empty) {
+        subsystemName = (firstItemSnap.docs[0].data() as PlanItem).subplan || subsystemName;
+      }
+    }
+
+    const planFolderId = await ensurePlanDriveFolder(
+      session.user.adminId,
+      plan.title,
+      subsystemName,
+      plan.driveFolderId
+    );
+
+    if (plan.driveFolderId !== planFolderId) {
       await adminDb.collection("pma_plans").doc(planId).update({ driveFolderId: planFolderId });
     }
 
     let targetFolderId: string = planFolderId;
     let planItemName: string | undefined;
 
-    // If uploading for a specific item, resolve: period subfolder → item folder
-    if (planItemId) {
-      const itemDoc = await adminDb.collection("pma_planItems").doc(planItemId).get();
-      if (itemDoc.exists) {
-        const planItem = itemDoc.data() as PlanItem;
-        planItemName = planItem.item;
+    if (planItem) {
+      planItemName = planItem.item;
+      const itemFolderId = await ensureItemDriveFolder(
+        session.user.adminId,
+        planItem.item,
+        planFolderId,
+        planItem.driveFolderId
+      );
 
-        // Create/get period subfolder inside plan folder
-        let periodFolderId: string = planFolderId;
-        if (activityMonth) {
-          const { getActivityPeriodFolder } = createPeriodHelpers({
-            start_date: plan.start_date,
-            createdAt: plan.createdAt,
-            report_per: planItem.report_per,
-          });
-          const periodName = getActivityPeriodFolder(activityMonth);
-          periodFolderId = await getOrCreateFolder(drive, periodName, planFolderId);
-        }
+      if (planItem.driveFolderId !== itemFolderId) {
+        await adminDb.collection("pma_planItems").doc(planItem.id).update({ driveFolderId: itemFolderId });
+        planItem.driveFolderId = itemFolderId;
+      }
 
-        // Ensure item folder exists inside period folder
-        targetFolderId = await getOrCreateFolder(drive, planItem.item, periodFolderId);
+      targetFolderId = itemFolderId;
+
+      if (activityMonth) {
+        const { getActivityPeriodFolder } = createPeriodHelpers({
+          start_date: plan.start_date,
+          createdAt: plan.createdAt,
+          report_per: planItem.report_per,
+        });
+        const periodName = getActivityPeriodFolder(activityMonth);
+        targetFolderId = await getOrCreateFolder(drive, periodName, itemFolderId);
       }
     }
 
-    // Upload to Google Drive
     const { fileId, fileUrl } = await uploadFile(
       drive,
       buffer,
@@ -101,7 +119,6 @@ export async function POST(req: NextRequest) {
       targetFolderId
     );
 
-    // Create evidence record in Firestore
     const evidence = await createEvidence(
       planId,
       session.user.id,

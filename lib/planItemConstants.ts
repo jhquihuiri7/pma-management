@@ -33,6 +33,20 @@ export const PERIODICITY_OPTIONS = [
   "Unica vez",
 ] as const;
 
+export const ORIGIN_GENERATION_OPTIONS = [
+  "AMI - Almacenamiento de insumo",
+  "AMP - Almacenamiento del producto",
+  "CC - Control de calidad",
+  "DP - Descarga de producto",
+  "MN - Mantenimiento",
+  "PP - Proceso productivo",
+  "SAX - Servicios auxiliares",
+  "SP - Subproducto",
+  "TI - Transporte de insumo",
+  "TP - Transporte de producto",
+  "OT - Otro",
+] as const;
+
 function normalize(value: string): string {
   return value
     .toLowerCase()

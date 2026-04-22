@@ -32,7 +32,11 @@ import {
   DropdownMenuItem,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
-import { SUBPLAN_OPTIONS, PERIODICITY_OPTIONS } from "@/lib/planItemConstants";
+import {
+  SUBPLAN_OPTIONS,
+  PERIODICITY_OPTIONS,
+  ORIGIN_GENERATION_OPTIONS,
+} from "@/lib/planItemConstants";
 import { parseExcelFile, ParsedItemRow } from "@/lib/excelImport";
 import { parseDateOnly } from "@/lib/dateOnly";
 import { createPeriodHelpers } from "@/lib/planPeriods";
@@ -800,15 +804,31 @@ export default function PlanDetailPage() {
                       </select>
                     </div>
                     <div className="space-y-2">
-                      <Label htmlFor="direccion">Dirección</Label>
-                      <Input
+                      <Label htmlFor="direccion">Origen de la generación</Label>
+                      <select
                         id="direccion"
                         value={itemForm.direccion}
                         onChange={(e) =>
                           setItemForm({ ...itemForm, direccion: e.target.value })
                         }
                         required
-                      />
+                        className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                      >
+                        <option value="" disabled>
+                          Seleccionar origen...
+                        </option>
+                        {itemForm.direccion &&
+                          !ORIGIN_GENERATION_OPTIONS.includes(
+                            itemForm.direccion as (typeof ORIGIN_GENERATION_OPTIONS)[number]
+                          ) && (
+                            <option value={itemForm.direccion}>{itemForm.direccion}</option>
+                          )}
+                        {ORIGIN_GENERATION_OPTIONS.map((option) => (
+                          <option key={option} value={option}>
+                            {option}
+                          </option>
+                        ))}
+                      </select>
                     </div>
                     <div className="space-y-2">
                       <Label htmlFor="periodicity">Periodicidad</Label>
@@ -1349,7 +1369,7 @@ export default function PlanDetailPage() {
                               planStartDate.getFullYear() === m.getFullYear() &&
                               planStartDate.getMonth() === m.getMonth();
                             const isToday = m.getTime() === todayMonth.getTime();
-                            const periodicLabel = periodicityLabel[pi.periodicity] ?? ""¢";
+                            const periodicLabel = periodicityLabel[pi.periodicity] ?? "";
                             const monthKey = `${m.getFullYear()}-${String(m.getMonth() + 1).padStart(2, "0")}`;
                             const evStatus = evidenceMonthStatus.get(`${pi.id}-${monthKey}`) ?? "none";
                             const style = statusStyle[evStatus];
@@ -1432,7 +1452,7 @@ export default function PlanDetailPage() {
                                     }}
                                     title={vc.periodLabel}
                                   >
-                                    {compStatus ?? ""”"}
+                                    {compStatus ?? ""}
                                   </DropdownMenuTrigger>
                                   <DropdownMenuContent align="center">
                                     <DropdownMenuItem onClick={() => handleComplianceChange(pi.id, vc.periodKey, "C")}>
@@ -1461,7 +1481,7 @@ export default function PlanDetailPage() {
                                   }}
                                   title={vc.periodLabel}
                                 >
-                                  {compStatus ?? ""”"}
+                                  {compStatus ?? ""}
                                 </div>
                               )}
                             </td>
@@ -1599,7 +1619,7 @@ export default function PlanDetailPage() {
       <Dialog open={assignItemOpen} onOpenChange={(open) => { setAssignItemOpen(open); if (!open) setPendingAssign(null); }}>
         <DialogContent>
           <DialogHeader>
-            <DialogTitle>Reporteros "” {selectedItem?.item}</DialogTitle>
+            <DialogTitle>Reporteros - {selectedItem?.item}</DialogTitle>
           </DialogHeader>
           <div className="space-y-4 mt-2">
             {/* Assigned */}
@@ -1741,7 +1761,7 @@ export default function PlanDetailPage() {
       <Dialog open={!!obsItem} onOpenChange={(open) => { if (!open) setObsItem(null); }}>
         <DialogContent className="max-w-lg">
           <DialogHeader>
-            <DialogTitle>Observación "” {obsItem?.item}</DialogTitle>
+            <DialogTitle>Observación - {obsItem?.item}</DialogTitle>
           </DialogHeader>
           <textarea
             className="w-full min-h-[140px] rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring resize-y"
@@ -2140,14 +2160,14 @@ export default function PlanDetailPage() {
                               <TableCell className="max-w-[160px] truncate" title={row.subplan}>
                                 {row.subplan || (
                                   <span className="text-muted-foreground italic">
-                                    "”
+                                    -
                                   </span>
                                 )}
                               </TableCell>
                               <TableCell className="max-w-[160px] truncate" title={row.direccion}>
                                 {row.direccion || (
                                   <span className="text-muted-foreground italic">
-                                    "”
+                                    -
                                   </span>
                                 )}
                               </TableCell>
@@ -2169,7 +2189,7 @@ export default function PlanDetailPage() {
                               <TableCell>
                                 {row.periodicity || (
                                   <span className="text-muted-foreground italic">
-                                    "”
+                                    -
                                   </span>
                                 )}
                               </TableCell>
@@ -2322,7 +2342,3 @@ export default function PlanDetailPage() {
     </div>
   );
 }
-
-
-
-
