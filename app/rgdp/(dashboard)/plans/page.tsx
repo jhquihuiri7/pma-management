@@ -13,7 +13,7 @@ import {
   DialogTitle,
   DialogTrigger,
 } from "@/components/ui/dialog";
-import { Plus, ArrowRight, Pencil, Download, Upload } from "lucide-react";
+import { Plus, ArrowRight, Pencil, Download, Upload, Map } from "lucide-react";
 import { toast } from "sonner";
 import { Plan } from "@/types";
 import { formatDateOnly } from "@/lib/dateOnly";
@@ -43,6 +43,7 @@ interface ProjectFormState {
   enfoque: string;
   report_per: string;
   start_date: string;
+  visualization_url: string;
   location: {
     province: string;
     canton: string;
@@ -78,6 +79,7 @@ const INITIAL_FORM: ProjectFormState = {
   enfoque: "",
   report_per: "6 meses",
   start_date: "",
+  visualization_url: "",
   location: {
     province: "Galápagos",
     canton: "",
@@ -174,7 +176,7 @@ export default function PlansPage() {
   const [editingPlan, setEditingPlan] = useState<Plan | null>(null);
   const [loading, setLoading] = useState(false);
   const [form, setForm] = useState<ProjectFormState>(INITIAL_FORM);
-  const [editForm, setEditForm] = useState({ title: "", description: "" });
+  const [editForm, setEditForm] = useState({ title: "", description: "", visualization_url: "" });
 
   const [ciiuCatalog, setCiiuCatalog] = useState<CiiuEntry[]>([]);
   const [catalogLoading, setCatalogLoading] = useState(false);
@@ -339,6 +341,7 @@ export default function PlansPage() {
     setEditForm({
       title: plan.title,
       description: plan.description || "",
+      visualization_url: plan.visualization_url || "",
     });
     setEditOpen(true);
   }
@@ -732,6 +735,15 @@ export default function PlansPage() {
                       required
                     />
                   </div>
+                  <div className="space-y-2">
+                    <Label>URL de Visualización (Opcional)</Label>
+                    <Input
+                      type="url"
+                      placeholder="https://ejemplo.com"
+                      value={form.visualization_url}
+                      onChange={(e) => setForm((prev) => ({ ...prev, visualization_url: e.target.value }))}
+                    />
+                  </div>
                 </div>
 
                 <Button type="submit" className="w-full" disabled={loading}>
@@ -758,11 +770,11 @@ export default function PlansPage() {
               <CardHeader>
                 <CardTitle className="text-base">{plan.title}</CardTitle>
               </CardHeader>
-              <CardContent>
-                <p className="text-sm text-muted-foreground line-clamp-2 mb-4">
+              <CardContent className="flex flex-col gap-4">
+                <p className="text-sm text-muted-foreground line-clamp-2">
                   {plan.description || "Sin resumen"}
                 </p>
-                <div className="space-y-1.5 mb-4">
+                <div className="space-y-1.5">
                   <div className="flex items-center justify-between">
                     <span className="text-xs text-muted-foreground">Provincia:</span>
                     <span className="text-xs font-medium bg-slate-100 px-2 py-0.5 rounded">
@@ -793,6 +805,16 @@ export default function PlansPage() {
                 <div className="flex items-center justify-between">
                   <span />
                   <div className="flex items-center gap-1">
+                    {plan.visualization_url && (
+                      <Button
+                        className="bg-black text-white hover:bg-slate-800"
+                        size="sm"
+                        onClick={() => window.open(plan.visualization_url, "_blank")}
+                      >
+                        <Map className="w-4 h-4 mr-1" />
+                        Visualizar
+                      </Button>
+                    )}
                     {isAdmin && (
                       <Button variant="ghost" size="sm" onClick={() => openEdit(plan)}>
                         <Pencil className="w-4 h-4" />
@@ -831,6 +853,15 @@ export default function PlansPage() {
                 className="flex min-h-[80px] w-full rounded-md border border-input bg-background px-3 py-2 text-sm"
                 value={editForm.description}
                 onChange={(e) => setEditForm((prev) => ({ ...prev, description: e.target.value }))}
+              />
+            </div>
+            <div className="space-y-2">
+              <Label>URL de Visualización (Opcional)</Label>
+              <Input
+                type="url"
+                placeholder="https://ejemplo.com"
+                value={editForm.visualization_url}
+                onChange={(e) => setEditForm((prev) => ({ ...prev, visualization_url: e.target.value }))}
               />
             </div>
             <Button type="submit" className="w-full" disabled={loading}>

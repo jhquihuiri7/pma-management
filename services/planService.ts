@@ -11,7 +11,8 @@ export async function createPlan(
   tipo?: PlanTipo,
   start_date?: string,
   fase?: PlanFase,
-  enfoque?: PlanEnfoque
+  enfoque?: PlanEnfoque,
+  visualization_url?: string
 ): Promise<Plan> {
   const planRef = adminDb.collection("pma_plans").doc();
   const now = new Date().toISOString();
@@ -26,6 +27,7 @@ export async function createPlan(
     ...(enfoque ? { enfoque } : {}),
     report_per,
     ...(start_date ? { start_date } : {}),
+    ...(visualization_url ? { visualization_url } : {}),
     ...(driveFolderId ? { driveFolderId } : {}),
     createdAt: now,
     updatedAt: now,
@@ -58,7 +60,7 @@ export async function getPlanById(planId: string): Promise<Plan | null> {
 export async function updatePlan(
   planId: string,
   adminId: string,
-  updates: { title?: string; description?: string; report_per?: PlanReporte; tipo?: PlanTipo; start_date?: string; fase?: PlanFase; enfoque?: PlanEnfoque }
+  updates: { title?: string; description?: string; report_per?: PlanReporte; tipo?: PlanTipo; start_date?: string; fase?: PlanFase; enfoque?: PlanEnfoque; visualization_url?: string }
 ): Promise<Plan> {
   const doc = await adminDb.collection("pma_plans").doc(planId).get();
   if (!doc.exists) throw new Error("Plan not found");

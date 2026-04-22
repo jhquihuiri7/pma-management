@@ -50,6 +50,7 @@ export async function POST(req: NextRequest) {
   const start_date = body?.start_date;
   const fase = body?.fase;
   const enfoque = body?.enfoque;
+  const visualization_url = body?.visualization_url;
 
   const location = body?.location as Plan["location"] | undefined;
   const ciiu = body?.ciiu as Plan["ciiu"] | undefined;
@@ -129,7 +130,8 @@ export async function POST(req: NextRequest) {
         coordinateFormat,
         ...(geographicArea ? { geographicArea } : {}),
         ...(implantationArea ? { implantationArea } : {}),
-      }
+      },
+      visualization_url
     );
 
     return NextResponse.json(plan, { status: 201 });

@@ -37,7 +37,7 @@ export async function PUT(
   if (session.user.role !== "ADMIN") return forbiddenResponse();
 
   const body = await req.json();
-  const { title, description, report_per, tipo, start_date, fase, enfoque } = body;
+  const { title, description, report_per, tipo, start_date, fase, enfoque, visualization_url } = body;
 
   if (!title) return errorResponse("Title is required");
 
@@ -50,6 +50,7 @@ export async function PUT(
       start_date,
       fase: fase as PlanFase | undefined,
       enfoque: enfoque as PlanEnfoque | undefined,
+      visualization_url,
     });
     return NextResponse.json(plan);
   } catch (error: unknown) {

@@ -12,7 +12,8 @@ export async function createPlan(
   start_date?: string,
   fase?: PlanFase,
   enfoque?: PlanEnfoque,
-  projectData?: Partial<Plan>
+  projectData?: Partial<Plan>,
+  visualization_url?: string
 ): Promise<Plan> {
   const planRef = adminDb.collection("rgdp_projects").doc();
   const now = new Date().toISOString();
@@ -27,6 +28,7 @@ export async function createPlan(
     ...(enfoque ? { enfoque } : {}),
     report_per,
     ...(start_date ? { start_date } : {}),
+    ...(visualization_url ? { visualization_url } : {}),
     ...(driveFolderId ? { driveFolderId } : {}),
     ...(projectData?.location ? { location: projectData.location } : {}),
     ...(projectData?.ciiu ? { ciiu: projectData.ciiu } : {}),
@@ -73,6 +75,7 @@ export async function updatePlan(
     start_date?: string;
     fase?: PlanFase;
     enfoque?: PlanEnfoque;
+    visualization_url?: string;
     location?: Plan["location"];
     ciiu?: Plan["ciiu"];
     zoneType?: Plan["zoneType"];

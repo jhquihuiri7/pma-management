@@ -34,7 +34,7 @@ export async function POST(req: NextRequest) {
   if (session.user.role !== "ADMIN") return forbiddenResponse();
 
   const body = await req.json();
-  const { title, description, report_per, tipo, start_date, fase, enfoque } = body;
+  const { title, description, report_per, tipo, start_date, fase, enfoque, visualization_url } = body;
 
   if (!title) {
     return errorResponse("Title is required");
@@ -50,7 +50,8 @@ export async function POST(req: NextRequest) {
       tipo,
       start_date,
       fase,
-      enfoque
+      enfoque,
+      visualization_url
     );
     return NextResponse.json(plan, { status: 201 });
   } catch (error: unknown) {

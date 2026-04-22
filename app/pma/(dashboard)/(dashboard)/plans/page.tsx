@@ -14,7 +14,7 @@ import {
   DialogTitle,
   DialogTrigger,
 } from "@/components/ui/dialog";
-import { Plus, ArrowRight, Pencil } from "lucide-react";
+import { Plus, ArrowRight, Pencil, Map } from "lucide-react";
 import { toast } from "sonner";
 import { Plan } from "@/types";
 import { formatDateOnly } from "@/lib/dateOnly";
@@ -28,8 +28,8 @@ export default function PlansPage() {
   const [editOpen, setEditOpen] = useState(false);
   const [editingPlan, setEditingPlan] = useState<Plan | null>(null);
   const [loading, setLoading] = useState(false);
-  const [form, setForm] = useState({ title: "", description: "", tipo: "", fase: "", enfoque: "", report_per: "6 meses", start_date: "" });
-  const [editForm, setEditForm] = useState({ title: "", description: "", tipo: "", fase: "", enfoque: "", report_per: "6 meses", start_date: "" });
+  const [form, setForm] = useState({ title: "", description: "", tipo: "", fase: "", enfoque: "", report_per: "6 meses", start_date: "", visualization_url: "" });
+  const [editForm, setEditForm] = useState({ title: "", description: "", tipo: "", fase: "", enfoque: "", report_per: "6 meses", start_date: "", visualization_url: "" });
 
   async function loadPlans() {
     const res = await fetch("/pma/api/plans");
@@ -54,7 +54,7 @@ export default function PlansPage() {
 
     if (res.ok) {
       toast.success("Plan created successfully");
-      setForm({ title: "", description: "", tipo: "", fase: "", enfoque: "", report_per: "6 meses", start_date: "" });
+      setForm({ title: "", description: "", tipo: "", fase: "", enfoque: "", report_per: "6 meses", start_date: "", visualization_url: "" });
       setOpen(false);
       loadPlans();
     } else {
@@ -73,6 +73,7 @@ export default function PlansPage() {
       enfoque: plan.enfoque || "",
       report_per: plan.report_per ?? "6 meses",
       start_date: plan.start_date || "",
+      visualization_url: plan.visualization_url || "",
     });
     setEditOpen(true);
   }
@@ -228,6 +229,18 @@ export default function PlansPage() {
                     required
                   />
                 </div>
+                <div className="space-y-2">
+                  <Label htmlFor="visualization_url">URL de Visualización (Opcional)</Label>
+                  <Input
+                    id="visualization_url"
+                    type="url"
+                    placeholder="https://ejemplo.com"
+                    value={form.visualization_url}
+                    onChange={(e) =>
+                      setForm({ ...form, visualization_url: e.target.value })
+                    }
+                  />
+                </div>
                 <Button type="submit" className="w-full" disabled={loading}>
                   {loading ? "Creando..." : "Crear Plan"}
                 </Button>
@@ -255,11 +268,11 @@ export default function PlansPage() {
               <CardHeader>
                 <CardTitle className="text-base">{plan.title}</CardTitle>
               </CardHeader>
-              <CardContent>
-                <p className="text-sm text-muted-foreground line-clamp-2 mb-4">
+              <CardContent className="flex flex-col gap-4">
+                <p className="text-sm text-muted-foreground line-clamp-2">
                   {plan.description || "Sin descripción"}
                 </p>
-                <div className="space-y-1.5 mb-4">
+                <div className="space-y-1.5">
                   {plan.tipo && (
                     <div className="flex items-center justify-between">
                       <span className="text-xs text-muted-foreground">Tipo:</span>
@@ -308,6 +321,16 @@ export default function PlansPage() {
                 <div className="flex items-center justify-between">
                   <span />
                   <div className="flex items-center gap-1">
+                    {plan.visualization_url && (
+                      <Button
+                        className="bg-black text-white hover:bg-slate-800"
+                        size="sm"
+                        onClick={() => window.open(plan.visualization_url, "_blank")}
+                      >
+                        <Map className="w-4 h-4 mr-1" />
+                        Visualizar
+                      </Button>
+                    )}
                     {isAdmin && (
                       <Button
                         variant="ghost"
@@ -432,6 +455,18 @@ export default function PlansPage() {
                   setEditForm({ ...editForm, start_date: e.target.value })
                 }
                 required
+              />
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="edit-visualization_url">URL de Visualización (Opcional)</Label>
+              <Input
+                id="edit-visualization_url"
+                type="url"
+                placeholder="https://ejemplo.com"
+                value={editForm.visualization_url}
+                onChange={(e) =>
+                  setEditForm({ ...editForm, visualization_url: e.target.value })
+                }
               />
             </div>
             <Button type="submit" className="w-full" disabled={loading}>

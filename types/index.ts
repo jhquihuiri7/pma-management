@@ -43,6 +43,7 @@ export interface Plan {
   enfoque?: PlanEnfoque;
   report_per: PlanReporte;
   start_date?: string;
+  visualization_url?: string;
   driveFolderId?: string;
   location?: {
     province: string;
