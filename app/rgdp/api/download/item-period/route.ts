@@ -13,32 +13,13 @@ import {
   PhotoWithDescription,
 } from "@/lib/wordUtils";
 
-function getBlockSize(report_per: string | undefined): number {
-  const s = (report_per ?? "").toLowerCase();
-  if (s.startsWith("2")) return 24;
-  if (s.startsWith("1")) return 12;
-  return 6;
-}
-
-function getPeriodMonthKeys(periodStart: string, blockSize: number): string[] {
-  const [year, month] = periodStart.split("-").map(Number);
-  const keys: string[] = [];
-  for (let i = 0; i < blockSize; i++) {
-    const d = new Date(year, month - 1 + i, 1);
-    keys.push(
-      `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}`
-    );
-  }
-  return keys;
-}
-
 export async function GET(req: NextRequest) {
   const session = await getAuthSession();
   if (!session?.user) return unauthorizedResponse();
 
   const { searchParams } = new URL(req.url);
   const planItemId = searchParams.get("planItemId");
-  const periodStart = searchParams.get("periodStart"); // YYYY-MM
+  const periodStart = searchParams.get("periodStart"); // YYYY-MM (mes exacto)
   const planId = searchParams.get("planId");
 
   if (!planItemId || !periodStart || !planId) {
@@ -52,18 +33,13 @@ export async function GET(req: NextRequest) {
     return errorResponse("No autorizado", 403);
   }
 
-  // Get the plan item to know its report_per
+  // Get the plan item
   const itemDoc = await adminDb.collection("rgdp_projectItems").doc(planItemId).get();
-  if (!itemDoc.exists) return errorResponse("Ítem no encontrado", 404);
+  if (!itemDoc.exists) return errorResponse("Item no encontrado", 404);
   const planItem = itemDoc.data() as PlanItem;
   if (planItem.planId !== planId) return errorResponse("No autorizado", 403);
 
-  // Compute which months belong to this period
-  const blockSize = getBlockSize(planItem.report_per);
-  const monthKeys = getPeriodMonthKeys(periodStart, blockSize);
-  const monthKeySet = new Set(monthKeys);
-
-  // Fetch evidences for this item within the period
+  // Fetch evidences for this item within the selected month
   const evidenceSnap = await adminDb
     .collection("rgdp_evidences")
     .where("planId", "==", planId)
@@ -72,7 +48,7 @@ export async function GET(req: NextRequest) {
 
   const periodEvidences = evidenceSnap.docs
     .map((d) => d.data() as Evidence)
-    .filter((e) => e.activityMonth && monthKeySet.has(e.activityMonth));
+    .filter((e) => e.activityMonth === periodStart);
 
   if (periodEvidences.length === 0) {
     return errorResponse("No hay archivos para este período", 404);
@@ -189,5 +165,4 @@ export async function GET(req: NextRequest) {
     },
   });
 }
-
 

@@ -54,7 +54,7 @@ export async function GET(req: NextRequest) {
 
   // Get the plan item to know its report_per
   const itemDoc = await adminDb.collection("pma_planItems").doc(planItemId).get();
-  if (!itemDoc.exists) return errorResponse("Ítem no encontrado", 404);
+  if (!itemDoc.exists) return errorResponse("Item no encontrado", 404);
   const planItem = itemDoc.data() as PlanItem;
   if (planItem.planId !== planId) return errorResponse("No autorizado", 403);
 

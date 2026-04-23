@@ -527,9 +527,9 @@ export default function PlanDetailPage() {
       });
       if (res.ok) {
         const data = await res.json();
-        toast.success(`${data.created} ítems cargados correctamente`);
+        toast.success(`${data.created} Items cargados correctamente`);
         if (data.failed?.length > 0) {
-          toast.warning(`${data.failed.length} ítems fallaron al crear`);
+          toast.warning(`${data.failed.length} Items fallaron al crear`);
         }
         setBulkOpen(false);
         setBulkRows([]);
@@ -537,10 +537,10 @@ export default function PlanDetailPage() {
         await loadItems();
       } else {
         const data = await res.json();
-        toast.error(data.error || "Error al cargar ítems");
+        toast.error(data.error || "Error al cargar Items");
       }
     } catch {
-      toast.error("Error al cargar ítems");
+      toast.error("Error al cargar Items");
     } finally {
       setBulkUploading(false);
     }
@@ -554,7 +554,7 @@ export default function PlanDetailPage() {
       body: JSON.stringify({ userId, category }),
     });
     if (res.ok) {
-      toast.success("Reportero asignado al ítem");
+      toast.success("Reportero asignado al Item");
       setPendingAssign(null);
       const updated = await fetch(`/pma/api/plans/${id}/items`);
       if (updated.ok) {
@@ -575,7 +575,7 @@ export default function PlanDetailPage() {
       body: JSON.stringify({ userId }),
     });
     if (res.ok) {
-      toast.success("Reportero desasignado del ítem");
+      toast.success("Reportero desasignado del Item");
       const updated = await fetch(`/pma/api/plans/${id}/items`);
       if (updated.ok) {
         const items = await updated.json();
@@ -685,17 +685,17 @@ export default function PlanDetailPage() {
   }
 
   async function handleDeleteItem(itemId: string) {
-    if (!confirm("¿Eliminar este ítem?")) return;
+    if (!confirm("¿Eliminar este Item?")) return;
 
     const res = await fetch(`/pma/api/plans/${id}/items/${itemId}`, {
       method: "DELETE",
     });
 
     if (res.ok) {
-      toast.success("Ítem eliminado");
+      toast.success("Item eliminado");
       loadItems();
     } else {
-      toast.error("Error al eliminar ítem");
+      toast.error("Error al eliminar Item");
     }
   }
 
@@ -852,7 +852,7 @@ export default function PlanDetailPage() {
       <Card>
         <CardHeader className="flex flex-row items-center justify-between">
           <CardTitle className="text-base">
-            Ítems del Plan ({visibleItems.length})
+            Items del Plan ({visibleItems.length})
           </CardTitle>
           {isAdmin && (
             <div className="flex gap-2">
@@ -904,16 +904,16 @@ export default function PlanDetailPage() {
               >
               <DialogTrigger render={<Button size="sm" />}>
                 <Plus className="w-4 h-4 mr-2" />
-                Agregar Ítem
+                Agregar Item
               </DialogTrigger>
               <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
                 <DialogHeader>
-                  <DialogTitle>{editingItem ? "Editar Ítem" : "Agregar Ítem al Plan"}</DialogTitle>
+                  <DialogTitle>{editingItem ? "Editar Item" : "Agregar Item al Plan"}</DialogTitle>
                 </DialogHeader>
                 <form onSubmit={handleAddItem} className="space-y-4 mt-4">
                   <div className="grid grid-cols-2 gap-4">
                     <div className="space-y-2">
-                      <Label htmlFor="item">Ítem</Label>
+                      <Label htmlFor="item">Item</Label>
                       <Input
                         id="item"
                         value={itemForm.item}
@@ -1147,7 +1147,7 @@ export default function PlanDetailPage() {
                   </div>
 
                   <Button type="submit" className="w-full" disabled={savingItem}>
-                    {savingItem ? "Guardando..." : editingItem ? "Guardar cambios" : "Agregar Ítem"}
+                    {savingItem ? "Guardando..." : editingItem ? "Guardar cambios" : "Agregar Item"}
                   </Button>
                 </form>
               </DialogContent>
@@ -1158,15 +1158,15 @@ export default function PlanDetailPage() {
         <CardContent>
           {visibleItems.length === 0 ? (
             <p className="text-sm text-muted-foreground text-center py-8">
-              Sin ítems aún.{" "}
-              {isAdmin && "Usa el botón \"Agregar Ítem\" para comenzar."}
+              Sin Items aún.{" "}
+              {isAdmin && "Usa el botón \"Agregar Item\" para comenzar."}
             </p>
           ) : (
             <div className="overflow-x-auto">
               <Table>
                 <TableHeader>
                   <TableRow>
-                    <TableHead>Ítem</TableHead>
+                    <TableHead>Item</TableHead>
                     <TableHead>Subplan</TableHead>
                     <TableHead>Dirección</TableHead>
                     <TableHead>Actividad Ambiental</TableHead>
@@ -1257,7 +1257,7 @@ export default function PlanDetailPage() {
                             <Button
                               variant="ghost"
                               size="sm"
-                              title="Editar ítem"
+                              title="Editar Item"
                               onClick={() => {
                                 setEditingItem(pi);
                                 setItemForm({
@@ -1434,7 +1434,7 @@ export default function PlanDetailPage() {
                   <thead>
                     <tr>
                       <th className="sticky left-0 z-10 bg-background border border-border px-3 py-2 min-w-[200px] text-left font-medium text-muted-foreground">
-                        Ítem
+                        Item
                       </th>
                       {yearHeaders.map(({ year, count }) => (
                         <th
@@ -2278,7 +2278,7 @@ export default function PlanDetailPage() {
                 <Table>
                   <TableHeader>
                     <TableRow>
-                      <TableHead>Ítem</TableHead>
+                      <TableHead>Item</TableHead>
                       <TableHead>Anexos</TableHead>
                     </TableRow>
                   </TableHeader>
@@ -2363,7 +2363,7 @@ export default function PlanDetailPage() {
       >
         <DialogContent className="w-[80vw] sm:w-[80vw] max-w-[80vw] sm:max-w-[80vw] h-[80vh] max-h-[80vh] overflow-hidden flex flex-col">
           <DialogHeader>
-            <DialogTitle>Carga masiva de ítems</DialogTitle>
+            <DialogTitle>Carga masiva de Items</DialogTitle>
           </DialogHeader>
           {bulkParseError ? (
             <div className="p-4 border border-destructive/50 bg-destructive/10 rounded-md text-sm">
@@ -2429,7 +2429,7 @@ export default function PlanDetailPage() {
                       <TableHeader>
                         <TableRow>
                           <TableHead className="w-12">#</TableHead>
-                          <TableHead>Ítem</TableHead>
+                          <TableHead>Item</TableHead>
                           <TableHead>Subplan</TableHead>
                           <TableHead>Dirección</TableHead>
                           <TableHead>Actividad</TableHead>
@@ -2573,7 +2573,7 @@ export default function PlanDetailPage() {
                                   ))}
                                   {duplicate && (
                                     <span className="text-xs text-amber-600">
-                                      Ya existe un ítem con este código en el plan
+                                      Ya existe un Item con este código en el plan
                                     </span>
                                   )}
                                 </div>
@@ -2599,7 +2599,7 @@ export default function PlanDetailPage() {
                     >
                       {bulkUploading
                         ? "Cargando..."
-                        : `Crear ${toCreateCount} ítem${toCreateCount === 1 ? "" : "s"}`}
+                        : `Crear ${toCreateCount} Item${toCreateCount === 1 ? "" : "s"}`}
                     </Button>
                   </div>
                 </div>
@@ -2623,11 +2623,11 @@ export default function PlanDetailPage() {
               Esta acción es <strong>irreversible</strong>. Se eliminará todo lo relacionado con este plan:
             </p>
             <ul className="text-sm space-y-1 list-disc list-inside text-muted-foreground">
-              <li>Todos los ítems del plan</li>
+              <li>Todos los Items del plan</li>
               <li>Todas las evidencias y archivos en Google Drive</li>
               <li>Todos los hallazgos registrados</li>
               <li>Registros de cumplimiento por período</li>
-              <li>Todas las asignaciones de usuarios a los ítems</li>
+              <li>Todas las asignaciones de usuarios a los Items</li>
               <li>Notificaciones relacionadas al plan</li>
             </ul>
             <p className="text-sm font-medium">

@@ -211,6 +211,7 @@ export default function DashboardPage() {
                   directionCounts={directionCounts}
                   items={items}
                   complianceRecords={complianceRecords}
+                  periodMode="monthly"
                 />
               ))}
             </div>
@@ -228,7 +229,7 @@ export default function DashboardPage() {
               </CardContent>
             </Card>
           ) : (
-            <GeneralComplianceChart planCharts={planCharts} />
+            <GeneralComplianceChart planCharts={planCharts} periodMode="monthly" />
           )
         )}
       </div>

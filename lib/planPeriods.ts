@@ -6,6 +6,8 @@ interface PlanLike {
   report_per?: string;
 }
 
+export type PeriodMode = "block" | "monthly";
+
 export function getBlockSize(report_per: string | undefined): number {
   const s = (report_per ?? "").toLowerCase();
   if (s.startsWith("2")) return 24;
@@ -76,6 +78,17 @@ export function createPeriodHelpers(plan: PlanLike) {
  * Period keys use the format "mar-ago 2025".
  */
 export function getPlanPeriods(plan: PlanLike): { key: string; label: string }[] {
+  return getPlanPeriodsByMode(plan, "block");
+}
+
+export function getPlanPeriodsByMode(
+  plan: PlanLike,
+  mode: PeriodMode
+): { key: string; label: string }[] {
+  if (mode === "monthly") {
+    return getMonthlyPlanPeriods(plan);
+  }
+
   const { isBlockEnd, getPeriodLabel } = createPeriodHelpers(plan);
   const planStartDate = parseDateOnly(plan.start_date ?? "") ?? new Date(plan.createdAt);
 
@@ -106,6 +119,24 @@ export function getPlanPeriods(plan: PlanLike): { key: string; label: string }[]
     if (!periods.some((p) => p.key === lbl)) {
       periods.push({ key: lbl, label: lbl });
     }
+  }
+
+  return periods;
+}
+
+function getMonthlyPlanPeriods(plan: PlanLike): { key: string; label: string }[] {
+  const planStartDate = parseDateOnly(plan.start_date ?? "") ?? new Date(plan.createdAt);
+  const today = new Date();
+  const rangeStart = new Date(planStartDate.getFullYear(), planStartDate.getMonth(), 1);
+  const rangeEnd = new Date(today.getFullYear(), today.getMonth() + 2, 1);
+
+  const periods: { key: string; label: string }[] = [];
+  const cur = new Date(rangeStart);
+  while (cur < rangeEnd) {
+    const key = `${cur.getFullYear()}-${String(cur.getMonth() + 1).padStart(2, "0")}`;
+    const label = cur.toLocaleString("es", { month: "short", year: "numeric" });
+    periods.push({ key, label });
+    cur.setMonth(cur.getMonth() + 1);
   }
 
   return periods;

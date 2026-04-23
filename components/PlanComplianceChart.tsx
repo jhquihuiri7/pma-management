@@ -20,7 +20,7 @@ import { Download } from "lucide-react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Plan, PeriodCompliance } from "@/types";
-import { getPlanPeriods } from "@/lib/planPeriods";
+import { getPlanPeriodsByMode, PeriodMode } from "@/lib/planPeriods";
 
 interface Props {
   plan: Plan;
@@ -28,6 +28,7 @@ interface Props {
   directionCounts: { name: string; value: number }[];
   items: { id: string; direccion?: string }[];
   complianceRecords: PeriodCompliance[];
+  periodMode?: PeriodMode;
 }
 
 const CATEGORY_COLORS: Record<string, string> = {
@@ -283,8 +284,9 @@ export default function PlanComplianceChart({
   directionCounts,
   items,
   complianceRecords,
+  periodMode = "block",
 }: Props) {
-  const periods = getPlanPeriods(plan);
+  const periods = getPlanPeriodsByMode(plan, periodMode);
   const defaultPeriod = periods.length > 0 ? periods[periods.length - 1].key : "";
   const [selectedPeriod, setSelectedPeriod] = useState(defaultPeriod);
   const barRef = useRef<HTMLDivElement>(null);

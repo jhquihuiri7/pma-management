@@ -20,7 +20,7 @@ import { Download } from "lucide-react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Plan, PeriodCompliance, PlanItem } from "@/types";
-import { getPlanPeriods } from "@/lib/planPeriods";
+import { getPlanPeriodsByMode, PeriodMode } from "@/lib/planPeriods";
 
 interface PlanChartData {
   plan: Plan;
@@ -32,6 +32,7 @@ interface PlanChartData {
 
 interface Props {
   planCharts: PlanChartData[];
+  periodMode?: PeriodMode;
 }
 
 const CATEGORY_COLORS: Record<string, string> = {
@@ -184,11 +185,11 @@ const renderBarLabel = (total: number) => {
   return BarLabel;
 };
 
-export default function GeneralComplianceChart({ planCharts }: Props) {
+export default function GeneralComplianceChart({ planCharts, periodMode = "block" }: Props) {
   // Collect all unique periods from all plans (union)
   const allPeriods: { key: string; label: string }[] = [];
   for (const { plan } of planCharts) {
-    for (const p of getPlanPeriods(plan)) {
+    for (const p of getPlanPeriodsByMode(plan, periodMode)) {
       if (!allPeriods.some((ap) => ap.key === p.key)) {
         allPeriods.push(p);
       }

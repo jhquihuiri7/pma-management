@@ -11,10 +11,16 @@ import { getUserById } from "@/services/userService";
 import { adminDb } from "@/lib/firebase-admin";
 import { PlanItem } from "@/types";
 import { createNotifications } from "@/services-rgdp/notificationService";
-import { createPeriodHelpers } from "@/lib/planPeriods";
 import { ensureItemDriveFolder, ensurePlanDriveFolder } from "@/services-rgdp/driveService";
 
 const MAX_FILE_SIZE = 10 * 1024 * 1024; // 10MB
+const MONTHS_ES = ["ene", "feb", "mar", "abr", "may", "jun", "jul", "ago", "sep", "oct", "nov", "dic"];
+
+function getMonthlyFolderName(activityMonth: string): string {
+  const [year, month] = activityMonth.split("-").map(Number);
+  if (!year || !month || month < 1 || month > 12) return activityMonth;
+  return `${MONTHS_ES[month - 1]}${year}`;
+}
 
 export async function POST(req: NextRequest) {
   const session = await getAuthSession();
@@ -101,12 +107,7 @@ export async function POST(req: NextRequest) {
       targetFolderId = itemFolderId;
 
       if (activityMonth) {
-        const { getActivityPeriodFolder } = createPeriodHelpers({
-          start_date: plan.start_date,
-          createdAt: plan.createdAt,
-          report_per: planItem.report_per,
-        });
-        const periodName = getActivityPeriodFolder(activityMonth);
+        const periodName = getMonthlyFolderName(activityMonth);
         targetFolderId = await getOrCreateFolder(drive, periodName, itemFolderId);
       }
     }

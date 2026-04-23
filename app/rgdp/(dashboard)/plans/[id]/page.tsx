@@ -39,7 +39,6 @@ import {
 } from "@/lib/planItemConstants";
 import { parseExcelFile, ParsedItemRow } from "@/lib/excelImport";
 import { parseDateOnly } from "@/lib/dateOnly";
-import { createPeriodHelpers } from "@/lib/planPeriods";
 
 const EMPTY_ITEM_FORM = {
   item: "",
@@ -54,6 +53,10 @@ const EMPTY_ITEM_FORM = {
   budget: "",
   report_per: "6 meses",
 };
+
+function toMonthKey(date: Date): string {
+  return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, "0")}`;
+}
 
 export default function PlanDetailPage() {
   const { id } = useParams<{ id: string }>();
@@ -387,9 +390,9 @@ export default function PlanDetailPage() {
       });
       if (res.ok) {
         const data = await res.json();
-        toast.success(`${data.created} ítems cargados correctamente`);
+        toast.success(`${data.created} Items cargados correctamente`);
         if (data.failed?.length > 0) {
-          toast.warning(`${data.failed.length} ítems fallaron al crear`);
+          toast.warning(`${data.failed.length} Items fallaron al crear`);
         }
         setBulkOpen(false);
         setBulkRows([]);
@@ -397,10 +400,10 @@ export default function PlanDetailPage() {
         await loadItems();
       } else {
         const data = await res.json();
-        toast.error(data.error || "Error al cargar ítems");
+        toast.error(data.error || "Error al cargar Items");
       }
     } catch {
-      toast.error("Error al cargar ítems");
+      toast.error("Error al cargar Items");
     } finally {
       setBulkUploading(false);
     }
@@ -414,7 +417,7 @@ export default function PlanDetailPage() {
       body: JSON.stringify({ userId, category }),
     });
     if (res.ok) {
-      toast.success("Reportero asignado al ítem");
+      toast.success("Reportero asignado al Item");
       setPendingAssign(null);
       const updated = await fetch(`/rgdp/api/plans/${id}/items`);
       if (updated.ok) {
@@ -435,7 +438,7 @@ export default function PlanDetailPage() {
       body: JSON.stringify({ userId }),
     });
     if (res.ok) {
-      toast.success("Reportero desasignado del ítem");
+      toast.success("Reportero desasignado del Item");
       const updated = await fetch(`/rgdp/api/plans/${id}/items`);
       if (updated.ok) {
         const items = await updated.json();
@@ -545,17 +548,17 @@ export default function PlanDetailPage() {
   }
 
   async function handleDeleteItem(itemId: string) {
-    if (!confirm("¿Eliminar este ítem?")) return;
+    if (!confirm("¿Eliminar este Item?")) return;
 
     const res = await fetch(`/rgdp/api/plans/${id}/items/${itemId}`, {
       method: "DELETE",
     });
 
     if (res.ok) {
-      toast.success("Ítem eliminado");
+      toast.success("Item eliminado");
       loadItems();
     } else {
-      toast.error("Error al eliminar ítem");
+      toast.error("Error al eliminar Item");
     }
   }
 
@@ -711,7 +714,7 @@ export default function PlanDetailPage() {
       <Card>
         <CardHeader className="flex flex-row items-center justify-between">
           <CardTitle className="text-base">
-            Ítems del proyecto ({visibleItems.length})
+            Items del proyecto ({visibleItems.length})
           </CardTitle>
           {isAdmin && (
             <div className="flex gap-2">
@@ -763,16 +766,16 @@ export default function PlanDetailPage() {
               >
               <DialogTrigger render={<Button size="sm" />}>
                 <Plus className="w-4 h-4 mr-2" />
-                Agregar Ítem
+                Agregar Item
               </DialogTrigger>
               <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
                 <DialogHeader>
-                  <DialogTitle>{editingItem ? "Editar Ítem" : "Agregar Ítem al Proyecto"}</DialogTitle>
+                  <DialogTitle>{editingItem ? "Editar Item" : "Agregar Item al Proyecto"}</DialogTitle>
                 </DialogHeader>
                 <form onSubmit={handleAddItem} className="space-y-4 mt-4">
                   <div className="grid grid-cols-2 gap-4">
                     <div className="space-y-2">
-                      <Label htmlFor="item">Ítem</Label>
+                      <Label htmlFor="item">Item</Label>
                       <Input
                         id="item"
                         value={itemForm.item}
@@ -1022,7 +1025,7 @@ export default function PlanDetailPage() {
                   </div>
 
                   <Button type="submit" className="w-full" disabled={savingItem}>
-                    {savingItem ? "Guardando..." : editingItem ? "Guardar cambios" : "Agregar Ítem"}
+                    {savingItem ? "Guardando..." : editingItem ? "Guardar cambios" : "Agregar Item"}
                   </Button>
                 </form>
               </DialogContent>
@@ -1033,15 +1036,15 @@ export default function PlanDetailPage() {
         <CardContent>
           {visibleItems.length === 0 ? (
             <p className="text-sm text-muted-foreground text-center py-8">
-              Sin ítems aún.{" "}
-              {isAdmin && "Usa el botón \"Agregar Ítem\" para comenzar."}
+              Sin Items aún.{" "}
+              {isAdmin && "Usa el botón \"Agregar Item\" para comenzar."}
             </p>
           ) : (
             <div className="overflow-x-auto">
               <Table>
                 <TableHeader>
                   <TableRow>
-                    <TableHead>Ítem</TableHead>
+                    <TableHead>Item</TableHead>
                     <TableHead>Subplan</TableHead>
                     <TableHead>Dirección</TableHead>
                     <TableHead>Actividad Ambiental</TableHead>
@@ -1132,7 +1135,7 @@ export default function PlanDetailPage() {
                             <Button
                               variant="ghost"
                               size="sm"
-                              title="Editar ítem"
+                              title="Editar Item"
                               onClick={() => {
                                 setEditingItem(pi);
                                 setItemForm({
@@ -1266,27 +1269,17 @@ export default function PlanDetailPage() {
           return diff % interval === 0;
         }
 
-        // Period block helpers (based on plan's report_per)
-        const { isBlockEnd, getPeriodLabel } = createPeriodHelpers(p);
-
-        // Build virtual column list: month columns + compliance columns at period ends
+        // Build virtual column list: month columns + monthly compliance columns
         type VCol =
           | { type: "month"; date: Date; year: number }
           | { type: "compliance"; periodKey: string; periodLabel: string; year: number };
 
         const vcols: VCol[] = [];
         for (const m of months) {
+          const periodKey = toMonthKey(m);
+          const periodLabel = m.toLocaleString("es", { month: "long", year: "numeric" });
           vcols.push({ type: "month", date: m, year: m.getFullYear() });
-          if (isBlockEnd(m)) {
-            const lbl = getPeriodLabel(m);
-            vcols.push({ type: "compliance", periodKey: lbl, periodLabel: lbl, year: m.getFullYear() });
-          }
-        }
-        // If the last month is not a block-end, add a compliance column for the current in-progress period
-        const lastMonth = months[months.length - 1];
-        if (lastMonth && !isBlockEnd(lastMonth)) {
-          const lbl = getPeriodLabel(lastMonth);
-          vcols.push({ type: "compliance", periodKey: lbl, periodLabel: lbl, year: lastMonth.getFullYear() });
+          vcols.push({ type: "compliance", periodKey, periodLabel, year: m.getFullYear() });
         }
 
         // Year header grouping
@@ -1309,7 +1302,7 @@ export default function PlanDetailPage() {
                   <thead>
                     <tr>
                       <th className="sticky left-0 z-10 bg-background border border-border px-3 py-2 min-w-[200px] text-left font-medium text-muted-foreground">
-                        Ítem
+                        Item
                       </th>
                       {yearHeaders.map(({ year, count }) => (
                         <th
@@ -1917,40 +1910,19 @@ export default function PlanDetailPage() {
       {/* Reportería */}
       {visibleItems.length > 0 && (() => {
         const p = plan!;
-        function getBlockSize(report_per: string | undefined): number {
-          const s = (report_per ?? "").toLowerCase();
-          if (s.startsWith("2")) return 24;
-          if (s.startsWith("1")) return 12;
-          return 6;
-        }
-
-        function getAvailablePeriods(pi: PlanItem): { key: string; label: string }[] {
-          const blockSize = getBlockSize(pi.report_per);
-          const startYear = (parseDateOnly(p.start_date) ?? new Date(p.createdAt)).getFullYear();
-          const blockOrigin = new Date(startYear, 0, 1);
+        function getAvailablePeriods(): { key: string; label: string }[] {
+          const planStart = parseDateOnly(p.start_date) ?? new Date(p.createdAt);
+          const startMonth = new Date(planStart.getFullYear(), planStart.getMonth(), 1);
           const today = new Date();
           const todayMonth = new Date(today.getFullYear(), today.getMonth(), 1);
 
           const periods: { key: string; label: string }[] = [];
-          let blockIndex = 0;
-
-          while (blockIndex < 100) {
-            const blockStart = new Date(
-              blockOrigin.getFullYear(),
-              blockOrigin.getMonth() + blockIndex * blockSize,
-              1
-            );
-            if (blockStart > todayMonth) break;
-            const blockEndMonth = new Date(
-              blockOrigin.getFullYear(),
-              blockOrigin.getMonth() + (blockIndex + 1) * blockSize - 1,
-              1
-            );
-            const key = `${blockStart.getFullYear()}-${String(blockStart.getMonth() + 1).padStart(2, "0")}`;
-            const startLabel = blockStart.toLocaleString("es", { month: "short", year: "numeric" });
-            const endLabel = blockEndMonth.toLocaleString("es", { month: "short", year: "numeric" });
-            periods.push({ key, label: `${startLabel} "“ ${endLabel}` });
-            blockIndex++;
+          const cur = new Date(startMonth);
+          while (cur <= todayMonth) {
+            const key = toMonthKey(cur);
+            const label = cur.toLocaleString("es", { month: "short", year: "numeric" });
+            periods.push({ key, label });
+            cur.setMonth(cur.getMonth() + 1);
           }
 
           return periods;
@@ -1966,13 +1938,13 @@ export default function PlanDetailPage() {
                 <Table>
                   <TableHeader>
                     <TableRow>
-                      <TableHead>Ítem</TableHead>
+                      <TableHead>Item</TableHead>
                       <TableHead>Anexos</TableHead>
                     </TableRow>
                   </TableHeader>
                   <TableBody>
                     {visibleItems.map((pi) => {
-                      const periods = getAvailablePeriods(pi);
+                      const periods = getAvailablePeriods();
                       return (
                         <TableRow key={pi.id}>
                           <TableCell className="font-medium whitespace-nowrap">
@@ -2051,7 +2023,7 @@ export default function PlanDetailPage() {
       >
         <DialogContent className="w-[80vw] sm:w-[80vw] max-w-[80vw] sm:max-w-[80vw] h-[80vh] max-h-[80vh] overflow-hidden flex flex-col">
           <DialogHeader>
-            <DialogTitle>Carga masiva de ítems</DialogTitle>
+            <DialogTitle>Carga masiva de Items</DialogTitle>
           </DialogHeader>
           {bulkParseError ? (
             <div className="p-4 border border-destructive/50 bg-destructive/10 rounded-md text-sm">
@@ -2117,7 +2089,7 @@ export default function PlanDetailPage() {
                       <TableHeader>
                         <TableRow>
                           <TableHead className="w-12">#</TableHead>
-                          <TableHead>Ítem</TableHead>
+                          <TableHead>Item</TableHead>
                           <TableHead>Subplan</TableHead>
                           <TableHead>Dirección</TableHead>
                           <TableHead>Actividad</TableHead>
@@ -2261,7 +2233,7 @@ export default function PlanDetailPage() {
                                   ))}
                                   {duplicate && (
                                     <span className="text-xs text-amber-600">
-                                      Ya existe un ítem con este código en el proyecto
+                                      Ya existe un Item con este código en el proyecto
                                     </span>
                                   )}
                                 </div>
@@ -2287,7 +2259,7 @@ export default function PlanDetailPage() {
                     >
                       {bulkUploading
                         ? "Cargando..."
-                        : `Crear ${toCreateCount} ítem${toCreateCount === 1 ? "" : "s"}`}
+                        : `Crear ${toCreateCount} Item${toCreateCount === 1 ? "" : "s"}`}
                     </Button>
                   </div>
                 </div>
@@ -2311,10 +2283,10 @@ export default function PlanDetailPage() {
               Esta acción es <strong>irreversible</strong>. Se eliminará todo lo relacionado con este Proyecto:
             </p>
             <ul className="text-sm space-y-1 list-disc list-inside text-muted-foreground">
-              <li>Todos los ítems del proyecto</li>
+              <li>Todos los Items del proyecto</li>
               <li>Todas las evidencias y archivos en Google Drive</li>
               <li>Registros de cumplimiento por período</li>
-              <li>Todas las asignaciones de usuarios a los ítems</li>
+              <li>Todas las asignaciones de usuarios a los Items</li>
               <li>Notificaciones relacionadas al proyecto</li>
             </ul>
             <p className="text-sm font-medium">
