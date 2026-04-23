@@ -25,7 +25,18 @@ import {
 } from "@/components/ui/dialog";
 import { Upload, ExternalLink, Trash2, Plus, Users, CheckCircle2, AlertTriangle, XCircle, Pencil, Download, FileSpreadsheet, OctagonAlert } from "lucide-react";
 import { toast } from "sonner";
-import { Plan, Evidence, User, PlanItem, ItemAssignmentCategory, EvidenceValidationStatus, PeriodCompliance, PeriodComplianceStatus } from "@/types";
+import {
+  Plan,
+  Evidence,
+  User,
+  PlanItem,
+  ItemAssignmentCategory,
+  EvidenceValidationStatus,
+  PeriodCompliance,
+  PeriodComplianceStatus,
+  Finding,
+  FindingComponent,
+} from "@/types";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -51,6 +62,20 @@ const EMPTY_ITEM_FORM = {
   report_per: "6 meses",
 };
 
+const FINDING_COMPONENT_OPTIONS: FindingComponent[] = [
+  "LEGAL",
+  "OPERACIONAL",
+  "AMBIENTAL",
+];
+
+const EMPTY_FINDING_FORM = {
+  component: "LEGAL" as FindingComponent,
+  nudosCriticos: "",
+  alarmas: "",
+  riesgos: "",
+  propuestasSolucion: "",
+};
+
 export default function PlanDetailPage() {
   const { id } = useParams<{ id: string }>();
   const searchParams = useSearchParams();
@@ -62,6 +87,7 @@ export default function PlanDetailPage() {
 
   const [plan, setPlan] = useState<Plan | null>(null);
   const [evidences, setEvidences] = useState<Evidence[]>([]);
+  const [findings, setFindings] = useState<Finding[]>([]);
   const [allReporters, setAllReporters] = useState<User[]>([]);
   const [allViewers, setAllViewers] = useState<User[]>([]);
   const [assignedViewerIds, setAssignedViewerIds] = useState<string[]>([]);
@@ -92,6 +118,10 @@ export default function PlanDetailPage() {
   const [approvedWarningRows, setApprovedWarningRows] = useState<Set<number>>(new Set());
   const [complianceRecords, setComplianceRecords] = useState<PeriodCompliance[]>([]);
   const [highlightEvidenceId, setHighlightEvidenceId] = useState<string | null>(null);
+  const [findingDialogOpen, setFindingDialogOpen] = useState(false);
+  const [findingForm, setFindingForm] = useState(EMPTY_FINDING_FORM);
+  const [editingFinding, setEditingFinding] = useState<Finding | null>(null);
+  const [savingFinding, setSavingFinding] = useState(false);
   const [deletePlanOpen, setDeletePlanOpen] = useState(false);
   const [deletingPlan, setDeletingPlan] = useState(false);
 
@@ -101,6 +131,7 @@ export default function PlanDetailPage() {
       const data = await res.json();
       setPlan(data.plan);
       setEvidences(data.evidences);
+      setFindings(Array.isArray(data.findings) ? data.findings : []);
       if (Array.isArray(data.assignedUsers)) {
         setAssignedViewerIds(data.assignedUsers);
       }
@@ -251,6 +282,118 @@ export default function PlanDetailPage() {
       loadPlan();
     } else {
       toast.error("Error al eliminar");
+    }
+  }
+
+  function resetFindingForm() {
+    setFindingForm(EMPTY_FINDING_FORM);
+    setEditingFinding(null);
+  }
+
+  function openCreateFindingDialog() {
+    resetFindingForm();
+    setFindingDialogOpen(true);
+  }
+
+  function openEditFindingDialog(finding: Finding) {
+    setEditingFinding(finding);
+    setFindingForm({
+      component: finding.component,
+      nudosCriticos: finding.nudosCriticos,
+      alarmas: finding.alarmas,
+      riesgos: finding.riesgos,
+      propuestasSolucion: finding.propuestasSolucion,
+    });
+    setFindingDialogOpen(true);
+  }
+
+  async function handleSaveFinding(e: React.FormEvent<HTMLFormElement>) {
+    e.preventDefault();
+    if (!plan) return;
+
+    const payload = {
+      planId: plan.id,
+      component: findingForm.component,
+      nudosCriticos: findingForm.nudosCriticos.trim(),
+      alarmas: findingForm.alarmas.trim(),
+      riesgos: findingForm.riesgos.trim(),
+      propuestasSolucion: findingForm.propuestasSolucion.trim(),
+    };
+
+    if (
+      !payload.component ||
+      !payload.nudosCriticos ||
+      !payload.alarmas ||
+      !payload.riesgos ||
+      !payload.propuestasSolucion
+    ) {
+      toast.error("Todos los campos son obligatorios");
+      return;
+    }
+
+    setSavingFinding(true);
+    try {
+      if (editingFinding) {
+        const res = await fetch(`/pma/api/findings?id=${editingFinding.id}`, {
+          method: "PATCH",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(payload),
+        });
+
+        if (!res.ok) {
+          const data = await res.json().catch(() => ({}));
+          toast.error(data.error || "Error al actualizar hallazgo");
+          return;
+        }
+
+        setFindings((prev) =>
+          prev.map((finding) =>
+            finding.id === editingFinding.id ? { ...finding, ...payload } : finding
+          )
+        );
+        toast.success("Hallazgo actualizado");
+      } else {
+        const res = await fetch("/pma/api/findings", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(payload),
+        });
+        if (!res.ok) {
+          const data = await res.json().catch(() => ({}));
+          toast.error(data.error || "Error al crear hallazgo");
+          return;
+        }
+
+        const created = (await res.json()) as Finding;
+        setFindings((prev) => [created, ...prev]);
+        toast.success("Hallazgo creado");
+      }
+
+      setFindingDialogOpen(false);
+      resetFindingForm();
+    } finally {
+      setSavingFinding(false);
+    }
+  }
+
+  async function handleDeleteFinding(findingId: string) {
+    if (!plan) return;
+    if (!confirm("¿Eliminar este hallazgo?")) return;
+
+    const params = new URLSearchParams({
+      id: findingId,
+      planId: plan.id,
+    });
+    const res = await fetch(`/pma/api/findings?${params.toString()}`, {
+      method: "DELETE",
+    });
+
+    if (res.ok) {
+      setFindings((prev) => prev.filter((finding) => finding.id !== findingId));
+      toast.success("Hallazgo eliminado");
+    } else {
+      const data = await res.json().catch(() => ({}));
+      toast.error(data.error || "Error al eliminar hallazgo");
     }
   }
 
@@ -624,6 +767,7 @@ export default function PlanDetailPage() {
     : evidences.filter(
         (ev) => !ev.planItemId || visibleItems.some((pi) => pi.id === ev.planItemId)
       );
+  const visibleFindings = findings;
 
   return (
     <div className="space-y-6">
@@ -1761,6 +1905,193 @@ export default function PlanDetailPage() {
         </DialogContent>
       </Dialog>
 
+      {/* Findings Dialog */}
+      <Dialog
+        open={findingDialogOpen}
+        onOpenChange={(open) => {
+          setFindingDialogOpen(open);
+          if (!open) resetFindingForm();
+        }}
+      >
+        <DialogContent className="max-w-2xl">
+          <DialogHeader>
+            <DialogTitle>
+              {editingFinding ? "Editar hallazgo" : "Nuevo hallazgo"}
+            </DialogTitle>
+          </DialogHeader>
+          <form className="space-y-4" onSubmit={handleSaveFinding}>
+            <div className="space-y-2">
+              <Label htmlFor="finding-component">Componente</Label>
+              <select
+                id="finding-component"
+                className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                value={findingForm.component}
+                onChange={(e) =>
+                  setFindingForm((prev) => ({
+                    ...prev,
+                    component: e.target.value as FindingComponent,
+                  }))
+                }
+                required
+              >
+                {FINDING_COMPONENT_OPTIONS.map((component) => (
+                  <option key={component} value={component}>
+                    {component}
+                  </option>
+                ))}
+              </select>
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="finding-nudos">Nudos críticos</Label>
+              <textarea
+                id="finding-nudos"
+                className="w-full min-h-[90px] rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring resize-y"
+                value={findingForm.nudosCriticos}
+                onChange={(e) =>
+                  setFindingForm((prev) => ({ ...prev, nudosCriticos: e.target.value }))
+                }
+                required
+              />
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="finding-alarmas">Alarmas</Label>
+              <textarea
+                id="finding-alarmas"
+                className="w-full min-h-[90px] rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring resize-y"
+                value={findingForm.alarmas}
+                onChange={(e) =>
+                  setFindingForm((prev) => ({ ...prev, alarmas: e.target.value }))
+                }
+                required
+              />
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="finding-riesgos">Riesgos</Label>
+              <textarea
+                id="finding-riesgos"
+                className="w-full min-h-[90px] rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring resize-y"
+                value={findingForm.riesgos}
+                onChange={(e) =>
+                  setFindingForm((prev) => ({ ...prev, riesgos: e.target.value }))
+                }
+                required
+              />
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="finding-propuestas">Propuestas de solución</Label>
+              <textarea
+                id="finding-propuestas"
+                className="w-full min-h-[90px] rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring resize-y"
+                value={findingForm.propuestasSolucion}
+                onChange={(e) =>
+                  setFindingForm((prev) => ({
+                    ...prev,
+                    propuestasSolucion: e.target.value,
+                  }))
+                }
+                required
+              />
+            </div>
+            <div className="flex justify-end gap-2">
+              <Button type="button" variant="outline" onClick={() => setFindingDialogOpen(false)}>
+                Cancelar
+              </Button>
+              <Button type="submit" disabled={savingFinding}>
+                {savingFinding
+                  ? editingFinding
+                    ? "Guardando..."
+                    : "Creando..."
+                  : editingFinding
+                  ? "Guardar cambios"
+                  : "Crear hallazgo"}
+              </Button>
+            </div>
+          </form>
+        </DialogContent>
+      </Dialog>
+
+      {/* Findings List */}
+      <Card>
+        <CardHeader className="flex flex-row items-center justify-between space-y-0">
+          <CardTitle className="text-base">
+            Hallazgos ({visibleFindings.length})
+          </CardTitle>
+          {isAdmin && (
+            <Button size="sm" onClick={openCreateFindingDialog}>
+              <Plus className="w-4 h-4 mr-1" />
+              Nuevo hallazgo
+            </Button>
+          )}
+        </CardHeader>
+        <CardContent>
+          {visibleFindings.length === 0 ? (
+            <p className="text-sm text-muted-foreground text-center py-8">
+              Sin hallazgos registrados aún.
+            </p>
+          ) : (
+            <Table>
+              <TableHeader>
+                <TableRow>
+                  <TableHead>Componente</TableHead>
+                  <TableHead>Nudos críticos</TableHead>
+                  <TableHead>Alarmas</TableHead>
+                  <TableHead>Riesgos</TableHead>
+                  <TableHead>Propuestas de solución</TableHead>
+                  <TableHead>Creado por</TableHead>
+                  <TableHead>Fecha</TableHead>
+                  {isAdmin && <TableHead className="w-[96px]">Acciones</TableHead>}
+                </TableRow>
+              </TableHeader>
+              <TableBody>
+                {visibleFindings.map((finding) => (
+                  <TableRow key={finding.id}>
+                    <TableCell className="font-medium">{finding.component}</TableCell>
+                    <TableCell className="max-w-[220px] whitespace-pre-wrap break-words">
+                      {finding.nudosCriticos}
+                    </TableCell>
+                    <TableCell className="max-w-[220px] whitespace-pre-wrap break-words">
+                      {finding.alarmas}
+                    </TableCell>
+                    <TableCell className="max-w-[220px] whitespace-pre-wrap break-words">
+                      {finding.riesgos}
+                    </TableCell>
+                    <TableCell className="max-w-[260px] whitespace-pre-wrap break-words">
+                      {finding.propuestasSolucion}
+                    </TableCell>
+                    <TableCell>{finding.createdByName || "-"}</TableCell>
+                    <TableCell>
+                      {new Date(finding.createdAt).toLocaleString()}
+                    </TableCell>
+                    {isAdmin && (
+                      <TableCell>
+                        <div className="flex gap-1">
+                          <Button
+                            size="icon"
+                            variant="ghost"
+                            onClick={() => openEditFindingDialog(finding)}
+                            title="Editar hallazgo"
+                          >
+                            <Pencil className="w-4 h-4" />
+                          </Button>
+                          <Button
+                            size="icon"
+                            variant="ghost"
+                            onClick={() => handleDeleteFinding(finding.id)}
+                            title="Eliminar hallazgo"
+                          >
+                            <Trash2 className="w-4 h-4 text-red-500" />
+                          </Button>
+                        </div>
+                      </TableCell>
+                    )}
+                  </TableRow>
+                ))}
+              </TableBody>
+            </Table>
+          )}
+        </CardContent>
+      </Card>
+
       {/* Evidence List */}
       <Card>
         <CardHeader>
@@ -2294,6 +2625,7 @@ export default function PlanDetailPage() {
             <ul className="text-sm space-y-1 list-disc list-inside text-muted-foreground">
               <li>Todos los ítems del plan</li>
               <li>Todas las evidencias y archivos en Google Drive</li>
+              <li>Todos los hallazgos registrados</li>
               <li>Registros de cumplimiento por período</li>
               <li>Todas las asignaciones de usuarios a los ítems</li>
               <li>Notificaciones relacionadas al plan</li>

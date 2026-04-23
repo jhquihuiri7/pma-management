@@ -7,6 +7,7 @@ import {
 } from "@/lib/api-utils";
 import { getPlanById, updatePlan, getAssignedUsers, deletePlan } from "@/services/planService";
 import { getEvidencesByPlan } from "@/services/evidenceService";
+import { getFindingsByPlan } from "@/services/findingService";
 import { PlanReporte, PlanTipo, PlanFase, PlanEnfoque } from "@/types";
 
 export async function GET(
@@ -20,12 +21,13 @@ export async function GET(
   if (!plan) return errorResponse("Plan not found", 404);
   if (plan.adminId !== session.user.adminId) return forbiddenResponse();
 
-  const [evidences, assignedUsers] = await Promise.all([
+  const [evidences, assignedUsers, findings] = await Promise.all([
     getEvidencesByPlan(params.id),
     getAssignedUsers(params.id),
+    getFindingsByPlan(params.id),
   ]);
 
-  return NextResponse.json({ plan, evidences, assignedUsers });
+  return NextResponse.json({ plan, evidences, assignedUsers, findings });
 }
 
 export async function PUT(

@@ -101,6 +101,20 @@ export interface Evidence {
   createdAt: string;
 }
 
+export type FindingComponent = "LEGAL" | "OPERACIONAL" | "AMBIENTAL";
+
+export interface Finding {
+  id: string;
+  planId: string;
+  component: FindingComponent;
+  nudosCriticos: string;
+  alarmas: string;
+  riesgos: string;
+  propuestasSolucion: string;
+  createdByName: string;
+  createdAt: string;
+}
+
 export type NotificationType =
   | "evidence_submitted"
   | "evidence_approved"

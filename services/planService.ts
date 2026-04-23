@@ -1,6 +1,6 @@
 import { adminDb } from "@/lib/firebase-admin";
 import { getAuthenticatedDrive } from "@/lib/drive";
-import { Plan, Assignment, PlanReporte, PlanTipo, PlanFase, PlanEnfoque, Evidence } from "@/types";
+import { Plan, Assignment, PlanReporte, PlanTipo, PlanFase, PlanEnfoque } from "@/types";
 
 export async function createPlan(
   adminId: string,
@@ -98,13 +98,14 @@ export async function deletePlan(
   }
 
   // Query all related Firestore collections in parallel
-  const [assignments, evidences, planItems, periodCompliance, notifications] =
+  const [assignments, evidences, planItems, periodCompliance, notifications, findings] =
     await Promise.all([
       adminDb.collection("pma_assignments").where("planId", "==", planId).get(),
       adminDb.collection("pma_evidences").where("planId", "==", planId).get(),
       adminDb.collection("pma_planItems").where("planId", "==", planId).get(),
       adminDb.collection("pma_periodCompliance").where("planId", "==", planId).get(),
       adminDb.collection("pma_notifications").where("planId", "==", planId).get(),
+      adminDb.collection("pma_findings").where("planId", "==", planId).get(),
     ]);
 
   // Collect all refs to delete (including the plan document itself)
@@ -114,6 +115,7 @@ export async function deletePlan(
     ...planItems.docs.map((d) => d.ref),
     ...periodCompliance.docs.map((d) => d.ref),
     ...notifications.docs.map((d) => d.ref),
+    ...findings.docs.map((d) => d.ref),
     adminDb.collection("pma_plans").doc(planId),
   ];
 
