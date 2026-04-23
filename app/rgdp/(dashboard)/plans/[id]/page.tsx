@@ -1,6 +1,6 @@
 ﻿"use client";
 
-import { useEffect, useState, useCallback } from "react";
+import { useEffect, useState, useCallback, useMemo } from "react";
 import { useSession } from "next-auth/react";
 import { useParams, useSearchParams } from "next/navigation";
 import { Button } from "@/components/ui/button";
@@ -25,34 +25,40 @@ import {
 } from "@/components/ui/dialog";
 import { Upload, ExternalLink, Trash2, Plus, Users, CheckCircle2, AlertTriangle, XCircle, Pencil, Download, FileSpreadsheet, OctagonAlert } from "lucide-react";
 import { toast } from "sonner";
-import { Plan, Evidence, User, PlanItem, ItemAssignmentCategory, EvidenceValidationStatus, PeriodCompliance, PeriodComplianceStatus } from "@/types";
+import { Plan, Evidence, User, PlanItem, ItemAssignmentCategory, EvidenceValidationStatus, MonthlyGeneration } from "@/types";
 import {
   DropdownMenu,
   DropdownMenuContent,
   DropdownMenuItem,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
-import {
-  SUBPLAN_OPTIONS,
-  PERIODICITY_OPTIONS,
-  ORIGIN_GENERATION_OPTIONS,
-} from "@/lib/planItemConstants";
 import { parseExcelFile, ParsedItemRow } from "@/lib/excelImport";
 import { parseDateOnly } from "@/lib/dateOnly";
 
+interface RgdtCatalogEntry {
+  codigo: string;
+  descripcion: string;
+  crtib: string;
+}
+
 const EMPTY_ITEM_FORM = {
-  item: "",
-  subplan: "",
-  direccion: "",
-  environmental_activity: "",
-  identified_environmental_impact: "",
-  proposed_measure: "",
-  indicator: "",
-  verification_method: "",
-  periodicity: "",
-  budget: "",
-  report_per: "6 meses",
+  wasteCode: "",
+  wasteName: "",
+  wasteDescription: "",
+  crtib: "",
+  annualGenerationKg: "",
+  generationOrigin: "",
+  selfManagement: false,
 };
+
+function normalizeCatalogValue(value: string): string {
+  return value
+    .toLowerCase()
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .replace(/\s+/g, " ")
+    .trim();
+}
 
 function toMonthKey(date: Date): string {
   return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, "0")}`;
@@ -96,10 +102,12 @@ export default function PlanDetailPage() {
   const [bulkParseError, setBulkParseError] = useState<string>("");
   const [bulkUploading, setBulkUploading] = useState(false);
   const [approvedWarningRows, setApprovedWarningRows] = useState<Set<number>>(new Set());
-  const [complianceRecords, setComplianceRecords] = useState<PeriodCompliance[]>([]);
+  const [monthlyGenerationRecords, setMonthlyGenerationRecords] = useState<MonthlyGeneration[]>([]);
   const [highlightEvidenceId, setHighlightEvidenceId] = useState<string | null>(null);
   const [deletePlanOpen, setDeletePlanOpen] = useState(false);
   const [deletingPlan, setDeletingPlan] = useState(false);
+  const [catalogEntries, setCatalogEntries] = useState<RgdtCatalogEntry[]>([]);
+  const [draftGenerationInputs, setDraftGenerationInputs] = useState<Record<string, string>>({});
 
   const loadPlan = useCallback(async () => {
     const res = await fetch(`/rgdp/api/plans/${id}`);
@@ -118,16 +126,16 @@ export default function PlanDetailPage() {
     if (res.ok) setPlanItems(await res.json());
   }, [id]);
 
-  const loadCompliance = useCallback(async () => {
-    const res = await fetch(`/rgdp/api/plans/${id}/period-compliance`);
-    if (res.ok) setComplianceRecords(await res.json());
+  const loadMonthlyGeneration = useCallback(async () => {
+    const res = await fetch(`/rgdp/api/plans/${id}/monthly-generation`);
+    if (res.ok) setMonthlyGenerationRecords(await res.json());
   }, [id]);
 
   useEffect(() => {
     loadPlan();
     loadItems();
-    loadCompliance();
-  }, [loadPlan, loadItems, loadCompliance]);
+    loadMonthlyGeneration();
+  }, [loadPlan, loadItems, loadMonthlyGeneration]);
 
   useEffect(() => {
     if (isAdmin) {
@@ -140,6 +148,23 @@ export default function PlanDetailPage() {
           }
         });
     }
+  }, [isAdmin]);
+
+  useEffect(() => {
+    if (!isAdmin) return;
+    fetch("/rgdp/api/waste-catalog")
+      .then((r) => r.json())
+      .then((data) => {
+        if (Array.isArray(data)) {
+          setCatalogEntries(data);
+        } else {
+          setCatalogEntries([]);
+        }
+      })
+      .catch(() => {
+        setCatalogEntries([]);
+        toast.error("No se pudo cargar el catálogo de residuos RGDT");
+      });
   }, [isAdmin]);
 
   useEffect(() => {
@@ -260,15 +285,92 @@ export default function PlanDetailPage() {
     }
   }
 
+  const findExactCatalogMatch = useCallback(
+    (values: { wasteCode: string; wasteName: string; crtib: string }) => {
+      const code = normalizeCatalogValue(values.wasteCode);
+      const name = normalizeCatalogValue(values.wasteName);
+      const crtib = normalizeCatalogValue(values.crtib);
+      if (!code || !name || !crtib) return null;
+
+      return (
+        catalogEntries.find(
+          (entry) =>
+            normalizeCatalogValue(entry.codigo) === code &&
+            normalizeCatalogValue(entry.descripcion) === name &&
+            normalizeCatalogValue(entry.crtib) === crtib
+        ) ?? null
+      );
+    },
+    [catalogEntries]
+  );
+
+  function applyCatalogEntry(entry: RgdtCatalogEntry) {
+    setItemForm((prev) => ({
+      ...prev,
+      wasteCode: entry.codigo,
+      wasteName: entry.descripcion,
+      crtib: entry.crtib,
+    }));
+  }
+
+  const filteredCodeOptions = useMemo(() => {
+    const q = normalizeCatalogValue(itemForm.wasteCode);
+    return catalogEntries
+      .filter((e) => (q ? normalizeCatalogValue(e.codigo).includes(q) : true))
+      .slice(0, 30);
+  }, [catalogEntries, itemForm.wasteCode]);
+
+  const filteredNameOptions = useMemo(() => {
+    const q = normalizeCatalogValue(itemForm.wasteName);
+    return catalogEntries
+      .filter((e) =>
+        q ? normalizeCatalogValue(e.descripcion).includes(q) : true
+      )
+      .slice(0, 30);
+  }, [catalogEntries, itemForm.wasteName]);
+
+  const filteredCrtibOptions = useMemo(() => {
+    const q = normalizeCatalogValue(itemForm.crtib);
+    return catalogEntries
+      .filter((e) => (q ? normalizeCatalogValue(e.crtib).includes(q) : true))
+      .slice(0, 30);
+  }, [catalogEntries, itemForm.crtib]);
+
   async function handleAddItem(e: React.FormEvent) {
     e.preventDefault();
+    const annualGenerationKg = Number(itemForm.annualGenerationKg);
+    if (!Number.isFinite(annualGenerationKg) || annualGenerationKg < 0) {
+      toast.error("Generación anual (kg) debe ser un número válido");
+      return;
+    }
+
+    const exactMatch = findExactCatalogMatch({
+      wasteCode: itemForm.wasteCode,
+      wasteName: itemForm.wasteName,
+      crtib: itemForm.crtib,
+    });
+    if (!exactMatch) {
+      toast.error("Código, Nombre y CRTIB deben coincidir con el catálogo RGDT");
+      return;
+    }
+
+    const payload = {
+      wasteCode: exactMatch.codigo,
+      wasteName: exactMatch.descripcion,
+      wasteDescription: itemForm.wasteDescription.trim(),
+      crtib: exactMatch.crtib,
+      annualGenerationKg,
+      generationOrigin: itemForm.generationOrigin.trim(),
+      selfManagement: itemForm.selfManagement,
+    };
+
     setSavingItem(true);
     try {
       if (editingItem) {
         const res = await fetch(`/rgdp/api/plans/${id}/items/${editingItem.id}`, {
           method: "PATCH",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ ...itemForm, budget: Number(itemForm.budget) }),
+          body: JSON.stringify(payload),
         });
         if (res.ok) {
           await syncItemAssignments(
@@ -292,7 +394,7 @@ export default function PlanDetailPage() {
       const res = await fetch(`/rgdp/api/plans/${id}/items`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ ...itemForm, budget: Number(itemForm.budget) }),
+        body: JSON.stringify(payload),
       });
 
       if (res.ok) {
@@ -582,29 +684,36 @@ export default function PlanDetailPage() {
     }
   }
 
-  async function handleComplianceChange(planItemId: string, periodKey: string, status: PeriodComplianceStatus) {
-    const res = await fetch(`/rgdp/api/plans/${id}/period-compliance`, {
+  async function handleMonthlyGenerationChange(
+    planItemId: string,
+    periodKey: string,
+    generationKg: number
+  ): Promise<boolean> {
+    const res = await fetch(`/rgdp/api/plans/${id}/monthly-generation`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ planItemId, periodKey, status }),
+      body: JSON.stringify({ planItemId, periodKey, generationKg }),
     });
     if (res.ok) {
-      const updated = await res.json() as PeriodCompliance;
-      setComplianceRecords((prev) => {
+      const updated = (await res.json()) as MonthlyGeneration;
+      setMonthlyGenerationRecords((prev) => {
         const exists = prev.some(
           (r) => r.planItemId === planItemId && r.periodKey === periodKey
         );
         if (exists) {
           return prev.map((r) =>
             r.planItemId === planItemId && r.periodKey === periodKey
-              ? { ...r, status }
+              ? { ...r, generationKg }
               : r
           );
         }
         return [...prev, updated];
       });
+      return true;
     } else {
-      toast.error("Error al guardar cumplimiento");
+      const data = await res.json().catch(() => ({}));
+      toast.error(data.error || "Error al guardar generación mensual");
+      return false;
     }
   }
 
@@ -740,23 +849,6 @@ export default function PlanDetailPage() {
                     setEditingItem(null);
                     setItemForm(EMPTY_ITEM_FORM);
                     setItemAssignments([]);
-                  } else if (open && !editingItem && planItems.length > 0) {
-                    const last = planItems[planItems.length - 1];
-                    setItemForm({
-                      item: last.item,
-                      subplan: last.subplan,
-                      direccion: last.direccion ?? "",
-                      environmental_activity: last.environmental_activity,
-                      identified_environmental_impact:
-                        last.identified_environmental_impact,
-                      proposed_measure: last.proposed_measure,
-                      indicator: last.indicator,
-                      verification_method: last.verification_method,
-                      periodicity: last.periodicity,
-                      budget: String(last.budget),
-                      report_per: last.report_per ?? "6 meses",
-                    });
-                    setItemAssignments([]);
                   } else if (open && !editingItem) {
                     setItemForm(EMPTY_ITEM_FORM);
                     setItemAssignments([]);
@@ -775,96 +867,105 @@ export default function PlanDetailPage() {
                 <form onSubmit={handleAddItem} className="space-y-4 mt-4">
                   <div className="grid grid-cols-2 gap-4">
                     <div className="space-y-2">
-                      <Label htmlFor="item">Item</Label>
+                      <Label htmlFor="wasteCode">Código del residuo o desecho</Label>
                       <Input
-                        id="item"
-                        value={itemForm.item}
-                        onChange={(e) =>
-                          setItemForm({ ...itemForm, item: e.target.value })
-                        }
+                        id="wasteCode"
+                        list="rgdt-code-options"
+                        value={itemForm.wasteCode}
+                        onChange={(e) => {
+                          const nextValue = e.target.value;
+                          const matched = catalogEntries.find(
+                            (entry) =>
+                              normalizeCatalogValue(entry.codigo) ===
+                              normalizeCatalogValue(nextValue)
+                          );
+                          if (matched) {
+                            applyCatalogEntry(matched);
+                          } else {
+                            setItemForm((prev) => ({ ...prev, wasteCode: nextValue }));
+                          }
+                        }}
                         required
                       />
-                    </div>
-                    <div className="space-y-2">
-                      <Label htmlFor="subplan">Subplan</Label>
-                      <select
-                        id="subplan"
-                        value={itemForm.subplan}
-                        onChange={(e) =>
-                          setItemForm({ ...itemForm, subplan: e.target.value })
-                        }
-                        required
-                        className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
-                      >
-                        <option value="" disabled>
-                          Seleccionar subplan...
-                        </option>
-                        {SUBPLAN_OPTIONS.map((option) => (
-                          <option key={option} value={option}>
-                            {option}
+                      <datalist id="rgdt-code-options">
+                        {filteredCodeOptions.map((entry) => (
+                          <option key={`${entry.codigo}-${entry.descripcion}`} value={entry.codigo}>
+                            {entry.descripcion} ({entry.crtib})
                           </option>
                         ))}
-                      </select>
+                      </datalist>
                     </div>
                     <div className="space-y-2">
-                      <Label htmlFor="direccion">Origen de la generación</Label>
-                      <select
-                        id="direccion"
-                        value={itemForm.direccion}
-                        onChange={(e) =>
-                          setItemForm({ ...itemForm, direccion: e.target.value })
-                        }
-                        required
-                        className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
-                      >
-                        <option value="" disabled>
-                          Seleccionar origen...
-                        </option>
-                        {itemForm.direccion &&
-                          !ORIGIN_GENERATION_OPTIONS.includes(
-                            itemForm.direccion as (typeof ORIGIN_GENERATION_OPTIONS)[number]
-                          ) && (
-                            <option value={itemForm.direccion}>{itemForm.direccion}</option>
-                          )}
-                        {ORIGIN_GENERATION_OPTIONS.map((option) => (
-                          <option key={option} value={option}>
-                            {option}
-                          </option>
-                        ))}
-                      </select>
-                    </div>
-                    <div className="space-y-2">
-                      <Label htmlFor="periodicity">Periodicidad</Label>
-                      <select
-                        id="periodicity"
-                        value={itemForm.periodicity}
-                        onChange={(e) =>
-                          setItemForm({
-                            ...itemForm,
-                            periodicity: e.target.value,
-                          })
-                        }
-                        required
-                        className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
-                      >
-                        <option value="" disabled>
-                          Seleccionar periodicidad...
-                        </option>
-                        {PERIODICITY_OPTIONS.map((option) => (
-                          <option key={option} value={option}>{option}</option>
-                        ))}
-                      </select>
-                    </div>
-                    <div className="space-y-2">
-                      <Label htmlFor="budget">Presupuesto</Label>
+                      <Label htmlFor="wasteName">Nombre del residuo o desecho</Label>
                       <Input
-                        id="budget"
+                        id="wasteName"
+                        list="rgdt-name-options"
+                        value={itemForm.wasteName}
+                        onChange={(e) => {
+                          const nextValue = e.target.value;
+                          const matched = catalogEntries.find(
+                            (entry) =>
+                              normalizeCatalogValue(entry.descripcion) ===
+                              normalizeCatalogValue(nextValue)
+                          );
+                          if (matched) {
+                            applyCatalogEntry(matched);
+                          } else {
+                            setItemForm((prev) => ({ ...prev, wasteName: nextValue }));
+                          }
+                        }}
+                        required
+                      />
+                      <datalist id="rgdt-name-options">
+                        {filteredNameOptions.map((entry) => (
+                          <option key={`${entry.codigo}-${entry.crtib}`} value={entry.descripcion}>
+                            {entry.codigo} ({entry.crtib})
+                          </option>
+                        ))}
+                      </datalist>
+                    </div>
+                    <div className="space-y-2">
+                      <Label htmlFor="crtib">CRTIB</Label>
+                      <Input
+                        id="crtib"
+                        list="rgdt-crtib-options"
+                        value={itemForm.crtib}
+                        onChange={(e) => {
+                          const nextValue = e.target.value;
+                          const matched = catalogEntries.find(
+                            (entry) =>
+                              normalizeCatalogValue(entry.crtib) ===
+                              normalizeCatalogValue(nextValue)
+                          );
+                          if (matched) {
+                            applyCatalogEntry(matched);
+                          } else {
+                            setItemForm((prev) => ({ ...prev, crtib: nextValue }));
+                          }
+                        }}
+                        required
+                      />
+                      <datalist id="rgdt-crtib-options">
+                        {filteredCrtibOptions.map((entry) => (
+                          <option key={`${entry.codigo}-${entry.descripcion}`} value={entry.crtib}>
+                            {entry.codigo} - {entry.descripcion}
+                          </option>
+                        ))}
+                      </datalist>
+                    </div>
+                    <div className="space-y-2">
+                      <Label htmlFor="annualGenerationKg">Generación anual (kg)</Label>
+                      <Input
+                        id="annualGenerationKg"
                         type="number"
                         min="0"
                         step="0.01"
-                        value={itemForm.budget}
+                        value={itemForm.annualGenerationKg}
                         onChange={(e) =>
-                          setItemForm({ ...itemForm, budget: e.target.value })
+                          setItemForm((prev) => ({
+                            ...prev,
+                            annualGenerationKg: e.target.value,
+                          }))
                         }
                         required
                       />
@@ -872,86 +973,56 @@ export default function PlanDetailPage() {
                   </div>
 
                   <div className="space-y-2">
-                    <Label htmlFor="environmental_activity">
-                      Actividad Ambiental
-                    </Label>
+                    <Label htmlFor="generationOrigin">Origen de la generación</Label>
                     <Input
-                      id="environmental_activity"
-                      value={itemForm.environmental_activity}
+                      id="generationOrigin"
+                      value={itemForm.generationOrigin}
                       onChange={(e) =>
-                        setItemForm({
-                          ...itemForm,
-                          environmental_activity: e.target.value,
-                        })
+                        setItemForm((prev) => ({
+                          ...prev,
+                          generationOrigin: e.target.value,
+                        }))
                       }
                       required
                     />
                   </div>
 
                   <div className="space-y-2">
-                    <Label htmlFor="identified_environmental_impact">
-                      Impacto Ambiental Identificado
-                    </Label>
-                    <Input
-                      id="identified_environmental_impact"
-                      value={itemForm.identified_environmental_impact}
-                      onChange={(e) =>
-                        setItemForm({
-                          ...itemForm,
-                          identified_environmental_impact: e.target.value,
-                        })
-                      }
-                      required
-                    />
-                  </div>
-
-                  <div className="space-y-2">
-                    <Label htmlFor="proposed_measure">Medida Propuesta</Label>
+                    <Label htmlFor="wasteDescription">Descripción del residuo o desecho (opcional)</Label>
                     <textarea
-                      id="proposed_measure"
+                      id="wasteDescription"
                       className="w-full min-h-[96px] rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring overflow-hidden resize-none"
-                      value={itemForm.proposed_measure}
+                      value={itemForm.wasteDescription}
                       onChange={(e) => {
                         autoResizeTextarea(e);
-                        setItemForm({
-                          ...itemForm,
-                          proposed_measure: e.target.value,
-                        });
+                        setItemForm((prev) => ({
+                          ...prev,
+                          wasteDescription: e.target.value,
+                        }));
                       }}
-                      required
                     />
                   </div>
 
                   <div className="space-y-2">
-                    <Label htmlFor="indicator">Indicador</Label>
-                    <textarea
-                      id="indicator"
-                      className="w-full min-h-[96px] rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring overflow-hidden resize-none"
-                      value={itemForm.indicator}
-                      onChange={(e) => {
-                        autoResizeTextarea(e);
-                        setItemForm({ ...itemForm, indicator: e.target.value });
-                      }}
-                      required
-                    />
+                    <label className="inline-flex items-center gap-2 text-sm font-medium">
+                      <input
+                        type="checkbox"
+                        checked={itemForm.selfManagement}
+                        onChange={(e) =>
+                          setItemForm((prev) => ({
+                            ...prev,
+                            selfManagement: e.target.checked,
+                          }))
+                        }
+                      />
+                      Gestión propia
+                    </label>
                   </div>
-
-                  <div className="space-y-2">
-                    <Label htmlFor="verification_method">
-                      Método de Verificación
-                    </Label>
-                    <Input
-                      id="verification_method"
-                      value={itemForm.verification_method}
-                      onChange={(e) =>
-                        setItemForm({
-                          ...itemForm,
-                          verification_method: e.target.value,
-                        })
-                      }
-                      required
-                    />
-                  </div>
+                  {catalogEntries.length === 0 && (
+                    <p className="text-sm text-destructive">
+                      No hay catálogo RGDT cargado. Verifica `public/data/rgdt-residuos.xlsx|xls|csv`.
+                    </p>
+                  )}
 
                   <div className="space-y-2">
                     <Label>Asignar reporteros</Label>
@@ -1044,16 +1115,13 @@ export default function PlanDetailPage() {
               <Table>
                 <TableHeader>
                   <TableRow>
-                    <TableHead>Item</TableHead>
-                    <TableHead>Subplan</TableHead>
-                    <TableHead>Dirección</TableHead>
-                    <TableHead>Actividad Ambiental</TableHead>
-                    <TableHead>Impacto Identificado</TableHead>
-                    <TableHead>Medida Propuesta</TableHead>
-                    <TableHead>Indicador</TableHead>
-                    <TableHead>Método Verificación</TableHead>
-                    <TableHead>Periodicidad</TableHead>
-                    <TableHead>Presupuesto</TableHead>
+                    <TableHead>Código</TableHead>
+                    <TableHead>Nombre</TableHead>
+                    <TableHead>CRTIB</TableHead>
+                    <TableHead>Descripción</TableHead>
+                    <TableHead>Generación anual (kg)</TableHead>
+                    <TableHead>Origen</TableHead>
+                    <TableHead>Gestión propia</TableHead>
                     <TableHead>Reporteros</TableHead>
                     <TableHead>Observación</TableHead>
                     <TableHead className="w-[60px]"></TableHead>
@@ -1064,37 +1132,29 @@ export default function PlanDetailPage() {
                   {visibleItems.map((pi) => (
                     <TableRow key={pi.id}>
                       <TableCell className="font-medium whitespace-nowrap">
-                        {pi.item}
+                        {pi.wasteCode ?? pi.item}
+                      </TableCell>
+                      <TableCell className="max-w-[240px] truncate" title={pi.wasteName ?? pi.environmental_activity}>
+                        {pi.wasteName ?? pi.environmental_activity}
                       </TableCell>
                       <TableCell className="whitespace-nowrap">
-                        {pi.subplan}
+                        {pi.crtib ?? pi.indicator}
                       </TableCell>
-                      <TableCell className="max-w-[150px] truncate">
-                        {pi.direccion ?? ""}
-                      </TableCell>
-                      <TableCell className="max-w-[150px] truncate">
-                        {pi.environmental_activity}
-                      </TableCell>
-                      <TableCell className="max-w-[150px] truncate">
-                        {pi.identified_environmental_impact}
-                      </TableCell>
-                      <TableCell className="max-w-[150px] truncate">
-                        {pi.proposed_measure}
-                      </TableCell>
-                      <TableCell className="max-w-[120px] truncate">
-                        {pi.indicator}
-                      </TableCell>
-                      <TableCell className="max-w-[120px] truncate">
-                        {pi.verification_method}
+                      <TableCell className="max-w-[220px] truncate" title={pi.wasteDescription ?? ""}>
+                        {pi.wasteDescription || (
+                          <span className="text-muted-foreground italic">—</span>
+                        )}
                       </TableCell>
                       <TableCell className="whitespace-nowrap">
-                        {pi.periodicity}
+                        {typeof pi.annualGenerationKg === "number"
+                          ? pi.annualGenerationKg.toLocaleString("en-US")
+                          : "—"}
+                      </TableCell>
+                      <TableCell className="max-w-[180px] truncate" title={pi.generationOrigin ?? pi.direccion ?? ""}>
+                        {pi.generationOrigin ?? pi.direccion ?? "—"}
                       </TableCell>
                       <TableCell className="whitespace-nowrap">
-                        {pi.budget.toLocaleString("en-US", {
-                          style: "currency",
-                          currency: "USD",
-                        })}
+                        {pi.selfManagement ? "Sí" : "No"}
                       </TableCell>
                       <TableCell>
                         <Button
@@ -1139,17 +1199,21 @@ export default function PlanDetailPage() {
                               onClick={() => {
                                 setEditingItem(pi);
                                 setItemForm({
-                                  item: pi.item,
-                                  subplan: pi.subplan,
-                                  direccion: pi.direccion ?? "",
-                                  environmental_activity: pi.environmental_activity,
-                                  identified_environmental_impact: pi.identified_environmental_impact,
-                                  proposed_measure: pi.proposed_measure,
-                                  indicator: pi.indicator,
-                                  verification_method: pi.verification_method,
-                                  periodicity: pi.periodicity,
-                                  budget: String(pi.budget),
-                                  report_per: pi.report_per ?? "6 meses",
+                                  wasteCode: pi.wasteCode ?? pi.item,
+                                  wasteName: pi.wasteName ?? pi.environmental_activity,
+                                  wasteDescription:
+                                    pi.wasteDescription ??
+                                    (pi.identified_environmental_impact === "-"
+                                      ? ""
+                                      : pi.identified_environmental_impact),
+                                  crtib: pi.crtib ?? pi.indicator,
+                                  annualGenerationKg:
+                                    typeof pi.annualGenerationKg === "number"
+                                      ? String(pi.annualGenerationKg)
+                                      : "",
+                                  generationOrigin:
+                                    pi.generationOrigin ?? pi.direccion ?? "",
+                                  selfManagement: Boolean(pi.selfManagement),
                                 });
                                 setItemAssignments(
                                   (pi.assignedUsers ?? []).map((a) => ({
@@ -1199,9 +1263,16 @@ export default function PlanDetailPage() {
             }
           });
 
-        // // Build compliance lookup: "planItemId::periodKey" -> status
-        const complianceMap = new Map(
-          complianceRecords.map((r) => [`${r.planItemId}::${r.periodKey}`, r.status])
+        // Build monthly generation lookup: "planItemId::YYYY-MM" -> kg
+        const monthlyGenerationMap = new Map(
+          monthlyGenerationRecords.map((r) => [`${r.planItemId}::${r.periodKey}`, r.generationKg])
+        );
+        const itemGenerationTotals = monthlyGenerationRecords.reduce<Record<string, number>>(
+          (acc, record) => {
+            acc[record.planItemId] = (acc[record.planItemId] ?? 0) + (record.generationKg ?? 0);
+            return acc;
+          },
+          {}
         );
 
         const statusStyle: Record<"none" | EvidenceValidationStatus, { bg: string; color: string; border: string; label: string }> = {
@@ -1269,17 +1340,17 @@ export default function PlanDetailPage() {
           return diff % interval === 0;
         }
 
-        // Build virtual column list: month columns + monthly compliance columns
+        // Build virtual column list: month columns + monthly generation columns
         type VCol =
           | { type: "month"; date: Date; year: number }
-          | { type: "compliance"; periodKey: string; periodLabel: string; year: number };
+          | { type: "generation"; periodKey: string; periodLabel: string; year: number };
 
         const vcols: VCol[] = [];
         for (const m of months) {
           const periodKey = toMonthKey(m);
           const periodLabel = m.toLocaleString("es", { month: "long", year: "numeric" });
           vcols.push({ type: "month", date: m, year: m.getFullYear() });
-          vcols.push({ type: "compliance", periodKey, periodLabel, year: m.getFullYear() });
+          vcols.push({ type: "generation", periodKey, periodLabel, year: m.getFullYear() });
         }
 
         // Year header grouping
@@ -1338,7 +1409,7 @@ export default function PlanDetailPage() {
                             className="border-2 border-border bg-slate-50 px-1 py-1 text-center font-semibold text-slate-500 min-w-[72px]"
                             title={vc.periodLabel}
                           >
-                            Cump.
+                            Gen. kg
                           </th>
                         );
                       })}
@@ -1351,7 +1422,11 @@ export default function PlanDetailPage() {
                         className={rowIdx % 2 === 0 ? "bg-background" : "bg-muted/20"}
                       >
                         <td className="sticky left-0 z-10 border border-border px-3 py-1.5 font-medium truncate max-w-[200px] bg-inherit">
-                          {pi.item}
+                          <div className="truncate">{pi.item}</div>
+                          <div className="text-[10px] text-muted-foreground">
+                            {(itemGenerationTotals[pi.id] ?? 0).toLocaleString("en-US")} /{" "}
+                            {Number(pi.annualGenerationKg ?? 0).toLocaleString("en-US")} kg
+                          </div>
                         </td>
                         {vcols.map((vc, i) => {
                           if (vc.type === "month") {
@@ -1409,23 +1484,17 @@ export default function PlanDetailPage() {
                             );
                           }
 
-                          // Compliance column
-                          const compStatus = complianceMap.get(`${pi.id}::${vc.periodKey}`);
-                          const compBg =
-                            compStatus === "C"                          ? "#dcfce7" :
-                            compStatus === "NC+" || compStatus === "NC-" ? "#fee2e2" :
-                            compStatus === "N/A"                        ? "#fef9c3" :
-                            "#f8fafc";
-                          const compColor =
-                            compStatus === "C"                          ? "#166534" :
-                            compStatus === "NC+" || compStatus === "NC-" ? "#991b1b" :
-                            compStatus === "N/A"                        ? "#854d0e" :
-                            "#94a3b8";
-                          const compBorder =
-                            compStatus === "C"                          ? "#86efac" :
-                            compStatus === "NC+" || compStatus === "NC-" ? "#fca5a5" :
-                            compStatus === "N/A"                        ? "#fde047" :
-                            "#e2e8f0";
+                          // Monthly generation column
+                          const generationKgRaw = monthlyGenerationMap.get(`${pi.id}::${vc.periodKey}`);
+                          const generationKg =
+                            typeof generationKgRaw === "number" && Number.isFinite(generationKgRaw)
+                              ? generationKgRaw
+                              : undefined;
+                          const generationCellKey = `${pi.id}::${vc.periodKey}`;
+                          const generationDisplay =
+                            generationKg === undefined ? "" : String(generationKg);
+                          const generationInputValue =
+                            draftGenerationInputs[generationCellKey] ?? generationDisplay;
 
                           return (
                             <td
@@ -1433,48 +1502,57 @@ export default function PlanDetailPage() {
                               className="border-2 border-border p-0.5"
                             >
                               {isAdmin ? (
-                                <DropdownMenu>
-                                  <DropdownMenuTrigger
-                                    className="w-full rounded flex items-center justify-center font-bold leading-none transition-opacity hover:opacity-75 bg-transparent border-0 cursor-pointer"
-                                    style={{
-                                      height: "24px",
-                                      backgroundColor: compBg,
-                                      color: compColor,
-                                      fontSize: "10px",
-                                      border: `1px solid ${compBorder}`,
-                                    }}
-                                    title={vc.periodLabel}
-                                  >
-                                    {compStatus ?? ""}
-                                  </DropdownMenuTrigger>
-                                  <DropdownMenuContent align="center">
-                                    <DropdownMenuItem onClick={() => handleComplianceChange(pi.id, vc.periodKey, "C")}>
-                                      <span className="font-bold text-green-600 mr-2">C</span> Conforme
-                                    </DropdownMenuItem>
-                                    <DropdownMenuItem onClick={() => handleComplianceChange(pi.id, vc.periodKey, "NC+")}>
-                                      <span className="font-bold text-red-600 mr-2">NC+</span> No conforme mayor
-                                    </DropdownMenuItem>
-                                    <DropdownMenuItem onClick={() => handleComplianceChange(pi.id, vc.periodKey, "NC-")}>
-                                      <span className="font-bold text-red-600 mr-2">NC-</span> No conforme menor
-                                    </DropdownMenuItem>
-                                    <DropdownMenuItem onClick={() => handleComplianceChange(pi.id, vc.periodKey, "N/A")}>
-                                      <span className="font-bold text-yellow-600 mr-2">N/A</span> No aplica
-                                    </DropdownMenuItem>
-                                  </DropdownMenuContent>
-                                </DropdownMenu>
-                              ) : (
-                                <div
-                                  className="w-full rounded flex items-center justify-center font-bold leading-none"
-                                  style={{
-                                    height: "24px",
-                                    backgroundColor: compBg,
-                                    color: compColor,
-                                    fontSize: "10px",
-                                    border: `1px solid ${compBorder}`,
+                                <Input
+                                  type="number"
+                                  min="0"
+                                  step="0.01"
+                                  className="h-7 text-[10px] px-1 text-right"
+                                  value={generationInputValue}
+                                  placeholder="0"
+                                  onChange={(e) => {
+                                    const nextRaw = e.target.value;
+                                    setDraftGenerationInputs((prev) => ({
+                                      ...prev,
+                                      [generationCellKey]: nextRaw,
+                                    }));
+                                  }}
+                                  onBlur={async (e) => {
+                                    const raw = e.target.value.trim();
+                                    const nextValue = raw === "" ? 0 : Number(raw);
+                                    if (!Number.isFinite(nextValue) || nextValue < 0) {
+                                      toast.error("Generación mensual inválida");
+                                      return;
+                                    }
+                                    if (generationKg !== undefined && nextValue === generationKg) {
+                                      setDraftGenerationInputs((prev) => {
+                                        const next = { ...prev };
+                                        delete next[generationCellKey];
+                                        return next;
+                                      });
+                                      return;
+                                    }
+                                    const ok = await handleMonthlyGenerationChange(
+                                      pi.id,
+                                      vc.periodKey,
+                                      nextValue
+                                    );
+                                    if (ok) {
+                                      setDraftGenerationInputs((prev) => {
+                                        const next = { ...prev };
+                                        delete next[generationCellKey];
+                                        return next;
+                                      });
+                                    }
                                   }}
                                   title={vc.periodLabel}
+                                />
+                              ) : (
+                                <div
+                                  className="w-full rounded flex items-center justify-end font-semibold leading-none px-1"
+                                  style={{ height: "24px", fontSize: "10px" }}
+                                  title={vc.periodLabel}
                                 >
-                                  {compStatus ?? ""}
+                                  {generationKg === undefined ? "—" : generationKg.toLocaleString("en-US")}
                                 </div>
                               )}
                             </td>
@@ -1504,7 +1582,7 @@ export default function PlanDetailPage() {
                 </span>
                 <span className="flex items-center gap-1.5">
                   <span className="inline-block w-10 h-4 rounded border-2" style={{ backgroundColor: "#f8fafc", borderColor: "#e2e8f0" }} />
-                  Columna de cumplimiento (C / NC+ / NC-)
+                  Columna de generación mensual (kg)
                 </span>
                 <span className="ml-auto flex gap-3">
                   {([

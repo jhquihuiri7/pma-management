@@ -118,7 +118,8 @@ export interface Finding {
 export type NotificationType =
   | "evidence_submitted"
   | "evidence_approved"
-  | "evidence_rejected";
+  | "evidence_rejected"
+  | "generation_threshold_reached";
 
 export interface AppNotification {
   id: string;
@@ -178,6 +179,15 @@ export interface PeriodCompliance {
   planItemId: string;
   periodKey: string;
   status: PeriodComplianceStatus;
+  updatedAt: string;
+}
+
+export interface MonthlyGeneration {
+  id: string;
+  planId: string;
+  planItemId: string;
+  periodKey: string; // YYYY-MM
+  generationKg: number;
   updatedAt: string;
 }
 

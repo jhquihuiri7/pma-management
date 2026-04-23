@@ -120,12 +120,13 @@ export async function deletePlan(
   }
 
   // Query all related Firestore collections in parallel
-  const [assignments, evidences, planItems, periodCompliance, notifications] =
+  const [assignments, evidences, planItems, periodCompliance, monthlyGeneration, notifications] =
     await Promise.all([
       adminDb.collection("rgdp_project_assignments").where("planId", "==", planId).get(),
       adminDb.collection("rgdp_evidences").where("planId", "==", planId).get(),
       adminDb.collection("rgdp_projectItems").where("planId", "==", planId).get(),
       adminDb.collection("rgdp_project_period_compliance").where("planId", "==", planId).get(),
+      adminDb.collection("rgdp_project_monthly_generation").where("planId", "==", planId).get(),
       adminDb.collection("rgdp_notifications").where("planId", "==", planId).get(),
     ]);
 
@@ -135,6 +136,7 @@ export async function deletePlan(
     ...evidences.docs.map((d) => d.ref),
     ...planItems.docs.map((d) => d.ref),
     ...periodCompliance.docs.map((d) => d.ref),
+    ...monthlyGeneration.docs.map((d) => d.ref),
     ...notifications.docs.map((d) => d.ref),
     adminDb.collection("rgdp_projects").doc(planId),
   ];
