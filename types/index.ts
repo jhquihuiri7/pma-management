@@ -28,10 +28,17 @@ export interface Admin {
   createdAt: string;
 }
 
-export type PlanReporte = "6 meses" | "1 año" | "2 años";
-export type PlanTipo = "Licencia" | "Registro Ambiental";
-export type PlanFase = "Planificación" | "Construcción" | "Operación" | "Cierre";
-export type PlanEnfoque = "Prevenir impactos" | "Controlar impactos" | "Monitorear y optimizar" | "Restaurar el ambiente";
+export const PLAN_REPORTE_VALUES = ["6 meses", "1 año", "2 años"] as const;
+export type PlanReporte = typeof PLAN_REPORTE_VALUES[number];
+
+export const PLAN_TIPO_VALUES = ["Licencia", "Registro Ambiental"] as const;
+export type PlanTipo = typeof PLAN_TIPO_VALUES[number];
+
+export const PLAN_FASE_VALUES = ["Planificación", "Construcción", "Operación", "Cierre"] as const;
+export type PlanFase = typeof PLAN_FASE_VALUES[number];
+
+export const PLAN_ENFOQUE_VALUES = ["Prevenir impactos", "Controlar impactos", "Monitorear y optimizar", "Restaurar el ambiente"] as const;
+export type PlanEnfoque = typeof PLAN_ENFOQUE_VALUES[number];
 
 export interface Plan {
   id: string;

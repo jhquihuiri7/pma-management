@@ -15,7 +15,7 @@ import {
 } from "@/components/ui/dialog";
 import { Plus, ArrowRight, Pencil, Download, Upload, Map } from "lucide-react";
 import { toast } from "sonner";
-import { Plan } from "@/types";
+import { Plan, PLAN_TIPO_VALUES, PLAN_FASE_VALUES, PLAN_ENFOQUE_VALUES, PLAN_REPORTE_VALUES } from "@/types";
 import { formatDateOnly } from "@/lib/dateOnly";
 import {
   CiiuEntry,
@@ -680,8 +680,7 @@ export default function PlansPage() {
                       required
                     >
                       <option value="" disabled>Seleccionar tipo...</option>
-                      <option value="Licencia">Licencia</option>
-                      <option value="Registro Ambiental">Registro Ambiental</option>
+                      {PLAN_TIPO_VALUES.map(tipo => <option key={tipo} value={tipo}>{tipo}</option>)}
                     </select>
                   </div>
                   <div className="space-y-2">
@@ -693,10 +692,7 @@ export default function PlansPage() {
                       required
                     >
                       <option value="" disabled>Seleccionar fase...</option>
-                      <option value="Planificación">Planificación</option>
-                      <option value="Construcción">Construcción</option>
-                      <option value="Operación">Operación</option>
-                      <option value="Cierre">Cierre</option>
+                      {PLAN_FASE_VALUES.map(fase => <option key={fase} value={fase}>{fase}</option>)}
                     </select>
                   </div>
                   <div className="space-y-2">
@@ -708,10 +704,7 @@ export default function PlansPage() {
                       required
                     >
                       <option value="" disabled>Seleccionar enfoque...</option>
-                      <option value="Prevenir impactos">Prevenir impactos</option>
-                      <option value="Controlar impactos">Controlar impactos</option>
-                      <option value="Monitorear y optimizar">Monitorear y optimizar</option>
-                      <option value="Restaurar el ambiente">Restaurar el ambiente</option>
+                      {PLAN_ENFOQUE_VALUES.map(enfoque => <option key={enfoque} value={enfoque}>{enfoque}</option>)}
                     </select>
                   </div>
                   <div className="space-y-2">
@@ -721,9 +714,7 @@ export default function PlansPage() {
                       value={form.report_per}
                       onChange={(e) => setForm((prev) => ({ ...prev, report_per: e.target.value }))}
                     >
-                      <option value="6 meses">6 meses</option>
-                      <option value="1 año">1 año</option>
-                      <option value="2 años">2 años</option>
+                      {PLAN_REPORTE_VALUES.map(reporte => <option key={reporte} value={reporte}>{reporte}</option>)}
                     </select>
                   </div>
                   <div className="space-y-2">
