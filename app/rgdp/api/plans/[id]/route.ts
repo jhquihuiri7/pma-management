@@ -7,7 +7,7 @@ import {
 } from "@/lib/api-utils";
 import { getPlanById, updatePlan, getAssignedUsers, deletePlan } from "@/services-rgdp/planService";
 import { getEvidencesByPlan } from "@/services-rgdp/evidenceService";
-import { PlanReporte, PlanTipo, PlanFase, PlanEnfoque } from "@/types";
+import { PlanReporte, PlanTipo } from "@/types";
 
 export async function GET(
   _req: NextRequest,
@@ -43,8 +43,6 @@ export async function PUT(
     report_per,
     tipo,
     start_date,
-    fase,
-    enfoque,
     visualization_url,
     location,
     ciiu,
@@ -63,8 +61,6 @@ export async function PUT(
       report_per: report_per as PlanReporte,
       tipo: tipo as PlanTipo | undefined,
       start_date,
-      fase: fase as PlanFase | undefined,
-      enfoque: enfoque as PlanEnfoque | undefined,
       visualization_url,
       location,
       ciiu,

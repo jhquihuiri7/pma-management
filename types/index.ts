@@ -31,7 +31,7 @@ export interface Admin {
 export const PLAN_REPORTE_VALUES = ["6 meses", "1 año", "2 años"] as const;
 export type PlanReporte = typeof PLAN_REPORTE_VALUES[number];
 
-export const PLAN_TIPO_VALUES = ["Licencia", "Registro Ambiental"] as const;
+export const PLAN_TIPO_VALUES = ["Licencia", "Registro Ambiental","N/A"] as const;
 export type PlanTipo = typeof PLAN_TIPO_VALUES[number];
 
 export const PLAN_FASE_VALUES = ["Planificación", "Construcción", "Operación", "Cierre"] as const;

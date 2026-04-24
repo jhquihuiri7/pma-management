@@ -48,8 +48,6 @@ export async function POST(req: NextRequest) {
   const report_per = String(body?.report_per ?? "6 meses");
   const tipo = body?.tipo;
   const start_date = body?.start_date;
-  const fase = body?.fase;
-  const enfoque = body?.enfoque;
   const visualization_url = body?.visualization_url;
 
   const location = body?.location as Plan["location"] | undefined;
@@ -116,8 +114,8 @@ export async function POST(req: NextRequest) {
       undefined,
       tipo,
       start_date,
-      fase,
-      enfoque,
+      undefined,
+      undefined,
       {
         location: {
           province: location.province,

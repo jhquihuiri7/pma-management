@@ -15,7 +15,7 @@ import {
 } from "@/components/ui/dialog";
 import { Plus, ArrowRight, Pencil, Download, Upload, Map } from "lucide-react";
 import { toast } from "sonner";
-import { Plan, PLAN_TIPO_VALUES, PLAN_FASE_VALUES, PLAN_ENFOQUE_VALUES, PLAN_REPORTE_VALUES } from "@/types";
+import { Plan, PLAN_TIPO_VALUES, PLAN_REPORTE_VALUES } from "@/types";
 import { formatDateOnly } from "@/lib/dateOnly";
 import {
   CiiuEntry,
@@ -39,8 +39,6 @@ interface ProjectFormState {
   title: string;
   description: string;
   tipo: string;
-  fase: string;
-  enfoque: string;
   report_per: string;
   start_date: string;
   visualization_url: string;
@@ -75,8 +73,6 @@ const INITIAL_FORM: ProjectFormState = {
   title: "",
   description: "",
   tipo: "",
-  fase: "",
-  enfoque: "",
   report_per: "6 meses",
   start_date: "",
   visualization_url: "",
@@ -176,7 +172,14 @@ export default function PlansPage() {
   const [editingPlan, setEditingPlan] = useState<Plan | null>(null);
   const [loading, setLoading] = useState(false);
   const [form, setForm] = useState<ProjectFormState>(INITIAL_FORM);
-  const [editForm, setEditForm] = useState({ title: "", description: "", visualization_url: "" });
+  const [editForm, setEditForm] = useState({
+    title: "",
+    description: "",
+    visualization_url: "",
+    tipo: "",
+    report_per: "6 meses",
+    start_date: "",
+  });
 
   const [ciiuCatalog, setCiiuCatalog] = useState<CiiuEntry[]>([]);
   const [catalogLoading, setCatalogLoading] = useState(false);
@@ -342,6 +345,9 @@ export default function PlansPage() {
       title: plan.title,
       description: plan.description || "",
       visualization_url: plan.visualization_url || "",
+      tipo: plan.tipo || "",
+      report_per: plan.report_per || "6 meses",
+      start_date: plan.start_date || "",
     });
     setEditOpen(true);
   }
@@ -684,30 +690,6 @@ export default function PlansPage() {
                     </select>
                   </div>
                   <div className="space-y-2">
-                    <Label>Fase</Label>
-                    <select
-                      className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm"
-                      value={form.fase}
-                      onChange={(e) => setForm((prev) => ({ ...prev, fase: e.target.value }))}
-                      required
-                    >
-                      <option value="" disabled>Seleccionar fase...</option>
-                      {PLAN_FASE_VALUES.map(fase => <option key={fase} value={fase}>{fase}</option>)}
-                    </select>
-                  </div>
-                  <div className="space-y-2">
-                    <Label>Enfoque clave</Label>
-                    <select
-                      className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm"
-                      value={form.enfoque}
-                      onChange={(e) => setForm((prev) => ({ ...prev, enfoque: e.target.value }))}
-                      required
-                    >
-                      <option value="" disabled>Seleccionar enfoque...</option>
-                      {PLAN_ENFOQUE_VALUES.map(enfoque => <option key={enfoque} value={enfoque}>{enfoque}</option>)}
-                    </select>
-                  </div>
-                  <div className="space-y-2">
                     <Label>Reporte</Label>
                     <select
                       className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm"
@@ -825,7 +807,7 @@ export default function PlansPage() {
       )}
 
       <Dialog open={editOpen} onOpenChange={setEditOpen}>
-        <DialogContent>
+        <DialogContent className="max-h-[90vh] overflow-y-auto">
           <DialogHeader>
             <DialogTitle>Editar Proyecto</DialogTitle>
           </DialogHeader>
@@ -846,14 +828,47 @@ export default function PlansPage() {
                 onChange={(e) => setEditForm((prev) => ({ ...prev, description: e.target.value }))}
               />
             </div>
-            <div className="space-y-2">
-              <Label>URL de Visualización (Opcional)</Label>
-              <Input
-                type="url"
-                placeholder="https://ejemplo.com"
-                value={editForm.visualization_url}
-                onChange={(e) => setEditForm((prev) => ({ ...prev, visualization_url: e.target.value }))}
-              />
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+              <div className="space-y-2">
+                <Label>Tipo</Label>
+                <select
+                  className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm"
+                  value={editForm.tipo}
+                  onChange={(e) => setEditForm((prev) => ({ ...prev, tipo: e.target.value }))}
+                  required
+                >
+                  <option value="" disabled>Seleccionar tipo...</option>
+                  {PLAN_TIPO_VALUES.map(tipo => <option key={tipo} value={tipo}>{tipo}</option>)}
+                </select>
+              </div>
+              <div className="space-y-2">
+                <Label>Reporte</Label>
+                <select
+                  className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm"
+                  value={editForm.report_per}
+                  onChange={(e) => setEditForm((prev) => ({ ...prev, report_per: e.target.value }))}
+                >
+                  {PLAN_REPORTE_VALUES.map(reporte => <option key={reporte} value={reporte}>{reporte}</option>)}
+                </select>
+              </div>
+              <div className="space-y-2">
+                <Label>Fecha de inicio</Label>
+                <Input
+                  type="date"
+                  value={editForm.start_date}
+                  onChange={(e) => setEditForm((prev) => ({ ...prev, start_date: e.target.value }))}
+                  required
+                />
+              </div>
+              <div className="space-y-2">
+                <Label>URL de Visualización (Opcional)</Label>
+                <Input
+                  type="url"
+                  placeholder="https://ejemplo.com"
+                  value={editForm.visualization_url}
+                  onChange={(e) => setEditForm((prev) => ({ ...prev, visualization_url: e.target.value }))}
+                />
+              </div>
             </div>
             <Button type="submit" className="w-full" disabled={loading}>
               {loading ? "Guardando..." : "Guardar cambios"}

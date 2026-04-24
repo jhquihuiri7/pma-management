@@ -38,7 +38,9 @@
       "Bash(git add *)",
       "Bash(git commit -m 'Fix: Resolve UTF-8 encoding issues in UI text *)",
       "Skill(git-commit-helper)",
-      "Skill(git-commit-helper:*)"
+      "Skill(git-commit-helper:*)",
+      "Bash(git commit -m ' *)",
+      "Bash(grep -E \"\\\\.\\(tsx|ts|jsx\\)$\")"
     ]
   }
 }
