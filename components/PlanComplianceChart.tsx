@@ -325,7 +325,7 @@ export default function PlanComplianceChart({
 
   const direccionTotals = new Map<string, { total: number; c: number }>();
   // Only iterate over items that have a status defined for this period
-  for (const [planItemId, status] of statusByItem) {
+  for (const [planItemId, status] of Array.from(statusByItem.entries())) {
     const it = itemById.get(planItemId);
     if (!it) continue;
     const dir = normalizeDireccion(it?.direccion);
@@ -337,7 +337,7 @@ export default function PlanComplianceChart({
 
   console.log(`=== ${plan.title} - Período: ${selectedPeriod} ===`);
   console.log("Totales por Dirección:");
-  for (const [dir, vals] of direccionTotals) {
+  for (const [dir, vals] of Array.from(direccionTotals.entries())) {
     console.log(`  ${dir}: C=${vals.c}, Total=${vals.total}, Porcentaje=${((vals.c/vals.total)*100).toFixed(1)}%`);
   }
 

@@ -124,6 +124,14 @@ export default function PlanDetailPage() {
   const [savingFinding, setSavingFinding] = useState(false);
   const [deletePlanOpen, setDeletePlanOpen] = useState(false);
   const [deletingPlan, setDeletingPlan] = useState(false);
+  const [manualEvidenceOpen, setManualEvidenceOpen] = useState(false);
+  const [manualEvidenceForm, setManualEvidenceForm] = useState({
+    itemId: "",
+    year: new Date().getFullYear(),
+    month: new Date().getMonth() + 1,
+    description: "",
+  });
+  const [uploadingManualEvidence, setUploadingManualEvidence] = useState(false);
 
   const loadPlan = useCallback(async () => {
     const res = await fetch(`/pma/api/plans/${id}`);
@@ -650,6 +658,39 @@ export default function PlanDetailPage() {
     } else {
       const data = await res.json();
       toast.error(data.error || "Error al subir");
+    }
+  }
+
+  async function handleManualEvidenceSubmit(e: React.FormEvent<HTMLFormElement>) {
+    e.preventDefault();
+    if (!manualEvidenceForm.itemId) {
+      toast.error("Selecciona un item");
+      return;
+    }
+    setUploadingManualEvidence(true);
+
+    const monthKey = `${manualEvidenceForm.year}-${String(manualEvidenceForm.month).padStart(2, "0")}`;
+    const formData = new FormData(e.currentTarget);
+    formData.set("planId", id);
+    formData.set("planItemId", manualEvidenceForm.itemId);
+    formData.set("activityMonth", monthKey);
+
+    const res = await fetch("/pma/api/upload", { method: "POST", body: formData });
+    setUploadingManualEvidence(false);
+
+    if (res.ok) {
+      toast.success("Evidencia agregada correctamente");
+      setManualEvidenceOpen(false);
+      setManualEvidenceForm({
+        itemId: "",
+        year: new Date().getFullYear(),
+        month: new Date().getMonth() + 1,
+        description: "",
+      });
+      loadPlan();
+    } else {
+      const data = await res.json();
+      toast.error(data.error || "Error al agregar evidencia");
     }
   }
 
@@ -1882,6 +1923,122 @@ export default function PlanDetailPage() {
         </DialogContent>
       </Dialog>
 
+      {/* Manual Evidence Dialog */}
+      <Dialog open={manualEvidenceOpen} onOpenChange={setManualEvidenceOpen}>
+        <DialogContent className="max-w-md">
+          <DialogHeader>
+            <DialogTitle>Agregar Evidencia Manual</DialogTitle>
+          </DialogHeader>
+          <form onSubmit={handleManualEvidenceSubmit} className="space-y-4">
+            <div className="space-y-2">
+              <Label htmlFor="manual-item">Item *</Label>
+              <select
+                id="manual-item"
+                className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                value={manualEvidenceForm.itemId}
+                onChange={(e) =>
+                  setManualEvidenceForm((prev) => ({
+                    ...prev,
+                    itemId: e.target.value,
+                  }))
+                }
+                required
+              >
+                <option value="">Selecciona un item</option>
+                {visibleItems.map((item) => (
+                  <option key={item.id} value={item.id}>
+                    {item.item}
+                  </option>
+                ))}
+              </select>
+            </div>
+
+            <div className="grid grid-cols-2 gap-3">
+              <div className="space-y-2">
+                <Label htmlFor="manual-month">Mes *</Label>
+                <select
+                  id="manual-month"
+                  className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                  value={manualEvidenceForm.month}
+                  onChange={(e) =>
+                    setManualEvidenceForm((prev) => ({
+                      ...prev,
+                      month: parseInt(e.target.value),
+                    }))
+                  }
+                  required
+                >
+                  {[1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12].map((m) => (
+                    <option key={m} value={m}>
+                      {new Date(2000, m - 1).toLocaleString("es", { month: "short" })}
+                    </option>
+                  ))}
+                </select>
+              </div>
+
+              <div className="space-y-2">
+                <Label htmlFor="manual-year">Año *</Label>
+                <select
+                  id="manual-year"
+                  className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                  value={manualEvidenceForm.year}
+                  onChange={(e) =>
+                    setManualEvidenceForm((prev) => ({
+                      ...prev,
+                      year: parseInt(e.target.value),
+                    }))
+                  }
+                  required
+                >
+                  {(() => {
+                    const startYear = plan ? new Date(plan.start_date ?? plan.createdAt).getFullYear() : new Date().getFullYear();
+                    const endYear = new Date().getFullYear();
+                    const years = [];
+                    for (let y = startYear; y <= endYear; y++) {
+                      years.push(y);
+                    }
+                    return years.map((y) => (
+                      <option key={y} value={y}>
+                        {y}
+                      </option>
+                    ));
+                  })()}
+                </select>
+              </div>
+            </div>
+
+            <div className="space-y-2">
+              <Label htmlFor="manual-file">Archivo (máx 10MB) *</Label>
+              <Input id="manual-file" name="file" type="file" required />
+            </div>
+
+            <div className="space-y-2">
+              <Label htmlFor="manual-desc">Descripción *</Label>
+              <Input
+                id="manual-desc"
+                name="description"
+                placeholder="Breve descripción de la evidencia"
+                required
+              />
+            </div>
+
+            <div className="flex gap-2 justify-end">
+              <Button
+                type="button"
+                variant="outline"
+                onClick={() => setManualEvidenceOpen(false)}
+              >
+                Cancelar
+              </Button>
+              <Button type="submit" disabled={uploadingManualEvidence}>
+                <Upload className="w-4 h-4 mr-2" />
+                {uploadingManualEvidence ? "Agregando..." : "Agregar Evidencia"}
+              </Button>
+            </div>
+          </form>
+        </DialogContent>
+      </Dialog>
+
       {/* Observation Dialog */}
       <Dialog open={!!obsItem} onOpenChange={(open) => { if (!open) setObsItem(null); }}>
         <DialogContent className="max-w-lg">
@@ -2095,9 +2252,21 @@ export default function PlanDetailPage() {
       {/* Evidence List */}
       <Card>
         <CardHeader>
-          <CardTitle className="text-base">
-            Evidencias ({visibleEvidences.length})
-          </CardTitle>
+          <div className="flex items-center justify-between">
+            <CardTitle className="text-base">
+              Evidencias ({visibleEvidences.length})
+            </CardTitle>
+            {isAdmin && (
+              <Button
+                size="sm"
+                onClick={() => setManualEvidenceOpen(true)}
+                className="gap-2"
+              >
+                <Plus className="w-4 h-4" />
+                Agregar Manual
+              </Button>
+            )}
+          </div>
         </CardHeader>
         <CardContent>
           {visibleEvidences.length === 0 ? (
@@ -2110,7 +2279,7 @@ export default function PlanDetailPage() {
                 <TableRow>
                   <TableHead className="w-[48px]"></TableHead>
                   <TableHead>Item</TableHead>
-                  <TableHead>Mes-AÍ±o</TableHead>
+                  <TableHead>Mes-Año</TableHead>
                   <TableHead>Archivo</TableHead>
                   <TableHead>Subido por</TableHead>
                   <TableHead>Descripción</TableHead>
