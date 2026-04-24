@@ -316,17 +316,29 @@ export default function PlanComplianceChart({
 
   const statusByItem = new Map(
     complianceRecords
-      .filter((r) => r.periodKey === selectedPeriod)
+      .filter((r) => r.periodKey === selectedPeriod && ["C", "NC+", "NC-"].includes(r.status))
       .map((r) => [r.planItemId, r.status] as const)
   );
 
+  // Build item lookup by planItemId since that's what statusByItem uses
+  const itemById = new Map((items ?? []).map((it) => [it.id, it] as const));
+
   const direccionTotals = new Map<string, { total: number; c: number }>();
-  for (const it of items ?? []) {
+  // Only iterate over items that have a status defined for this period
+  for (const [planItemId, status] of statusByItem) {
+    const it = itemById.get(planItemId);
+    if (!it) continue;
     const dir = normalizeDireccion(it?.direccion);
     const cur = direccionTotals.get(dir) ?? { total: 0, c: 0 };
     cur.total += 1;
-    if (statusByItem.get(it.id) === "C") cur.c += 1;
+    if (status === "C") cur.c += 1;
     direccionTotals.set(dir, cur);
+  }
+
+  console.log(`=== ${plan.title} - Período: ${selectedPeriod} ===`);
+  console.log("Totales por Dirección:");
+  for (const [dir, vals] of direccionTotals) {
+    console.log(`  ${dir}: C=${vals.c}, Total=${vals.total}, Porcentaje=${((vals.c/vals.total)*100).toFixed(1)}%`);
   }
 
   const gauges = Array.from(direccionTotals.entries())
