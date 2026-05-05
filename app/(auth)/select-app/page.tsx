@@ -6,7 +6,7 @@ import { useEffect } from "react";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { signOut } from "next-auth/react";
-import { Leaf, Shield, LogOut } from "lucide-react";
+import { Leaf, Shield, LogOut, Map, Globe } from "lucide-react";
 
 const APPS = [
   {
@@ -28,6 +28,26 @@ const APPS = [
     color: "text-blue-600",
     border: "border-blue-200 hover:border-blue-400",
     bg: "hover:bg-blue-50",
+  },
+  {
+    key: "pg",
+    label: "Plan Galápagos",
+    description: "Gestión de proyectos y seguimiento ambiental en Galápagos.",
+    href: "/pg/dashboard",
+    icon: Globe,
+    color: "text-violet-600",
+    border: "border-violet-200 hover:border-violet-400",
+    bg: "hover:bg-violet-50",
+  },
+  {
+    key: "geo",
+    label: "Geoportal Ambiental",
+    description: "Exploración de mapas interactivos y datos geoespaciales.",
+    href: "/geo/dashboard",
+    icon: Map,
+    color: "text-teal-600",
+    border: "border-teal-200 hover:border-teal-400",
+    bg: "hover:bg-teal-50",
   },
 ] as const;
 
@@ -64,7 +84,7 @@ export default function SelectAppPage() {
         <p className="text-sm text-muted-foreground mt-1">Selecciona la aplicación a la que deseas acceder.</p>
       </div>
 
-      <div className="flex flex-col sm:flex-row gap-4 w-full max-w-xl">
+      <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 w-full max-w-2xl">
         {availableApps.map((app) => {
           const Icon = app.icon;
           return (

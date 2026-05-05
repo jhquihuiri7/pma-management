@@ -40,7 +40,8 @@
       "Skill(git-commit-helper)",
       "Skill(git-commit-helper:*)",
       "Bash(git commit -m ' *)",
-      "Bash(grep -E \"\\\\.\\(tsx|ts|jsx\\)$\")"
+      "Bash(grep -E \"\\\\.\\(tsx|ts|jsx\\)$\")",
+      "WebFetch(domain:kmap.info-rac.org)"
     ]
   }
 }

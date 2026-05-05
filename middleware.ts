@@ -7,7 +7,7 @@ export default withAuth(
     const pathname = req.nextUrl.pathname;
     const isPath = (value: string) => pathname === value || pathname.startsWith(`${value}/`);
     const isAnyPath = (values: string[]) => values.some((value) => isPath(value));
-    const isApiRoute = pathname.startsWith("/pma/api") || pathname.startsWith("/rgdp/api");
+    const isApiRoute = pathname.startsWith("/pma/api") || pathname.startsWith("/rgdp/api") || pathname.startsWith("/pg/api") || pathname.startsWith("/geo/api");
 
     const loginUrl = new URL("/login", req.url);
     const selectAppUrl = new URL("/select-app", req.url);
@@ -71,6 +71,41 @@ export default withAuth(
       return NextResponse.next();
     }
 
+    if (isPath("/pg")) {
+      if (!token) return denyUnauthenticated();
+
+      const apps: string[] = (token as { apps?: string[] }).apps ?? [];
+      if (!apps.includes("pg")) return denyAppAccess();
+
+      const pgAdminOnlyPaths = [
+        "/pg/users",
+        "/pg/formatos",
+        "/pg/api/users",
+        "/pg/api/formats",
+      ];
+
+      if (isAnyPath(pgAdminOnlyPaths) && token.role !== "ADMIN") {
+        return denyRoleAccess("/pg/dashboard");
+      }
+
+      return NextResponse.next();
+    }
+
+    if (isPath("/geo")) {
+      if (!token) return denyUnauthenticated();
+
+      const apps: string[] = (token as { apps?: string[] }).apps ?? [];
+      if (!apps.includes("geo")) return denyAppAccess();
+
+      const geoAdminOnlyPaths = ["/geo/api/maps/create"];
+
+      if (isAnyPath(geoAdminOnlyPaths) && token.role !== "ADMIN") {
+        return denyRoleAccess("/geo/maps");
+      }
+
+      return NextResponse.next();
+    }
+
     return NextResponse.next();
   },
   {
@@ -81,5 +116,5 @@ export default withAuth(
 );
 
 export const config = {
-  matcher: ["/api/auth/:path*", "/select-app", "/pma", "/pma/:path*", "/rgdp", "/rgdp/:path*"],
+  matcher: ["/api/auth/:path*", "/select-app", "/pma", "/pma/:path*", "/rgdp", "/rgdp/:path*", "/pg", "/pg/:path*", "/geo", "/geo/:path*"],
 };

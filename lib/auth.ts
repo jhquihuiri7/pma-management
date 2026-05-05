@@ -160,7 +160,7 @@ export const authOptions: NextAuthOptions = {
               email: user.email,
               role: "ADMIN",
               adminId: user.id,
-              apps: ["pma", "rgdp"],
+              apps: ["pma", "rgdp", "pg", "geo"],
               createdAt: new Date().toISOString(),
             },
             { merge: true }
@@ -174,7 +174,7 @@ export const authOptions: NextAuthOptions = {
         if (account?.provider === "google") {
           token.role = "ADMIN" as UserRole;
           token.adminId = user.id;
-          token.apps = ["pma", "rgdp"];
+          token.apps = ["pma", "rgdp", "pg", "geo"];
         } else {
           token.role = (user as unknown as { role: UserRole }).role;
           token.adminId = (user as unknown as { adminId: string }).adminId;
