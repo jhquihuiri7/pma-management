@@ -1,7 +1,8 @@
 /**
  * Thin fetch wrapper for the @pma/api backend.
  *
- * - Reads NEXT_PUBLIC_API_BASE_URL (default: http://localhost:4000).
+ * - Server-side: uses API_BASE_URL env (default: http://localhost:4000).
+ * - Browser: uses NEXT_PUBLIC_API_BASE_URL env (default: /api-proxy → rewrite en next.config).
  * - Sends cookies with every request (credentials: "include").
  * - On 401 with a body that signals expired access, transparently calls
  *   POST /auth/refresh once and retries the original request.
@@ -12,7 +13,10 @@
  * will go through this client.
  */
 
-const BASE_URL = process.env.NEXT_PUBLIC_API_BASE_URL ?? "http://localhost:4000";
+const isServer = typeof window === "undefined";
+const BASE_URL = isServer
+  ? (process.env.API_BASE_URL ?? "http://localhost:4000")
+  : (process.env.NEXT_PUBLIC_API_BASE_URL ?? "/api-proxy");
 
 export class ApiError extends Error {
   constructor(public status: number, message: string, public details?: unknown) {

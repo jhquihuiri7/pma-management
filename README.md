@@ -1,36 +1,252 @@
-This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
+# PMA Management
 
-## Getting Started
+Sistema de gestión ambiental (PMA, RGDP, PGLP, GEO) construido como monorepo con Next.js y Fastify.
 
-First, run the development server:
+## Arquitectura
 
-```bash
-npm run dev
-# or
-yarn dev
-# or
-pnpm dev
-# or
-bun dev
+```
+pma-management/
+├── apps/
+│   ├── web/          Next.js 14 — frontend (puerto 3000)
+│   └── api/          Fastify + Drizzle + Postgres (puerto 4000 en dev / 3001 en Docker)
+├── packages/
+│   └── types/        Tipos TypeScript compartidos
+└── tools/
+    └── migration/    Pipeline ETL (Firestore + Drive → Postgres)
 ```
 
-Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
+## Requisitos
 
-You can start editing the page by modifying `app/page.tsx`. The page auto-updates as you edit the file.
+- Node.js >= 20
+- npm >= 9
+- Docker y Docker Compose (solo para despliegue en contenedor)
+- PostgreSQL 16 (solo para desarrollo local sin Docker)
 
-This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.
+---
 
-## Learn More
+## Desarrollo local
 
-To learn more about Next.js, take a look at the following resources:
+### 1. Instalar dependencias
 
-- [Next.js Documentation](https://nextjs.org/docs) - learn about Next.js features and API.
-- [Learn Next.js](https://nextjs.org/learn) - an interactive Next.js tutorial.
+```bash
+npm install
+```
 
-You can check out [the Next.js GitHub repository](https://github.com/vercel/next.js) - your feedback and contributions are welcome!
+### 2. Configurar variables de entorno de la API
 
-## Deploy on Vercel
+```bash
+cp apps/api/.env.example apps/api/.env
+```
 
-The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme) from the creators of Next.js.
+Editar `apps/api/.env` con los valores correctos:
 
-Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/building-your-application/deploying) for more details.
+```env
+NODE_ENV=development
+PORT=4000
+FRONTEND_ORIGIN=http://localhost:3000
+
+JWT_ACCESS_SECRET=<mínimo 32 caracteres>
+JWT_REFRESH_SECRET=<mínimo 32 caracteres>
+JWT_ACCESS_TTL=15m
+JWT_REFRESH_TTL=7d
+
+DATABASE_URL=postgresql://postgres:postgres@localhost:5432/pma_db
+
+STORAGE_ROOT=./data/storage
+STORAGE_PUBLIC_BASE_URL=http://localhost:4000/storage
+
+SMTP_HOST=
+SMTP_PORT=587
+SMTP_USER=
+SMTP_PASS=
+SMTP_FROM="PMA Management <no-reply@example.com>"
+```
+
+Generar secretos seguros para producción:
+```bash
+openssl rand -base64 48
+```
+
+### 3. Levantar PostgreSQL con Docker (recomendado)
+
+```bash
+docker compose up postgres -d
+```
+
+O apuntar `DATABASE_URL` a una instancia de PostgreSQL existente.
+
+### 4. Ejecutar migraciones
+
+```bash
+# Generar archivos SQL desde el schema de Drizzle
+npm run db:generate -w apps/api
+
+# Aplicar migraciones a la base de datos
+npm run db:migrate -w apps/api
+```
+
+### 5. Crear usuario administrador
+
+```bash
+npm run seed:admin -w apps/api
+```
+
+El script pedirá correo, nombre y contraseña de forma interactiva.
+
+### 6. Iniciar los servidores de desarrollo
+
+En terminales separadas:
+
+```bash
+# Terminal 1 — API (hot reload)
+npm run dev:api
+
+# Terminal 2 — Web (hot reload)
+npm run dev:web
+```
+
+| Servicio    | URL                        |
+|-------------|----------------------------|
+| Web         | http://localhost:3000      |
+| API         | http://localhost:4000      |
+| API Health  | http://localhost:4000/health |
+
+---
+
+## Base de datos — comandos de migraciones
+
+Todos los comandos se ejecutan desde la raíz del monorepo.
+
+```bash
+# Generar nuevos archivos de migración SQL desde el schema
+npm run db:generate -w apps/api
+
+# Aplicar todas las migraciones pendientes
+npm run db:migrate -w apps/api
+
+# Sincronizar el schema directamente a la DB (solo desarrollo, sin generar archivos)
+npm run db:push -w apps/api
+
+# Abrir Drizzle Studio (UI visual de la base de datos)
+npm run db:studio -w apps/api
+```
+
+### Usuarios y seeds
+
+```bash
+# Crear administrador de forma interactiva (pide datos por consola)
+npm run seed:admin -w apps/api
+
+# Crear administrador desde variables de entorno (automatizado)
+npm run seed:admin:env -w apps/api
+
+# Crear usuario con rol específico
+npm run create:user -w apps/api
+```
+
+---
+
+## Despliegue con Docker
+
+### Variables de entorno para Docker
+
+Crear un archivo `.env` en la raíz del proyecto (donde está `docker-compose.yml`):
+
+```env
+DB_NAME=pma_db
+DB_USER=postgres
+DB_PASSWORD=cambia_esto_en_produccion
+
+JWT_ACCESS_SECRET=<openssl rand -base64 48>
+JWT_REFRESH_SECRET=<openssl rand -base64 48>
+```
+
+### Levantar todos los servicios
+
+```bash
+docker compose up -d
+```
+
+| Servicio    | URL                        |
+|-------------|----------------------------|
+| Web         | http://localhost:3000      |
+| API         | http://localhost:3001      |
+| PostgreSQL  | localhost:5432             |
+
+### Ejecutar migraciones en el contenedor
+
+```bash
+docker compose exec api npm run db:migrate
+```
+
+### Crear administrador en el contenedor
+
+```bash
+docker compose exec -it api npm run seed:admin
+```
+
+### Ver logs
+
+```bash
+# Todos los servicios
+docker compose logs -f
+
+# Un servicio específico
+docker compose logs -f api
+docker compose logs -f web
+docker compose logs -f postgres
+```
+
+### Otros comandos de Docker
+
+```bash
+# Detener todos los servicios
+docker compose down
+
+# Detener y eliminar volúmenes (borra la base de datos)
+docker compose down -v
+
+# Reconstruir imágenes desde cero
+docker compose build --no-cache
+
+# Reiniciar un servicio
+docker compose restart api
+
+# Ver estado de los servicios
+docker compose ps
+```
+
+---
+
+## Build de producción (sin Docker)
+
+```bash
+# Compilar todos los workspaces
+npm run build
+
+# O individualmente
+npm run build:api
+npm run build:web
+```
+
+---
+
+## Verificación de tipos y lint
+
+```bash
+# Typecheck de todos los workspaces
+npm run typecheck
+
+# Lint de todos los workspaces
+npm run lint
+```
+
+---
+
+## Notas para entornos Codespaces / devcontainer
+
+En GitHub Codespaces el browser no puede acceder directamente a `localhost:4000`.
+El web server ya incluye un proxy en `/api-proxy/*` que reenvía al API server-side,
+por lo que las peticiones del browser pasan por Next.js sin necesidad de CORS.
+
+No se requiere configuración adicional para que funcione en Codespaces.

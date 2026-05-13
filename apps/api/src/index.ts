@@ -22,8 +22,15 @@ async function start() {
 
   registerErrorHandler(app);
 
+  const allowedOrigins = [env.FRONTEND_ORIGIN];
+  if (env.NODE_ENV === "development") {
+    const url = new URL(env.FRONTEND_ORIGIN);
+    const alt = url.hostname === "localhost" ? "127.0.0.1" : "localhost";
+    allowedOrigins.push(`${url.protocol}//${alt}:${url.port}`);
+  }
+
   await app.register(cors, {
-    origin: env.FRONTEND_ORIGIN,
+    origin: allowedOrigins,
     credentials: true,
   });
 

@@ -27,4 +27,4 @@ COPY --from=builder /app/packages ./packages
 
 EXPOSE 3001
 
-CMD ["node", "dist/index.js"]
+CMD ["node", "dist/apps/api/src/index.js"]

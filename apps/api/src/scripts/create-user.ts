@@ -1,3 +1,4 @@
+import "dotenv/config";
 import { getDb } from "../db/client.js";
 import { users, userApps, admins } from "../db/schema/shared.js";
 import { hashPassword } from "../auth/password.js";
