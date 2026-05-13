@@ -11,7 +11,10 @@
     "db:generate": "drizzle-kit generate",
     "db:migrate": "tsx src/db/run-migrations.ts",
     "db:push": "drizzle-kit push",
-    "db:studio": "drizzle-kit studio"
+    "db:studio": "drizzle-kit studio",
+    "seed:admin": "tsx src/scripts/seed-admin.ts",
+    "seed:admin:env": "tsx src/scripts/seed-admin-env.ts",
+    "create:user": "tsx src/scripts/create-user.ts"
   },
   "dependencies": {
     "@fastify/cookie": "^9.3.1",
