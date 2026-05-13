@@ -1,7 +1,7 @@
 "use client";
 
 import { usePathname } from "next/navigation";
-import { useSession, signOut } from "next-auth/react";
+import { useAuth } from "@/lib/auth-context";
 import { LayoutDashboard, Map, LogOut } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Separator } from "@/components/ui/separator";
@@ -12,8 +12,8 @@ const commonLinks = [
 
 export default function SidebarGeo() {
   const pathname = usePathname();
-  const { data: session } = useSession();
-  const role = session?.user?.role;
+  const { user: session, logout } = useAuth();
+  const role = session?.role;
 
   return (
     <aside className="w-64 h-screen bg-white border-r border-slate-200 flex flex-col fixed left-0 top-0">
@@ -58,10 +58,10 @@ export default function SidebarGeo() {
       <div className="p-4 border-t border-slate-200">
         <div className="flex items-center gap-3 mb-3 px-3">
           <div className="w-8 h-8 rounded-full bg-teal-100 flex items-center justify-center text-xs font-medium text-teal-700">
-            {session?.user?.name?.[0]?.toUpperCase() || "?"}
+            {session?.name?.[0]?.toUpperCase() || "?"}
           </div>
           <div className="flex-1 min-w-0">
-            <p className="text-sm font-medium truncate">{session?.user?.name}</p>
+            <p className="text-sm font-medium truncate">{session?.name}</p>
             <p className="text-xs text-muted-foreground truncate">
               {role === "ADMIN"
                 ? "Administrador"
@@ -75,7 +75,7 @@ export default function SidebarGeo() {
           variant="ghost"
           size="sm"
           className="w-full justify-start text-slate-600"
-          onClick={() => signOut({ callbackUrl: "/login" })}
+          onClick={() => logout()}
         >
           <LogOut className="w-4 h-4 mr-2" />
           Cerrar sesión

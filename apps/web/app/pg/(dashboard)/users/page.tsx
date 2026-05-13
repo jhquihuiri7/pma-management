@@ -1,5 +1,6 @@
 ﻿"use client";
 
+import { apiFetch } from "@/lib/api-client";
 import { useEffect, useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -38,7 +39,7 @@ export default function UsersPage() {
   });
 
   async function loadUsers() {
-    const res = await fetch("/pg/api/users");
+    const res = await apiFetch("/pg/api/users");
     if (res.ok) {
       setUsers(await res.json());
     }
@@ -52,7 +53,7 @@ export default function UsersPage() {
     e.preventDefault();
     setLoading(true);
 
-    const res = await fetch("/pg/api/users", {
+    const res = await apiFetch("/pg/api/users", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify(form),
@@ -83,7 +84,7 @@ export default function UsersPage() {
   async function handleDelete(userId: string) {
     if (!confirm("¿Estás seguro de que quieres eliminar este usuario?")) return;
 
-    const res = await fetch(`/pg/api/users?userId=${userId}`, {
+    const res = await apiFetch(`/pg/api/users?userId=${userId}`, {
       method: "DELETE",
     });
 
@@ -96,7 +97,7 @@ export default function UsersPage() {
   }
 
   async function handleResendInvitation(userId: string, email: string) {
-    const res = await fetch("/pg/api/users", {
+    const res = await apiFetch("/pg/api/users", {
       method: "PATCH",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ userId }),

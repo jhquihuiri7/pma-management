@@ -1,7 +1,8 @@
 ﻿"use client";
 
+import { apiFetch } from "@/lib/api-client";
 import { useEffect, useState, useCallback, useMemo } from "react";
-import { useSession } from "next-auth/react";
+import { useAuth } from "@/lib/auth-context";
 import { useParams, useSearchParams } from "next/navigation";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -67,9 +68,9 @@ function toMonthKey(date: Date): string {
 export default function PlanDetailPage() {
   const { id } = useParams<{ id: string }>();
   const searchParams = useSearchParams();
-  const { data: session } = useSession();
-  const isAdmin = session?.user?.role === "ADMIN";
-  const isViewer = session?.user?.role === "VIEWER";
+  const { user: session} = useAuth();
+  const isAdmin = session?.role === "ADMIN";
+  const isViewer = session?.role === "VIEWER";
   const deepLinkEvidenceId = searchParams.get("evidenceId");
 
   const [plan, setPlan] = useState<Plan | null>(null);
@@ -110,7 +111,7 @@ export default function PlanDetailPage() {
   const [draftGenerationInputs, setDraftGenerationInputs] = useState<Record<string, string>>({});
 
   const loadPlan = useCallback(async () => {
-    const res = await fetch(`/rgdp/api/plans/${id}`);
+    const res = await apiFetch(`/rgdp/api/plans/${id}`);
     if (res.ok) {
       const data = await res.json();
       setPlan(data.plan);
@@ -122,12 +123,12 @@ export default function PlanDetailPage() {
   }, [id]);
 
   const loadItems = useCallback(async () => {
-    const res = await fetch(`/rgdp/api/plans/${id}/items`);
+    const res = await apiFetch(`/rgdp/api/plans/${id}/items`);
     if (res.ok) setPlanItems(await res.json());
   }, [id]);
 
   const loadMonthlyGeneration = useCallback(async () => {
-    const res = await fetch(`/rgdp/api/plans/${id}/monthly-generation`);
+    const res = await apiFetch(`/rgdp/api/plans/${id}/monthly-generation`);
     if (res.ok) setMonthlyGenerationRecords(await res.json());
   }, [id]);
 
@@ -139,7 +140,7 @@ export default function PlanDetailPage() {
 
   useEffect(() => {
     if (isAdmin) {
-      fetch("/rgdp/api/users")
+      apiFetch("/rgdp/api/users")
         .then((r) => r.json())
         .then((data) => {
           if (Array.isArray(data)) {
@@ -152,7 +153,7 @@ export default function PlanDetailPage() {
 
   useEffect(() => {
     if (!isAdmin) return;
-    fetch("/rgdp/api/waste-catalog")
+    apiFetch("/rgdp/api/waste-catalog")
       .then((r) => r.json())
       .then((data) => {
         if (Array.isArray(data)) {
@@ -193,7 +194,7 @@ export default function PlanDetailPage() {
   async function handleDeletePlan() {
     setDeletingPlan(true);
     try {
-      const res = await fetch(`/rgdp/api/plans/${id}`, { method: "DELETE" });
+      const res = await apiFetch(`/rgdp/api/plans/${id}`, { method: "DELETE" });
       if (res.ok) {
         toast.success("Proyecto eliminado correctamente");
         window.location.assign("/rgdp/plans");
@@ -208,7 +209,7 @@ export default function PlanDetailPage() {
   }
 
   async function handleAssignViewer(viewerId: string) {
-    const res = await fetch(`/rgdp/api/plans/${id}/assign`, {
+    const res = await apiFetch(`/rgdp/api/plans/${id}/assign`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ userId: viewerId }),
@@ -222,7 +223,7 @@ export default function PlanDetailPage() {
   }
 
   async function handleUnassignViewer(viewerId: string) {
-    const res = await fetch(`/rgdp/api/plans/${id}/assign`, {
+    const res = await apiFetch(`/rgdp/api/plans/${id}/assign`, {
       method: "DELETE",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ userId: viewerId }),
@@ -240,7 +241,7 @@ export default function PlanDetailPage() {
     status: EvidenceValidationStatus,
     validationComment?: string
   ) {
-    const res = await fetch(`/rgdp/api/evidences?id=${evidenceId}`, {
+    const res = await apiFetch(`/rgdp/api/evidences?id=${evidenceId}`, {
       method: "PATCH",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
@@ -273,7 +274,7 @@ export default function PlanDetailPage() {
 
   async function handleDeleteEvidence(evidenceId: string) {
     if (!confirm("¿Eliminar esta evidencia?")) return;
-    const res = await fetch(`/rgdp/api/evidences?id=${evidenceId}`, {
+    const res = await apiFetch(`/rgdp/api/evidences?id=${evidenceId}`, {
       method: "DELETE",
     });
 
@@ -367,7 +368,7 @@ export default function PlanDetailPage() {
     setSavingItem(true);
     try {
       if (editingItem) {
-        const res = await fetch(`/rgdp/api/plans/${id}/items/${editingItem.id}`, {
+        const res = await apiFetch(`/rgdp/api/plans/${id}/items/${editingItem.id}`, {
           method: "PATCH",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify(payload),
@@ -391,7 +392,7 @@ export default function PlanDetailPage() {
         return;
       }
 
-      const res = await fetch(`/rgdp/api/plans/${id}/items`, {
+      const res = await apiFetch(`/rgdp/api/plans/${id}/items`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(payload),
@@ -485,7 +486,7 @@ export default function PlanDetailPage() {
 
     setBulkUploading(true);
     try {
-      const res = await fetch(`/rgdp/api/plans/${id}/items/bulk`, {
+      const res = await apiFetch(`/rgdp/api/plans/${id}/items/bulk`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ items: toSend }),
@@ -513,7 +514,7 @@ export default function PlanDetailPage() {
 
   async function handleAssignToItem(userId: string, category: ItemAssignmentCategory) {
     if (!selectedItem) return;
-    const res = await fetch(`/rgdp/api/plans/${id}/items/${selectedItem.id}/assign`, {
+    const res = await apiFetch(`/rgdp/api/plans/${id}/items/${selectedItem.id}/assign`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ userId, category }),
@@ -521,7 +522,7 @@ export default function PlanDetailPage() {
     if (res.ok) {
       toast.success("Reportero asignado al Item");
       setPendingAssign(null);
-      const updated = await fetch(`/rgdp/api/plans/${id}/items`);
+      const updated = await apiFetch(`/rgdp/api/plans/${id}/items`);
       if (updated.ok) {
         const items = await updated.json();
         setPlanItems(items);
@@ -534,14 +535,14 @@ export default function PlanDetailPage() {
 
   async function handleUnassignFromItem(userId: string) {
     if (!selectedItem) return;
-    const res = await fetch(`/rgdp/api/plans/${id}/items/${selectedItem.id}/assign`, {
+    const res = await apiFetch(`/rgdp/api/plans/${id}/items/${selectedItem.id}/assign`, {
       method: "DELETE",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ userId }),
     });
     if (res.ok) {
       toast.success("Reportero desasignado del Item");
-      const updated = await fetch(`/rgdp/api/plans/${id}/items`);
+      const updated = await apiFetch(`/rgdp/api/plans/${id}/items`);
       if (updated.ok) {
         const items = await updated.json();
         setPlanItems(items);
@@ -573,14 +574,14 @@ export default function PlanDetailPage() {
 
     const responses = await Promise.all([
       ...toRemove.map((userId) =>
-        fetch(`/rgdp/api/plans/${id}/items/${itemId}/assign`, {
+        apiFetch(`/rgdp/api/plans/${id}/items/${itemId}/assign`, {
           method: "DELETE",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({ userId }),
         })
       ),
       ...toUpsert.map(({ userId, category }) =>
-        fetch(`/rgdp/api/plans/${id}/items/${itemId}/assign`, {
+        apiFetch(`/rgdp/api/plans/${id}/items/${itemId}/assign`, {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({ userId, category }),
@@ -604,7 +605,7 @@ export default function PlanDetailPage() {
     formData.set("planItemId", calUpload.item.id);
     formData.set("activityMonth", monthKey);
 
-    const res = await fetch("/rgdp/api/upload", { method: "POST", body: formData });
+    const res = await apiFetch("/rgdp/api/upload", { method: "POST", body: formData });
     setUploadingCal(false);
 
     if (res.ok) {
@@ -627,7 +628,7 @@ export default function PlanDetailPage() {
         periodStart: periodKey,
         planId: id,
       });
-      const res = await fetch(`/rgdp/api/download/item-period?${params}`);
+      const res = await apiFetch(`/rgdp/api/download/item-period?${params}`);
       if (!res.ok) {
         const data = await res.json().catch(() => ({}));
         toast.error(data.error || "No hay archivos para descargar");
@@ -652,7 +653,7 @@ export default function PlanDetailPage() {
   async function handleDeleteItem(itemId: string) {
     if (!confirm("¿Eliminar este Item?")) return;
 
-    const res = await fetch(`/rgdp/api/plans/${id}/items/${itemId}`, {
+    const res = await apiFetch(`/rgdp/api/plans/${id}/items/${itemId}`, {
       method: "DELETE",
     });
 
@@ -667,7 +668,7 @@ export default function PlanDetailPage() {
   async function handleSaveObservation() {
     if (!obsItem) return;
     setSavingObs(true);
-    const res = await fetch(`/rgdp/api/plans/${id}/items/${obsItem.id}`, {
+    const res = await apiFetch(`/rgdp/api/plans/${id}/items/${obsItem.id}`, {
       method: "PATCH",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ observation: obsText }),
@@ -689,7 +690,7 @@ export default function PlanDetailPage() {
     periodKey: string,
     generationKg: number
   ): Promise<boolean> {
-    const res = await fetch(`/rgdp/api/plans/${id}/monthly-generation`, {
+    const res = await apiFetch(`/rgdp/api/plans/${id}/monthly-generation`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ planItemId, periodKey, generationKg }),
@@ -728,7 +729,7 @@ export default function PlanDetailPage() {
   }
 
 
-  const userId = session?.user?.id ?? "";
+  const userId = session?.id ?? "";
   const visibleItems = (isAdmin || isViewer)
     ? planItems
     : planItems.filter((pi) =>

@@ -1,7 +1,10 @@
 "use client";
 
+import { apiFetch } from "@/lib/api-client";
+
+
 import { useState, useEffect } from "react";
-import { useSession } from "next-auth/react";
+import { useAuth } from "@/lib/auth-context";
 import {
   TreePine,
   Waves,
@@ -77,8 +80,8 @@ function CategoryCard({
 }
 
 export default function GeoDashboardPage() {
-  const { data: session } = useSession();
-  const isAdmin = session?.user?.role === "ADMIN";
+  const { user: session} = useAuth();
+  const isAdmin = session?.role === "ADMIN";
 
   const [search, setSearch] = useState("");
   const [activeCategory, setActiveCategory] = useState<string | null>(null);
@@ -90,7 +93,7 @@ export default function GeoDashboardPage() {
 
   async function loadMaps() {
     try {
-      const res = await fetch("/geo/api/maps");
+      const res = await apiFetch("/geo/api/maps");
       if (res.ok) {
         const data = await res.json();
         setMaps(data);

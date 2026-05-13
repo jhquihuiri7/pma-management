@@ -1,7 +1,10 @@
 "use client";
 
+import { apiFetch } from "@/lib/api-client";
+
+
 import { useEffect, useState } from "react";
-import { useSession } from "next-auth/react";
+import { useAuth } from "@/lib/auth-context";
 import Link from "next/link";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -20,9 +23,9 @@ import { Plan, PLAN_TIPO_VALUES, PLAN_FASE_VALUES, PLAN_ENFOQUE_VALUES, PLAN_REP
 import { formatDateOnly } from "@/lib/dateOnly";
 
 export default function PlansPage() {
-  const { data: session } = useSession();
-  const isAdmin = session?.user?.role === "ADMIN";
-  const isViewer = session?.user?.role === "VIEWER";
+  const { user: session} = useAuth();
+  const isAdmin = session?.role === "ADMIN";
+  const isViewer = session?.role === "VIEWER";
   const [plans, setPlans] = useState<Plan[]>([]);
   const [open, setOpen] = useState(false);
   const [editOpen, setEditOpen] = useState(false);
@@ -32,7 +35,7 @@ export default function PlansPage() {
   const [editForm, setEditForm] = useState({ title: "", description: "", tipo: "", fase: "", enfoque: "", report_per: "6 meses", start_date: "", visualization_url: "" });
 
   async function loadPlans() {
-    const res = await fetch("/pma/api/plans");
+    const res = await apiFetch("/pma/api/plans");
     if (res.ok) setPlans(await res.json());
   }
 
@@ -44,7 +47,7 @@ export default function PlansPage() {
     e.preventDefault();
     setLoading(true);
 
-    const res = await fetch("/pma/api/plans", {
+    const res = await apiFetch("/pma/api/plans", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify(form),
@@ -83,7 +86,7 @@ export default function PlansPage() {
     if (!editingPlan) return;
     setLoading(true);
 
-    const res = await fetch(`/pma/api/plans/${editingPlan.id}`, {
+    const res = await apiFetch(`/pma/api/plans/${editingPlan.id}`, {
       method: "PUT",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify(editForm),

@@ -1,120 +1,40 @@
-﻿import { withAuth } from "next-auth/middleware";
-import { NextResponse } from "next/server";
+import { NextResponse, type NextRequest } from "next/server";
 
-export default withAuth(
-  function middleware(req) {
-    const token = req.nextauth.token;
-    const pathname = req.nextUrl.pathname;
-    const isPath = (value: string) => pathname === value || pathname.startsWith(`${value}/`);
-    const isAnyPath = (values: string[]) => values.some((value) => isPath(value));
-    const isApiRoute = pathname.startsWith("/pma/api") || pathname.startsWith("/rgdp/api") || pathname.startsWith("/pg/api") || pathname.startsWith("/geo/api");
+/**
+ * Edge middleware: presence-only check of the access cookie issued by
+ * apps/api. The real authentication and authorization (role/app) happen on
+ * the backend; here we only avoid serving protected page shells to obviously
+ * unauthenticated browsers and short-circuit redirects.
+ *
+ * We deliberately do NOT validate the JWT signature here — that requires the
+ * Node crypto module which is unavailable in the Edge runtime, and any client
+ * could in theory present an expired/forged token, but apps/api will reject
+ * it on every data fetch.
+ */
 
-    const loginUrl = new URL("/login", req.url);
-    const selectAppUrl = new URL("/select-app", req.url);
+const ACCESS_COOKIE = "pma_access";
+const APPS = ["pma", "rgdp", "pg", "pglp", "geo"] as const;
 
-    const denyUnauthenticated = () =>
-      isApiRoute
-        ? NextResponse.json({ error: "Unauthorized" }, { status: 401 })
-        : NextResponse.redirect(loginUrl);
+export default function middleware(req: NextRequest) {
+  const { pathname } = req.nextUrl;
+  const isAppPath = APPS.some((a) => pathname === `/${a}` || pathname.startsWith(`/${a}/`));
+  const isSelectApp = pathname === "/select-app" || pathname.startsWith("/select-app/");
+  if (!isAppPath && !isSelectApp) return NextResponse.next();
 
-    const denyAppAccess = () =>
-      isApiRoute
-        ? NextResponse.json({ error: "Forbidden" }, { status: 403 })
-        : NextResponse.redirect(selectAppUrl);
-
-    const denyRoleAccess = (fallbackPath: string) =>
-      isApiRoute
-        ? NextResponse.json({ error: "Forbidden" }, { status: 403 })
-        : NextResponse.redirect(new URL(fallbackPath, req.url));
-
-    if (isPath("/select-app") && !token) {
-      return NextResponse.redirect(loginUrl);
-    }
-
-    if (isPath("/pma")) {
-      if (!token) return denyUnauthenticated();
-
-      const apps: string[] = (token as { apps?: string[] }).apps ?? [];
-      if (!apps.includes("pma")) return denyAppAccess();
-
-      const pmaAdminOnlyPaths = [
-        "/pma/users",
-        "/pma/formatos",
-        "/pma/api/users",
-        "/pma/api/formats",
-      ];
-
-      if (isAnyPath(pmaAdminOnlyPaths) && token.role !== "ADMIN") {
-        return denyRoleAccess("/pma/dashboard");
-      }
-
-      return NextResponse.next();
-    }
-
-    if (isPath("/rgdp")) {
-      if (!token) return denyUnauthenticated();
-
-      const apps: string[] = (token as { apps?: string[] }).apps ?? [];
-      if (!apps.includes("rgdp")) return denyAppAccess();
-
-      const rgdpAdminOnlyPaths = [
-        "/rgdp/users",
-        "/rgdp/formatos",
-        "/rgdp/api/users",
-        "/rgdp/api/formats",
-      ];
-
-      if (isAnyPath(rgdpAdminOnlyPaths) && token.role !== "ADMIN") {
-        return denyRoleAccess("/rgdp/dashboard");
-      }
-
-      return NextResponse.next();
-    }
-
-    if (isPath("/pg")) {
-      if (!token) return denyUnauthenticated();
-
-      const apps: string[] = (token as { apps?: string[] }).apps ?? [];
-      if (!apps.includes("pg")) return denyAppAccess();
-
-      const pgAdminOnlyPaths = [
-        "/pg/users",
-        "/pg/formatos",
-        "/pg/api/users",
-        "/pg/api/formats",
-      ];
-
-      if (isAnyPath(pgAdminOnlyPaths) && token.role !== "ADMIN") {
-        return denyRoleAccess("/pg/dashboard");
-      }
-
-      return NextResponse.next();
-    }
-
-    if (isPath("/geo")) {
-      if (!token) return denyUnauthenticated();
-
-      const apps: string[] = (token as { apps?: string[] }).apps ?? [];
-      if (!apps.includes("geo")) return denyAppAccess();
-
-      const geoAdminOnlyPaths = ["/geo/api/maps/create"];
-
-      if (isAnyPath(geoAdminOnlyPaths) && token.role !== "ADMIN") {
-        return denyRoleAccess("/geo/maps");
-      }
-
-      return NextResponse.next();
-    }
-
-    return NextResponse.next();
-  },
-  {
-    callbacks: {
-      authorized: () => true,
-    },
-  }
-);
+  const hasCookie = Boolean(req.cookies.get(ACCESS_COOKIE)?.value);
+  if (hasCookie) return NextResponse.next();
+  const loginUrl = new URL("/login", req.url);
+  loginUrl.searchParams.set("next", pathname);
+  return NextResponse.redirect(loginUrl);
+}
 
 export const config = {
-  matcher: ["/api/auth/:path*", "/select-app", "/pma", "/pma/:path*", "/rgdp", "/rgdp/:path*", "/pg", "/pg/:path*", "/geo", "/geo/:path*"],
+  matcher: [
+    "/select-app",
+    "/pma/:path*",
+    "/rgdp/:path*",
+    "/pg/:path*",
+    "/pglp/:path*",
+    "/geo/:path*",
+  ],
 };

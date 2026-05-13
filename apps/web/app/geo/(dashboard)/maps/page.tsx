@@ -1,7 +1,10 @@
 "use client";
 
+import { apiFetch } from "@/lib/api-client";
+
+
 import { useEffect, useState } from "react";
-import { useSession } from "next-auth/react";
+import { useAuth } from "@/lib/auth-context";
 import { Map, Search } from "lucide-react";
 import { toast } from "sonner";
 import { GEO_MAPS, GEO_CATEGORIES } from "@/lib/geo-mock-data";
@@ -10,8 +13,8 @@ import AddMapDialog from "@/components/geo/AddMapDialog";
 import GeoMapCard from "@/components/geo/GeoMapCard";
 
 export default function MapsPage() {
-  const { data: session } = useSession();
-  const isAdmin = session?.user?.role === "ADMIN";
+  const { user: session} = useAuth();
+  const isAdmin = session?.role === "ADMIN";
 
   const [maps, setMaps] = useState<GeoMap[]>([]);
   const [search, setSearch] = useState("");
@@ -23,7 +26,7 @@ export default function MapsPage() {
 
   async function loadMaps() {
     try {
-      const res = await fetch("/geo/api/maps");
+      const res = await apiFetch("/geo/api/maps");
       if (res.ok) {
         const data = await res.json();
         setMaps(data);

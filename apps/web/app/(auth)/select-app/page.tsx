@@ -1,12 +1,11 @@
 "use client";
 
-import { useSession } from "next-auth/react";
 import { useRouter } from "next/navigation";
 import { useEffect } from "react";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
-import { signOut } from "next-auth/react";
 import { Leaf, Shield, LogOut, Map, Globe } from "lucide-react";
+import { useAuth } from "@/lib/auth-context";
 
 const APPS = [
   {
@@ -30,7 +29,7 @@ const APPS = [
     bg: "hover:bg-blue-50",
   },
   {
-    key: "pg",
+    key: "pglp",
     label: "Plan Galápagos",
     description: "Gestión de proyectos y seguimiento ambiental en Galápagos.",
     href: "/pg/dashboard",
@@ -52,7 +51,7 @@ const APPS = [
 ] as const;
 
 export default function SelectAppPage() {
-  const { data: session, status } = useSession();
+  const { user, status, logout } = useAuth();
   const router = useRouter();
 
   useEffect(() => {
@@ -61,7 +60,7 @@ export default function SelectAppPage() {
     }
   }, [status, router]);
 
-  if (status === "loading" || !session) {
+  if (status === "loading" || !user) {
     return (
       <div className="min-h-screen flex items-center justify-center bg-slate-50">
         <p className="text-sm text-muted-foreground">Cargando...</p>
@@ -69,8 +68,11 @@ export default function SelectAppPage() {
     );
   }
 
-  const userApps = session.user.apps ?? [];
-  const availableApps = APPS.filter((a) => userApps.includes(a.key));
+  // Accept both legacy "pg" and canonical "pglp" while the URL space is in transition.
+  const userApps = new Set(user.apps);
+  const availableApps = APPS.filter((a) =>
+    userApps.has(a.key) || (a.key === "pglp" && (userApps as Set<string>).has("pg"))
+  );
 
   if (availableApps.length === 1) {
     router.replace(availableApps[0].href);
@@ -80,8 +82,12 @@ export default function SelectAppPage() {
   return (
     <div className="min-h-screen flex flex-col items-center justify-center bg-slate-50 px-4 gap-6">
       <div className="text-center">
-        <h1 className="text-2xl font-bold text-slate-900">Bienvenido, {session.user.name?.split(" ")[0]}</h1>
-        <p className="text-sm text-muted-foreground mt-1">Selecciona la aplicación a la que deseas acceder.</p>
+        <h1 className="text-2xl font-bold text-slate-900">
+          Bienvenido, {user.name?.split(" ")[0]}
+        </h1>
+        <p className="text-sm text-muted-foreground mt-1">
+          Selecciona la aplicación a la que deseas acceder.
+        </p>
       </div>
 
       <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 w-full max-w-2xl">
@@ -117,7 +123,10 @@ export default function SelectAppPage() {
       )}
 
       <button
-        onClick={() => signOut({ callbackUrl: "/login" })}
+        onClick={async () => {
+          await logout();
+          router.push("/login");
+        }}
         className="flex items-center gap-1.5 text-xs text-muted-foreground hover:text-slate-700 transition-colors"
       >
         <LogOut className="w-3.5 h-3.5" />

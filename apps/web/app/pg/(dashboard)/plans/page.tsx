@@ -1,7 +1,8 @@
 ﻿"use client";
 
+import { apiFetch } from "@/lib/api-client";
 import { useEffect, useMemo, useState } from "react";
-import { useSession } from "next-auth/react";
+import { useAuth } from "@/lib/auth-context";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -162,9 +163,9 @@ function CiiuPicker({
 }
 
 export default function PlansPage() {
-  const { data: session } = useSession();
-  const isAdmin = session?.user?.role === "ADMIN";
-  const isViewer = session?.user?.role === "VIEWER";
+  const { user: session} = useAuth();
+  const isAdmin = session?.role === "ADMIN";
+  const isViewer = session?.role === "VIEWER";
 
   const [plans, setPlans] = useState<Plan[]>([]);
   const [open, setOpen] = useState(false);
@@ -197,7 +198,7 @@ export default function PlansPage() {
   }, [form.location.province, form.location.canton]);
 
   async function loadPlans() {
-    const res = await fetch("/pg/api/plans");
+    const res = await apiFetch("/pg/api/plans");
     if (res.ok) setPlans(await res.json());
   }
 
@@ -320,7 +321,7 @@ export default function PlansPage() {
 
     setLoading(true);
 
-    const res = await fetch("/pg/api/plans", {
+    const res = await apiFetch("/pg/api/plans", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify(form),
@@ -357,7 +358,7 @@ export default function PlansPage() {
     if (!editingPlan) return;
     setLoading(true);
 
-    const res = await fetch(`/pg/api/plans/${editingPlan.id}`, {
+    const res = await apiFetch(`/pg/api/plans/${editingPlan.id}`, {
       method: "PUT",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ ...editingPlan, ...editForm }),

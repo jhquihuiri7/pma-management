@@ -1,7 +1,8 @@
 ﻿"use client";
 
+import { apiFetch } from "@/lib/api-client";
 import { useEffect, useState } from "react";
-import { useSession } from "next-auth/react";
+import { useAuth } from "@/lib/auth-context";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import {
@@ -17,12 +18,12 @@ import { toast } from "sonner";
 import { Evidence } from "@/types";
 
 export default function EvidencesPage() {
-  const { data: session } = useSession();
-  const isAdmin = session?.user?.role === "ADMIN";
+  const { user: session} = useAuth();
+  const isAdmin = session?.role === "ADMIN";
   const [evidences, setEvidences] = useState<Evidence[]>([]);
 
   async function loadEvidences() {
-    const res = await fetch("/pg/api/evidences");
+    const res = await apiFetch("/pg/api/evidences");
     if (res.ok) {
       const data = await res.json();
       if (Array.isArray(data)) setEvidences(data);
@@ -35,7 +36,7 @@ export default function EvidencesPage() {
 
   async function handleDelete(id: string) {
     if (!confirm("¿Eliminar esta evidencia?")) return;
-    const res = await fetch(`/pg/api/evidences?id=${id}`, { method: "DELETE" });
+    const res = await apiFetch(`/pg/api/evidences?id=${id}`, { method: "DELETE" });
     if (res.ok) {
       toast.success("Evidencia eliminada");
       loadEvidences();

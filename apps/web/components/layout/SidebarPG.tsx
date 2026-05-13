@@ -1,7 +1,7 @@
 ﻿"use client";
 
 import { usePathname } from "next/navigation";
-import { useSession, signOut } from "next-auth/react";
+import { useAuth } from "@/lib/auth-context";
 import {
   LayoutDashboard,
   FileText,
@@ -30,8 +30,8 @@ const viewerLinks = [
 
 export default function SidebarPG() {
   const pathname = usePathname();
-  const { data: session } = useSession();
-  const role = session?.user?.role;
+  const { user: session, logout } = useAuth();
+  const role = session?.role;
   const links =
     role === "ADMIN" ? adminLinks : role === "VIEWER" ? viewerLinks : reporterLinks;
 
@@ -94,14 +94,14 @@ export default function SidebarPG() {
       <div className="p-4 border-t border-slate-200">
         <div className="flex items-center gap-3 mb-3 px-3">
           <div className="w-8 h-8 rounded-full bg-slate-200 flex items-center justify-center text-xs font-medium">
-            {session?.user?.name?.[0]?.toUpperCase() || "?"}
+            {session?.name?.[0]?.toUpperCase() || "?"}
           </div>
           <div className="flex-1 min-w-0">
             <p className="text-sm font-medium truncate">
-              {session?.user?.name}
+              {session?.name}
             </p>
             <p className="text-xs text-muted-foreground truncate">
-              {session?.user?.role === "ADMIN" ? "Administrador" : session?.user?.role === "REPORTER" ? "Reportero" : "Visualizador"}
+              {session?.role === "ADMIN" ? "Administrador" : session?.role === "REPORTER" ? "Reportero" : "Visualizador"}
             </p>
           </div>
         </div>
@@ -109,7 +109,7 @@ export default function SidebarPG() {
           variant="ghost"
           size="sm"
           className="w-full justify-start text-slate-600"
-          onClick={() => signOut({ callbackUrl: "/login" })}
+          onClick={() => logout()}
         >
           <LogOut className="w-4 h-4 mr-2" />
           Cerrar sesión

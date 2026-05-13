@@ -2,7 +2,7 @@ import type { Metadata } from "next";
 import { Inter } from "next/font/google";
 import "./globals.css";
 import { cn } from "@/lib/utils";
-import SessionProvider from "@/components/providers/SessionProvider";
+import { AuthProvider } from "@/lib/auth-context";
 import { Toaster } from "@/components/ui/sonner";
 
 const inter = Inter({ subsets: ["latin"], variable: "--font-sans" });
@@ -20,10 +20,10 @@ export default function RootLayout({
   return (
     <html lang="en" className={cn("font-sans", inter.variable)}>
       <body className="antialiased">
-        <SessionProvider>
+        <AuthProvider>
           {children}
           <Toaster />
-        </SessionProvider>
+        </AuthProvider>
       </body>
     </html>
   );

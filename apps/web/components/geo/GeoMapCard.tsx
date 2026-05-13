@@ -1,5 +1,8 @@
 "use client";
 
+import { apiFetch } from "@/lib/api-client";
+
+
 import { useState } from "react";
 import {
   Map,
@@ -50,7 +53,7 @@ export default function GeoMapCard({ geoMap, isAdmin, onEdit, onDelete }: Props)
   const handleDelete = async () => {
     setDeleting(true);
     try {
-      const res = await fetch(`/geo/api/maps/${geoMap.id}`, {
+      const res = await apiFetch(`/geo/api/maps/${geoMap.id}`, {
         method: "DELETE",
       });
 

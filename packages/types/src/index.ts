@@ -1,5 +1,7 @@
 export type UserRole = 'ADMIN' | 'REPORTER' | 'VIEWER';
-export type AppKey = "pma" | "rgdp" | "pg" | "geo";
+// "pg" is the legacy name; "pglp" is the new name. Both are accepted during
+// the migration; collections/routes will be renamed in Phase 2.
+export type AppKey = "pma" | "rgdp" | "pg" | "pglp" | "geo";
 
 export interface User {
   id: string;

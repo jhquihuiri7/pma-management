@@ -1,5 +1,8 @@
 "use client";
 
+import { apiFetch } from "@/lib/api-client";
+
+
 import dynamic from "next/dynamic";
 import { useParams } from "next/navigation";
 import { useState, useEffect } from "react";
@@ -50,7 +53,7 @@ export default function MapViewerPage() {
   useEffect(() => {
     async function loadMap() {
       try {
-        const res = await fetch("/geo/api/maps");
+        const res = await apiFetch("/geo/api/maps");
         if (res.ok) {
           const maps: GeoMap[] = await res.json();
           const found = maps.find((m) => m.id === id);

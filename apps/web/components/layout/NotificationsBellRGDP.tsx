@@ -1,7 +1,10 @@
 "use client";
 
+import { apiFetch } from "@/lib/api-client";
+
+
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { useSession } from "next-auth/react";
+import { useAuth } from "@/lib/auth-context";
 import { Bell } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import {
@@ -35,9 +38,9 @@ function buildNotificationHref(notification: AppNotification): string {
 }
 
 export default function NotificationsBellRGDP() {
-  const { data: session } = useSession();
-  const userId = session?.user?.id;
-  const adminId = session?.user?.adminId;
+  const { user: session} = useAuth();
+  const userId = session?.id;
+  const adminId = session?.adminId;
 
   const [notifications, setNotifications] = useState<AppNotification[]>([]);
 
@@ -47,7 +50,7 @@ export default function NotificationsBellRGDP() {
   );
 
   const fetchNotifications = useCallback(async () => {
-    const res = await fetch("/rgdp/api/notifications?limit=30", { cache: "no-store" });
+    const res = await apiFetch("/rgdp/api/notifications?limit=30", { cache: "no-store" });
     if (!res.ok) return;
     const data = (await res.json()) as AppNotification[];
     if (Array.isArray(data)) {
@@ -58,8 +61,7 @@ export default function NotificationsBellRGDP() {
   useEffect(() => {
     if (!userId || !adminId) return;
 
-    let disposed = false;
-    let unsubscribe: (() => void) | null = null;
+    // disposed flag is no longer needed without realtime subscription
     let pollId: ReturnType<typeof setInterval> | null = null;
 
     const stopPolling = () => {
@@ -75,55 +77,10 @@ export default function NotificationsBellRGDP() {
       }, 30000);
     };
 
-    const startRealtime = async () => {
-      try {
-        const [{ getFirestore, collection, query, where, onSnapshot }, { default: app }] =
-          await Promise.all([import("firebase/firestore"), import("@/lib/firebase")]);
-
-        if (disposed) return;
-
-        const db = getFirestore(app);
-        const notificationsQuery = query(
-          collection(db, "rgdp_notifications"),
-          where("userId", "==", userId),
-          where("adminId", "==", adminId)
-        );
-
-        unsubscribe = onSnapshot(
-          notificationsQuery,
-          (snapshot) => {
-            if (disposed) return;
-
-            const nowMs = Date.now();
-            const next = snapshot.docs
-              .map((doc) => doc.data() as AppNotification)
-              .filter((notification) => {
-                const expiresAtMs = new Date(notification.expiresAt).getTime();
-                return !Number.isNaN(expiresAtMs) && expiresAtMs > nowMs;
-              })
-              .sort(
-                (left, right) =>
-                  new Date(right.createdAt).getTime() - new Date(left.createdAt).getTime()
-              )
-              .slice(0, 30);
-
-            setNotifications(next);
-          },
-          () => {
-            startPolling();
-          }
-        );
-      } catch {
-        startPolling();
-      }
-    };
-
     void fetchNotifications();
-    void startRealtime();
 
+    startPolling();
     return () => {
-      disposed = true;
-      if (unsubscribe) unsubscribe();
       stopPolling();
     };
   }, [fetchNotifications, userId, adminId]);
@@ -137,7 +94,7 @@ export default function NotificationsBellRGDP() {
         )
       );
 
-      await fetch("/rgdp/api/notifications/read", {
+      await apiFetch("/rgdp/api/notifications/read", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ id: notification.id }),
@@ -147,7 +104,7 @@ export default function NotificationsBellRGDP() {
     window.location.assign(buildNotificationHref(notification));
   };
 
-  if (!session?.user) return null;
+  if (!session) return null;
 
   return (
     <DropdownMenu>

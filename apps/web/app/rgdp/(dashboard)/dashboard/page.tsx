@@ -1,6 +1,9 @@
 "use client";
 
-import { useSession } from "next-auth/react";
+import { apiFetch } from "@/lib/api-client";
+
+
+import { useAuth } from "@/lib/auth-context";
 import { useEffect, useState } from "react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { FileText, Users, Upload } from "lucide-react";
@@ -23,9 +26,9 @@ interface PlanChartData {
 }
 
 export default function DashboardPage() {
-  const { data: session } = useSession();
-  const isAdmin = session?.user?.role === "ADMIN";
-  const isViewer = session?.user?.role === "VIEWER";
+  const { user: session} = useAuth();
+  const isAdmin = session?.role === "ADMIN";
+  const isViewer = session?.role === "VIEWER";
   const [stats, setStats] = useState<Stats>({ plans: 0, reporters: 0, evidences: 0 });
   const [planCharts, setPlanCharts] = useState<PlanChartData[]>([]);
   const [chartsLoading, setChartsLoading] = useState(false);
@@ -33,8 +36,8 @@ export default function DashboardPage() {
 
   useEffect(() => {
     async function loadStats() {
-      const requests: Promise<Response>[] = [fetch("/rgdp/api/plans")];
-      if (!isAdmin) requests.push(fetch("/rgdp/api/evidences"));
+      const requests: Promise<Response>[] = [apiFetch("/rgdp/api/plans")];
+      if (!isAdmin) requests.push(apiFetch("/rgdp/api/evidences"));
       const [plansRes, evidencesRes] = await Promise.all(requests);
       const plans: Plan[] = plansRes.ok ? await plansRes.json() : [];
       const evidences = evidencesRes?.ok ? await evidencesRes.json() : [];
@@ -46,7 +49,7 @@ export default function DashboardPage() {
       };
 
       if (isAdmin) {
-        const usersRes = await fetch("/rgdp/api/users");
+        const usersRes = await apiFetch("/rgdp/api/users");
         if (usersRes.ok) {
           const users = await usersRes.json();
           statsData.reporters = Array.isArray(users) ? users.length : 0;
@@ -62,8 +65,8 @@ export default function DashboardPage() {
           const chartResults = await Promise.all(
             plans.map(async (plan) => {
               const [itemsRes, complianceRes] = await Promise.all([
-                fetch(`/rgdp/api/plans/${plan.id}/items`),
-                fetch(`/rgdp/api/plans/${plan.id}/period-compliance`),
+                apiFetch(`/rgdp/api/plans/${plan.id}/items`),
+                apiFetch(`/rgdp/api/plans/${plan.id}/period-compliance`),
               ]);
               const items: PlanItem[] = itemsRes.ok ? await itemsRes.json() : [];
               const complianceRecords: PeriodCompliance[] = complianceRes.ok
@@ -107,7 +110,7 @@ export default function DashboardPage() {
       <div>
         <h1 className="text-2xl font-bold mb-1">Panel Principal</h1>
         <p className="text-muted-foreground mb-6">
-          Bienvenido, {session?.user?.name}
+          Bienvenido, {session?.name}
         </p>
 
         <div className="grid grid-cols-1 md:grid-cols-3 gap-6">

@@ -7,6 +7,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { CheckCircle2, Loader2 } from "lucide-react";
+import { auth } from "@/lib/api-client";
 
 export default function ForgotPasswordPage() {
   const router = useRouter();
@@ -20,18 +21,13 @@ export default function ForgotPasswordPage() {
     setError("");
     setSubmitting(true);
 
-    const res = await fetch("/api/auth/forgot-password", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ email }),
-    });
-
-    setSubmitting(false);
-
-    if (res.ok) {
+    try {
+      await auth.forgot(email);
       setSent(true);
-    } else {
+    } catch {
       setError("Ocurrió un error. Inténtalo de nuevo.");
+    } finally {
+      setSubmitting(false);
     }
   }
 

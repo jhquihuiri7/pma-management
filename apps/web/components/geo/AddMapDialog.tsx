@@ -1,5 +1,8 @@
 "use client";
 
+import { apiFetch } from "@/lib/api-client";
+
+
 import { useState } from "react";
 import { Plus, X, Link } from "lucide-react";
 import { toast } from "sonner";
@@ -30,7 +33,7 @@ export default function AddMapDialog({ onAdd }: Props) {
     setLoading(true);
 
     try {
-      const res = await fetch("/geo/api/maps", {
+      const res = await apiFetch("/geo/api/maps", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({

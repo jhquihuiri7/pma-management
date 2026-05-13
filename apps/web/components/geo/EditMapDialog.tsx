@@ -1,5 +1,8 @@
 "use client";
 
+import { apiFetch } from "@/lib/api-client";
+
+
 import { useState, useEffect } from "react";
 import { X, Link } from "lucide-react";
 import { toast } from "sonner";
@@ -38,7 +41,7 @@ export default function EditMapDialog({ map, onSave, onClose }: Props) {
     setLoading(true);
 
     try {
-      const res = await fetch(`/geo/api/maps/${map.id}`, {
+      const res = await apiFetch(`/geo/api/maps/${map.id}`, {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
