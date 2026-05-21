@@ -81,7 +81,7 @@ case "$ACTION" in
 
     migrate)
         echo "🗄️  Ejecutando migraciones..."
-        docker compose exec api npm run db:migrate --workspace=@pma/api
+        docker compose exec api node dist/apps/api/src/db/run-migrations.js
         echo "✅ Migraciones completadas"
         ;;
 

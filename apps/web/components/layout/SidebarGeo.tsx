@@ -2,7 +2,7 @@
 
 import { usePathname } from "next/navigation";
 import { useAuth } from "@/lib/auth-context";
-import { LayoutDashboard, Map, LogOut } from "lucide-react";
+import { LayoutDashboard, Map, LogOut, UserCog } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Separator } from "@/components/ui/separator";
 
@@ -53,6 +53,27 @@ export default function SidebarGeo() {
             </a>
           );
         })}
+
+        {role === "ADMIN" && (
+          <>
+            <div className="pt-4 pb-1">
+              <p className="px-3 text-xs font-semibold text-slate-400 uppercase tracking-wider">
+                Configuración
+              </p>
+            </div>
+            <a
+              href="/admin/users"
+              className={`flex items-center gap-3 px-3 py-2 rounded-lg text-sm font-medium transition-colors ${
+                pathname.startsWith("/admin/users")
+                  ? "bg-teal-50 text-teal-800"
+                  : "text-slate-600 hover:bg-slate-50 hover:text-slate-900"
+              }`}
+            >
+              <UserCog className="w-4 h-4" />
+              Gestión de Usuarios
+            </a>
+          </>
+        )}
       </nav>
 
       <div className="p-4 border-t border-slate-200">

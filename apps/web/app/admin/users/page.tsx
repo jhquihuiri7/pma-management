@@ -1,0 +1,410 @@
+"use client";
+
+import { apiFetch } from "@/lib/api-client";
+import { useEffect, useState } from "react";
+import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import {
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
+} from "@/components/ui/table";
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+  DialogTrigger,
+} from "@/components/ui/dialog";
+import { Badge } from "@/components/ui/badge";
+import { Plus, Trash2, Send, Pencil, X } from "lucide-react";
+import { toast } from "sonner";
+import { User } from "@/types";
+
+type AppKey = "pma" | "rgdp" | "pglp" | "geo";
+
+const APP_LABELS: Record<AppKey, string> = {
+  pma: "PMA",
+  rgdp: "RGDP",
+  pglp: "Plan Galápagos",
+  geo: "Geoportal",
+};
+
+const ALL_APPS: AppKey[] = ["pma", "rgdp", "pglp", "geo"];
+
+const emptyForm = {
+  name: "",
+  email: "",
+  unit: "",
+  position: "",
+  role: "REPORTER" as "REPORTER" | "VIEWER",
+  apps: [] as AppKey[],
+};
+
+export default function AdminUsersPage() {
+  const [users, setUsers] = useState<User[]>([]);
+  const [createOpen, setCreateOpen] = useState(false);
+  const [editUser, setEditUser] = useState<User | null>(null);
+  const [loading, setLoading] = useState(false);
+  const [form, setForm] = useState(emptyForm);
+  const [editForm, setEditForm] = useState({ name: "", unit: "", position: "" });
+
+  async function loadUsers() {
+    const res = await apiFetch("/api/users");
+    if (res.ok) setUsers(await res.json());
+  }
+
+  useEffect(() => { loadUsers(); }, []);
+
+  function toggleApp(app: AppKey) {
+    setForm((f) => ({
+      ...f,
+      apps: f.apps.includes(app) ? f.apps.filter((a) => a !== app) : [...f.apps, app],
+    }));
+  }
+
+  async function handleCreate(e: React.FormEvent) {
+    e.preventDefault();
+    setLoading(true);
+    const res = await apiFetch("/api/users", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        name: form.name,
+        email: form.email,
+        role: form.role,
+        unit: form.unit || undefined,
+        position: form.position || undefined,
+        apps: form.apps,
+      }),
+    });
+    setLoading(false);
+    if (res.ok) {
+      toast.success(`Usuario creado. Se envió un correo de invitación a ${form.email}.`);
+      setForm(emptyForm);
+      setCreateOpen(false);
+      loadUsers();
+    } else {
+      const data = await res.json();
+      toast.error(data.message || "Error al crear usuario");
+    }
+  }
+
+  async function handleEdit(e: React.FormEvent) {
+    e.preventDefault();
+    if (!editUser) return;
+    setLoading(true);
+    const res = await apiFetch(`/api/users/${editUser.id}`, {
+      method: "PUT",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        name: editForm.name || undefined,
+        unit: editForm.unit || null,
+        position: editForm.position || null,
+      }),
+    });
+    setLoading(false);
+    if (res.ok) {
+      toast.success("Usuario actualizado");
+      setEditUser(null);
+      loadUsers();
+    } else {
+      const data = await res.json();
+      toast.error(data.message || "Error al actualizar usuario");
+    }
+  }
+
+  async function handleDelete(userId: string, name: string) {
+    if (!confirm(`¿Eliminar permanentemente a ${name}? Esto lo quitará de todos los subsistemas.`)) return;
+    const res = await apiFetch(`/api/users/${userId}`, { method: "DELETE" });
+    if (res.ok) {
+      toast.success("Usuario eliminado");
+      loadUsers();
+    } else {
+      toast.error("Error al eliminar usuario");
+    }
+  }
+
+  async function handleResend(userId: string, email: string) {
+    const res = await apiFetch(`/api/users/${userId}/resend-invitation`, { method: "POST" });
+    if (res.ok) {
+      toast.success(`Invitación reenviada a ${email}`);
+    } else {
+      const data = await res.json();
+      toast.error(data.message || "Error al reenviar invitación");
+    }
+  }
+
+  async function handleAssignApp(userId: string, appKey: AppKey) {
+    const res = await apiFetch(`/api/users/${userId}/apps`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ appKey }),
+    });
+    if (res.ok) {
+      loadUsers();
+    } else {
+      const data = await res.json();
+      toast.error(data.message || "Error al asignar aplicación");
+    }
+  }
+
+  async function handleUnassignApp(userId: string, appKey: AppKey) {
+    const res = await apiFetch(`/api/users/${userId}/apps/${appKey}`, { method: "DELETE" });
+    if (res.ok) {
+      loadUsers();
+    } else {
+      const data = await res.json();
+      toast.error(data.message || "Error al quitar aplicación");
+    }
+  }
+
+  function openEdit(user: User) {
+    setEditUser(user);
+    setEditForm({ name: user.name, unit: user.unit || "", position: user.position || "" });
+  }
+
+  const reporters = users.filter((u) => u.role === "REPORTER");
+  const viewers = users.filter((u) => u.role === "VIEWER");
+
+  function StatusBadge({ user }: { user: User }) {
+    return user.passwordSet === false ? (
+      <Badge variant="outline" className="text-amber-600 border-amber-300 bg-amber-50">Pendiente</Badge>
+    ) : (
+      <Badge variant="outline" className="text-green-600 border-green-300 bg-green-50">Activo</Badge>
+    );
+  }
+
+  function AppBadges({ user }: { user: User }) {
+    const assigned = (user.apps ?? []) as AppKey[];
+    const unassigned = ALL_APPS.filter((a) => !assigned.includes(a));
+    return (
+      <div className="flex flex-wrap gap-1">
+        {assigned.map((a) => (
+          <Badge
+            key={a}
+            variant="secondary"
+            className="text-xs flex items-center gap-1 cursor-pointer hover:bg-red-100 hover:text-red-700 group"
+            onClick={() => handleUnassignApp(user.id, a)}
+            title={`Quitar de ${APP_LABELS[a]}`}
+          >
+            {APP_LABELS[a]}
+            <X className="w-2.5 h-2.5 opacity-0 group-hover:opacity-100" />
+          </Badge>
+        ))}
+        {unassigned.map((a) => (
+          <Badge
+            key={a}
+            variant="outline"
+            className="text-xs cursor-pointer hover:bg-slate-100 text-slate-400 border-dashed"
+            onClick={() => handleAssignApp(user.id, a)}
+            title={`Asignar a ${APP_LABELS[a]}`}
+          >
+            + {APP_LABELS[a]}
+          </Badge>
+        ))}
+      </div>
+    );
+  }
+
+  function UserTable({ list }: { list: User[] }) {
+    return (
+      <Table>
+        <TableHeader>
+          <TableRow>
+            <TableHead>Nombre</TableHead>
+            <TableHead>Correo</TableHead>
+            <TableHead>Dirección</TableHead>
+            <TableHead>Cargo</TableHead>
+            <TableHead>Estado</TableHead>
+            <TableHead>Aplicaciones</TableHead>
+            <TableHead className="w-[100px]"></TableHead>
+          </TableRow>
+        </TableHeader>
+        <TableBody>
+          {list.map((user) => (
+            <TableRow key={user.id}>
+              <TableCell className="font-medium">{user.name}</TableCell>
+              <TableCell>{user.email}</TableCell>
+              <TableCell>{user.unit || "-"}</TableCell>
+              <TableCell>{user.position || "-"}</TableCell>
+              <TableCell><StatusBadge user={user} /></TableCell>
+              <TableCell><AppBadges user={user} /></TableCell>
+              <TableCell>
+                <div className="flex items-center gap-1">
+                  {user.passwordSet === false && (
+                    <Button variant="ghost" size="sm" title="Reenviar invitación"
+                      onClick={() => handleResend(user.id, user.email)}>
+                      <Send className="w-4 h-4 text-blue-500" />
+                    </Button>
+                  )}
+                  <Button variant="ghost" size="sm" title="Editar usuario"
+                    onClick={() => openEdit(user)}>
+                    <Pencil className="w-4 h-4 text-slate-500" />
+                  </Button>
+                  <Button variant="ghost" size="sm" title="Eliminar usuario"
+                    onClick={() => handleDelete(user.id, user.name)}>
+                    <Trash2 className="w-4 h-4 text-red-500" />
+                  </Button>
+                </div>
+              </TableCell>
+            </TableRow>
+          ))}
+        </TableBody>
+      </Table>
+    );
+  }
+
+  return (
+    <div>
+      <div className="flex items-center justify-between mb-6">
+        <div>
+          <h1 className="text-2xl font-bold">Gestión de Usuarios</h1>
+          <p className="text-muted-foreground">
+            Crea y administra usuarios de tu organización. Asígnalos a los subsistemas desde aquí.
+          </p>
+        </div>
+
+        <Dialog open={createOpen} onOpenChange={setCreateOpen}>
+          <DialogTrigger render={<Button />}>
+            <Plus className="w-4 h-4 mr-2" />
+            Nuevo Usuario
+          </DialogTrigger>
+          <DialogContent>
+            <DialogHeader>
+              <DialogTitle>Crear Nuevo Usuario</DialogTitle>
+            </DialogHeader>
+            <p className="text-sm text-muted-foreground -mt-2">
+              Se enviará un correo de invitación para que el usuario establezca su contraseña.
+            </p>
+            <form onSubmit={handleCreate} className="space-y-4 mt-2">
+              <div className="space-y-2">
+                <Label>Tipo de usuario</Label>
+                <div className="flex rounded-lg bg-slate-100 p-1">
+                  {(["REPORTER", "VIEWER"] as const).map((r) => (
+                    <button key={r} type="button"
+                      className={`flex-1 py-2 text-sm font-medium rounded-md transition-colors ${
+                        form.role === r ? "bg-white shadow-sm text-slate-900" : "text-slate-500 hover:text-slate-700"
+                      }`}
+                      onClick={() => setForm({ ...form, role: r })}
+                    >
+                      {r === "REPORTER" ? "Reportero" : "Visualizador"}
+                    </button>
+                  ))}
+                </div>
+              </div>
+
+              <div className="space-y-2">
+                <Label htmlFor="name">Nombre Completo</Label>
+                <Input id="name" value={form.name} required
+                  onChange={(e) => setForm({ ...form, name: e.target.value })} />
+              </div>
+              <div className="space-y-2">
+                <Label htmlFor="email">Correo electrónico</Label>
+                <Input id="email" type="email" value={form.email} required
+                  onChange={(e) => setForm({ ...form, email: e.target.value })} />
+              </div>
+              <div className="grid grid-cols-2 gap-3">
+                <div className="space-y-2">
+                  <Label htmlFor="unit">Dirección</Label>
+                  <Input id="unit" value={form.unit}
+                    onChange={(e) => setForm({ ...form, unit: e.target.value })} />
+                </div>
+                <div className="space-y-2">
+                  <Label htmlFor="position">Cargo</Label>
+                  <Input id="position" value={form.position}
+                    onChange={(e) => setForm({ ...form, position: e.target.value })} />
+                </div>
+              </div>
+
+              <div className="space-y-2">
+                <Label>Asignar a subsistemas</Label>
+                <div className="grid grid-cols-2 gap-2">
+                  {ALL_APPS.map((appKey) => (
+                    <label key={appKey}
+                      className="flex items-center gap-2 p-2 rounded-lg border border-slate-200 cursor-pointer hover:bg-slate-50">
+                      <input type="checkbox" checked={form.apps.includes(appKey)}
+                        onChange={() => toggleApp(appKey)}
+                        className="rounded border-slate-300" />
+                      <span className="text-sm font-medium">{APP_LABELS[appKey]}</span>
+                    </label>
+                  ))}
+                </div>
+              </div>
+
+              <Button type="submit" className="w-full" disabled={loading}>
+                {loading ? "Creando..." : "Crear Usuario"}
+              </Button>
+            </form>
+          </DialogContent>
+        </Dialog>
+      </div>
+
+      <Card className="mb-6">
+        <CardHeader>
+          <CardTitle className="text-base">Reporteros ({reporters.length})</CardTitle>
+        </CardHeader>
+        <CardContent>
+          {reporters.length === 0 ? (
+            <p className="text-sm text-muted-foreground text-center py-8">
+              Sin reporteros aún. Crea uno para comenzar.
+            </p>
+          ) : (
+            <UserTable list={reporters} />
+          )}
+        </CardContent>
+      </Card>
+
+      <Card>
+        <CardHeader>
+          <CardTitle className="text-base">Visualizadores ({viewers.length})</CardTitle>
+        </CardHeader>
+        <CardContent>
+          {viewers.length === 0 ? (
+            <p className="text-sm text-muted-foreground text-center py-8">
+              Sin visualizadores aún. Crea uno para comenzar.
+            </p>
+          ) : (
+            <UserTable list={viewers} />
+          )}
+        </CardContent>
+      </Card>
+
+      {/* Edit dialog */}
+      <Dialog open={!!editUser} onOpenChange={(o) => !o && setEditUser(null)}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Editar Usuario</DialogTitle>
+          </DialogHeader>
+          <form onSubmit={handleEdit} className="space-y-4 mt-2">
+            <div className="space-y-2">
+              <Label htmlFor="edit-name">Nombre Completo</Label>
+              <Input id="edit-name" value={editForm.name} required
+                onChange={(e) => setEditForm({ ...editForm, name: e.target.value })} />
+            </div>
+            <div className="grid grid-cols-2 gap-3">
+              <div className="space-y-2">
+                <Label htmlFor="edit-unit">Dirección</Label>
+                <Input id="edit-unit" value={editForm.unit}
+                  onChange={(e) => setEditForm({ ...editForm, unit: e.target.value })} />
+              </div>
+              <div className="space-y-2">
+                <Label htmlFor="edit-position">Cargo</Label>
+                <Input id="edit-position" value={editForm.position}
+                  onChange={(e) => setEditForm({ ...editForm, position: e.target.value })} />
+              </div>
+            </div>
+            <Button type="submit" className="w-full" disabled={loading}>
+              {loading ? "Guardando..." : "Guardar Cambios"}
+            </Button>
+          </form>
+        </DialogContent>
+      </Dialog>
+    </div>
+  );
+}

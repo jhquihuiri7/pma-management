@@ -42,5 +42,9 @@ tools/migration/dump/
 tools/migration/files/
 tools/migration/drive-manifest.json
 
+# migration env (contains real credentials — never commit)
+tools/migration/.env
+tools/migration/.env.example
+
 # local IDE / tooling
 .claude/

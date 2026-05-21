@@ -15,6 +15,12 @@ FROM base AS builder
 WORKDIR /app
 
 ENV NEXT_TELEMETRY_DISABLED=1
+
+# API_BASE_URL must be known at build time because next.config.mjs
+# evaluates rewrites() during `next build`.
+ARG API_BASE_URL=http://api:3001
+ENV API_BASE_URL=${API_BASE_URL}
+
 RUN npm run build --workspace=@pma/web
 
 FROM base AS runner

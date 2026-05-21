@@ -19,7 +19,8 @@ export default function middleware(req: NextRequest) {
   const { pathname } = req.nextUrl;
   const isAppPath = APPS.some((a) => pathname === `/${a}` || pathname.startsWith(`/${a}/`));
   const isSelectApp = pathname === "/select-app" || pathname.startsWith("/select-app/");
-  if (!isAppPath && !isSelectApp) return NextResponse.next();
+  const isAdminPath = pathname === "/admin" || pathname.startsWith("/admin/");
+  if (!isAppPath && !isSelectApp && !isAdminPath) return NextResponse.next();
 
   const hasCookie = Boolean(req.cookies.get(ACCESS_COOKIE)?.value);
   if (hasCookie) return NextResponse.next();
@@ -31,6 +32,7 @@ export default function middleware(req: NextRequest) {
 export const config = {
   matcher: [
     "/select-app",
+    "/admin/:path*",
     "/pma/:path*",
     "/rgdp/:path*",
     "/pg/:path*",

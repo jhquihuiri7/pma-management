@@ -1,4 +1,4 @@
-import { eq, and, desc, inArray, sql } from "drizzle-orm";
+import { eq, and, desc, inArray } from "drizzle-orm";
 import { randomBytes } from "node:crypto";
 import { getDb } from "../../db/client.js";
 import { users, userApps, passwordResets } from "../../db/schema/shared.js";
@@ -24,6 +24,16 @@ export type CreateManagedUserInput = {
   unit?: string;
   position?: string;
   app: AppKey;
+};
+
+export type CreateUserGlobalInput = {
+  adminId: string;
+  name: string;
+  email: string;
+  role: ManagedRole;
+  unit?: string;
+  position?: string;
+  apps?: AppKey[];
 };
 
 async function findUserRowByEmail(email: string) {
@@ -65,7 +75,11 @@ async function sendInvitation(email: string, name: string, token: string) {
   });
 }
 
-export async function createManagedUser(input: CreateManagedUserInput) {
+// ---------------------------------------------------------------------------
+// Global user management (central /api/users module)
+// ---------------------------------------------------------------------------
+
+export async function createUserGlobal(input: CreateUserGlobalInput) {
   const db = getDb();
   const normalizedEmail = input.email.trim().toLowerCase();
   const existing = await findUserRowByEmail(normalizedEmail);
@@ -77,20 +91,19 @@ export async function createManagedUser(input: CreateManagedUserInput) {
       throw Forbidden("No puedes gestionar este usuario");
     if (existing.role !== input.role)
       throw Conflict("Ya existe un usuario con ese correo y un rol diferente");
-    const apps = await getUserApps(existing.id);
-    if (apps.includes(input.app)) throw Conflict("Ya existe un usuario con ese correo");
 
     await db
       .update(users)
       .set({ name: input.name, unit: input.unit ?? null, position: input.position ?? null, updatedAt: new Date() })
       .where(eq(users.id, existing.id));
-    await db.insert(userApps).values({ userId: existing.id, appKey: input.app }).onConflictDoNothing();
 
-    if (!existing.passwordSet) {
-      const token = await buildSetPasswordToken(existing.id);
-      try { await sendInvitation(normalizedEmail, input.name, token); } catch { /* ignore */ }
+    const currentApps = await getUserApps(existing.id);
+    const newApps = (input.apps ?? []).filter((a) => !currentApps.includes(a));
+    for (const appKey of newApps) {
+      await db.insert(userApps).values({ userId: existing.id, appKey }).onConflictDoNothing();
     }
-    return { id: existing.id, email: normalizedEmail, name: input.name, role: input.role, apps: [...apps, input.app] };
+    const allApps = [...new Set([...currentApps, ...newApps])];
+    return { id: existing.id, email: normalizedEmail, name: input.name, role: input.role, apps: allApps };
   }
 
   const [row] = await db
@@ -105,12 +118,82 @@ export async function createManagedUser(input: CreateManagedUserInput) {
       position: input.position ?? null,
     })
     .returning();
-  await db.insert(userApps).values({ userId: row.id, appKey: input.app });
+
+  const assignedApps = input.apps ?? [];
+  for (const appKey of assignedApps) {
+    await db.insert(userApps).values({ userId: row.id, appKey }).onConflictDoNothing();
+  }
 
   const token = await buildSetPasswordToken(row.id);
   try { await sendInvitation(normalizedEmail, input.name, token); } catch { /* ignore */ }
-  return { id: row.id, email: row.email, name: row.name, role: row.role, apps: [input.app] };
+
+  return { id: row.id, email: row.email, name: row.name, role: row.role, apps: assignedApps };
 }
+
+export async function updateManagedUser(
+  userId: string,
+  adminId: string,
+  updates: { name?: string; unit?: string | null; position?: string | null },
+) {
+  const db = getDb();
+  const rows = await db.select().from(users).where(eq(users.id, userId)).limit(1);
+  const u = rows[0];
+  if (!u) throw NotFound("Usuario no encontrado");
+  if (u.adminId !== adminId) throw Forbidden();
+  if (u.role !== "REPORTER" && u.role !== "VIEWER")
+    throw Forbidden("No puedes gestionar este usuario");
+
+  await db.update(users).set({
+    ...(updates.name !== undefined ? { name: updates.name } : {}),
+    ...(updates.unit !== undefined ? { unit: updates.unit } : {}),
+    ...(updates.position !== undefined ? { position: updates.position } : {}),
+    updatedAt: new Date(),
+  }).where(eq(users.id, userId));
+}
+
+export async function deleteUserGlobal(userId: string, adminId: string) {
+  const db = getDb();
+  const rows = await db.select().from(users).where(eq(users.id, userId)).limit(1);
+  const u = rows[0];
+  if (!u) throw NotFound("Usuario no encontrado");
+  if (u.adminId !== adminId) throw Forbidden();
+  if (u.role !== "REPORTER" && u.role !== "VIEWER")
+    throw Forbidden("No puedes eliminar usuarios administradores");
+
+  // FK cascades remove userApps, plan/item assignments and notifications.
+  await db.delete(users).where(eq(users.id, userId));
+}
+
+export async function assignUserToApp(userId: string, adminId: string, app: AppKey) {
+  const db = getDb();
+  const rows = await db.select().from(users).where(eq(users.id, userId)).limit(1);
+  const u = rows[0];
+  if (!u) throw NotFound("Usuario no encontrado");
+  if (u.adminId !== adminId) throw Forbidden();
+  if (u.role !== "REPORTER" && u.role !== "VIEWER")
+    throw Forbidden("No puedes gestionar este usuario");
+
+  const apps = await getUserApps(userId);
+  if (apps.includes(app)) throw Conflict("El usuario ya tiene acceso a esta aplicación");
+
+  await db.insert(userApps).values({ userId, appKey: app }).onConflictDoNothing();
+}
+
+export async function resendInvitationGlobal(userId: string, adminId: string) {
+  const db = getDb();
+  const rows = await db.select().from(users).where(eq(users.id, userId)).limit(1);
+  const u = rows[0];
+  if (!u) throw NotFound("Usuario no encontrado");
+  if (u.adminId !== adminId) throw Forbidden();
+  if (u.passwordSet) throw BadRequest("Este usuario ya estableció su contraseña");
+
+  const token = await buildSetPasswordToken(u.id);
+  await sendInvitation(u.email, u.name, token);
+}
+
+// ---------------------------------------------------------------------------
+// Per-app user management (subsystem routes)
+// ---------------------------------------------------------------------------
 
 export async function resendInvitation(userId: string, adminId: string, app: AppKey) {
   const db = getDb();

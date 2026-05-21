@@ -39,7 +39,7 @@ const resetSchema = z.object({
 function cookieOpts(maxAgeSec: number) {
   return {
     httpOnly: true,
-    secure: env.NODE_ENV === "production",
+    secure: env.COOKIE_SECURE,
     sameSite: "lax" as const,
     path: "/",
     domain: env.COOKIE_DOMAIN || undefined,

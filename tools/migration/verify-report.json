@@ -1,0 +1,209 @@
+{
+  "timestamp": "2026-05-21T16:34:59.403Z",
+  "rowCountDiffs": [
+    {
+      "collection": "users",
+      "table": "users",
+      "firestore": 7,
+      "postgres": 7,
+      "delta": 0
+    },
+    {
+      "collection": "pma_plans",
+      "table": "pma_plans",
+      "firestore": 12,
+      "postgres": 12,
+      "delta": 0
+    },
+    {
+      "collection": "pma_planItems",
+      "table": "pma_plan_items",
+      "firestore": 422,
+      "postgres": 422,
+      "delta": 0
+    },
+    {
+      "collection": "pma_evidences",
+      "table": "pma_evidences",
+      "firestore": 22,
+      "postgres": 22,
+      "delta": 0
+    },
+    {
+      "collection": "pma_findings",
+      "table": "pma_findings",
+      "firestore": 0,
+      "postgres": 0,
+      "delta": 0
+    },
+    {
+      "collection": "pma_periodCompliance",
+      "table": "pma_period_compliance",
+      "firestore": 129,
+      "postgres": 121,
+      "delta": -8
+    },
+    {
+      "collection": "pma_assignments",
+      "table": "pma_plan_assignments",
+      "firestore": 5,
+      "postgres": 5,
+      "delta": 0
+    },
+    {
+      "collection": "pma_notifications",
+      "table": "pma_notifications",
+      "firestore": 29,
+      "postgres": 22,
+      "delta": -7
+    },
+    {
+      "collection": "pma_formats",
+      "table": "pma_formats",
+      "firestore": 1,
+      "postgres": 1,
+      "delta": 0
+    },
+    {
+      "collection": "rgdp_projects",
+      "table": "rgdp_plans",
+      "firestore": 1,
+      "postgres": 1,
+      "delta": 0
+    },
+    {
+      "collection": "rgdp_projectItems",
+      "table": "rgdp_plan_items",
+      "firestore": 1,
+      "postgres": 1,
+      "delta": 0
+    },
+    {
+      "collection": "rgdp_evidences",
+      "table": "rgdp_evidences",
+      "firestore": 0,
+      "postgres": 0,
+      "delta": 0
+    },
+    {
+      "collection": "rgdp_periodCompliance",
+      "table": "rgdp_period_compliance",
+      "firestore": 0,
+      "postgres": 0,
+      "delta": 0
+    },
+    {
+      "collection": "rgdp_assignments",
+      "table": "rgdp_plan_assignments",
+      "firestore": 0,
+      "postgres": 0,
+      "delta": 0
+    },
+    {
+      "collection": "rgdp_notifications",
+      "table": "rgdp_notifications",
+      "firestore": 0,
+      "postgres": 0,
+      "delta": 0
+    },
+    {
+      "collection": "rgdp_monthlyGenerations",
+      "table": "rgdp_monthly_generations",
+      "firestore": 0,
+      "postgres": 0,
+      "delta": 0
+    },
+    {
+      "collection": "rgdp_findings",
+      "table": "rgdp_findings",
+      "firestore": 0,
+      "postgres": 0,
+      "delta": 0
+    },
+    {
+      "collection": "rgdp_formats",
+      "table": "rgdp_formats",
+      "firestore": 0,
+      "postgres": 0,
+      "delta": 0
+    },
+    {
+      "collection": "pg_projects",
+      "table": "pglp_plans",
+      "firestore": 0,
+      "postgres": 0,
+      "delta": 0
+    },
+    {
+      "collection": "pg_projectItems",
+      "table": "pglp_plan_items",
+      "firestore": 0,
+      "postgres": 0,
+      "delta": 0
+    },
+    {
+      "collection": "pg_evidences",
+      "table": "pglp_evidences",
+      "firestore": 0,
+      "postgres": 0,
+      "delta": 0
+    },
+    {
+      "collection": "pg_periodCompliance",
+      "table": "pglp_period_compliance",
+      "firestore": 0,
+      "postgres": 0,
+      "delta": 0
+    },
+    {
+      "collection": "pg_assignments",
+      "table": "pglp_plan_assignments",
+      "firestore": 0,
+      "postgres": 0,
+      "delta": 0
+    },
+    {
+      "collection": "pg_notifications",
+      "table": "pglp_notifications",
+      "firestore": 0,
+      "postgres": 0,
+      "delta": 0
+    },
+    {
+      "collection": "pg_monthlyGenerations",
+      "table": "pglp_monthly_generations",
+      "firestore": 0,
+      "postgres": 0,
+      "delta": 0
+    },
+    {
+      "collection": "pg_findings",
+      "table": "pglp_findings",
+      "firestore": 0,
+      "postgres": 0,
+      "delta": 0
+    },
+    {
+      "collection": "pg_formats",
+      "table": "pglp_formats",
+      "firestore": 0,
+      "postgres": 0,
+      "delta": 0
+    },
+    {
+      "collection": "geo_maps",
+      "table": "geo_maps",
+      "firestore": 1,
+      "postgres": 1,
+      "delta": 0
+    }
+  ],
+  "storageMissingCount": 5,
+  "storageMissingSample": [
+    "unmapped/1KPybQMuXWFqiUnK8ppQNLFcQMbsRIQiw/screencapture-partyrock-aws-data-2026-04-21-16_22_54.pdf",
+    "unmapped/1AVJQ858dEv7dUNfyX8LAfgxA31GzFjfm/WhatsApp Image 2026-05-09 at 7.25.36 PM (1).jpeg",
+    "unmapped/1spmSz6L8q-589WPhNzOoz1LAGA8S_5w2/velocimetros_test_ene-may 2026.png",
+    "unmapped/1ME0kE0SANVDHsDfYeCse2GMTuz50RWCL/5. CGREG-DOSPPVSR-2026-0209-M Información RGDP.pdf",
+    "unmapped/formats/RHcHWNSM8NGVDzlWUViW/formato.docx"
+  ]
+}

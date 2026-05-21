@@ -7,6 +7,7 @@ import { env } from "./lib/env.js";
 import { registerErrorHandler, authenticate } from "./auth/middleware.js";
 import { authRoutes } from "./routes/auth.js";
 import { storageRoutes } from "./routes/storage.js";
+import { usersRoutes } from "./routes/users.js";
 import { pmaRoutes } from "./routes/pma/index.js";
 import { rgdpRoutes } from "./routes/rgdp/index.js";
 import { pglpRoutes } from "./routes/pglp/index.js";
@@ -54,6 +55,9 @@ async function start() {
 
   // Protected storage proxy
   await app.register(storageRoutes, { prefix: "/storage" });
+
+  // Central user management (cross-subsystem, ADMIN only)
+  await app.register(usersRoutes, { prefix: "/api/users" });
 
   // Subsystem routes (Phase 2). Each prefix mirrors the web URL space.
   await app.register(pmaRoutes, { prefix: "/pma" });

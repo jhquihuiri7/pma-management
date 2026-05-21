@@ -5,6 +5,7 @@ const schema = z.object({
   PORT: z.coerce.number().int().positive().default(4000),
   FRONTEND_ORIGIN: z.string().default("http://localhost:3000"),
   COOKIE_DOMAIN: z.string().optional(),
+  COOKIE_SECURE: z.preprocess((v) => v !== "false" && v !== "0" && v !== false, z.boolean()).default(true),
 
   JWT_ACCESS_SECRET: z.string().min(32).default("dev-access-secret-change-me-please-32chars-min"),
   JWT_REFRESH_SECRET: z.string().min(32).default("dev-refresh-secret-change-me-please-32chars-min"),

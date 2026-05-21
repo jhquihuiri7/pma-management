@@ -24,6 +24,8 @@ ENV NODE_ENV=production
 COPY --from=builder /app/apps/api/dist ./dist
 COPY --from=builder /app/node_modules ./node_modules
 COPY --from=builder /app/packages ./packages
+# Migration SQL files (not emitted by tsc, copied explicitly)
+COPY --from=builder /app/apps/api/src/db/migrations ./dist/apps/api/src/db/migrations
 
 EXPOSE 3001
 

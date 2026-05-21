@@ -25,8 +25,13 @@ services:
       NODE_ENV: production
       DATABASE_URL: postgresql://${DB_USER:-postgres}:${DB_PASSWORD:-postgres}@postgres:5432/${DB_NAME:-pma_db}
       PORT: 3001
+      STORAGE_ROOT: /data/storage
+      STORAGE_PUBLIC_BASE_URL: ${STORAGE_PUBLIC_BASE_URL:-http://localhost:3001/storage}
+      COOKIE_SECURE: "false"
     ports:
       - "3001:3001"
+    volumes:
+      - /mnt/nas/dgtar/pma-data:/data/storage
     depends_on:
       postgres:
         condition: service_healthy
