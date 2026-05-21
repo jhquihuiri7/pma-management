@@ -4,8 +4,9 @@ import { authenticate, requireRole, requireApp } from "../../auth/middleware.js"
 import { BadRequest, Unauthorized } from "../../lib/errors.js";
 import {
   createPlan, getPlansByAdmin, getPlansForReporter, getPlansForViewer,
-  getPlanById, updatePlan, deletePlan,
+  getPlanById, updatePlan, deletePlan, getAssignedUserIds,
 } from "../../modules/rgdp/plansModule.js";
+import { getEvidencesByPlan } from "../../modules/rgdp/evidencesModule.js";
 
 const planCreateSchema = z.object({
   title: z.string().min(1),
@@ -57,7 +58,11 @@ export async function rgdpPlansRoutes(app: FastifyInstance) {
     if (!plan) throw BadRequest("Plan not found");
     const u = req.user!;
     if (u.role === "ADMIN" && plan.adminId !== u.adminId) throw Unauthorized();
-    return plan;
+    const [evidences, assignedUsers] = await Promise.all([
+      getEvidencesByPlan(id),
+      getAssignedUserIds(id),
+    ]);
+    return { plan, evidences, assignedUsers };
   });
 
   app.put("/:id", { preHandler: requireRole("ADMIN") }, async (req) => {

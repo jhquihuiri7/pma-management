@@ -3,14 +3,13 @@
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { useAuth } from "@/lib/auth-context";
-import { Users, LogOut, LayoutDashboard } from "lucide-react";
+import { Users, LogOut, LayoutDashboard, ArrowLeft } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Separator } from "@/components/ui/separator";
 
 const APP_LABELS: Record<string, { label: string; href: string }> = {
   pma: { label: "PMA", href: "/pma/dashboard" },
   rgdp: { label: "RGDP", href: "/rgdp/dashboard" },
-  pglp: { label: "Plan Galápagos", href: "/pg/dashboard" },
   geo: { label: "Geoportal", href: "/geo/dashboard" },
 };
 
@@ -44,29 +43,32 @@ export default function SidebarAdmin() {
           Usuarios
         </Link>
 
-        {userApps.length > 0 && (
-          <>
-            <div className="pt-4 pb-1">
-              <p className="px-3 text-xs font-semibold text-slate-400 uppercase tracking-wider">
-                Mis aplicaciones
-              </p>
-            </div>
-            {userApps.map((appKey) => {
-              const app = APP_LABELS[appKey];
-              if (!app) return null;
-              return (
-                <Link
-                  key={appKey}
-                  href={app.href}
-                  className="flex items-center gap-3 px-3 py-2 rounded-lg text-sm font-medium text-slate-600 hover:bg-slate-50 hover:text-slate-900 transition-colors"
-                >
-                  <LayoutDashboard className="w-4 h-4" />
-                  {app.label}
-                </Link>
-              );
-            })}
-          </>
-        )}
+        <div className="pt-4 pb-1">
+          <p className="px-3 text-xs font-semibold text-slate-400 uppercase tracking-wider">
+            Subsistemas
+          </p>
+        </div>
+        {userApps.map((appKey) => {
+          const app = APP_LABELS[appKey];
+          if (!app) return null;
+          return (
+            <Link
+              key={appKey}
+              href={app.href}
+              className="flex items-center gap-3 px-3 py-2 rounded-lg text-sm font-medium text-slate-600 hover:bg-slate-50 hover:text-slate-900 transition-colors"
+            >
+              <LayoutDashboard className="w-4 h-4" />
+              {app.label}
+            </Link>
+          );
+        })}
+        <Link
+          href="/select-app"
+          className="flex items-center gap-3 px-3 py-2 rounded-lg text-sm font-medium text-slate-500 hover:bg-slate-50 hover:text-slate-900 transition-colors"
+        >
+          <ArrowLeft className="w-4 h-4" />
+          Ver todas las apps
+        </Link>
       </nav>
 
       <div className="p-4 border-t border-slate-200">

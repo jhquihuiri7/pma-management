@@ -14,15 +14,11 @@ import { fsdb } from "./lib/firebase.js";
 
 const DUMP_DIR = process.env.DUMP_DIR ?? "./dump";
 
-// All collections this app reads/writes today. Note: legacy "pg" collections
-// are still on disk; they will be loaded and inserted into the `pglp_*`
-// Postgres tables in step 03.
 const COLLECTIONS = [
   // shared
   "users",
   "pma_admins",
   "rgdp_admins",
-  "pg_admins",
 
   // PMA
   "pma_plans",
@@ -44,17 +40,6 @@ const COLLECTIONS = [
   "rgdp_monthlyGenerations",
   "rgdp_findings",
   "rgdp_formats",
-
-  // PG (legacy name; will be renamed to pglp on import)
-  "pg_projects",
-  "pg_projectItems",
-  "pg_evidences",
-  "pg_periodCompliance",
-  "pg_assignments",
-  "pg_notifications",
-  "pg_monthlyGenerations",
-  "pg_findings",
-  "pg_formats",
 
   // GEO
   "geo_maps",

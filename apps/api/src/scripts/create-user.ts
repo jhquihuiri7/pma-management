@@ -27,7 +27,7 @@ async function createUser() {
   const userEmail = await question("Email del nuevo usuario: ");
   const userName = await question("Nombre del usuario: ");
   const role = await question("Rol (ADMIN/REPORTER/VIEWER) [REPORTER]: ");
-  const appsList = await question("Apps (pma,rgdp,pglp,geo) [pma,rgdp]: ");
+  const appsList = await question("Apps (pma,rgdp,geo) [pma,rgdp]: ");
 
   if (!adminEmail || !userEmail || !userName) {
     console.error("❌ Email del admin, email del usuario y nombre son obligatorios");
@@ -60,9 +60,9 @@ async function createUser() {
 
     // Parsear apps
     const selectedApps = (appsList || "pma,rgdp").split(",").map((a) => a.trim()) as Array<
-      "pma" | "rgdp" | "pglp" | "geo"
+      "pma" | "rgdp" | "geo"
     >;
-    const validApps = ["pma", "rgdp", "pglp", "geo"];
+    const validApps = ["pma", "rgdp", "geo"];
     for (const app of selectedApps) {
       if (!validApps.includes(app)) {
         console.error(`❌ App inválida: ${app}. Válidas: ${validApps.join(", ")}`);

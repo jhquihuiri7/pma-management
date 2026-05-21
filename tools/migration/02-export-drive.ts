@@ -28,7 +28,7 @@ interface Manifest {
   [driveFileId: string]: {
     relativePath: string;
     adminId: string;
-    subsystem: "pma" | "rgdp" | "pglp";
+    subsystem: "pma" | "rgdp";
     planId: string;
     planItemId?: string;
     fileName: string;
@@ -61,7 +61,7 @@ async function downloadFile(driveClient: ReturnType<typeof google.drive>, fileId
 }
 
 async function processSubsystem(
-  subsystem: "pma" | "rgdp" | "pglp",
+  subsystem: "pma" | "rgdp",
   evidenceCollection: string,
   formatCollection: string,
   adminCollection: string,
@@ -90,7 +90,7 @@ async function processSubsystem(
     // adminId may not be on the evidence; resolve via plan
     let adminId = e.adminId as string | undefined;
     if (!adminId) {
-      const planDoc = await db.collection(`${subsystem === "pglp" ? "pg" : subsystem}_${subsystem === "pma" ? "plans" : "projects"}`).doc(planId).get();
+      const planDoc = await db.collection(`${subsystem}_${subsystem === "pma" ? "plans" : "projects"}`).doc(planId).get();
       adminId = planDoc.exists ? (planDoc.data()!.adminId as string) : undefined;
     }
     if (!adminId) {
@@ -145,7 +145,6 @@ async function main() {
   }
   await processSubsystem("pma", "pma_evidences", "pma_formats", "pma_admins", manifest);
   await processSubsystem("rgdp", "rgdp_evidences", "rgdp_formats", "rgdp_admins", manifest);
-  await processSubsystem("pglp", "pg_evidences", "pg_formats", "pg_admins", manifest);
   await fs.writeFile(MANIFEST_FILE, JSON.stringify(manifest, null, 2));
   console.log(`\nManifest: ${Object.keys(manifest).length} files → ${MANIFEST_FILE}`);
 }

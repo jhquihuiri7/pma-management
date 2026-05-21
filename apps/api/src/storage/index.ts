@@ -41,7 +41,7 @@ export function getStorage(): StorageProvider {
 
 export function buildEvidencePath(args: {
   adminId: string;
-  subsystem: "pma" | "rgdp" | "pglp";
+  subsystem: "pma" | "rgdp";
   planId: string;
   planItemId?: string;
   fileName: string;
@@ -52,7 +52,7 @@ export function buildEvidencePath(args: {
 
 export function buildFormatPath(args: {
   adminId: string;
-  subsystem: "pma" | "rgdp" | "pglp";
+  subsystem: "pma" | "rgdp";
   fileName: string;
 }): string {
   return `${args.adminId}/${args.subsystem}/_formats/${args.fileName}`;

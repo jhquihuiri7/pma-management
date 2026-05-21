@@ -10,7 +10,7 @@ import type { UserRole } from "@pma/types";
 
 // API-side AppKey: legacy "pg" is normalized at the API boundary and never
 // reaches Postgres. The Drizzle enum only contains the canonical four keys.
-export type AppKey = "pma" | "rgdp" | "pglp" | "geo";
+export type AppKey = "pma" | "rgdp" | "geo";
 
 const TOKEN_TTL_MS = 24 * 60 * 60 * 1000;
 

@@ -112,7 +112,6 @@ export const api = {
  * Translates old Next.js API paths to the new backend:
  *   /pma/api/X        → ${BASE_URL}/pma/X
  *   /rgdp/api/X       → ${BASE_URL}/rgdp/X
- *   /pg/api/X         → ${BASE_URL}/pglp/X
  *   /geo/api/X        → ${BASE_URL}/geo/X
  *   /api/auth/X       → ${BASE_URL}/auth/X
  *
@@ -124,7 +123,6 @@ export async function apiFetch(input: string, init: RequestInit = {}): Promise<R
   if (typeof url === "string" && url.startsWith("/")) {
     if (url.startsWith("/pma/api/")) url = `${BASE_URL}/pma/${url.slice("/pma/api/".length)}`;
     else if (url.startsWith("/rgdp/api/")) url = `${BASE_URL}/rgdp/${url.slice("/rgdp/api/".length)}`;
-    else if (url.startsWith("/pg/api/")) url = `${BASE_URL}/pglp/${url.slice("/pg/api/".length)}`;
     else if (url.startsWith("/geo/api/")) url = `${BASE_URL}/geo/${url.slice("/geo/api/".length)}`;
     else if (url.startsWith("/api/auth/")) url = `${BASE_URL}/auth/${url.slice("/api/auth/".length)}`;
   }
@@ -154,6 +152,6 @@ export const auth = {
     name: string;
     role: "ADMIN" | "REPORTER" | "VIEWER";
     adminId: string;
-    apps: Array<"pma" | "rgdp" | "pglp" | "geo">;
+    apps: Array<"pma" | "rgdp" | "geo">;
   } }>("/auth/me"),
 };

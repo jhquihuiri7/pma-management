@@ -10,7 +10,6 @@ import { storageRoutes } from "./routes/storage.js";
 import { usersRoutes } from "./routes/users.js";
 import { pmaRoutes } from "./routes/pma/index.js";
 import { rgdpRoutes } from "./routes/rgdp/index.js";
-import { pglpRoutes } from "./routes/pglp/index.js";
 import { geoRoutes } from "./routes/geo/index.js";
 
 async function start() {
@@ -62,7 +61,6 @@ async function start() {
   // Subsystem routes (Phase 2). Each prefix mirrors the web URL space.
   await app.register(pmaRoutes, { prefix: "/pma" });
   await app.register(rgdpRoutes, { prefix: "/rgdp" });
-  await app.register(pglpRoutes, { prefix: "/pglp" });
   await app.register(geoRoutes, { prefix: "/geo" });
 
   try {

@@ -13,7 +13,7 @@ import {
 } from "../modules/shared/usersModule.js";
 import { NotFound } from "../lib/errors.js";
 
-const VALID_APPS: AppKey[] = ["pma", "rgdp", "pglp", "geo"];
+const VALID_APPS: AppKey[] = ["pma", "rgdp", "geo"];
 
 const createSchema = z.object({
   name: z.string().min(1),
@@ -21,7 +21,7 @@ const createSchema = z.object({
   role: z.enum(["REPORTER", "VIEWER"]),
   unit: z.string().optional(),
   position: z.string().optional(),
-  apps: z.array(z.enum(["pma", "rgdp", "pglp", "geo"])).optional(),
+  apps: z.array(z.enum(["pma", "rgdp", "geo"])).optional(),
 });
 
 const updateSchema = z.object({
@@ -31,7 +31,7 @@ const updateSchema = z.object({
 });
 
 const assignAppSchema = z.object({
-  appKey: z.enum(["pma", "rgdp", "pglp", "geo"]),
+  appKey: z.enum(["pma", "rgdp", "geo"]),
 });
 
 export async function usersRoutes(app: FastifyInstance) {

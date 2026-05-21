@@ -10,7 +10,10 @@ import {
   getPlanById,
   updatePlan,
   deletePlan,
+  getAssignedUserIds,
 } from "../../modules/pma/plansModule.js";
+import { getEvidencesByPlan } from "../../modules/pma/evidencesModule.js";
+import { getFindingsByPlan } from "../../modules/pma/findingsModule.js";
 
 const planCreateSchema = z.object({
   title: z.string().min(1),
@@ -61,7 +64,12 @@ export async function pmaPlansRoutes(app: FastifyInstance) {
     if (!plan) throw BadRequest("Plan not found");
     const u = req.user!;
     if (u.role === "ADMIN" && plan.adminId !== u.adminId) throw Unauthorized();
-    return plan;
+    const [evidences, findings, assignedUsers] = await Promise.all([
+      getEvidencesByPlan(id),
+      getFindingsByPlan(id),
+      getAssignedUserIds(id),
+    ]);
+    return { plan, evidences, findings, assignedUsers };
   });
 
   app.put("/:id", { preHandler: requireRole("ADMIN") }, async (req) => {

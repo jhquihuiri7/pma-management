@@ -13,7 +13,7 @@ import { NextResponse, type NextRequest } from "next/server";
  */
 
 const ACCESS_COOKIE = "pma_access";
-const APPS = ["pma", "rgdp", "pg", "pglp", "geo"] as const;
+const APPS = ["pma", "rgdp", "geo"] as const;
 
 export default function middleware(req: NextRequest) {
   const { pathname } = req.nextUrl;
@@ -35,8 +35,6 @@ export const config = {
     "/admin/:path*",
     "/pma/:path*",
     "/rgdp/:path*",
-    "/pg/:path*",
-    "/pglp/:path*",
     "/geo/:path*",
   ],
 };

@@ -4,10 +4,10 @@ import { useRouter } from "next/navigation";
 import { useEffect } from "react";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
-import { Leaf, Shield, LogOut, Map, Globe } from "lucide-react";
+import { Leaf, Shield, LogOut, Map, Users } from "lucide-react";
 import { useAuth } from "@/lib/auth-context";
 
-const APPS = [
+const SUBSYSTEM_APPS = [
   {
     key: "pma",
     label: "Plan de Manejo Ambiental",
@@ -29,16 +29,6 @@ const APPS = [
     bg: "hover:bg-blue-50",
   },
   {
-    key: "pglp",
-    label: "Plan Galápagos",
-    description: "Gestión de proyectos y seguimiento ambiental en Galápagos.",
-    href: "/pg/dashboard",
-    icon: Globe,
-    color: "text-violet-600",
-    border: "border-violet-200 hover:border-violet-400",
-    bg: "hover:bg-violet-50",
-  },
-  {
     key: "geo",
     label: "Geoportal Ambiental",
     description: "Exploración de mapas interactivos y datos geoespaciales.",
@@ -49,6 +39,17 @@ const APPS = [
     bg: "hover:bg-teal-50",
   },
 ] as const;
+
+const ADMIN_ENTRY = {
+  key: "admin",
+  label: "Administración",
+  description: "Gestión de usuarios y accesos a los subsistemas.",
+  href: "/admin/users",
+  icon: Users,
+  color: "text-slate-700",
+  border: "border-slate-200 hover:border-slate-400",
+  bg: "hover:bg-slate-50",
+};
 
 export default function SelectAppPage() {
   const { user, status, logout } = useAuth();
@@ -68,14 +69,14 @@ export default function SelectAppPage() {
     );
   }
 
-  // Accept both legacy "pg" and canonical "pglp" while the URL space is in transition.
   const userApps = new Set(user.apps);
-  const availableApps = APPS.filter((a) =>
-    userApps.has(a.key) || (a.key === "pglp" && (userApps as Set<string>).has("pg"))
-  );
+  const availableApps = SUBSYSTEM_APPS.filter((a) => userApps.has(a.key));
+  const allEntries = user.role === "ADMIN"
+    ? [...availableApps, ADMIN_ENTRY]
+    : availableApps;
 
-  if (availableApps.length === 1) {
-    router.replace(availableApps[0].href);
+  if (allEntries.length === 1) {
+    router.replace(allEntries[0].href);
     return null;
   }
 
@@ -91,7 +92,7 @@ export default function SelectAppPage() {
       </div>
 
       <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 w-full max-w-2xl">
-        {availableApps.map((app) => {
+        {allEntries.map((app) => {
           const Icon = app.icon;
           return (
             <Card
@@ -116,7 +117,7 @@ export default function SelectAppPage() {
         })}
       </div>
 
-      {availableApps.length === 0 && (
+      {allEntries.length === 0 && (
         <p className="text-sm text-muted-foreground">
           No tienes acceso a ninguna aplicación. Contacta a tu administrador.
         </p>

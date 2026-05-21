@@ -120,3 +120,12 @@ export async function getPlansForViewer(userId: string) {
   if (planIds.length === 0) return [];
   return db.select().from(rgdpPlans).where(inArray(rgdpPlans.id, planIds));
 }
+
+export async function getAssignedUserIds(planId: string): Promise<string[]> {
+  const db = getDb();
+  const rows = await db
+    .select({ userId: rgdpPlanAssignments.userId })
+    .from(rgdpPlanAssignments)
+    .where(eq(rgdpPlanAssignments.planId, planId));
+  return rows.map((r) => r.userId);
+}

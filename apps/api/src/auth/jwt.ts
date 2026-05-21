@@ -10,7 +10,7 @@ export interface AccessTokenClaims extends JWTPayload {
   adminId: string;
   email: string;
   role: "ADMIN" | "REPORTER" | "VIEWER";
-  apps: Array<"pma" | "rgdp" | "pg" | "pglp" | "geo">;
+  apps: Array<"pma" | "rgdp" | "geo">;
   name: string;
 }
 
@@ -24,7 +24,7 @@ export interface AccessTokenInput {
   adminId: string;
   email: string;
   role: "ADMIN" | "REPORTER" | "VIEWER";
-  apps: Array<"pma" | "rgdp" | "pg" | "pglp" | "geo">;
+  apps: Array<"pma" | "rgdp" | "geo">;
   name: string;
 }
 

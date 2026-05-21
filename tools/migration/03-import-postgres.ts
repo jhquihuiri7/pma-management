@@ -6,9 +6,8 @@
  * apps/api/src/db/schema/*.
  *
  * Important transforms:
- * - "pg_*" Firestore collections → "pglp_*" Postgres tables (subsystem rename).
  * - "pma_planItems" → "pma_plan_items" (camelCase → snake_case).
- * - admin docs from pma/rgdp/pg admin collections are unified into a single
+ * - admin docs from pma/rgdp admin collections are unified into a single
  *   `admins` table (dedup by email).
  * - users.password (bcrypt) → users.password_hash.
  * - "apps" array on users → rows in user_apps.
@@ -66,7 +65,7 @@ interface Manifest {
   [driveFileId: string]: {
     relativePath: string;
     adminId: string;
-    subsystem: "pma" | "rgdp" | "pglp";
+    subsystem: "pma" | "rgdp";
     planId: string;
     planItemId?: string;
     fileName: string;
@@ -148,7 +147,7 @@ async function importUsers() {
     if (inserted) {
       const apps: string[] = Array.isArray(u.apps) ? u.apps : [];
       for (const a of apps) {
-        const appKey = a === "pg" ? "pglp" : a;
+        const appKey = a;
         await tryExec(sql`
           INSERT INTO user_apps (user_id, app_key)
           VALUES (${toUUID(u.id)}, ${appKey}::app_key)
@@ -418,17 +417,6 @@ async function main() {
   await importFindings("rgdp_findings", "rgdp_findings");
   await importNotifications("rgdp_notifications", "rgdp_notifications");
   await importFormats("rgdp_formats", "rgdp_formats", manifest);
-
-  // PGLP (legacy pg_*)
-  await importPlans("pg_projects", "pglp_plans");
-  await importPlanItems("pg_projectItems", "pglp_plan_items", true);
-  await importPlanAssignments("pg_assignments", "pglp_plan_assignments");
-  await importEvidences("pg_evidences", "pglp_evidences", manifest);
-  await importPeriodCompliance("pg_periodCompliance", "pglp_period_compliance");
-  await importMonthlyGenerations("pg_monthlyGenerations", "pglp_monthly_generations");
-  await importFindings("pg_findings", "pglp_findings");
-  await importNotifications("pg_notifications", "pglp_notifications");
-  await importFormats("pg_formats", "pglp_formats", manifest);
 
   // GEO
   await importGeoMaps();

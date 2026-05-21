@@ -73,7 +73,7 @@ export async function pmaPlanItemsRoutes(app: FastifyInstance) {
     return rows;
   });
 
-  app.put("/:itemId", { preHandler: requireRole("ADMIN") }, async (req) => {
+  app.patch("/:itemId", { preHandler: requireRole("ADMIN") }, async (req) => {
     const { planId, itemId } = req.params as { planId: string; itemId: string };
     await assertPlanOwnership(planId, req.user!.adminId);
     const body = itemUpdate.parse(req.body);
@@ -111,8 +111,9 @@ export async function pmaPlanItemsRoutes(app: FastifyInstance) {
     return { ok: true };
   });
 
-  app.delete("/:itemId/assign/:userId", { preHandler: requireRole("ADMIN") }, async (req) => {
-    const { planId, itemId, userId } = req.params as { planId: string; itemId: string; userId: string };
+  app.delete("/:itemId/assign", { preHandler: requireRole("ADMIN") }, async (req) => {
+    const { planId, itemId } = req.params as { planId: string; itemId: string };
+    const { userId } = req.body as { userId: string };
     await assertPlanOwnership(planId, req.user!.adminId);
     await unassignReporterFromItem(itemId, userId);
     return { ok: true };

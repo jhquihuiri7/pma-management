@@ -44,15 +44,6 @@ const COLLECTION_TO_TABLE: Record<string, string> = {
   rgdp_monthlyGenerations: "rgdp_monthly_generations",
   rgdp_findings: "rgdp_findings",
   rgdp_formats: "rgdp_formats",
-  pg_projects: "pglp_plans",
-  pg_projectItems: "pglp_plan_items",
-  pg_evidences: "pglp_evidences",
-  pg_periodCompliance: "pglp_period_compliance",
-  pg_assignments: "pglp_plan_assignments",
-  pg_notifications: "pglp_notifications",
-  pg_monthlyGenerations: "pglp_monthly_generations",
-  pg_findings: "pglp_findings",
-  pg_formats: "pglp_formats",
   geo_maps: "geo_maps",
 };
 
@@ -68,8 +59,8 @@ async function exists(p: string): Promise<boolean> {
 async function getStoragePaths(): Promise<string[]> {
   const out: string[] = [];
   for (const table of [
-    "pma_evidences", "rgdp_evidences", "pglp_evidences",
-    "pma_formats", "rgdp_formats", "pglp_formats",
+    "pma_evidences", "rgdp_evidences",
+    "pma_formats", "rgdp_formats",
   ]) {
     const r = await pool.query<{ p: string }>(`SELECT storage_path AS p FROM ${table}`);
     out.push(...r.rows.map((x) => x.p));
