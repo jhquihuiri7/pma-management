@@ -20,13 +20,17 @@ services:
     build:
       context: .
       dockerfile: apps/api/Dockerfile
+      target: base
     container_name: pma-api
+    command: npm run dev --workspace=@pma/api
     environment:
-      NODE_ENV: production
+      NODE_ENV: development
       DATABASE_URL: postgresql://${DB_USER:-postgres}:${DB_PASSWORD:-postgres}@postgres:5432/${DB_NAME:-pma_db}
       PORT: 3001
     ports:
       - "3001:3001"
+    volumes:
+      - ./apps/api:/app/apps/api
     depends_on:
       postgres:
         condition: service_healthy
@@ -36,13 +40,18 @@ services:
     build:
       context: .
       dockerfile: apps/web/Dockerfile
+      target: base
     container_name: pma-web
+    command: npm run dev --workspace=@pma/web
     environment:
-      NODE_ENV: production
+      NODE_ENV: development
       PORT: 3000
       API_BASE_URL: http://api:3001
+      WATCHPACK_POLLING: "true"
     ports:
-      - "8000:3000"
+      - "3000:3000"
+    volumes:
+      - ./apps/web:/app/apps/web
     depends_on:
       - api
     restart: unless-stopped
