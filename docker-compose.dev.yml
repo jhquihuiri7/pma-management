@@ -27,6 +27,8 @@ services:
       NODE_ENV: development
       DATABASE_URL: postgresql://${DB_USER:-postgres}:${DB_PASSWORD:-postgres}@postgres:5432/${DB_NAME:-pma_db}
       PORT: 3001
+      COOKIE_SECURE: "false"
+      FRONTEND_ORIGIN: http://localhost:3000
     ports:
       - "3001:3001"
     volumes:
@@ -42,7 +44,8 @@ services:
       dockerfile: apps/web/Dockerfile
       target: base
     container_name: pma-web
-    command: npm run dev --workspace=@pma/web
+    user: root
+    command: sh -c "npm run dev --workspace=@pma/web -- -H 0.0.0.0"
     environment:
       NODE_ENV: development
       PORT: 3000

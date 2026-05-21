@@ -1,6 +1,6 @@
 "use client";
 
-import { apiFetch } from "@/lib/api-client";
+import { api, ApiError } from "@/lib/api-client";
 import { useEffect, useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -54,8 +54,12 @@ export default function AdminUsersPage() {
   const [editForm, setEditForm] = useState({ name: "", unit: "", position: "" });
 
   async function loadUsers() {
-    const res = await apiFetch("/api/users");
-    if (res.ok) setUsers(await res.json());
+    try {
+      const data = await api.get<User[]>("/api/users");
+      setUsers(data);
+    } catch {
+      // errors shown inline; don't toast on initial load
+    }
   }
 
   useEffect(() => { loadUsers(); }, []);
@@ -70,27 +74,23 @@ export default function AdminUsersPage() {
   async function handleCreate(e: React.FormEvent) {
     e.preventDefault();
     setLoading(true);
-    const res = await apiFetch("/api/users", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
+    try {
+      await api.post("/api/users", {
         name: form.name,
         email: form.email,
         role: form.role,
         unit: form.unit || undefined,
         position: form.position || undefined,
         apps: form.apps,
-      }),
-    });
-    setLoading(false);
-    if (res.ok) {
+      });
       toast.success(`Usuario creado. Se envió un correo de invitación a ${form.email}.`);
       setForm(emptyForm);
       setCreateOpen(false);
       loadUsers();
-    } else {
-      const data = await res.json();
-      toast.error(data.message || "Error al crear usuario");
+    } catch (err) {
+      toast.error(err instanceof ApiError ? err.message : "Error al crear usuario");
+    } finally {
+      setLoading(false);
     }
   }
 
@@ -98,68 +98,57 @@ export default function AdminUsersPage() {
     e.preventDefault();
     if (!editUser) return;
     setLoading(true);
-    const res = await apiFetch(`/api/users/${editUser.id}`, {
-      method: "PUT",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
+    try {
+      await api.put(`/api/users/${editUser.id}`, {
         name: editForm.name || undefined,
         unit: editForm.unit || null,
         position: editForm.position || null,
-      }),
-    });
-    setLoading(false);
-    if (res.ok) {
+      });
       toast.success("Usuario actualizado");
       setEditUser(null);
       loadUsers();
-    } else {
-      const data = await res.json();
-      toast.error(data.message || "Error al actualizar usuario");
+    } catch (err) {
+      toast.error(err instanceof ApiError ? err.message : "Error al actualizar usuario");
+    } finally {
+      setLoading(false);
     }
   }
 
   async function handleDelete(userId: string, name: string) {
     if (!confirm(`¿Eliminar permanentemente a ${name}? Esto lo quitará de todos los subsistemas.`)) return;
-    const res = await apiFetch(`/api/users/${userId}`, { method: "DELETE" });
-    if (res.ok) {
+    try {
+      await api.delete(`/api/users/${userId}`);
       toast.success("Usuario eliminado");
       loadUsers();
-    } else {
-      toast.error("Error al eliminar usuario");
+    } catch (err) {
+      toast.error(err instanceof ApiError ? err.message : "Error al eliminar usuario");
     }
   }
 
   async function handleResend(userId: string, email: string) {
-    const res = await apiFetch(`/api/users/${userId}/resend-invitation`, { method: "POST" });
-    if (res.ok) {
+    try {
+      await api.post(`/api/users/${userId}/resend-invitation`);
       toast.success(`Invitación reenviada a ${email}`);
-    } else {
-      const data = await res.json();
-      toast.error(data.message || "Error al reenviar invitación");
+    } catch (err) {
+      toast.error(err instanceof ApiError ? err.message : "Error al reenviar invitación");
     }
   }
 
   async function handleAssignApp(userId: string, appKey: AppKey) {
-    const res = await apiFetch(`/api/users/${userId}/apps`, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ appKey }),
-    });
-    if (res.ok) {
+    try {
+      await api.post(`/api/users/${userId}/apps`, { appKey });
       loadUsers();
-    } else {
-      const data = await res.json();
-      toast.error(data.message || "Error al asignar aplicación");
+    } catch (err) {
+      toast.error(err instanceof ApiError ? err.message : "Error al asignar aplicación");
     }
   }
 
   async function handleUnassignApp(userId: string, appKey: AppKey) {
-    const res = await apiFetch(`/api/users/${userId}/apps/${appKey}`, { method: "DELETE" });
-    if (res.ok) {
+    try {
+      await api.delete(`/api/users/${userId}/apps/${appKey}`);
       loadUsers();
-    } else {
-      const data = await res.json();
-      toast.error(data.message || "Error al quitar aplicación");
+    } catch (err) {
+      toast.error(err instanceof ApiError ? err.message : "Error al quitar aplicación");
     }
   }
 
