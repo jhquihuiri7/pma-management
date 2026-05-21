@@ -42,7 +42,5 @@ tools/migration/dump/
 tools/migration/files/
 tools/migration/drive-manifest.json
 
-deploy.sh
-
 # local IDE / tooling
 .claude/
