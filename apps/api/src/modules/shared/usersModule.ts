@@ -14,7 +14,7 @@ export type AppKey = "pma" | "rgdp" | "geo";
 
 const TOKEN_TTL_MS = 24 * 60 * 60 * 1000;
 
-export type ManagedRole = "REPORTER" | "VIEWER";
+export type ManagedRole = "ADMIN" | "REPORTER" | "VIEWER";
 
 export type CreateManagedUserInput = {
   adminId: string;
@@ -85,10 +85,6 @@ export async function createUserGlobal(input: CreateUserGlobalInput) {
   const existing = await findUserRowByEmail(normalizedEmail);
 
   if (existing) {
-    if (existing.adminId !== input.adminId)
-      throw Conflict("Ya existe un usuario con ese correo");
-    if (existing.role !== "REPORTER" && existing.role !== "VIEWER")
-      throw Forbidden("No puedes gestionar este usuario");
     if (existing.role !== input.role)
       throw Conflict("Ya existe un usuario con ese correo y un rol diferente");
 
@@ -109,7 +105,6 @@ export async function createUserGlobal(input: CreateUserGlobalInput) {
   const [row] = await db
     .insert(users)
     .values({
-      adminId: input.adminId,
       email: normalizedEmail,
       name: input.name,
       role: input.role as UserRole,
@@ -139,9 +134,6 @@ export async function updateManagedUser(
   const rows = await db.select().from(users).where(eq(users.id, userId)).limit(1);
   const u = rows[0];
   if (!u) throw NotFound("Usuario no encontrado");
-  if (u.adminId !== adminId) throw Forbidden();
-  if (u.role !== "REPORTER" && u.role !== "VIEWER")
-    throw Forbidden("No puedes gestionar este usuario");
 
   await db.update(users).set({
     ...(updates.name !== undefined ? { name: updates.name } : {}),
@@ -151,14 +143,13 @@ export async function updateManagedUser(
   }).where(eq(users.id, userId));
 }
 
-export async function deleteUserGlobal(userId: string, adminId: string) {
+export async function deleteUserGlobal(userId: string, adminId: string, requesterId: string) {
   const db = getDb();
   const rows = await db.select().from(users).where(eq(users.id, userId)).limit(1);
   const u = rows[0];
   if (!u) throw NotFound("Usuario no encontrado");
-  if (u.adminId !== adminId) throw Forbidden();
-  if (u.role !== "REPORTER" && u.role !== "VIEWER")
-    throw Forbidden("No puedes eliminar usuarios administradores");
+  if (u.id === requesterId)
+    throw Forbidden("No puedes eliminar tu propia cuenta");
 
   // FK cascades remove userApps, plan/item assignments and notifications.
   await db.delete(users).where(eq(users.id, userId));
@@ -169,9 +160,6 @@ export async function assignUserToApp(userId: string, adminId: string, app: AppK
   const rows = await db.select().from(users).where(eq(users.id, userId)).limit(1);
   const u = rows[0];
   if (!u) throw NotFound("Usuario no encontrado");
-  if (u.adminId !== adminId) throw Forbidden();
-  if (u.role !== "REPORTER" && u.role !== "VIEWER")
-    throw Forbidden("No puedes gestionar este usuario");
 
   const apps = await getUserApps(userId);
   if (apps.includes(app)) throw Conflict("El usuario ya tiene acceso a esta aplicación");
@@ -184,7 +172,6 @@ export async function resendInvitationGlobal(userId: string, adminId: string) {
   const rows = await db.select().from(users).where(eq(users.id, userId)).limit(1);
   const u = rows[0];
   if (!u) throw NotFound("Usuario no encontrado");
-  if (u.adminId !== adminId) throw Forbidden();
   if (u.passwordSet) throw BadRequest("Este usuario ya estableció su contraseña");
 
   const token = await buildSetPasswordToken(u.id);
@@ -200,7 +187,6 @@ export async function resendInvitation(userId: string, adminId: string, app: App
   const rows = await db.select().from(users).where(eq(users.id, userId)).limit(1);
   const u = rows[0];
   if (!u) throw NotFound("Usuario no encontrado");
-  if (u.adminId !== adminId) throw Forbidden();
   if (u.passwordSet) throw BadRequest("Este usuario ya estableció su contraseña");
   const apps = await getUserApps(u.id);
   if (!apps.includes(app)) throw BadRequest("El usuario no tiene acceso a esta aplicación");
@@ -213,7 +199,6 @@ export async function deleteManagedUser(userId: string, adminId: string, app: Ap
   const rows = await db.select().from(users).where(eq(users.id, userId)).limit(1);
   const u = rows[0];
   if (!u) throw NotFound("User not found");
-  if (u.adminId !== adminId) throw Forbidden();
   if (u.role !== "REPORTER" && u.role !== "VIEWER")
     throw Forbidden("Cannot delete admin users");
 
@@ -231,7 +216,7 @@ export async function deleteManagedUser(userId: string, adminId: string, app: Ap
   }
 }
 
-export async function listManagedUsersForAdmin(adminId: string, app?: AppKey) {
+export async function listManagedUsersForAdmin(_adminId?: string, app?: AppKey) {
   const db = getDb();
   const rows = await db
     .select({
@@ -245,7 +230,7 @@ export async function listManagedUsersForAdmin(adminId: string, app?: AppKey) {
       createdAt: users.createdAt,
     })
     .from(users)
-    .where(and(eq(users.adminId, adminId), inArray(users.role, ["REPORTER", "VIEWER"] as const)))
+    .where(inArray(users.role, ["ADMIN", "REPORTER", "VIEWER"] as const))
     .orderBy(desc(users.createdAt));
 
   if (rows.length === 0) return [];

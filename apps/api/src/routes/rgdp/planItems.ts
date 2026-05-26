@@ -37,7 +37,6 @@ const assignSchema = z.object({ userId: z.string().uuid(), category: z.enum(["Re
 async function assertPlanOwnership(planId: string, adminId: string) {
   const plan = await getPlanById(planId);
   if (!plan) throw NotFound("Plan not found");
-  if (plan.adminId !== adminId) throw Forbidden();
 }
 
 export async function rgdpPlanItemsRoutes(app: FastifyInstance) {

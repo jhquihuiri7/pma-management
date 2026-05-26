@@ -32,7 +32,7 @@ export async function createPlan(adminId: string, input: PlanCreateInput) {
   const [row] = await db
     .insert(rgdpPlans)
     .values({
-      adminId,
+      createdBy: adminId,
       title: input.title,
       description: input.description ?? "",
       tipo: input.tipo,
@@ -52,8 +52,8 @@ export async function createPlan(adminId: string, input: PlanCreateInput) {
   return row;
 }
 
-export const getPlansByAdmin = (adminId: string) =>
-  getDb().select().from(rgdpPlans).where(eq(rgdpPlans.adminId, adminId)).orderBy(desc(rgdpPlans.createdAt));
+export const getPlansByAdmin = (_adminId?: string) =>
+  getDb().select().from(rgdpPlans).orderBy(desc(rgdpPlans.createdAt));
 
 export async function getPlanById(planId: string) {
   const rows = await getDb().select().from(rgdpPlans).where(eq(rgdpPlans.id, planId)).limit(1);
@@ -63,7 +63,6 @@ export async function getPlanById(planId: string) {
 export async function updatePlan(planId: string, adminId: string, updates: PlanUpdateInput) {
   const plan = await getPlanById(planId);
   if (!plan) throw NotFound("Plan not found");
-  if (plan.adminId !== adminId) throw Forbidden();
   const cleaned = Object.fromEntries(Object.entries(updates).filter(([, v]) => v !== undefined));
   const [row] = await getDb()
     .update(rgdpPlans)
@@ -73,22 +72,21 @@ export async function updatePlan(planId: string, adminId: string, updates: PlanU
   return row;
 }
 
-export async function deletePlan(planId: string, adminId: string) {
+export async function deletePlan(planId: string, _adminId?: string) {
   const plan = await getPlanById(planId);
   if (!plan) throw NotFound("Plan not found");
-  if (plan.adminId !== adminId) throw Forbidden();
   await getDb().delete(rgdpPlans).where(eq(rgdpPlans.id, planId));
 }
 
-export async function assignUserToPlan(planId: string, userId: string, adminId: string) {
+export async function assignUserToPlan(planId: string, userId: string, _adminId?: string) {
   const plan = await getPlanById(planId);
-  if (!plan || plan.adminId !== adminId) throw Forbidden();
+  if (!plan) throw NotFound("Plan not found");
   await getDb().insert(rgdpPlanAssignments).values({ planId, userId }).onConflictDoNothing();
 }
 
-export async function unassignUserFromPlan(planId: string, userId: string, adminId: string) {
+export async function unassignUserFromPlan(planId: string, userId: string, _adminId?: string) {
   const plan = await getPlanById(planId);
-  if (!plan || plan.adminId !== adminId) throw Forbidden();
+  if (!plan) throw NotFound("Plan not found");
   await getDb()
     .delete(rgdpPlanAssignments)
     .where(and(eq(rgdpPlanAssignments.planId, planId), eq(rgdpPlanAssignments.userId, userId)));

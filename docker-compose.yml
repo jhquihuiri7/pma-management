@@ -31,7 +31,7 @@ services:
     ports:
       - "3001:3001"
     volumes:
-      - /mnt/nas/dgtar/pma-data:/data/storage
+      - /mnt/synology_smb/sistema-ambiental:/data/storage
     depends_on:
       postgres:
         condition: service_healthy

@@ -104,7 +104,7 @@ export default function SidebarRGDP() {
       </nav>
 
       <div className="p-4 border-t border-slate-200">
-        <div className="flex items-center gap-3 mb-3 px-3">
+        <div className="flex items-center gap-3 px-3">
           <div className="w-8 h-8 rounded-full bg-slate-200 flex items-center justify-center text-xs font-medium">
             {session?.name?.[0]?.toUpperCase() || "?"}
           </div>
@@ -116,16 +116,16 @@ export default function SidebarRGDP() {
               {session?.role === "ADMIN" ? "Administrador" : session?.role === "REPORTER" ? "Reportero" : "Visualizador"}
             </p>
           </div>
+          <Button
+            variant="ghost"
+            size="icon"
+            className="h-8 w-8 shrink-0 text-slate-500 hover:text-slate-900"
+            onClick={() => logout()}
+            title="Cerrar sesión"
+          >
+            <LogOut className="w-4 h-4" />
+          </Button>
         </div>
-        <Button
-          variant="ghost"
-          size="sm"
-          className="w-full justify-start text-slate-600"
-          onClick={() => logout()}
-        >
-          <LogOut className="w-4 h-4 mr-2" />
-          Cerrar sesión
-        </Button>
       </div>
     </aside>
   );

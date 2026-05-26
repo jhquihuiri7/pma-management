@@ -9,7 +9,6 @@ import {
   Users,
   LogOut,
   LayoutTemplate,
-  UserCog,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Separator } from "@/components/ui/separator";
@@ -89,23 +88,12 @@ export default function Sidebar() {
               <LayoutTemplate className="w-4 h-4" />
               Formatos
             </Link>
-            <Link
-              href="/admin/users"
-              className={`flex items-center gap-3 px-3 py-2 rounded-lg text-sm font-medium transition-colors ${
-                pathname.startsWith("/admin/users")
-                  ? "bg-slate-100 text-slate-900"
-                  : "text-slate-600 hover:bg-slate-50 hover:text-slate-900"
-              }`}
-            >
-              <UserCog className="w-4 h-4" />
-              Gestión de Usuarios
-            </Link>
           </>
         )}
       </nav>
 
       <div className="p-4 border-t border-slate-200">
-        <div className="flex items-center gap-3 mb-3 px-3">
+        <div className="flex items-center gap-3 px-3">
           <div className="w-8 h-8 rounded-full bg-slate-200 flex items-center justify-center text-xs font-medium">
             {session?.name?.[0]?.toUpperCase() || "?"}
           </div>
@@ -117,16 +105,16 @@ export default function Sidebar() {
               {session?.role === "ADMIN" ? "Administrador" : session?.role === "REPORTER" ? "Reportero" : "Visualizador"}
             </p>
           </div>
+          <Button
+            variant="ghost"
+            size="icon"
+            className="h-8 w-8 shrink-0 text-slate-500 hover:text-slate-900"
+            onClick={() => logout()}
+            title="Cerrar sesión"
+          >
+            <LogOut className="w-4 h-4" />
+          </Button>
         </div>
-        <Button
-          variant="ghost"
-          size="sm"
-          className="w-full justify-start text-slate-600"
-          onClick={() => logout()}
-        >
-          <LogOut className="w-4 h-4 mr-2" />
-          Cerrar sesión
-        </Button>
       </div>
     </aside>
   );

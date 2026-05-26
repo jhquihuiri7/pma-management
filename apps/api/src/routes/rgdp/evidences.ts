@@ -1,4 +1,4 @@
-import type { FastifyInstance } from "fastify";
+import type { FastifyInstance, FastifyReply, FastifyRequest } from "fastify";
 import { z } from "zod";
 import { authenticate, requireRole, requireApp } from "../../auth/middleware.js";
 import { BadRequest } from "../../lib/errors.js";
@@ -17,6 +17,10 @@ const queryListSchema = z.object({
   mine: z.coerce.boolean().optional(),
 });
 
+const deleteQuerySchema = z.object({
+  id: z.string().uuid(),
+});
+
 export async function rgdpEvidencesRoutes(app: FastifyInstance) {
   app.addHook("preHandler", authenticate);
   app.addHook("preHandler", requireApp("rgdp"));
@@ -28,30 +32,12 @@ export async function rgdpEvidencesRoutes(app: FastifyInstance) {
     return [];
   });
 
-  app.post("/", async (req, reply) => {
-    const u = req.user!;
-    const data = await req.file();
-    if (!data) throw BadRequest("file required");
-    const buf = await data.toBuffer();
-    const fields: Record<string, string> = {};
-    for (const [k, v] of Object.entries(data.fields)) {
-      const f: any = v;
-      if (f && typeof f === "object" && "value" in f) fields[k] = f.value as string;
-    }
-    if (!fields.planId) throw BadRequest("planId required");
-    const ev = await createEvidence(u.adminId, {
-      planId: fields.planId,
-      planItemId: fields.planItemId || undefined,
-      uploadedBy: u.sub,
-      uploaderName: u.name,
-      fileName: data.filename,
-      description: fields.description ?? "",
-      activityMonth: fields.activityMonth || undefined,
-      data: buf,
-      contentType: data.mimetype,
-    });
-    reply.status(201);
-    return ev;
+  app.post("/", uploadRgdpEvidence);
+
+  app.delete("/", { preHandler: requireRole("ADMIN") }, async (req) => {
+    const { id } = deleteQuerySchema.parse(req.query);
+    await deleteEvidence(id, req.user!.adminId);
+    return { ok: true };
   });
 
   app.put("/:id/validation", { preHandler: requireRole("ADMIN") }, async (req) => {
@@ -66,4 +52,30 @@ export async function rgdpEvidencesRoutes(app: FastifyInstance) {
     await deleteEvidence(id, req.user!.adminId);
     return { ok: true };
   });
+}
+
+export async function uploadRgdpEvidence(req: FastifyRequest, reply: FastifyReply) {
+  const u = req.user!;
+  const data = await req.file();
+  if (!data) throw BadRequest("file required");
+  const buf = await data.toBuffer();
+  const fields: Record<string, string> = {};
+  for (const [k, v] of Object.entries(data.fields)) {
+    const f: any = v;
+    if (f && typeof f === "object" && "value" in f) fields[k] = f.value as string;
+  }
+  if (!fields.planId) throw BadRequest("planId required");
+  const ev = await createEvidence(u.adminId, {
+    planId: fields.planId,
+    planItemId: fields.planItemId || undefined,
+    uploadedBy: u.sub,
+    uploaderName: u.name,
+    fileName: data.filename,
+    description: fields.description ?? "",
+    activityMonth: fields.activityMonth || undefined,
+    data: buf,
+    contentType: data.mimetype,
+  });
+  reply.status(201);
+  return ev;
 }

@@ -18,7 +18,7 @@ const VALID_APPS: AppKey[] = ["pma", "rgdp", "geo"];
 const createSchema = z.object({
   name: z.string().min(1),
   email: z.string().email(),
-  role: z.enum(["REPORTER", "VIEWER"]),
+  role: z.enum(["ADMIN", "REPORTER", "VIEWER"]),
   unit: z.string().optional(),
   position: z.string().optional(),
   apps: z.array(z.enum(["pma", "rgdp", "geo"])).optional(),
@@ -65,7 +65,7 @@ export async function usersRoutes(app: FastifyInstance) {
 
   app.delete("/:id", async (req) => {
     const { id } = req.params as { id: string };
-    await deleteUserGlobal(id, req.user!.adminId);
+    await deleteUserGlobal(id, req.user!.adminId, req.user!.sub);
     return { ok: true };
   });
 

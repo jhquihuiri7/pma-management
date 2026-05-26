@@ -14,11 +14,10 @@ export type GeoMapInput = {
   tags?: string[];
 };
 
-export async function createMap(adminId: string, userId: string, input: GeoMapInput) {
+export async function createMap(_adminId: string, userId: string, input: GeoMapInput) {
   const [row] = await getDb()
     .insert(geoMaps)
     .values({
-      adminId,
       title: input.title,
       description: input.description ?? "",
       categoryId: input.categoryId,
@@ -34,25 +33,23 @@ export async function createMap(adminId: string, userId: string, input: GeoMapIn
   return rowToApi(row);
 }
 
-export async function listMaps(adminId: string) {
+export async function listMaps(_adminId?: string) {
   const rows = await getDb()
     .select()
     .from(geoMaps)
-    .where(eq(geoMaps.adminId, adminId))
     .orderBy(desc(geoMaps.createdAt));
   return rows.map(rowToApi);
 }
 
-export async function getMapById(id: string, adminId: string) {
-  const rows = await getDb().select().from(geoMaps).where(and(eq(geoMaps.id, id), eq(geoMaps.adminId, adminId))).limit(1);
+export async function getMapById(id: string, _adminId?: string) {
+  const rows = await getDb().select().from(geoMaps).where(eq(geoMaps.id, id)).limit(1);
   if (rows.length === 0) throw NotFound("Map not found");
   return rowToApi(rows[0]);
 }
 
-export async function updateMap(id: string, adminId: string, updates: Partial<GeoMapInput>) {
+export async function updateMap(id: string, _adminId: string, updates: Partial<GeoMapInput>) {
   const rows = await getDb().select().from(geoMaps).where(eq(geoMaps.id, id)).limit(1);
   if (rows.length === 0) throw NotFound("Map not found");
-  if (rows[0].adminId !== adminId) throw Forbidden();
   const set: Record<string, unknown> = { updatedAt: new Date() };
   if (updates.title !== undefined) set.title = updates.title;
   if (updates.description !== undefined) set.description = updates.description;
@@ -69,10 +66,9 @@ export async function updateMap(id: string, adminId: string, updates: Partial<Ge
   return rowToApi(row);
 }
 
-export async function deleteMap(id: string, adminId: string) {
+export async function deleteMap(id: string, _adminId?: string) {
   const rows = await getDb().select().from(geoMaps).where(eq(geoMaps.id, id)).limit(1);
   if (rows.length === 0) throw NotFound("Map not found");
-  if (rows[0].adminId !== adminId) throw Forbidden();
   await getDb().delete(geoMaps).where(eq(geoMaps.id, id));
 }
 

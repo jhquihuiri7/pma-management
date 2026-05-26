@@ -1,7 +1,7 @@
-import { eq, desc, and } from "drizzle-orm";
+import { eq, desc, asc } from "drizzle-orm";
 import { getDb } from "../../db/client.js";
-import { pmaEvidences, pmaPlans } from "../../db/schema/pma.js";
-import { Forbidden, NotFound } from "../../lib/errors.js";
+import { pmaEvidences, pmaPlanItems, pmaPlans } from "../../db/schema/pma.js";
+import { BadRequest, NotFound } from "../../lib/errors.js";
 import { getStorage, buildEvidencePath } from "../../storage/index.js";
 
 export type EvidenceCreateInput = {
@@ -24,12 +24,42 @@ export async function createEvidence(adminId: string, input: EvidenceCreateInput
     .where(eq(pmaPlans.id, input.planId))
     .limit(1);
   if (plan.length === 0) throw NotFound("Plan not found");
+  const planRow = plan[0];
+
+  let planItem: typeof pmaPlanItems.$inferSelect | null = null;
+  let subsystemName = "Sin proceso";
+
+  if (input.planItemId) {
+    const itemRows = await db
+      .select()
+      .from(pmaPlanItems)
+      .where(eq(pmaPlanItems.id, input.planItemId))
+      .limit(1);
+    planItem = itemRows[0] ?? null;
+    if (!planItem) throw NotFound("Plan item not found");
+    if (planItem.planId !== input.planId) throw BadRequest("Plan item does not belong to plan");
+    subsystemName = planItem.subplan || subsystemName;
+  } else {
+    const firstItemRows = await db
+      .select()
+      .from(pmaPlanItems)
+      .where(eq(pmaPlanItems.planId, input.planId))
+      .orderBy(asc(pmaPlanItems.createdAt))
+      .limit(1);
+    subsystemName = firstItemRows[0]?.subplan || subsystemName;
+  }
 
   const storagePath = buildEvidencePath({
     adminId,
     subsystem: "pma",
     planId: input.planId,
+    planName: planRow.title,
+    subsystemName,
     planItemId: input.planItemId,
+    planItemName: planItem?.item,
+    periodFolder: planItem && input.activityMonth
+      ? getActivityPeriodFolder(input.activityMonth, planRow.startDate, planRow.createdAt, planItem.reportPer)
+      : undefined,
     fileName: input.fileName,
   });
 
@@ -51,6 +81,38 @@ export async function createEvidence(adminId: string, input: EvidenceCreateInput
     })
     .returning();
   return row;
+}
+
+const MONTHS_ES = ["ene", "feb", "mar", "abr", "may", "jun", "jul", "ago", "sep", "oct", "nov", "dic"];
+
+function getBlockSize(reportPer: string | undefined): number {
+  const s = (reportPer ?? "").toLowerCase();
+  if (s.startsWith("2")) return 24;
+  if (s.startsWith("1")) return 12;
+  return 6;
+}
+
+function getActivityPeriodFolder(
+  activityMonth: string,
+  startDate: string | null,
+  createdAt: Date,
+  reportPer: string
+): string {
+  const [year, month] = activityMonth.split("-").map(Number);
+  if (!year || !month || month < 1 || month > 12) return activityMonth;
+
+  const planStart = startDate ? new Date(`${startDate}T00:00:00`) : createdAt;
+  const blockOrigin = new Date(planStart.getFullYear(), planStart.getMonth(), 1);
+  const targetDate = new Date(year, month - 1, 1);
+  const diff = (targetDate.getFullYear() - blockOrigin.getFullYear()) * 12 +
+    (targetDate.getMonth() - blockOrigin.getMonth());
+  if (diff < 0) return activityMonth;
+
+  const blockSize = getBlockSize(reportPer);
+  const blockIndex = Math.floor(diff / blockSize);
+  const blockStart = new Date(blockOrigin.getFullYear(), blockOrigin.getMonth() + blockIndex * blockSize, 1);
+  const blockEnd = new Date(blockOrigin.getFullYear(), blockOrigin.getMonth() + (blockIndex + 1) * blockSize - 1, 1);
+  return `${MONTHS_ES[blockStart.getMonth()]}${blockStart.getFullYear()}-${MONTHS_ES[blockEnd.getMonth()]}${blockEnd.getFullYear()}`;
 }
 
 export async function getEvidencesByPlan(planId: string) {
@@ -88,7 +150,7 @@ export async function updateEvidenceValidation(
   const evidence = await getEvidenceById(evidenceId);
   if (!evidence) throw NotFound("Evidence not found");
   const plan = await db.select().from(pmaPlans).where(eq(pmaPlans.id, evidence.planId)).limit(1);
-  if (plan.length === 0 || plan[0].adminId !== adminId) throw Forbidden();
+  if (plan.length === 0) throw NotFound("Plan not found");
 
   const previousStatus = evidence.validationStatus;
   const [row] = await db
@@ -109,7 +171,7 @@ export async function deleteEvidence(evidenceId: string, adminId: string) {
   const evidence = await getEvidenceById(evidenceId);
   if (!evidence) throw NotFound("Evidence not found");
   const plan = await db.select().from(pmaPlans).where(eq(pmaPlans.id, evidence.planId)).limit(1);
-  if (plan.length === 0 || plan[0].adminId !== adminId) throw Forbidden();
+  if (plan.length === 0) throw NotFound("Plan not found");
 
   // Remove the file first; if the DB delete fails we won't leave an orphan file.
   try {

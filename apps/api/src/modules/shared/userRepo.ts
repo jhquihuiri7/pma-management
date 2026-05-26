@@ -28,7 +28,7 @@ export async function findUserByEmail(email: string): Promise<DbUser | null> {
   const appRows = await db.select().from(userApps).where(eq(userApps.userId, u.id));
   return {
     id: u.id,
-    adminId: u.adminId,
+    adminId: u.id,
     email: u.email,
     passwordHash: u.passwordHash,
     passwordSet: u.passwordSet,
@@ -48,7 +48,7 @@ export async function findUserById(id: string): Promise<DbUser | null> {
   const appRows = await db.select().from(userApps).where(eq(userApps.userId, u.id));
   return {
     id: u.id,
-    adminId: u.adminId,
+    adminId: u.id,
     email: u.email,
     passwordHash: u.passwordHash,
     passwordSet: u.passwordSet,

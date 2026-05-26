@@ -24,7 +24,6 @@ const findingUpdate = findingSchema.omit({ planId: true });
 async function assertPlanOwnership(planId: string, adminId: string) {
   const plan = await getPlanById(planId);
   if (!plan) throw NotFound("Plan not found");
-  if (plan.adminId !== adminId) throw Forbidden();
 }
 
 export async function pmaFindingsRoutes(app: FastifyInstance) {

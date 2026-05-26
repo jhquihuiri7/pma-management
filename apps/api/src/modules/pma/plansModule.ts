@@ -26,7 +26,7 @@ export async function createPlan(adminId: string, input: PlanCreateInput) {
   const [row] = await db
     .insert(pmaPlans)
     .values({
-      adminId,
+      createdBy: adminId,
       title: input.title,
       description: input.description ?? "",
       tipo: input.tipo,
@@ -40,13 +40,10 @@ export async function createPlan(adminId: string, input: PlanCreateInput) {
   return row;
 }
 
-export async function getPlansByAdmin(adminId: string) {
+export async function getPlansByAdmin(_adminId?: string) {
+  // Single shared organization: every admin sees all plans.
   const db = getDb();
-  return db
-    .select()
-    .from(pmaPlans)
-    .where(eq(pmaPlans.adminId, adminId))
-    .orderBy(desc(pmaPlans.createdAt));
+  return db.select().from(pmaPlans).orderBy(desc(pmaPlans.createdAt));
 }
 
 export async function getPlanById(planId: string) {
@@ -59,7 +56,6 @@ export async function updatePlan(planId: string, adminId: string, updates: PlanU
   const db = getDb();
   const plan = await getPlanById(planId);
   if (!plan) throw NotFound("Plan not found");
-  if (plan.adminId !== adminId) throw Forbidden();
   const [row] = await db
     .update(pmaPlans)
     .set({ ...updates, updatedAt: new Date() })
@@ -72,15 +68,14 @@ export async function deletePlan(planId: string, adminId: string) {
   const db = getDb();
   const plan = await getPlanById(planId);
   if (!plan) throw NotFound("Plan not found");
-  if (plan.adminId !== adminId) throw Forbidden();
   // FKs are ON DELETE CASCADE; one statement removes items, evidences, assignments, etc.
   await db.delete(pmaPlans).where(eq(pmaPlans.id, planId));
   // Caller is responsible for removing storage_path tree after this returns.
 }
 
-export async function assignUserToPlan(planId: string, userId: string, adminId: string) {
+export async function assignUserToPlan(planId: string, userId: string, _adminId?: string) {
   const plan = await getPlanById(planId);
-  if (!plan || plan.adminId !== adminId) throw Forbidden();
+  if (!plan) throw NotFound("Plan not found");
   const db = getDb();
   await db
     .insert(pmaPlanAssignments)
@@ -88,9 +83,9 @@ export async function assignUserToPlan(planId: string, userId: string, adminId: 
     .onConflictDoNothing();
 }
 
-export async function unassignUserFromPlan(planId: string, userId: string, adminId: string) {
+export async function unassignUserFromPlan(planId: string, userId: string, _adminId?: string) {
   const plan = await getPlanById(planId);
-  if (!plan || plan.adminId !== adminId) throw Forbidden();
+  if (!plan) throw NotFound("Plan not found");
   const db = getDb();
   await db
     .delete(pmaPlanAssignments)

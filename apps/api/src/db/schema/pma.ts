@@ -23,15 +23,13 @@ import {
   itemAssignmentCategoryEnum,
   formatFunctionalityEnum,
 } from "./enums.js";
-import { admins, users } from "./shared.js";
+import { users } from "./shared.js";
 
 export const pmaPlans = pgTable(
   "pma_plans",
   {
     id: uuid("id").primaryKey().defaultRandom(),
-    adminId: uuid("admin_id")
-      .notNull()
-      .references(() => admins.id, { onDelete: "cascade" }),
+    createdBy: uuid("created_by").references(() => users.id, { onDelete: "set null" }),
     title: text("title").notNull(),
     description: text("description").notNull().default(""),
     tipo: planTipoEnum("tipo"),
@@ -51,7 +49,7 @@ export const pmaPlans = pgTable(
     updatedAt: timestamp("updated_at", { withTimezone: true }).defaultNow().notNull(),
   },
   (t) => ({
-    adminIdx: index("pma_plans_admin_idx").on(t.adminId),
+    createdByIdx: index("pma_plans_admin_idx").on(t.createdBy),
   })
 );
 
@@ -187,9 +185,6 @@ export const pmaNotifications = pgTable(
     userId: uuid("user_id")
       .notNull()
       .references(() => users.id, { onDelete: "cascade" }),
-    adminId: uuid("admin_id")
-      .notNull()
-      .references(() => admins.id, { onDelete: "cascade" }),
     type: notificationTypeEnum("type").notNull(),
     title: text("title").notNull(),
     message: text("message").notNull(),
@@ -208,9 +203,7 @@ export const pmaNotifications = pgTable(
 
 export const pmaFormats = pgTable("pma_formats", {
   id: uuid("id").primaryKey().defaultRandom(),
-  adminId: uuid("admin_id")
-    .notNull()
-    .references(() => admins.id, { onDelete: "cascade" }),
+  createdBy: uuid("created_by").references(() => users.id, { onDelete: "set null" }),
   functionality: formatFunctionalityEnum("functionality").notNull(),
   functionalityLabel: text("functionality_label").notNull(),
   storagePath: text("storage_path").notNull(),

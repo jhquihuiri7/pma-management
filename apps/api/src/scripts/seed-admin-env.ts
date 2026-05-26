@@ -1,6 +1,6 @@
 import "dotenv/config";
 import { getDb } from "../db/client.js";
-import { admins, users, userApps } from "../db/schema/shared.js";
+import { users, userApps } from "../db/schema/shared.js";
 import { hashPassword } from "../auth/password.js";
 import { eq } from "drizzle-orm";
 
@@ -32,18 +32,6 @@ async function seedAdminFromEnv() {
       process.exit(0);
     }
 
-    // Crear entrada en admins
-    const adminResult = await db
-      .insert(admins)
-      .values({
-        email: email.toLowerCase(),
-        name: name,
-      })
-      .returning();
-
-    const adminId = adminResult[0].id;
-    console.log(`✓ Admin creado: ${adminId}`);
-
     // Hashear la contraseña
     const passwordHash = await hashPassword(password);
 
@@ -51,7 +39,6 @@ async function seedAdminFromEnv() {
     const userResult = await db
       .insert(users)
       .values({
-        adminId: adminId,
         email: email.toLowerCase(),
         name: name,
         passwordHash: passwordHash,

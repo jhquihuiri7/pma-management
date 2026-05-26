@@ -24,7 +24,7 @@ export async function uploadFormat(input: FormatUpload) {
   const [row] = await db
     .insert(pmaFormats)
     .values({
-      adminId: input.adminId,
+      createdBy: input.adminId,
       functionality: input.functionality,
       functionalityLabel: input.functionalityLabel,
       fileName: input.fileName,
@@ -34,21 +34,16 @@ export async function uploadFormat(input: FormatUpload) {
   return row;
 }
 
-export async function listFormats(adminId: string) {
+export async function listFormats(_adminId?: string) {
   const db = getDb();
-  return db
-    .select()
-    .from(pmaFormats)
-    .where(eq(pmaFormats.adminId, adminId))
-    .orderBy(desc(pmaFormats.uploadedAt));
+  return db.select().from(pmaFormats).orderBy(desc(pmaFormats.uploadedAt));
 }
 
-export async function deleteFormat(id: string, adminId: string) {
+export async function deleteFormat(id: string, _adminId?: string) {
   const db = getDb();
   const rows = await db.select().from(pmaFormats).where(eq(pmaFormats.id, id)).limit(1);
   const f = rows[0];
   if (!f) throw NotFound("Format not found");
-  if (f.adminId !== adminId) throw Forbidden();
   try { await getStorage().delete(f.storagePath); } catch { /* ignore */ }
   await db.delete(pmaFormats).where(eq(pmaFormats.id, id));
 }

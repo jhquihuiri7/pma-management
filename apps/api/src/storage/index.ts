@@ -43,11 +43,26 @@ export function buildEvidencePath(args: {
   adminId: string;
   subsystem: "pma" | "rgdp";
   planId: string;
+  planName?: string;
+  subsystemName?: string;
   planItemId?: string;
+  planItemName?: string;
+  periodFolder?: string;
   fileName: string;
 }): string {
-  const item = args.planItemId ?? "_plan";
-  return `${args.adminId}/${args.subsystem}/${args.planId}/${item}/${args.fileName}`;
+  const app = args.subsystem.toUpperCase();
+  const plan = safePathSegment(args.planName, args.planId);
+  const file = safeFileName(args.fileName);
+
+  if (!args.planItemId && !args.planItemName) {
+    return [app, plan, file].join("/");
+  }
+
+  const item = safePathSegment(args.planItemName, args.planItemId ?? "Item");
+  const parts = [app, plan, item];
+  if (args.periodFolder) parts.push(safePathSegment(args.periodFolder, args.periodFolder));
+  parts.push(file);
+  return parts.join("/");
 }
 
 export function buildFormatPath(args: {
@@ -56,4 +71,13 @@ export function buildFormatPath(args: {
   fileName: string;
 }): string {
   return `${args.adminId}/${args.subsystem}/_formats/${args.fileName}`;
+}
+
+function safePathSegment(value: string | null | undefined, fallback: string): string {
+  const normalized = (value ?? fallback).trim().replace(/[\\/]/g, "-");
+  return normalized.length > 0 ? normalized : fallback;
+}
+
+function safeFileName(fileName: string): string {
+  return fileName.trim().replace(/[\\/]/g, "-") || "archivo";
 }

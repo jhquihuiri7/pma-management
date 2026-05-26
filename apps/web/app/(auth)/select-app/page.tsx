@@ -70,7 +70,10 @@ export default function SelectAppPage() {
   }
 
   const userApps = new Set(user.apps);
-  const availableApps = SUBSYSTEM_APPS.filter((a) => userApps.has(a.key));
+  // Admins have implicit access to every subsystem; everyone else sees only their assigned apps.
+  const availableApps = user.role === "ADMIN"
+    ? [...SUBSYSTEM_APPS]
+    : SUBSYSTEM_APPS.filter((a) => userApps.has(a.key));
   const allEntries = user.role === "ADMIN"
     ? [...availableApps, ADMIN_ENTRY]
     : availableApps;

@@ -9,21 +9,10 @@ import {
 } from "drizzle-orm/pg-core";
 import { userRoleEnum, appKeyEnum } from "./enums.js";
 
-export const admins = pgTable("admins", {
-  id: uuid("id").primaryKey().defaultRandom(),
-  email: text("email").notNull().unique(),
-  name: text("name").notNull(),
-  createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
-  updatedAt: timestamp("updated_at", { withTimezone: true }).defaultNow().notNull(),
-});
-
 export const users = pgTable(
   "users",
   {
     id: uuid("id").primaryKey().defaultRandom(),
-    adminId: uuid("admin_id")
-      .notNull()
-      .references(() => admins.id, { onDelete: "cascade" }),
     email: text("email").notNull().unique(),
     passwordHash: text("password_hash"),
     passwordSet: boolean("password_set").notNull().default(false),
@@ -33,10 +22,7 @@ export const users = pgTable(
     position: text("position"),
     createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
     updatedAt: timestamp("updated_at", { withTimezone: true }).defaultNow().notNull(),
-  },
-  (table) => ({
-    adminIdx: index("users_admin_idx").on(table.adminId),
-  })
+  }
 );
 
 export const userApps = pgTable(

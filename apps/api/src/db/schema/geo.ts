@@ -1,13 +1,10 @@
 import { pgTable, uuid, text, timestamp, jsonb, doublePrecision, integer, index } from "drizzle-orm/pg-core";
-import { admins, users } from "./shared.js";
+import { users } from "./shared.js";
 
 export const geoMaps = pgTable(
   "geo_maps",
   {
     id: uuid("id").primaryKey().defaultRandom(),
-    adminId: uuid("admin_id")
-      .notNull()
-      .references(() => admins.id, { onDelete: "cascade" }),
     title: text("title").notNull(),
     description: text("description").notNull().default(""),
     categoryId: text("category_id").notNull(),
@@ -22,7 +19,7 @@ export const geoMaps = pgTable(
     updatedAt: timestamp("updated_at", { withTimezone: true }).defaultNow().notNull(),
   },
   (t) => ({
-    adminIdx: index("geo_maps_admin_idx").on(t.adminId),
+    createdByIdx: index("geo_maps_admin_idx").on(t.createdBy),
     categoryIdx: index("geo_maps_category_idx").on(t.categoryId),
   })
 );

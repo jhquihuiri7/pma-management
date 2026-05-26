@@ -1,6 +1,7 @@
 "use client";
 
 import { api, ApiError } from "@/lib/api-client";
+import { useAuth } from "@/lib/auth-context";
 import { useEffect, useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -41,11 +42,12 @@ const emptyForm = {
   email: "",
   unit: "",
   position: "",
-  role: "REPORTER" as "REPORTER" | "VIEWER",
+  role: "REPORTER" as "ADMIN" | "REPORTER" | "VIEWER",
   apps: [] as AppKey[],
 };
 
 export default function AdminUsersPage() {
+  const { user: session } = useAuth();
   const [users, setUsers] = useState<User[]>([]);
   const [createOpen, setCreateOpen] = useState(false);
   const [editUser, setEditUser] = useState<User | null>(null);
@@ -81,7 +83,7 @@ export default function AdminUsersPage() {
         role: form.role,
         unit: form.unit || undefined,
         position: form.position || undefined,
-        apps: form.apps,
+        apps: form.role === "ADMIN" ? [] : form.apps,
       });
       toast.success(`Usuario creado. Se envió un correo de invitación a ${form.email}.`);
       setForm(emptyForm);
@@ -157,6 +159,7 @@ export default function AdminUsersPage() {
     setEditForm({ name: user.name, unit: user.unit || "", position: user.position || "" });
   }
 
+  const admins = users.filter((u) => u.role === "ADMIN");
   const reporters = users.filter((u) => u.role === "REPORTER");
   const viewers = users.filter((u) => u.role === "VIEWER");
 
@@ -169,6 +172,11 @@ export default function AdminUsersPage() {
   }
 
   function AppBadges({ user }: { user: User }) {
+    if (user.role === "ADMIN") {
+      return (
+        <Badge variant="secondary" className="text-xs">Todos los subsistemas</Badge>
+      );
+    }
     const assigned = (user.apps ?? []) as AppKey[];
     const unassigned = ALL_APPS.filter((a) => !assigned.includes(a));
     return (
@@ -217,7 +225,14 @@ export default function AdminUsersPage() {
         <TableBody>
           {list.map((user) => (
             <TableRow key={user.id}>
-              <TableCell className="font-medium">{user.name}</TableCell>
+              <TableCell className="font-medium">
+                <span className="flex items-center gap-2">
+                  {user.name}
+                  {user.id === session?.id && (
+                    <Badge variant="outline" className="text-xs text-slate-600 border-slate-300 bg-slate-50">Tú</Badge>
+                  )}
+                </span>
+              </TableCell>
               <TableCell>{user.email}</TableCell>
               <TableCell>{user.unit || "-"}</TableCell>
               <TableCell>{user.position || "-"}</TableCell>
@@ -235,10 +250,12 @@ export default function AdminUsersPage() {
                     onClick={() => openEdit(user)}>
                     <Pencil className="w-4 h-4 text-slate-500" />
                   </Button>
-                  <Button variant="ghost" size="sm" title="Eliminar usuario"
-                    onClick={() => handleDelete(user.id, user.name)}>
-                    <Trash2 className="w-4 h-4 text-red-500" />
-                  </Button>
+                  {user.id !== session?.id && (
+                    <Button variant="ghost" size="sm" title="Eliminar usuario"
+                      onClick={() => handleDelete(user.id, user.name)}>
+                      <Trash2 className="w-4 h-4 text-red-500" />
+                    </Button>
+                  )}
                 </div>
               </TableCell>
             </TableRow>
@@ -274,14 +291,14 @@ export default function AdminUsersPage() {
               <div className="space-y-2">
                 <Label>Tipo de usuario</Label>
                 <div className="flex rounded-lg bg-slate-100 p-1">
-                  {(["REPORTER", "VIEWER"] as const).map((r) => (
+                  {(["ADMIN", "REPORTER", "VIEWER"] as const).map((r) => (
                     <button key={r} type="button"
                       className={`flex-1 py-2 text-sm font-medium rounded-md transition-colors ${
                         form.role === r ? "bg-white shadow-sm text-slate-900" : "text-slate-500 hover:text-slate-700"
                       }`}
                       onClick={() => setForm({ ...form, role: r })}
                     >
-                      {r === "REPORTER" ? "Reportero" : "Visualizador"}
+                      {r === "ADMIN" ? "Administrador" : r === "REPORTER" ? "Reportero" : "Visualizador"}
                     </button>
                   ))}
                 </div>
@@ -310,20 +327,26 @@ export default function AdminUsersPage() {
                 </div>
               </div>
 
-              <div className="space-y-2">
-                <Label>Asignar a subsistemas</Label>
-                <div className="grid grid-cols-2 gap-2">
-                  {ALL_APPS.map((appKey) => (
-                    <label key={appKey}
-                      className="flex items-center gap-2 p-2 rounded-lg border border-slate-200 cursor-pointer hover:bg-slate-50">
-                      <input type="checkbox" checked={form.apps.includes(appKey)}
-                        onChange={() => toggleApp(appKey)}
-                        className="rounded border-slate-300" />
-                      <span className="text-sm font-medium">{APP_LABELS[appKey]}</span>
-                    </label>
-                  ))}
+              {form.role === "ADMIN" ? (
+                <p className="text-sm text-muted-foreground rounded-lg bg-slate-50 border border-slate-200 p-3">
+                  Los administradores tienen acceso a todos los subsistemas por defecto.
+                </p>
+              ) : (
+                <div className="space-y-2">
+                  <Label>Asignar a subsistemas</Label>
+                  <div className="grid grid-cols-2 gap-2">
+                    {ALL_APPS.map((appKey) => (
+                      <label key={appKey}
+                        className="flex items-center gap-2 p-2 rounded-lg border border-slate-200 cursor-pointer hover:bg-slate-50">
+                        <input type="checkbox" checked={form.apps.includes(appKey)}
+                          onChange={() => toggleApp(appKey)}
+                          className="rounded border-slate-300" />
+                        <span className="text-sm font-medium">{APP_LABELS[appKey]}</span>
+                      </label>
+                    ))}
+                  </div>
                 </div>
-              </div>
+              )}
 
               <Button type="submit" className="w-full" disabled={loading}>
                 {loading ? "Creando..." : "Crear Usuario"}
@@ -332,6 +355,21 @@ export default function AdminUsersPage() {
           </DialogContent>
         </Dialog>
       </div>
+
+      <Card className="mb-6">
+        <CardHeader>
+          <CardTitle className="text-base">Administradores ({admins.length})</CardTitle>
+        </CardHeader>
+        <CardContent>
+          {admins.length === 0 ? (
+            <p className="text-sm text-muted-foreground text-center py-8">
+              Sin administradores aún. Crea uno para comenzar.
+            </p>
+          ) : (
+            <UserTable list={admins} />
+          )}
+        </CardContent>
+      </Card>
 
       <Card className="mb-6">
         <CardHeader>

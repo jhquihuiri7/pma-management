@@ -20,7 +20,7 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import { Badge } from "@/components/ui/badge";
-import { UserPlus, Trash2, Send, ExternalLink, Users } from "lucide-react";
+import { UserPlus, Trash2, Send, Users } from "lucide-react";
 import { toast } from "sonner";
 import { User } from "@/types";
 
@@ -158,27 +158,11 @@ export default function SubsystemUsersPage({ appLabel, apiPrefix }: Props) {
           </p>
         </div>
         <div className="flex items-center gap-2">
-          <Link href="/admin/users">
-            <Button variant="outline" size="sm">
-              <Users className="w-4 h-4 mr-2" />
-              Gestión Global
-              <ExternalLink className="w-3 h-3 ml-1 opacity-60" />
-            </Button>
-          </Link>
           <Button onClick={openAssignDialog}>
             <UserPlus className="w-4 h-4 mr-2" />
             Asignar Usuario
           </Button>
         </div>
-      </div>
-
-      <div className="mb-4 p-3 rounded-lg bg-blue-50 border border-blue-100 text-sm text-blue-700 flex items-center gap-2">
-        <ExternalLink className="w-4 h-4 shrink-0" />
-        Para crear nuevos usuarios ve a{" "}
-        <Link href="/admin/users" className="font-semibold underline underline-offset-2">
-          Gestión Global de Usuarios
-        </Link>
-        . Aquí solo se asignan usuarios existentes.
       </div>
 
       <Card className="mb-6">

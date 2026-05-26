@@ -32,6 +32,8 @@ export function requireRole(...allowed: Array<AccessTokenClaims["role"]>) {
 export function requireApp(app: AccessTokenClaims["apps"][number]) {
   return async (req: FastifyRequest) => {
     if (!req.user) throw Unauthorized();
+    // Admins have implicit access to every subsystem.
+    if (req.user.role === "ADMIN") return;
     if (!req.user.apps.includes(app)) throw Forbidden(`Requires app access: ${app}`);
   };
 }

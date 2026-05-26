@@ -1,6 +1,6 @@
 import "dotenv/config";
 import { getDb } from "../db/client.js";
-import { users, userApps, admins } from "../db/schema/shared.js";
+import { users, userApps } from "../db/schema/shared.js";
 import { hashPassword } from "../auth/password.js";
 import { eq } from "drizzle-orm";
 import * as readline from "readline";
@@ -23,26 +23,17 @@ async function createUser() {
 
   console.log("\n=== Crear Nuevo Usuario ===\n");
 
-  const adminEmail = await question("Email del administrador propietario: ");
   const userEmail = await question("Email del nuevo usuario: ");
   const userName = await question("Nombre del usuario: ");
   const role = await question("Rol (ADMIN/REPORTER/VIEWER) [REPORTER]: ");
   const appsList = await question("Apps (pma,rgdp,geo) [pma,rgdp]: ");
 
-  if (!adminEmail || !userEmail || !userName) {
-    console.error("❌ Email del admin, email del usuario y nombre son obligatorios");
+  if (!userEmail || !userName) {
+    console.error("❌ Email del usuario y nombre son obligatorios");
     process.exit(1);
   }
 
   try {
-    // Encontrar el admin
-    const adminRows = await db.select().from(admins).where(eq(admins.email, adminEmail.toLowerCase())).limit(1);
-    if (adminRows.length === 0) {
-      console.error("❌ No existe un administrador con ese email");
-      process.exit(1);
-    }
-    const admin = adminRows[0];
-
     // Verificar si el usuario ya existe
     const existing = await db.select().from(users).where(eq(users.email, userEmail.toLowerCase())).limit(1);
     if (existing.length > 0) {
@@ -74,7 +65,6 @@ async function createUser() {
     const userResult = await db
       .insert(users)
       .values({
-        adminId: admin.id,
         email: userEmail.toLowerCase(),
         name: userName,
         passwordHash: null,

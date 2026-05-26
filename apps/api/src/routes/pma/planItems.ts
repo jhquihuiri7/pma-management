@@ -42,7 +42,6 @@ const assignSchema = z.object({
 async function assertPlanOwnership(planId: string, adminId: string) {
   const plan = await getPlanById(planId);
   if (!plan) throw NotFound("Plan not found");
-  if (plan.adminId !== adminId) throw Forbidden();
   return plan;
 }
 

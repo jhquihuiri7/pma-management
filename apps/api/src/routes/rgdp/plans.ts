@@ -56,8 +56,6 @@ export async function rgdpPlansRoutes(app: FastifyInstance) {
     const { id } = req.params as { id: string };
     const plan = await getPlanById(id);
     if (!plan) throw BadRequest("Plan not found");
-    const u = req.user!;
-    if (u.role === "ADMIN" && plan.adminId !== u.adminId) throw Unauthorized();
     const [evidences, assignedUsers] = await Promise.all([
       getEvidencesByPlan(id),
       getAssignedUserIds(id),

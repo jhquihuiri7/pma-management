@@ -1,7 +1,7 @@
-import { eq, desc } from "drizzle-orm";
+import { eq, desc, asc } from "drizzle-orm";
 import { getDb } from "../../db/client.js";
-import { rgdpEvidences, rgdpPlans } from "../../db/schema/rgdp.js";
-import { Forbidden, NotFound } from "../../lib/errors.js";
+import { rgdpEvidences, rgdpPlanItems, rgdpPlans } from "../../db/schema/rgdp.js";
+import { BadRequest, NotFound } from "../../lib/errors.js";
 import { getStorage, buildEvidencePath } from "../../storage/index.js";
 
 export type EvidenceCreateInput = {
@@ -20,12 +20,40 @@ export async function createEvidence(adminId: string, input: EvidenceCreateInput
   const db = getDb();
   const plan = await db.select().from(rgdpPlans).where(eq(rgdpPlans.id, input.planId)).limit(1);
   if (plan.length === 0) throw NotFound("Plan not found");
+  const planRow = plan[0];
+
+  let planItem: typeof rgdpPlanItems.$inferSelect | null = null;
+  let subsystemName = "Sin proceso";
+
+  if (input.planItemId) {
+    const itemRows = await db
+      .select()
+      .from(rgdpPlanItems)
+      .where(eq(rgdpPlanItems.id, input.planItemId))
+      .limit(1);
+    planItem = itemRows[0] ?? null;
+    if (!planItem) throw NotFound("Plan item not found");
+    if (planItem.planId !== input.planId) throw BadRequest("Plan item does not belong to plan");
+    subsystemName = planItem.subplan || subsystemName;
+  } else {
+    const firstItemRows = await db
+      .select()
+      .from(rgdpPlanItems)
+      .where(eq(rgdpPlanItems.planId, input.planId))
+      .orderBy(asc(rgdpPlanItems.createdAt))
+      .limit(1);
+    subsystemName = firstItemRows[0]?.subplan || subsystemName;
+  }
 
   const storagePath = buildEvidencePath({
     adminId,
     subsystem: "rgdp",
     planId: input.planId,
+    planName: planRow.title,
+    subsystemName,
     planItemId: input.planItemId,
+    planItemName: planItem?.item,
+    periodFolder: planItem && input.activityMonth ? getMonthlyFolderName(input.activityMonth) : undefined,
     fileName: input.fileName,
   });
   await getStorage().upload({ path: storagePath, data: input.data, contentType: input.contentType });
@@ -46,6 +74,14 @@ export async function createEvidence(adminId: string, input: EvidenceCreateInput
     })
     .returning();
   return row;
+}
+
+const MONTHS_ES = ["ene", "feb", "mar", "abr", "may", "jun", "jul", "ago", "sep", "oct", "nov", "dic"];
+
+function getMonthlyFolderName(activityMonth: string): string {
+  const [year, month] = activityMonth.split("-").map(Number);
+  if (!year || !month || month < 1 || month > 12) return activityMonth;
+  return `${MONTHS_ES[month - 1]}${year}`;
 }
 
 export const getEvidencesByPlan = (planId: string) =>
@@ -70,7 +106,7 @@ export async function updateEvidenceValidation(
   const evidence = await getEvidenceById(evidenceId);
   if (!evidence) throw NotFound("Evidence not found");
   const plan = await db.select().from(rgdpPlans).where(eq(rgdpPlans.id, evidence.planId)).limit(1);
-  if (plan.length === 0 || plan[0].adminId !== adminId) throw Forbidden();
+  if (plan.length === 0) throw NotFound("Plan not found");
   const previousStatus = evidence.validationStatus;
   const [row] = await db
     .update(rgdpEvidences)
@@ -90,7 +126,7 @@ export async function deleteEvidence(evidenceId: string, adminId: string) {
   const evidence = await getEvidenceById(evidenceId);
   if (!evidence) throw NotFound("Evidence not found");
   const plan = await db.select().from(rgdpPlans).where(eq(rgdpPlans.id, evidence.planId)).limit(1);
-  if (plan.length === 0 || plan[0].adminId !== adminId) throw Forbidden();
+  if (plan.length === 0) throw NotFound("Plan not found");
   try { await getStorage().delete(evidence.storagePath); } catch { /* ignore */ }
   await db.delete(rgdpEvidences).where(eq(rgdpEvidences.id, evidenceId));
 }
