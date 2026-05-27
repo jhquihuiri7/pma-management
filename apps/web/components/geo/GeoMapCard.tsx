@@ -18,6 +18,7 @@ import {
   ChevronRight,
   Pencil,
   Trash2,
+  Layers,
 } from "lucide-react";
 import { toast } from "sonner";
 import { GEO_CATEGORIES } from "@/lib/geo-mock-data";
@@ -171,6 +172,16 @@ export default function GeoMapCard({ geoMap, isAdmin, onEdit, onDelete }: Props)
                   )}
                 </>
               )}
+
+              {/* Open GIS editor */}
+              <a
+                href={`/geo/maps/${geoMap.id}/gis`}
+                className="inline-flex items-center gap-1 text-xs font-medium text-slate-500 hover:text-slate-800 transition-colors ml-1"
+                title="Abrir editor GIS para implementar capas"
+              >
+                <Layers className="w-3 h-3" />
+                GIS
+              </a>
 
               {/* View */}
               <a

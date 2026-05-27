@@ -65,6 +65,31 @@ export function buildEvidencePath(args: {
   return parts.join("/");
 }
 
+/**
+ * Storage layout for the GIS visualizer. Paths are keyed by map/layer UUIDs
+ * (never user-supplied strings) so they are inherently traversal-safe.
+ *
+ *   GEO/maps/{mapId}/layers/{layerId}/data.geojson   normalized GeoJSON (rendered)
+ *   GEO/maps/{mapId}/layers/{layerId}/source.<ext>   original upload (provenance)
+ */
+export function buildGeoMapDir(mapId: string): string {
+  return `GEO/maps/${mapId}`;
+}
+
+export function buildGeoLayerDir(mapId: string, layerId: string): string {
+  return `${buildGeoMapDir(mapId)}/layers/${layerId}`;
+}
+
+export function buildGeoLayerDataPath(mapId: string, layerId: string): string {
+  // GeoJSON is stored gzip-compressed; served with Content-Encoding: gzip.
+  return `${buildGeoLayerDir(mapId, layerId)}/data.geojson.gz`;
+}
+
+export function buildGeoLayerSourcePath(mapId: string, layerId: string, ext: string): string {
+  const clean = ext.replace(/[^a-z0-9]/gi, "").toLowerCase() || "bin";
+  return `${buildGeoLayerDir(mapId, layerId)}/source.${clean}`;
+}
+
 export function buildFormatPath(args: {
   adminId: string;
   subsystem: "pma" | "rgdp";

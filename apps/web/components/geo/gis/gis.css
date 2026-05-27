@@ -1,0 +1,848 @@
+/* ============================================================
+   DGTAR — GIS Profesional (ported from Claude Design prototype)
+   All selectors are scoped under .gis-shell so the editor's
+   generic class names never collide with the host app.
+   ============================================================ */
+
+.gis-shell {
+  --background: oklch(1 0 0);
+  --foreground: oklch(0.145 0 0);
+  --card: oklch(1 0 0);
+  --card-fg: oklch(0.145 0 0);
+  --muted: oklch(0.97 0 0);
+  --muted-fg: oklch(0.556 0 0);
+  --border: oklch(0.922 0 0);
+  --border-strong: oklch(0.85 0 0);
+  --input: oklch(0.922 0 0);
+  --ring: oklch(0.708 0 0);
+  --primary: oklch(0.205 0 0);
+  --primary-fg: oklch(0.985 0 0);
+  --accent-fg: oklch(0.205 0 0);
+  --hover: oklch(0.96 0 0);
+  --selected: oklch(0.93 0 0);
+
+  /* Data accents — used sparingly */
+  --data-green:   #3f7c5f;
+  --data-blue:    #2c5481;
+  --data-amber:   #c46d27;
+  --data-red:     #9d4636;
+  --data-purple:  #4a4458;
+
+  --radius: 0.625rem;
+  --radius-sm: calc(var(--radius) - 4px);
+  --radius-md: calc(var(--radius) - 2px);
+
+  --shadow-sm: 0 1px 2px rgba(15,15,15,0.04);
+  --shadow-md: 0 4px 14px -4px rgba(15,15,15,0.10), 0 2px 4px -2px rgba(15,15,15,0.06);
+  --shadow-lg: 0 18px 40px -12px rgba(15,15,15,0.16), 0 8px 16px -8px rgba(15,15,15,0.08);
+
+  --font-sans: -apple-system, BlinkMacSystemFont, "Inter", "SF Pro Text", "Segoe UI", system-ui, sans-serif;
+  --font-mono: "JetBrains Mono", "SF Mono", ui-monospace, monospace;
+
+  position: fixed;
+  inset: 0;
+  z-index: 50;
+  font-family: var(--font-sans);
+  background: var(--background);
+  color: var(--foreground);
+  font-size: 13px;
+  line-height: 1.45;
+  -webkit-font-smoothing: antialiased;
+}
+
+.gis-shell *, .gis-shell *::before, .gis-shell *::after { box-sizing: border-box; }
+
+.gis-shell button { font-family: inherit; cursor: pointer; }
+.gis-shell input, .gis-shell select, .gis-shell textarea { font-family: inherit; font-size: inherit; }
+
+/* ============================================================
+   App shell grid
+   ============================================================ */
+.gis-shell.app-shell {
+  display: grid;
+  grid-template-rows: 48px 1fr 26px;
+  grid-template-columns: 280px 1fr 360px;
+  grid-template-areas:
+    "topbar topbar topbar"
+    "left   map    right"
+    "status status status";
+  height: 100%;
+}
+
+.gis-shell.no-right { grid-template-columns: 280px 1fr 0; }
+.gis-shell.no-right .right-rail { display: none; }
+.gis-shell.no-left  { grid-template-columns: 0 1fr 360px; }
+.gis-shell.no-left  .left-rail   { display: none; }
+
+/* ============================================================
+   Topbar
+   ============================================================ */
+.gis-shell .topbar {
+  grid-area: topbar;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 0 12px 0 14px;
+  border-bottom: 1px solid var(--border);
+  background: var(--background);
+  z-index: 30;
+}
+
+.gis-shell .brand {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  padding-right: 12px;
+  margin-right: 6px;
+  border-right: 1px solid var(--border);
+  height: 100%;
+  user-select: none;
+}
+.gis-shell .brand-back {
+  display: inline-flex; align-items: center; gap: 4px;
+  height: 30px; padding: 0 8px;
+  border: 1px solid transparent; border-radius: var(--radius-md);
+  color: var(--muted-fg); font-size: 12px; background: transparent;
+  text-decoration: none;
+}
+.gis-shell .brand-back:hover { background: var(--hover); color: var(--foreground); }
+.gis-shell .brand-mark {
+  width: 22px; height: 22px;
+  border-radius: 5px;
+  background: var(--foreground);
+  display: grid; place-items: center;
+  color: var(--background);
+  font-weight: 700; font-size: 11px;
+  letter-spacing: 0.5px;
+}
+.gis-shell .brand-text { font-weight: 600; font-size: 13px; }
+.gis-shell .brand-sub  { font-size: 11px; color: var(--muted-fg); margin-left: 2px; }
+
+.gis-shell .tb-group { display: flex; align-items: center; gap: 2px; padding: 0 4px; height: 100%; }
+.gis-shell .tb-group + .tb-group { border-left: 1px solid var(--border); margin-left: 2px; padding-left: 8px; }
+
+.gis-shell .tb-btn {
+  height: 30px; min-width: 30px;
+  padding: 0 9px;
+  border: 1px solid transparent;
+  background: transparent;
+  border-radius: var(--radius-md);
+  color: var(--foreground);
+  display: inline-flex; align-items: center; gap: 6px;
+  font-size: 12.5px;
+  transition: background 0.12s, border-color 0.12s;
+}
+.gis-shell .tb-btn:hover { background: var(--hover); }
+.gis-shell .tb-btn.active { background: var(--selected); border-color: var(--border-strong); }
+.gis-shell .tb-btn.primary { background: var(--primary); color: var(--primary-fg); }
+.gis-shell .tb-btn.primary:hover { background: oklch(0.28 0 0); }
+
+.gis-shell .tb-spacer { flex: 1; }
+
+.gis-shell .search {
+  display: flex; align-items: center; gap: 6px;
+  width: 240px; height: 30px;
+  padding: 0 10px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  background: var(--muted);
+}
+.gis-shell .search input {
+  border: none; background: transparent;
+  flex: 1; outline: none;
+  color: var(--foreground);
+}
+.gis-shell .search input::placeholder { color: var(--muted-fg); }
+
+.gis-shell .kbd {
+  font-family: var(--font-mono);
+  font-size: 10px;
+  padding: 1px 5px;
+  border: 1px solid var(--border);
+  border-radius: 3px;
+  color: var(--muted-fg);
+  background: var(--background);
+}
+
+/* ============================================================
+   Left rail — layers
+   ============================================================ */
+.gis-shell .left-rail {
+  grid-area: left;
+  border-right: 1px solid var(--border);
+  background: var(--background);
+  display: flex; flex-direction: column;
+  overflow: hidden;
+}
+
+.gis-shell .rail-header {
+  padding: 12px 14px 10px;
+  border-bottom: 1px solid var(--border);
+  display: flex; align-items: center; justify-content: space-between;
+}
+.gis-shell .rail-title { font-weight: 600; font-size: 12.5px; }
+.gis-shell .rail-sub { color: var(--muted-fg); font-size: 11.5px; margin-top: 2px; }
+
+.gis-shell .layer-list { overflow-y: auto; padding: 6px 8px; flex: 1; }
+.gis-shell .layer-empty {
+  padding: 24px 18px;
+  text-align: center;
+  color: var(--muted-fg);
+  font-size: 12px;
+  border: 1px dashed var(--border);
+  border-radius: var(--radius-md);
+  margin: 12px;
+}
+.gis-shell .layer-empty b { color: var(--foreground); display: block; margin-bottom: 4px; font-weight: 600; font-size: 12.5px; }
+
+.gis-shell .layer-item {
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  background: var(--background);
+  margin-bottom: 6px;
+  overflow: hidden;
+  transition: border-color 0.12s, box-shadow 0.12s;
+}
+.gis-shell .layer-item.active {
+  border-color: var(--border-strong);
+  box-shadow: var(--shadow-sm);
+}
+
+.gis-shell .layer-row {
+  display: grid;
+  grid-template-columns: 16px 18px 1fr auto;
+  gap: 8px;
+  align-items: center;
+  padding: 8px 10px;
+}
+.gis-shell .layer-row:hover { background: var(--hover); }
+.gis-shell .layer-row .drag {
+  cursor: grab;
+  color: var(--muted-fg);
+  font-size: 12px;
+  user-select: none;
+}
+.gis-shell .layer-vis {
+  width: 18px; height: 18px;
+  border: 1px solid var(--border);
+  border-radius: 3px;
+  background: var(--background);
+  display: grid; place-items: center;
+  cursor: pointer;
+  color: var(--muted-fg);
+}
+.gis-shell .layer-vis.on { background: var(--foreground); color: var(--background); border-color: var(--foreground); }
+
+.gis-shell .layer-name {
+  font-weight: 500; font-size: 12.5px;
+  white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+}
+.gis-shell .layer-meta { font-size: 10.5px; color: var(--muted-fg); display: flex; gap: 6px; margin-top: 1px; }
+.gis-shell .layer-geom-icon { color: var(--muted-fg); }
+
+.gis-shell .layer-actions { display: flex; gap: 2px; }
+.gis-shell .icon-btn {
+  width: 24px; height: 24px;
+  border-radius: 5px; border: none; background: transparent;
+  display: grid; place-items: center;
+  color: var(--muted-fg);
+}
+.gis-shell .icon-btn:hover { background: var(--hover); color: var(--foreground); }
+
+.gis-shell .layer-expand {
+  border-top: 1px solid var(--border);
+  padding: 10px 12px;
+  background: var(--muted);
+  display: grid; gap: 10px;
+}
+
+/* Style editor inside layer */
+.gis-shell .style-section { display: grid; gap: 6px; }
+.gis-shell .style-label {
+  font-size: 10.5px;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  color: var(--muted-fg);
+  font-weight: 600;
+}
+
+.gis-shell .tab-row {
+  display: flex;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  overflow: hidden;
+  background: var(--background);
+}
+.gis-shell .tab-row button {
+  flex: 1; padding: 5px 0;
+  border: none; background: transparent;
+  font-size: 11px; color: var(--muted-fg);
+  border-right: 1px solid var(--border);
+}
+.gis-shell .tab-row button:last-child { border-right: none; }
+.gis-shell .tab-row button.active { background: var(--foreground); color: var(--background); }
+.gis-shell .tab-row button:disabled { opacity: 0.4; cursor: not-allowed; }
+
+.gis-shell .swatch-row { display: flex; gap: 4px; flex-wrap: wrap; }
+.gis-shell .swatch {
+  width: 22px; height: 22px;
+  border-radius: 4px;
+  border: 1px solid rgba(0,0,0,0.08);
+  cursor: pointer;
+  position: relative;
+}
+.gis-shell .swatch.selected {
+  box-shadow: 0 0 0 2px var(--background), 0 0 0 3px var(--foreground);
+}
+
+.gis-shell .ramp-row { display: grid; gap: 4px; }
+.gis-shell .ramp {
+  display: flex;
+  height: 16px;
+  border-radius: 3px;
+  overflow: hidden;
+  border: 1px solid rgba(0,0,0,0.08);
+  cursor: pointer;
+}
+.gis-shell .ramp.selected {
+  box-shadow: 0 0 0 2px var(--background), 0 0 0 3px var(--foreground);
+}
+.gis-shell .ramp > span { flex: 1; }
+
+.gis-shell .field-select, .gis-shell .field-input {
+  width: 100%;
+  height: 28px;
+  padding: 0 8px;
+  border: 1px solid var(--border);
+  background: var(--background);
+  border-radius: var(--radius-sm);
+  font-size: 12px;
+  color: var(--foreground);
+  outline: none;
+}
+.gis-shell .field-select:focus, .gis-shell .field-input:focus { border-color: var(--border-strong); }
+
+.gis-shell .slider-row {
+  display: grid; grid-template-columns: 1fr 36px; gap: 8px;
+  align-items: center;
+}
+.gis-shell .slider-row input[type=range] { width: 100%; accent-color: var(--foreground); }
+.gis-shell .slider-val {
+  font-family: var(--font-mono);
+  font-size: 11px;
+  color: var(--muted-fg);
+  text-align: right;
+}
+
+/* ============================================================
+   Map area
+   ============================================================ */
+.gis-shell .map-area {
+  grid-area: map;
+  position: relative;
+  background: var(--muted);
+}
+.gis-shell .gis-map { width: 100%; height: 100%; }
+
+.gis-shell .leaflet-container { background: #eef0ec; font-family: var(--font-sans); }
+.gis-shell .leaflet-control-attribution {
+  font-size: 9.5px !important;
+  background: rgba(255,255,255,0.85) !important;
+  padding: 1px 6px !important;
+}
+.gis-shell .leaflet-control-zoom { box-shadow: var(--shadow-md) !important; border: 1px solid var(--border) !important; }
+.gis-shell .leaflet-control-zoom a {
+  background: var(--background) !important;
+  color: var(--foreground) !important;
+  border-bottom-color: var(--border) !important;
+  font-weight: 400 !important;
+}
+.gis-shell .leaflet-control-zoom a:hover { background: var(--hover) !important; }
+
+.gis-shell .map-floating { position: absolute; z-index: 600; pointer-events: auto; }
+
+.gis-shell .map-tools {
+  top: 12px; left: 12px;
+  display: flex; flex-direction: column; gap: 6px;
+}
+.gis-shell .map-tools .tool-card {
+  background: var(--background);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  padding: 4px;
+  display: flex; flex-direction: column;
+  box-shadow: var(--shadow-sm);
+}
+.gis-shell .map-tools .tool-card.row { flex-direction: row; }
+
+.gis-shell .tool-btn {
+  width: 30px; height: 30px;
+  border: none; background: transparent;
+  border-radius: 5px;
+  color: var(--muted-fg);
+  display: grid; place-items: center;
+  position: relative;
+}
+.gis-shell .tool-btn:hover { background: var(--hover); color: var(--foreground); }
+.gis-shell .tool-btn.active { background: var(--foreground); color: var(--background); }
+.gis-shell .tool-btn .ind {
+  position: absolute; top: 4px; right: 4px;
+  width: 6px; height: 6px; border-radius: 50%;
+  background: var(--data-green);
+}
+
+.gis-shell .basemap-switch {
+  bottom: 14px; left: 12px;
+  background: var(--background);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  padding: 4px;
+  display: flex;
+  gap: 2px;
+  box-shadow: var(--shadow-md);
+}
+.gis-shell .basemap-tile {
+  width: 56px; height: 44px;
+  border: 1px solid var(--border);
+  border-radius: 5px;
+  background-size: cover; background-position: center;
+  cursor: pointer;
+  position: relative;
+  display: grid; place-items: end center;
+  overflow: hidden;
+}
+.gis-shell .basemap-tile span {
+  font-size: 9.5px; font-weight: 600;
+  color: white; padding: 1px 4px;
+  background: rgba(0,0,0,0.5);
+  width: 100%; text-align: center;
+  letter-spacing: 0.2px;
+}
+.gis-shell .basemap-tile.active { box-shadow: 0 0 0 2px var(--foreground); }
+
+.gis-shell .map-status-overlay {
+  position: absolute; right: 12px; bottom: 16px;
+  display: flex; gap: 6px;
+  font-family: var(--font-mono);
+  font-size: 10.5px;
+  z-index: 600;
+  pointer-events: none;
+}
+.gis-shell .map-status-overlay div {
+  background: rgba(255,255,255,0.92);
+  border: 1px solid var(--border);
+  padding: 3px 7px; border-radius: 4px;
+}
+
+.gis-shell .identify-popup {
+  position: absolute;
+  z-index: 700;
+  width: 260px;
+  background: var(--background);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  box-shadow: var(--shadow-lg);
+  font-size: 11.5px;
+  overflow: hidden;
+}
+.gis-shell .identify-popup-head {
+  display: flex; align-items: center; justify-content: space-between;
+  padding: 8px 10px;
+  background: var(--muted);
+  border-bottom: 1px solid var(--border);
+}
+.gis-shell .identify-popup-head .ttl { font-weight: 600; font-size: 12px; }
+.gis-shell .identify-popup-body { padding: 4px 10px 10px; max-height: 240px; overflow-y: auto; }
+.gis-shell .identify-row {
+  display: grid; grid-template-columns: 1fr 1fr;
+  gap: 8px;
+  padding: 5px 0;
+  border-bottom: 1px dashed var(--border);
+}
+.gis-shell .identify-row:last-child { border-bottom: none; }
+.gis-shell .identify-row .k { color: var(--muted-fg); }
+.gis-shell .identify-row .v { font-weight: 500; word-break: break-word; text-align: right; }
+
+.gis-shell .legend-card {
+  position: absolute; right: 12px; top: 12px;
+  width: 220px;
+  background: var(--background);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  box-shadow: var(--shadow-md);
+  font-size: 11.5px;
+  z-index: 600;
+  max-height: 60vh; display: flex; flex-direction: column;
+}
+.gis-shell .legend-head {
+  padding: 8px 10px;
+  border-bottom: 1px solid var(--border);
+  display: flex; align-items: center; justify-content: space-between;
+}
+.gis-shell .legend-head .ttl { font-weight: 600; font-size: 12px; }
+.gis-shell .legend-body { padding: 6px 10px 10px; overflow-y: auto; }
+.gis-shell .legend-section + .legend-section { margin-top: 8px; padding-top: 8px; border-top: 1px dashed var(--border); }
+.gis-shell .legend-section .sn { font-size: 10.5px; color: var(--muted-fg); margin-bottom: 4px; }
+.gis-shell .legend-entry {
+  display: grid; grid-template-columns: 16px 1fr auto;
+  gap: 7px;
+  padding: 2.5px 0;
+  align-items: center;
+}
+.gis-shell .legend-entry .sw {
+  width: 14px; height: 14px;
+  border-radius: 3px;
+  border: 1px solid rgba(0,0,0,0.10);
+}
+.gis-shell .legend-entry .sw.line { height: 3px; align-self: center; margin: 5.5px 0; border-radius: 1.5px; }
+.gis-shell .legend-entry .sw.point { border-radius: 50%; width: 12px; height: 12px; margin-left: 1px; }
+.gis-shell .legend-entry .lbl { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.gis-shell .legend-entry .val { font-family: var(--font-mono); font-size: 10.5px; color: var(--muted-fg); }
+
+/* ============================================================
+   Right rail — dashboards
+   ============================================================ */
+.gis-shell .right-rail {
+  grid-area: right;
+  border-left: 1px solid var(--border);
+  background: var(--background);
+  display: flex; flex-direction: column;
+  overflow: hidden;
+}
+
+.gis-shell .dash-tabs { display: flex; border-bottom: 1px solid var(--border); }
+.gis-shell .dash-tab {
+  flex: 1; padding: 10px 6px;
+  text-align: center;
+  border: none; background: transparent;
+  border-bottom: 2px solid transparent;
+  color: var(--muted-fg);
+  font-size: 12px; font-weight: 500;
+}
+.gis-shell .dash-tab.active { color: var(--foreground); border-bottom-color: var(--foreground); }
+
+.gis-shell .dash-body { overflow-y: auto; flex: 1; padding: 10px; }
+
+.gis-shell .dash-source {
+  padding: 12px 14px 8px;
+  border-bottom: 1px solid var(--border);
+}
+.gis-shell .dash-source .ds-name {
+  display: flex; align-items: center; gap: 8px;
+  font-weight: 600; font-size: 13px;
+}
+.gis-shell .ds-name .geom-dot {
+  width: 8px; height: 8px; border-radius: 50%;
+  background: var(--data-green);
+}
+.gis-shell .dash-source .ds-meta {
+  margin-top: 4px;
+  font-size: 11px; color: var(--muted-fg);
+  display: flex; gap: 10px;
+  font-family: var(--font-mono);
+}
+
+.gis-shell .dash-card {
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  background: var(--background);
+  margin-bottom: 10px;
+  overflow: hidden;
+}
+.gis-shell .dash-card-head {
+  padding: 9px 12px 7px;
+  display: flex; align-items: center; justify-content: space-between;
+  gap: 8px;
+}
+.gis-shell .dash-card-head .dh-l {
+  display: flex; flex-direction: column; gap: 2px;
+  min-width: 0;
+}
+.gis-shell .dash-card-head .dh-title {
+  font-weight: 600; font-size: 12.5px;
+  white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+}
+.gis-shell .dash-card-head .dh-sub {
+  font-size: 10.5px; color: var(--muted-fg);
+  display: flex; gap: 6px; align-items: center;
+  font-family: var(--font-mono);
+}
+.gis-shell .type-pill {
+  font-size: 9.5px; font-weight: 600;
+  padding: 1px 6px; border-radius: 999px;
+  background: var(--muted); color: var(--muted-fg);
+  text-transform: uppercase; letter-spacing: 0.4px;
+  font-family: var(--font-sans);
+}
+.gis-shell .type-pill.t-numeric { background: #e7f0ea; color: #1f5a3f; }
+.gis-shell .type-pill.t-categorical { background: #f0e9e3; color: #6e3409; }
+.gis-shell .type-pill.t-date { background: #e6ecf3; color: #11355f; }
+
+.gis-shell .dash-card-body { padding: 0 12px 12px; }
+.gis-shell .dash-chart { width: 100%; height: auto; display: block; }
+.gis-shell .axis-label { font-size: 9px; fill: var(--muted-fg); font-family: var(--font-mono); }
+
+.gis-shell .cat-bars { display: grid; gap: 5px; padding-top: 2px; }
+.gis-shell .cat-row {
+  display: grid; grid-template-columns: 96px 1fr 32px; gap: 8px; align-items: center;
+}
+.gis-shell .cat-label {
+  font-size: 11px; white-space: nowrap;
+  overflow: hidden; text-overflow: ellipsis;
+}
+.gis-shell .cat-track {
+  height: 10px;
+  background: var(--muted);
+  border-radius: 999px;
+  overflow: hidden;
+}
+.gis-shell .cat-fill { height: 100%; border-radius: 999px; }
+.gis-shell .cat-val { font-size: 10.5px; color: var(--muted-fg); font-family: var(--font-mono); text-align: right; }
+.gis-shell .cat-more { font-size: 10.5px; color: var(--muted-fg); padding-top: 2px; }
+
+.gis-shell .donut-wrap {
+  display: grid; grid-template-columns: 120px 1fr; gap: 8px; align-items: center;
+}
+.gis-shell .donut-num { font-weight: 700; font-size: 16px; fill: var(--foreground); }
+.gis-shell .donut-sub { font-size: 9px; fill: var(--muted-fg); }
+.gis-shell .donut-legend { display: grid; gap: 3px; }
+.gis-shell .legend-row {
+  display: grid; grid-template-columns: 10px 1fr auto; align-items: center; gap: 6px;
+  font-size: 10.5px;
+}
+.gis-shell .legend-sw { width: 10px; height: 10px; border-radius: 2px; }
+.gis-shell .legend-label { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.gis-shell .legend-val { font-family: var(--font-mono); color: var(--muted-fg); }
+
+.gis-shell .stat-card {
+  display: grid;
+  grid-template-columns: auto 1fr;
+  gap: 16px;
+  padding-bottom: 8px;
+  align-items: center;
+}
+.gis-shell .stat-main { padding-left: 2px; }
+.gis-shell .stat-big { font-size: 26px; font-weight: 700; line-height: 1; letter-spacing: -0.4px; font-family: var(--font-sans); }
+.gis-shell .stat-sub { font-size: 10px; color: var(--muted-fg); margin-top: 2px; text-transform: uppercase; letter-spacing: 0.5px; }
+.gis-shell .stat-grid {
+  display: grid; grid-template-columns: 1fr 1fr; gap: 4px 12px;
+  font-size: 10.5px;
+}
+.gis-shell .stat-grid > div { display: flex; justify-content: space-between; }
+.gis-shell .stat-grid span { color: var(--muted-fg); }
+.gis-shell .stat-grid b { font-family: var(--font-mono); font-weight: 600; }
+
+.gis-shell .dash-stack { display: grid; gap: 8px; }
+
+.gis-shell .empty {
+  font-size: 11px; color: var(--muted-fg);
+  text-align: center; padding: 18px 6px;
+}
+
+/* ============================================================
+   Attribute table panel (slides up from bottom)
+   ============================================================ */
+.gis-shell .attr-panel {
+  position: absolute;
+  left: 0; right: 0; bottom: 0;
+  height: 38%;
+  background: var(--background);
+  border-top: 1px solid var(--border);
+  z-index: 800;
+  display: flex; flex-direction: column;
+  box-shadow: 0 -8px 24px -12px rgba(0,0,0,0.15);
+  animation: gis-slide-in-up 0.18s ease-out;
+}
+.gis-shell .attr-head {
+  display: flex; align-items: center; justify-content: space-between;
+  padding: 8px 12px;
+  border-bottom: 1px solid var(--border);
+  background: var(--muted);
+}
+.gis-shell .attr-head .l { display: flex; align-items: center; gap: 10px; }
+
+.gis-shell .attr-table-wrap { overflow: auto; flex: 1; }
+.gis-shell .attr-table { width: 100%; border-collapse: collapse; font-size: 11.5px; }
+.gis-shell .attr-table th {
+  position: sticky; top: 0;
+  background: var(--background);
+  border-bottom: 1px solid var(--border);
+  padding: 8px 12px;
+  text-align: left;
+  font-weight: 600;
+  color: var(--muted-fg);
+  font-size: 10.5px;
+  text-transform: uppercase;
+  letter-spacing: 0.4px;
+  white-space: nowrap;
+}
+.gis-shell .attr-table th .col-type {
+  margin-left: 6px;
+  font-size: 8.5px;
+  background: var(--muted);
+  padding: 1px 5px;
+  border-radius: 3px;
+  font-family: var(--font-mono);
+  letter-spacing: 0;
+}
+.gis-shell .attr-table td {
+  padding: 6px 12px;
+  border-bottom: 1px solid var(--border);
+  white-space: nowrap;
+}
+.gis-shell .attr-table tr:hover td { background: var(--hover); }
+.gis-shell .attr-table tr.selected td { background: oklch(0.95 0.01 90); }
+.gis-shell .attr-numeric { font-family: var(--font-mono); text-align: right; }
+
+/* ============================================================
+   Upload / sample modal
+   ============================================================ */
+.gis-shell .modal-backdrop {
+  position: fixed; inset: 0;
+  background: rgba(15,15,15,0.35);
+  display: grid; place-items: center;
+  z-index: 1000;
+  animation: gis-fade-in 0.12s ease-out;
+}
+.gis-shell .modal {
+  width: 520px; max-width: 92vw;
+  background: var(--background);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  box-shadow: var(--shadow-lg);
+  overflow: hidden;
+  display: flex; flex-direction: column;
+}
+.gis-shell .modal-head {
+  padding: 14px 18px;
+  border-bottom: 1px solid var(--border);
+  display: flex; align-items: flex-start; justify-content: space-between;
+}
+.gis-shell .modal-head .h-title { font-weight: 600; font-size: 14px; }
+.gis-shell .modal-head .h-sub { font-size: 11.5px; color: var(--muted-fg); margin-top: 2px; }
+.gis-shell .modal-body { padding: 14px 18px; }
+.gis-shell .modal-foot {
+  padding: 12px 18px;
+  border-top: 1px solid var(--border);
+  display: flex; justify-content: flex-end; gap: 8px;
+  background: var(--muted);
+}
+
+.gis-shell .upload-drop {
+  border: 1.5px dashed var(--border-strong);
+  background: var(--muted);
+  border-radius: var(--radius-md);
+  padding: 24px 18px;
+  text-align: center;
+  margin-bottom: 14px;
+  cursor: pointer;
+  transition: border-color 0.15s, background 0.15s;
+}
+.gis-shell .upload-drop:hover, .gis-shell .upload-drop.drag-over { border-color: var(--foreground); background: var(--hover); }
+.gis-shell .upload-drop .ic { font-size: 28px; margin-bottom: 6px; }
+.gis-shell .upload-drop .t { font-weight: 600; font-size: 13px; }
+.gis-shell .upload-drop .s { font-size: 11.5px; color: var(--muted-fg); margin-top: 2px; }
+
+.gis-shell .sample-list { display: grid; gap: 6px; }
+.gis-shell .sample-item {
+  display: grid;
+  grid-template-columns: 28px 1fr auto;
+  gap: 10px;
+  align-items: center;
+  padding: 9px 12px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  background: var(--background);
+  cursor: pointer;
+}
+.gis-shell .sample-item:hover { border-color: var(--border-strong); background: var(--hover); }
+.gis-shell .sample-item.added { opacity: 0.55; pointer-events: none; }
+.gis-shell .sample-name { font-weight: 500; font-size: 12.5px; }
+.gis-shell .sample-meta { font-size: 10.5px; color: var(--muted-fg); margin-top: 2px; font-family: var(--font-mono); }
+.gis-shell .geom-glyph {
+  width: 26px; height: 26px;
+  background: var(--muted);
+  border-radius: 5px;
+  display: grid; place-items: center;
+}
+
+/* ============================================================
+   Buttons (modal)
+   ============================================================ */
+.gis-shell .btn {
+  height: 32px; padding: 0 14px;
+  border: 1px solid var(--border);
+  background: var(--background);
+  border-radius: var(--radius-md);
+  font-size: 12.5px;
+  color: var(--foreground);
+  display: inline-flex; align-items: center; gap: 6px;
+}
+.gis-shell .btn:hover { background: var(--hover); }
+.gis-shell .btn.primary { background: var(--foreground); color: var(--background); border-color: var(--foreground); }
+.gis-shell .btn.primary:hover { background: oklch(0.30 0 0); }
+.gis-shell .btn.subtle { border-color: transparent; }
+.gis-shell .btn.danger { color: var(--data-red); }
+
+/* ============================================================
+   Status bar
+   ============================================================ */
+.gis-shell .statusbar {
+  grid-area: status;
+  border-top: 1px solid var(--border);
+  background: var(--background);
+  display: flex; align-items: center;
+  padding: 0 12px;
+  font-family: var(--font-mono);
+  font-size: 10.5px;
+  color: var(--muted-fg);
+  gap: 16px;
+}
+.gis-shell .statusbar .sep { color: var(--border-strong); }
+.gis-shell .statusbar .dot {
+  width: 7px; height: 7px; border-radius: 50%; background: var(--data-green);
+  display: inline-block; margin-right: 5px; vertical-align: middle;
+}
+
+/* Map markers */
+.gis-shell .point-marker {
+  border-radius: 50%;
+  border: 1.5px solid white;
+  box-shadow: 0 1px 3px rgba(0,0,0,0.35);
+}
+
+/* Custom scrollbars (subtle) */
+.gis-shell .layer-list::-webkit-scrollbar,
+.gis-shell .dash-body::-webkit-scrollbar,
+.gis-shell .legend-body::-webkit-scrollbar,
+.gis-shell .attr-table-wrap::-webkit-scrollbar,
+.gis-shell .identify-popup-body::-webkit-scrollbar {
+  width: 8px; height: 8px;
+}
+.gis-shell ::-webkit-scrollbar-thumb { background: var(--border-strong); border-radius: 4px; }
+.gis-shell ::-webkit-scrollbar-track { background: transparent; }
+
+/* Tooltips */
+.gis-shell [data-tip] { position: relative; }
+.gis-shell [data-tip]:hover::after {
+  content: attr(data-tip);
+  position: absolute;
+  bottom: calc(100% + 6px); left: 50%;
+  transform: translateX(-50%);
+  background: var(--foreground); color: var(--background);
+  padding: 3px 7px;
+  border-radius: 4px;
+  font-size: 10.5px;
+  white-space: nowrap;
+  z-index: 1000;
+  pointer-events: none;
+}
+
+@keyframes gis-slide-in-up {
+  from { transform: translateY(10px); opacity: 0; }
+  to   { transform: translateY(0); opacity: 1; }
+}
+@keyframes gis-fade-in {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}

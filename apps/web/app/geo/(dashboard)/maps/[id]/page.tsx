@@ -9,6 +9,7 @@ import { useState, useEffect } from "react";
 import {
   ArrowLeft,
   Map,
+  Layers,
   TreePine,
   Waves,
   Thermometer,
@@ -119,6 +120,15 @@ export default function MapViewerPage() {
             {geoMap.description}
           </p>
         )}
+
+        <a
+          href={`/geo/maps/${geoMap.id}/gis`}
+          className="flex items-center gap-1.5 text-sm font-medium px-3 py-1.5 rounded-lg bg-slate-900 text-white hover:bg-slate-700 transition-colors flex-shrink-0"
+          title="Abrir editor GIS"
+        >
+          <Layers className="w-4 h-4" />
+          Abrir GIS
+        </a>
       </div>
 
       {/* Content — fills all remaining height */}

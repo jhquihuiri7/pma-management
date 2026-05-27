@@ -2,6 +2,7 @@ import { eq, and, desc } from "drizzle-orm";
 import { getDb } from "../../db/client.js";
 import { geoMaps } from "../../db/schema/geo.js";
 import { Forbidden, NotFound } from "../../lib/errors.js";
+import { deleteMapStorage } from "./layersModule.js";
 
 export type GeoMapInput = {
   title: string;
@@ -66,9 +67,23 @@ export async function updateMap(id: string, _adminId: string, updates: Partial<G
   return rowToApi(row);
 }
 
+/** Lightweight viewport save — usable by any geo user (no ADMIN required). */
+export async function updateMapViewport(id: string, center: [number, number], zoom: number) {
+  const rows = await getDb().select({ id: geoMaps.id }).from(geoMaps).where(eq(geoMaps.id, id)).limit(1);
+  if (rows.length === 0) throw NotFound("Map not found");
+  const [row] = await getDb()
+    .update(geoMaps)
+    .set({ centerLat: center[0], centerLng: center[1], zoom, updatedAt: new Date() })
+    .where(eq(geoMaps.id, id))
+    .returning();
+  return rowToApi(row);
+}
+
 export async function deleteMap(id: string, _adminId?: string) {
   const rows = await getDb().select().from(geoMaps).where(eq(geoMaps.id, id)).limit(1);
   if (rows.length === 0) throw NotFound("Map not found");
+  // Layer rows cascade via FK; remove their NAS files explicitly.
+  await deleteMapStorage(id);
   await getDb().delete(geoMaps).where(eq(geoMaps.id, id));
 }
 

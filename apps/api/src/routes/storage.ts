@@ -18,6 +18,7 @@ const MIME: Record<string, string> = {
   ".csv": "text/csv",
   ".txt": "text/plain",
   ".json": "application/json",
+  ".geojson": "application/geo+json",
   ".zip": "application/zip",
 };
 
