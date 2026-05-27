@@ -2,7 +2,7 @@
 
 import { usePathname } from "next/navigation";
 import { useAuth } from "@/lib/auth-context";
-import { LayoutDashboard, Map, LogOut, UserCog } from "lucide-react";
+import { LayoutDashboard, Map, LogOut, ArrowLeft, LogIn } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Separator } from "@/components/ui/separator";
 
@@ -54,53 +54,52 @@ export default function SidebarGeo() {
           );
         })}
 
-        {role === "ADMIN" && (
-          <>
-            <div className="pt-4 pb-1">
-              <p className="px-3 text-xs font-semibold text-slate-400 uppercase tracking-wider">
-                Configuración
-              </p>
-            </div>
-            <a
-              href="/admin/users"
-              className={`flex items-center gap-3 px-3 py-2 rounded-lg text-sm font-medium transition-colors ${
-                pathname.startsWith("/admin/users")
-                  ? "bg-teal-50 text-teal-800"
-                  : "text-slate-600 hover:bg-slate-50 hover:text-slate-900"
-              }`}
-            >
-              <UserCog className="w-4 h-4" />
-              Gestión de Usuarios
-            </a>
-          </>
+        {session && (
+          <a
+            href="/select-app"
+            className="flex items-center gap-3 px-3 py-2 rounded-lg text-sm font-medium text-slate-500 hover:bg-slate-50 hover:text-slate-900 transition-colors mt-2"
+          >
+            <ArrowLeft className="w-4 h-4" />
+            Ver todas las apps
+          </a>
         )}
       </nav>
 
       <div className="p-4 border-t border-slate-200">
-        <div className="flex items-center gap-3 px-3">
-          <div className="w-8 h-8 rounded-full bg-teal-100 flex items-center justify-center text-xs font-medium text-teal-700">
-            {session?.name?.[0]?.toUpperCase() || "?"}
+        {session ? (
+          <div className="flex items-center gap-3 px-3">
+            <div className="w-8 h-8 rounded-full bg-teal-100 flex items-center justify-center text-xs font-medium text-teal-700">
+              {session.name?.[0]?.toUpperCase() || "?"}
+            </div>
+            <div className="flex-1 min-w-0">
+              <p className="text-sm font-medium truncate">{session.name}</p>
+              <p className="text-xs text-muted-foreground truncate">
+                {role === "ADMIN"
+                  ? "Administrador"
+                  : role === "REPORTER"
+                  ? "Reportero"
+                  : "Visualizador"}
+              </p>
+            </div>
+            <Button
+              variant="ghost"
+              size="icon"
+              className="h-8 w-8 shrink-0 text-slate-500 hover:text-slate-900"
+              onClick={() => logout()}
+              title="Cerrar sesión"
+            >
+              <LogOut className="w-4 h-4" />
+            </Button>
           </div>
-          <div className="flex-1 min-w-0">
-            <p className="text-sm font-medium truncate">{session?.name}</p>
-            <p className="text-xs text-muted-foreground truncate">
-              {role === "ADMIN"
-                ? "Administrador"
-                : role === "REPORTER"
-                ? "Reportero"
-                : "Visualizador"}
-            </p>
-          </div>
-          <Button
-            variant="ghost"
-            size="icon"
-            className="h-8 w-8 shrink-0 text-slate-500 hover:text-slate-900"
-            onClick={() => logout()}
-            title="Cerrar sesión"
+        ) : (
+          <a
+            href="/login"
+            className="flex items-center gap-3 px-3 py-2 rounded-lg text-sm font-medium text-teal-700 hover:bg-teal-50 transition-colors"
           >
-            <LogOut className="w-4 h-4" />
-          </Button>
-        </div>
+            <LogIn className="w-4 h-4" />
+            Iniciar sesión
+          </a>
+        )}
       </div>
     </aside>
   );

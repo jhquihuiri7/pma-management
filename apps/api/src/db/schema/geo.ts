@@ -8,7 +8,6 @@ export const geoMaps = pgTable(
     title: text("title").notNull(),
     description: text("description").notNull().default(""),
     categoryId: text("category_id").notNull(),
-    arcgisUrl: text("arcgis_url"),
     layers: jsonb("layers").notNull(),
     centerLat: doublePrecision("center_lat").notNull(),
     centerLng: doublePrecision("center_lng").notNull(),

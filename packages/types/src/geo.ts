@@ -27,7 +27,6 @@ export interface GeoMap {
   title: string;
   description: string;
   categoryId: string;
-  arcgisUrl?: string;
   layers: GeoLayer[];
   center: [number, number];
   zoom: number;

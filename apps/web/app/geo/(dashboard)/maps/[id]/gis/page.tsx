@@ -4,6 +4,7 @@ import dynamic from "next/dynamic";
 import { useParams } from "next/navigation";
 import { useEffect, useState } from "react";
 import { apiFetch } from "@/lib/api-client";
+import { useAuth } from "@/lib/auth-context";
 import { GEO_MAPS } from "@/lib/geo-mock-data";
 import type { GeoMap } from "@/types/geo";
 
@@ -18,6 +19,8 @@ const GisEditor = dynamic(() => import("@/components/geo/gis/GisEditor"), {
 
 export default function GisEditorPage() {
   const { id } = useParams<{ id: string }>();
+  const { user } = useAuth();
+  const canEdit = user?.role === "ADMIN";
   const [geoMap, setGeoMap] = useState<GeoMap | null>(null);
   const [loaded, setLoaded] = useState(false);
 
@@ -54,9 +57,10 @@ export default function GisEditorPage() {
     <GisEditor
       mapId={id}
       mapTitle={geoMap?.title}
-      backHref={`/geo/maps/${id}`}
+      backHref="/geo/dashboard"
       initialCenter={geoMap?.center}
       initialZoom={geoMap?.zoom}
+      canEdit={canEdit}
     />
   );
 }

@@ -176,19 +176,11 @@ export default function GeoMapCard({ geoMap, isAdmin, onEdit, onDelete }: Props)
               {/* Open GIS editor */}
               <a
                 href={`/geo/maps/${geoMap.id}/gis`}
-                className="inline-flex items-center gap-1 text-xs font-medium text-slate-500 hover:text-slate-800 transition-colors ml-1"
-                title="Abrir editor GIS para implementar capas"
+                className="inline-flex items-center gap-1 text-xs font-medium text-teal-600 hover:text-teal-800 transition-colors ml-1"
+                title="Abrir mapa en el GIS"
               >
                 <Layers className="w-3 h-3" />
-                GIS
-              </a>
-
-              {/* View */}
-              <a
-                href={`/geo/maps/${geoMap.id}`}
-                className="inline-flex items-center gap-1 text-xs font-medium text-teal-600 hover:text-teal-800 transition-colors ml-1"
-              >
-                Ver mapa
+                Abrir GIS
                 <ChevronRight className="w-3 h-3" />
               </a>
             </div>

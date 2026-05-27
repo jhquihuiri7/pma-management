@@ -55,12 +55,15 @@ function defaultStyleFor(geometry: GisGeometry, index = 0): LayerStyle {
   };
 }
 
-export default function GisEditor({ mapId, mapTitle, backHref, initialCenter, initialZoom }: {
+export default function GisEditor({ mapId, mapTitle, backHref, initialCenter, initialZoom, canEdit = false }: {
   mapId?: string;
   mapTitle?: string;
   backHref?: string;
   initialCenter?: [number, number];
   initialZoom?: number;
+  // When false (public / non-admin viewers) the editor is read-only: no add,
+  // remove, reorder, style edits, or server persistence.
+  canEdit?: boolean;
 }) {
   const [layers, setLayers] = useState<GisLayer[]>([]);
   const [activeLayerId, setActiveLayerId] = useState<string | null>(null);
@@ -88,10 +91,10 @@ export default function GisEditor({ mapId, mapTitle, backHref, initialCenter, in
 
   const handleViewportChange = useCallback((center: [number, number], zoom: number) => {
     hasAutoFitted.current = true; // the view is now user/remembered-controlled
-    if (!mapId) return;
+    if (!mapId || !canEdit) return; // viewers don't persist viewport
     if (viewportTimer.current) clearTimeout(viewportTimer.current);
     viewportTimer.current = setTimeout(() => { saveViewport(mapId, center, zoom).catch(() => {}); }, 800);
-  }, [mapId]);
+  }, [mapId, canEdit]);
 
   // Load persisted layers for this map (so the editor doesn't start from zero).
   useEffect(() => {
@@ -121,16 +124,16 @@ export default function GisEditor({ mapId, mapTitle, backHref, initialCenter, in
     return () => { cancelled = true; };
   }, [mapId]);
 
-  // Once loaded, if the map has no layers yet, prompt to add one.
+  // Once loaded, if the map has no layers yet, prompt admins to add one.
   useEffect(() => {
-    if (!hydrated) return;
+    if (!hydrated || !canEdit) return;
     const t = setTimeout(() => { setLayers((cur) => { if (cur.length === 0) setShowUpload(true); return cur; }); }, 400);
     return () => clearTimeout(t);
-  }, [hydrated]);
+  }, [hydrated, canEdit]);
 
   // Debounced metadata save (style/visibility/name/order) for a persisted layer.
   const scheduleSave = useCallback((layer: GisLayer) => {
-    if (!mapId || !layer.persisted) return;
+    if (!mapId || !canEdit || !layer.persisted) return;
     clearTimeout(saveTimers.current[layer.id]);
     setSaveState("saving");
     saveTimers.current[layer.id] = setTimeout(async () => {
@@ -143,7 +146,7 @@ export default function GisEditor({ mapId, mapTitle, backHref, initialCenter, in
         setSaveState("error");
       }
     }, 600);
-  }, [mapId]);
+  }, [mapId, canEdit]);
 
   useEffect(() => {
     if (!mapInstance) return;
@@ -330,7 +333,9 @@ export default function GisEditor({ mapId, mapTitle, backHref, initialCenter, in
 
         <div className="tb-group">
           <button className="tb-btn" data-tip="Exportar mapa" onClick={() => toast.info("Exportación disponible próximamente.")}><Download size={14} /></button>
-          <button className="tb-btn primary" onClick={() => setShowUpload(true)}><Upload size={14} /> Agregar capa</button>
+          {canEdit && (
+            <button className="tb-btn primary" onClick={() => setShowUpload(true)}><Upload size={14} /> Agregar capa</button>
+          )}
         </div>
       </div>
 
@@ -343,6 +348,7 @@ export default function GisEditor({ mapId, mapTitle, backHref, initialCenter, in
         onRemove={removeLayer}
         onMove={moveLayer}
         onOpenUpload={() => setShowUpload(true)}
+        readOnly={!canEdit}
       />
 
       {/* MAP AREA */}

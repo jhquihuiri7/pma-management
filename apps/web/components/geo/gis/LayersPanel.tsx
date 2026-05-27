@@ -144,8 +144,8 @@ function StyleEditor({ layer, onChange }: { layer: GisLayer; onChange: (l: GisLa
   );
 }
 
-function LayerItem({ layer, active, isFirst, isLast, onClick, onChange, onRemove, onMove }: {
-  layer: GisLayer; active: boolean; isFirst: boolean; isLast: boolean;
+function LayerItem({ layer, active, isFirst, isLast, readOnly, onClick, onChange, onRemove, onMove }: {
+  layer: GisLayer; active: boolean; isFirst: boolean; isLast: boolean; readOnly?: boolean;
   onClick: () => void; onChange: (l: GisLayer) => void; onRemove: () => void; onMove: (d: number) => void;
 }) {
   const [expanded, setExpanded] = useState(active);
@@ -157,7 +157,7 @@ function LayerItem({ layer, active, isFirst, isLast, onClick, onChange, onRemove
   return (
     <div className={"layer-item" + (active ? " active" : "")}>
       <div className="layer-row" onClick={onClick}>
-        <div className="drag" data-tip="Reordenar" onClick={(e) => e.stopPropagation()}>⋮⋮</div>
+        {!readOnly && <div className="drag" data-tip="Reordenar" onClick={(e) => e.stopPropagation()}>⋮⋮</div>}
         <div className={"layer-vis" + (layer.visible ? " on" : "")} onClick={(e) => { e.stopPropagation(); onChange({ ...layer, visible: !layer.visible }); }} data-tip={layer.visible ? "Ocultar" : "Mostrar"}>
           {layer.visible ? <Eye size={13} /> : <EyeOff size={13} />}
         </div>
@@ -172,16 +172,20 @@ function LayerItem({ layer, active, isFirst, isLast, onClick, onChange, onRemove
           </div>
         </div>
         <div className="layer-actions" onClick={(e) => e.stopPropagation()}>
-          <button className="icon-btn" data-tip="Subir" disabled={isFirst} onClick={() => onMove(-1)} style={{ opacity: isFirst ? 0.4 : 1 }}>▲</button>
-          <button className="icon-btn" data-tip="Bajar" disabled={isLast} onClick={() => onMove(1)} style={{ opacity: isLast ? 0.4 : 1 }}>▼</button>
-          <button className="icon-btn" data-tip="Eliminar" onClick={onRemove}><Trash2 size={13} /></button>
-          <button className="icon-btn" data-tip={expanded ? "Cerrar" : "Estilos"} onClick={() => setExpanded(!expanded)}>
-            <ChevronRight size={13} style={{ transform: expanded ? "rotate(90deg)" : "none", transition: "transform 0.15s" }} />
-          </button>
+          {!readOnly && (
+            <>
+              <button className="icon-btn" data-tip="Subir" disabled={isFirst} onClick={() => onMove(-1)} style={{ opacity: isFirst ? 0.4 : 1 }}>▲</button>
+              <button className="icon-btn" data-tip="Bajar" disabled={isLast} onClick={() => onMove(1)} style={{ opacity: isLast ? 0.4 : 1 }}>▼</button>
+              <button className="icon-btn" data-tip="Eliminar" onClick={onRemove}><Trash2 size={13} /></button>
+              <button className="icon-btn" data-tip={expanded ? "Cerrar" : "Estilos"} onClick={() => setExpanded(!expanded)}>
+                <ChevronRight size={13} style={{ transform: expanded ? "rotate(90deg)" : "none", transition: "transform 0.15s" }} />
+              </button>
+            </>
+          )}
         </div>
       </div>
 
-      {expanded && (
+      {!readOnly && expanded && (
         <div className="layer-expand">
           <StyleEditor layer={layer} onChange={onChange} />
         </div>
@@ -190,7 +194,7 @@ function LayerItem({ layer, active, isFirst, isLast, onClick, onChange, onRemove
   );
 }
 
-export default function LayersPanel({ layers, activeId, onActive, onChange, onRemove, onMove, onOpenUpload }: {
+export default function LayersPanel({ layers, activeId, onActive, onChange, onRemove, onMove, onOpenUpload, readOnly }: {
   layers: GisLayer[];
   activeId: string | null;
   onActive: (id: string) => void;
@@ -198,6 +202,7 @@ export default function LayersPanel({ layers, activeId, onActive, onChange, onRe
   onRemove: (id: string) => void;
   onMove: (id: string, dir: number) => void;
   onOpenUpload: () => void;
+  readOnly?: boolean;
 }) {
   return (
     <div className="left-rail">
@@ -206,16 +211,20 @@ export default function LayersPanel({ layers, activeId, onActive, onChange, onRe
           <div className="rail-title">Capas</div>
           <div className="rail-sub">{layers.length} {layers.length === 1 ? "capa" : "capas"} cargada{layers.length === 1 ? "" : "s"}</div>
         </div>
-        <button className="tb-btn primary" onClick={onOpenUpload} data-tip="Agregar capa (shapefile)">
-          <Upload size={14} />
-        </button>
+        {!readOnly && (
+          <button className="tb-btn primary" onClick={onOpenUpload} data-tip="Agregar capa (shapefile)">
+            <Upload size={14} />
+          </button>
+        )}
       </div>
 
       <div className="layer-list">
         {layers.length === 0 && (
           <div className="layer-empty">
             <b>Sin capas aún</b>
-            Arrastra un archivo .shp / .zip o usa una muestra del catálogo para comenzar.
+            {readOnly
+              ? "Este mapa todavía no tiene capas publicadas."
+              : "Arrastra un archivo .shp / .zip o usa una muestra del catálogo para comenzar."}
           </div>
         )}
 
@@ -226,6 +235,7 @@ export default function LayersPanel({ layers, activeId, onActive, onChange, onRe
             active={layer.id === activeId}
             isFirst={idx === 0}
             isLast={idx === layers.length - 1}
+            readOnly={readOnly}
             onClick={() => onActive(layer.id)}
             onChange={onChange}
             onRemove={() => onRemove(layer.id)}

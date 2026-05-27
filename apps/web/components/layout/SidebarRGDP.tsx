@@ -8,7 +8,7 @@ import {
   Users,
   LogOut,
   LayoutTemplate,
-  UserCog,
+  ArrowLeft,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Separator } from "@/components/ui/separator";
@@ -88,19 +88,16 @@ export default function SidebarRGDP() {
               <LayoutTemplate className="w-4 h-4" />
               Formatos
             </a>
-            <a
-              href="/admin/users"
-              className={`flex items-center gap-3 px-3 py-2 rounded-lg text-sm font-medium transition-colors ${
-                pathname.startsWith("/admin/users")
-                  ? "bg-slate-100 text-slate-900"
-                  : "text-slate-600 hover:bg-slate-50 hover:text-slate-900"
-              }`}
-            >
-              <UserCog className="w-4 h-4" />
-              Gestión de Usuarios
-            </a>
           </>
         )}
+
+        <a
+          href="/select-app"
+          className="flex items-center gap-3 px-3 py-2 rounded-lg text-sm font-medium text-slate-500 hover:bg-slate-50 hover:text-slate-900 transition-colors mt-2"
+        >
+          <ArrowLeft className="w-4 h-4" />
+          Ver todas las apps
+        </a>
       </nav>
 
       <div className="p-4 border-t border-slate-200">

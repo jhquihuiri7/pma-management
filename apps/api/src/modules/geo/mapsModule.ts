@@ -8,7 +8,6 @@ export type GeoMapInput = {
   title: string;
   description?: string;
   categoryId: string;
-  arcgisUrl?: string;
   layers?: unknown[];
   center?: [number, number];
   zoom?: number;
@@ -22,7 +21,6 @@ export async function createMap(_adminId: string, userId: string, input: GeoMapI
       title: input.title,
       description: input.description ?? "",
       categoryId: input.categoryId,
-      arcgisUrl: input.arcgisUrl ?? null,
       layers: (input.layers ?? []) as any,
       centerLat: input.center?.[0] ?? -1.8,
       centerLng: input.center?.[1] ?? -78.2,
@@ -55,7 +53,6 @@ export async function updateMap(id: string, _adminId: string, updates: Partial<G
   if (updates.title !== undefined) set.title = updates.title;
   if (updates.description !== undefined) set.description = updates.description;
   if (updates.categoryId !== undefined) set.categoryId = updates.categoryId;
-  if (updates.arcgisUrl !== undefined) set.arcgisUrl = updates.arcgisUrl;
   if (updates.layers !== undefined) set.layers = updates.layers;
   if (updates.center !== undefined) {
     set.centerLat = updates.center[0];
@@ -93,7 +90,6 @@ function rowToApi(row: typeof geoMaps.$inferSelect) {
     title: row.title,
     description: row.description,
     categoryId: row.categoryId,
-    arcgisUrl: row.arcgisUrl,
     layers: row.layers,
     center: [row.centerLat, row.centerLng] as [number, number],
     zoom: row.zoom,

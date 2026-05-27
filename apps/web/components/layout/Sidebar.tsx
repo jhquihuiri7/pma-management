@@ -9,6 +9,7 @@ import {
   Users,
   LogOut,
   LayoutTemplate,
+  ArrowLeft,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Separator } from "@/components/ui/separator";
@@ -90,6 +91,14 @@ export default function Sidebar() {
             </Link>
           </>
         )}
+
+        <Link
+          href="/select-app"
+          className="flex items-center gap-3 px-3 py-2 rounded-lg text-sm font-medium text-slate-500 hover:bg-slate-50 hover:text-slate-900 transition-colors mt-2"
+        >
+          <ArrowLeft className="w-4 h-4" />
+          Ver todas las apps
+        </Link>
       </nav>
 
       <div className="p-4 border-t border-slate-200">

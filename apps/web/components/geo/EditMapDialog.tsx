@@ -4,7 +4,7 @@ import { apiFetch } from "@/lib/api-client";
 
 
 import { useState, useEffect } from "react";
-import { X, Link } from "lucide-react";
+import { X } from "lucide-react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { GEO_CATEGORIES } from "@/lib/geo-mock-data";
@@ -22,7 +22,6 @@ export default function EditMapDialog({ map, onSave, onClose }: Props) {
     title: map.title,
     description: map.description,
     categoryId: map.categoryId,
-    arcgisUrl: map.arcgisUrl ?? "",
     tags: map.tags?.join(", ") ?? "",
   });
 
@@ -31,7 +30,6 @@ export default function EditMapDialog({ map, onSave, onClose }: Props) {
       title: map.title,
       description: map.description,
       categoryId: map.categoryId,
-      arcgisUrl: map.arcgisUrl ?? "",
       tags: map.tags?.join(", ") ?? "",
     });
   }, [map]);
@@ -48,7 +46,6 @@ export default function EditMapDialog({ map, onSave, onClose }: Props) {
           title: form.title.trim(),
           description: form.description.trim(),
           categoryId: form.categoryId,
-          arcgisUrl: form.arcgisUrl.trim() || undefined,
           tags: form.tags ? form.tags.split(",").map((t) => t.trim()).filter(Boolean) : [],
         }),
       });
@@ -118,20 +115,6 @@ export default function EditMapDialog({ map, onSave, onClose }: Props) {
                 </option>
               ))}
             </select>
-          </div>
-
-          <div>
-            <label className="block text-sm font-medium text-slate-700 mb-1">URL</label>
-            <div className="relative">
-              <Link className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
-              <input
-                type="url"
-                value={form.arcgisUrl}
-                onChange={(e) => setForm({ ...form, arcgisUrl: e.target.value })}
-                placeholder="https://arcgis.com/apps/..."
-                className="w-full pl-9 pr-3 border border-slate-200 rounded-lg py-2 text-sm focus:outline-none focus:ring-2 focus:ring-teal-500"
-              />
-            </div>
           </div>
 
           <div>

@@ -15,7 +15,6 @@ const createSchema = z.object({
   title: z.string().min(1),
   description: z.string().optional(),
   categoryId: z.string().min(1),
-  arcgisUrl: z.string().optional(),
   layers: z.array(z.unknown()).optional(),
   center: z.tuple([z.number(), z.number()]).optional(),
   zoom: z.number().int().min(0).max(22).optional(),
@@ -23,37 +22,41 @@ const createSchema = z.object({
 });
 const updateSchema = createSchema.partial();
 
-export async function geoRoutes(app: FastifyInstance) {
-  app.addHook("preHandler", authenticate);
-  app.addHook("preHandler", requireApp("geo"));
+// Mutations require a logged-in ADMIN with geo access. Reads are public so the
+// Geoportal can be browsed without a session (see middleware in apps/web).
+const adminOnly = [authenticate, requireApp("geo"), requireRole("ADMIN")];
 
-  app.get("/maps", async (req) => listMaps(req.user!.adminId));
+export async function geoRoutes(app: FastifyInstance) {
+  // NOTE: no global auth hook — read routes below are intentionally public.
+
+  app.get("/maps", async () => listMaps());
 
   app.get("/maps/:id", async (req) => {
     const { id } = req.params as { id: string };
-    return getMapById(id, req.user!.adminId);
+    return getMapById(id);
   });
 
-  app.post("/maps", { preHandler: requireRole("ADMIN") }, async (req, reply) => {
+  app.post("/maps", { preHandler: adminOnly }, async (req, reply) => {
     const body = createSchema.parse(req.body);
     reply.status(201);
     return createMap(req.user!.adminId, req.user!.sub, body);
   });
 
-  app.put("/maps/:id", { preHandler: requireRole("ADMIN") }, async (req) => {
+  app.put("/maps/:id", { preHandler: adminOnly }, async (req) => {
     const { id } = req.params as { id: string };
     const body = updateSchema.parse(req.body);
     return updateMap(id, req.user!.adminId, body);
   });
 
-  app.delete("/maps/:id", { preHandler: requireRole("ADMIN") }, async (req) => {
+  app.delete("/maps/:id", { preHandler: adminOnly }, async (req) => {
     const { id } = req.params as { id: string };
     await deleteMap(id, req.user!.adminId);
     return { ok: true };
   });
 
-  // Save the remembered viewport. Any geo user (incl. VIEWER) may call this.
-  app.patch("/maps/:id/viewport", async (req) => {
+  // Save the remembered viewport. Any logged-in geo user (incl. VIEWER) may call
+  // this; public visitors do not persist viewport (the web app skips the call).
+  app.patch("/maps/:id/viewport", { preHandler: [authenticate, requireApp("geo")] }, async (req) => {
     const { id } = req.params as { id: string };
     const body = viewportSchema.parse(req.body);
     return updateMapViewport(id, body.center, body.zoom);
@@ -81,7 +84,7 @@ export async function geoRoutes(app: FastifyInstance) {
 
   // Create a layer. Multipart: file "data" (GeoJSON, required),
   // file "source" (original .zip/.shp, optional), plus text fields.
-  app.post("/maps/:id/layers", { preHandler: requireRole("ADMIN") }, async (req, reply) => {
+  app.post("/maps/:id/layers", { preHandler: adminOnly }, async (req, reply) => {
     const { id } = req.params as { id: string };
     let data: Buffer | null = null;
     let source: { data: Buffer; ext: string } | null = null;
@@ -124,13 +127,13 @@ export async function geoRoutes(app: FastifyInstance) {
     return layer;
   });
 
-  app.patch("/maps/:id/layers/:layerId", { preHandler: requireRole("ADMIN") }, async (req) => {
+  app.patch("/maps/:id/layers/:layerId", { preHandler: adminOnly }, async (req) => {
     const { id, layerId } = req.params as { id: string; layerId: string };
     const body = updateLayerSchema.parse(req.body);
     return updateLayer(id, layerId, body);
   });
 
-  app.delete("/maps/:id/layers/:layerId", { preHandler: requireRole("ADMIN") }, async (req) => {
+  app.delete("/maps/:id/layers/:layerId", { preHandler: adminOnly }, async (req) => {
     const { id, layerId } = req.params as { id: string; layerId: string };
     await deleteLayer(id, layerId);
     return { ok: true };

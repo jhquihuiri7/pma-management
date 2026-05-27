@@ -4,7 +4,7 @@ import { apiFetch } from "@/lib/api-client";
 
 
 import { useState } from "react";
-import { Plus, X, Link } from "lucide-react";
+import { Plus, X } from "lucide-react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { GEO_CATEGORIES } from "@/lib/geo-mock-data";
@@ -21,12 +21,11 @@ export default function AddMapDialog({ onAdd }: Props) {
     title: "",
     description: "",
     categoryId: GEO_CATEGORIES[0].id,
-    arcgisUrl: "",
     tags: "",
   });
 
   const reset = () =>
-    setForm({ title: "", description: "", categoryId: GEO_CATEGORIES[0].id, arcgisUrl: "", tags: "" });
+    setForm({ title: "", description: "", categoryId: GEO_CATEGORIES[0].id, tags: "" });
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -40,7 +39,6 @@ export default function AddMapDialog({ onAdd }: Props) {
           title: form.title.trim(),
           description: form.description.trim(),
           categoryId: form.categoryId,
-          arcgisUrl: form.arcgisUrl.trim(),
           tags: form.tags ? form.tags.split(",").map((t) => t.trim()).filter(Boolean) : [],
         }),
       });
@@ -128,26 +126,6 @@ export default function AddMapDialog({ onAdd }: Props) {
                 </option>
               ))}
             </select>
-          </div>
-
-          <div>
-            <label className="block text-sm font-medium text-slate-700 mb-1">
-              URL <span className="text-red-500">*</span>
-            </label>
-            <div className="relative">
-              <Link className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
-              <input
-                required
-                type="url"
-                value={form.arcgisUrl}
-                onChange={(e) => setForm({ ...form, arcgisUrl: e.target.value })}
-                placeholder="https://arcgis.com/apps/..."
-                className="w-full pl-9 pr-3 border border-slate-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-teal-500"
-              />
-            </div>
-            <p className="text-xs text-slate-400 mt-1">
-              Pega la URL de tu mapa de ArcGIS Online o StoryMap.
-            </p>
           </div>
 
           <div>
