@@ -2,7 +2,7 @@ import type { FastifyInstance } from "fastify";
 import { z } from "zod";
 import { authenticate, requireRole, requireApp } from "../../auth/middleware.js";
 import { Forbidden, NotFound } from "../../lib/errors.js";
-import { getPlanById } from "../../modules/pma/plansModule.js";
+import { getPlanById, canUserAccessPlan } from "../../modules/pma/plansModule.js";
 import {
   getCompliance,
   bulkSetCompliance,
@@ -27,6 +27,7 @@ export async function pmaPeriodComplianceRoutes(app: FastifyInstance) {
 
   app.get("/", async (req) => {
     const { planId } = req.params as { planId: string };
+    if (!(await canUserAccessPlan(planId, req.user!))) throw Forbidden("No tienes acceso a este plan");
     return getCompliance(planId);
   });
 

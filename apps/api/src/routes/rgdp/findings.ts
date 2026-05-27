@@ -3,7 +3,7 @@ import { z } from "zod";
 import { authenticate, requireRole, requireApp } from "../../auth/middleware.js";
 import { BadRequest, Forbidden, NotFound } from "../../lib/errors.js";
 import { createFinding, getFindingsByPlan, updateFinding, deleteFinding } from "../../modules/rgdp/findingsModule.js";
-import { getPlanById } from "../../modules/rgdp/plansModule.js";
+import { getPlanById, canUserAccessPlan } from "../../modules/rgdp/plansModule.js";
 
 const findingSchema = z.object({
   planId: z.string().uuid(),
@@ -27,6 +27,7 @@ export async function rgdpFindingsRoutes(app: FastifyInstance) {
   app.get("/", async (req) => {
     const planId = (req.query as any).planId as string | undefined;
     if (!planId) throw BadRequest("planId required");
+    if (!(await canUserAccessPlan(planId, req.user!))) throw Forbidden("No tienes acceso a este plan");
     return getFindingsByPlan(planId);
   });
 

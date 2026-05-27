@@ -8,7 +8,7 @@ import {
   updateFinding,
   deleteFinding,
 } from "../../modules/pma/findingsModule.js";
-import { getPlanById } from "../../modules/pma/plansModule.js";
+import { getPlanById, canUserAccessPlan } from "../../modules/pma/plansModule.js";
 
 const findingSchema = z.object({
   planId: z.string().uuid(),
@@ -33,6 +33,7 @@ export async function pmaFindingsRoutes(app: FastifyInstance) {
   app.get("/", async (req) => {
     const planId = (req.query as any).planId as string | undefined;
     if (!planId) throw BadRequest("planId required");
+    if (!(await canUserAccessPlan(planId, req.user!))) throw Forbidden("No tienes acceso a este plan");
     return getFindingsByPlan(planId);
   });
 

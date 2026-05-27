@@ -32,3 +32,30 @@ if (!parsed.success) {
 }
 
 export const env = parsed.data;
+
+// Fail-fast in production against insecure defaults. The dev fallbacks below are
+// publicly known (committed in this file), so booting prod with them would let
+// anyone forge valid access/refresh tokens and impersonate any user.
+const DEV_DEFAULT_SECRETS = new Set([
+  "dev-access-secret-change-me-please-32chars-min",
+  "dev-refresh-secret-change-me-please-32chars-min",
+]);
+
+if (env.NODE_ENV === "production") {
+  const problems: string[] = [];
+  if (DEV_DEFAULT_SECRETS.has(env.JWT_ACCESS_SECRET)) problems.push("JWT_ACCESS_SECRET is the dev default");
+  if (DEV_DEFAULT_SECRETS.has(env.JWT_REFRESH_SECRET)) problems.push("JWT_REFRESH_SECRET is the dev default");
+  if (env.JWT_ACCESS_SECRET === env.JWT_REFRESH_SECRET) problems.push("JWT_ACCESS_SECRET and JWT_REFRESH_SECRET must differ");
+  if (!env.DATABASE_URL) problems.push("DATABASE_URL is required");
+  if (problems.length > 0) {
+    console.error("Refusing to start in production with insecure configuration:");
+    for (const p of problems) console.error(`  - ${p}`);
+    process.exit(1);
+  }
+  // Tokens travel in cookies; without Secure they can leak over plain HTTP.
+  // Not fatal (some intranet deployments run HTTP), but you should put TLS in
+  // front and set COOKIE_SECURE=true.
+  if (!env.COOKIE_SECURE) {
+    console.warn("WARNING: COOKIE_SECURE is false in production — auth cookies will be sent over unencrypted HTTP. Use TLS and set COOKIE_SECURE=true.");
+  }
+}

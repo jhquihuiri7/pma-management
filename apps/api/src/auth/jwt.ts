@@ -56,12 +56,13 @@ export async function signRefreshToken(userId: string): Promise<{ token: string;
 }
 
 export async function verifyAccessToken(token: string): Promise<AccessTokenClaims> {
-  const { payload } = await jwtVerify(token, accessSecret);
+  // Pin the algorithm: never accept "none" or a mismatched alg in the header.
+  const { payload } = await jwtVerify(token, accessSecret, { algorithms: ["HS256"] });
   return payload as AccessTokenClaims;
 }
 
 export async function verifyRefreshToken(token: string): Promise<RefreshTokenClaims> {
-  const { payload } = await jwtVerify(token, refreshSecret);
+  const { payload } = await jwtVerify(token, refreshSecret, { algorithms: ["HS256"] });
   return payload as RefreshTokenClaims;
 }
 

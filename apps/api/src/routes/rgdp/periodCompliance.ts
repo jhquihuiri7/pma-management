@@ -2,7 +2,7 @@ import type { FastifyInstance } from "fastify";
 import { z } from "zod";
 import { authenticate, requireRole, requireApp } from "../../auth/middleware.js";
 import { Forbidden, NotFound } from "../../lib/errors.js";
-import { getPlanById } from "../../modules/rgdp/plansModule.js";
+import { getPlanById, canUserAccessPlan } from "../../modules/rgdp/plansModule.js";
 import { getCompliance, bulkSetCompliance } from "../../modules/rgdp/periodComplianceModule.js";
 
 const entrySchema = z.object({
@@ -21,7 +21,11 @@ export async function rgdpPeriodComplianceRoutes(app: FastifyInstance) {
   app.addHook("preHandler", authenticate);
   app.addHook("preHandler", requireApp("rgdp"));
 
-  app.get("/", async (req) => getCompliance((req.params as any).planId));
+  app.get("/", async (req) => {
+    const planId = (req.params as any).planId as string;
+    if (!(await canUserAccessPlan(planId, req.user!))) throw Forbidden("No tienes acceso a este plan");
+    return getCompliance(planId);
+  });
 
   app.put("/", { preHandler: requireRole("ADMIN") }, async (req) => {
     const { planId } = req.params as { planId: string };

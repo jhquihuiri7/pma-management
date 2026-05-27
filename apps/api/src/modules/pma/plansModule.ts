@@ -139,3 +139,26 @@ export async function isUserAssignedToPlan(userId: string, planId: string): Prom
     .limit(1);
   return rows.length > 0;
 }
+
+/**
+ * Object-level read authorization for a plan. ADMINs see everything; other
+ * roles may only reach a plan they are assigned to, at plan OR item level —
+ * exactly the set returned by the list endpoints. Used to stop a low-privilege
+ * user from reading an unrelated plan (and its evidences/findings) by guessing
+ * its id.
+ */
+export async function canUserAccessPlan(
+  planId: string,
+  user: { sub: string; role: "ADMIN" | "REPORTER" | "VIEWER" }
+): Promise<boolean> {
+  if (user.role === "ADMIN") return true;
+  if (await isUserAssignedToPlan(user.sub, planId)) return true;
+  const db = getDb();
+  const itemRows = await db
+    .select({ planItemId: pmaItemAssignments.planItemId })
+    .from(pmaItemAssignments)
+    .innerJoin(pmaPlanItems, eq(pmaItemAssignments.planItemId, pmaPlanItems.id))
+    .where(and(eq(pmaItemAssignments.userId, user.sub), eq(pmaPlanItems.planId, planId)))
+    .limit(1);
+  return itemRows.length > 0;
+}

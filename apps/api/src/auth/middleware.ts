@@ -47,9 +47,15 @@ function extractToken(req: FastifyRequest): string | null {
 }
 
 export function registerErrorHandler(app: FastifyInstance) {
-  app.setErrorHandler((err, _req, reply) => {
+  app.setErrorHandler((err, req, reply) => {
     const status = (err as any).statusCode ?? 500;
     const details = (err as any).details;
+    // Unexpected 5xx errors can carry internal details (stack traces, DB driver
+    // messages, file paths). Log them server-side but never leak to the client.
+    if (status >= 500) {
+      req.log.error(err);
+      return reply.status(status).send({ error: "InternalServerError", message: "Internal server error" });
+    }
     reply.status(status).send({
       error: err.name ?? "Error",
       message: err.message,

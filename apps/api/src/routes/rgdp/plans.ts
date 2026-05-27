@@ -1,10 +1,10 @@
 import type { FastifyInstance } from "fastify";
 import { z } from "zod";
 import { authenticate, requireRole, requireApp } from "../../auth/middleware.js";
-import { BadRequest, Unauthorized } from "../../lib/errors.js";
+import { BadRequest, Unauthorized, Forbidden } from "../../lib/errors.js";
 import {
   createPlan, getPlansByAdmin, getPlansForReporter, getPlansForViewer,
-  getPlanById, updatePlan, deletePlan, getAssignedUserIds,
+  getPlanById, updatePlan, deletePlan, getAssignedUserIds, canUserAccessPlan,
 } from "../../modules/rgdp/plansModule.js";
 import { getEvidencesByPlan } from "../../modules/rgdp/evidencesModule.js";
 
@@ -54,6 +54,8 @@ export async function rgdpPlansRoutes(app: FastifyInstance) {
 
   app.get("/:id", async (req) => {
     const { id } = req.params as { id: string };
+    const u = req.user!;
+    if (!(await canUserAccessPlan(id, u))) throw Forbidden("No tienes acceso a este plan");
     const plan = await getPlanById(id);
     if (!plan) throw BadRequest("Plan not found");
     const [evidences, assignedUsers] = await Promise.all([

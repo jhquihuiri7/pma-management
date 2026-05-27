@@ -1,7 +1,7 @@
 import type { FastifyInstance } from "fastify";
 import { z } from "zod";
 import { authenticate, requireRole, requireApp } from "../../auth/middleware.js";
-import { BadRequest, Unauthorized } from "../../lib/errors.js";
+import { BadRequest, Unauthorized, Forbidden } from "../../lib/errors.js";
 import {
   createPlan,
   getPlansByAdmin,
@@ -11,6 +11,7 @@ import {
   updatePlan,
   deletePlan,
   getAssignedUserIds,
+  canUserAccessPlan,
 } from "../../modules/pma/plansModule.js";
 import { getEvidencesByPlan } from "../../modules/pma/evidencesModule.js";
 import { getFindingsByPlan } from "../../modules/pma/findingsModule.js";
@@ -60,6 +61,8 @@ export async function pmaPlansRoutes(app: FastifyInstance) {
 
   app.get("/:id", async (req) => {
     const { id } = req.params as { id: string };
+    const u = req.user!;
+    if (!(await canUserAccessPlan(id, u))) throw Forbidden("No tienes acceso a este plan");
     const plan = await getPlanById(id);
     if (!plan) throw BadRequest("Plan not found");
     const [evidences, findings, assignedUsers] = await Promise.all([

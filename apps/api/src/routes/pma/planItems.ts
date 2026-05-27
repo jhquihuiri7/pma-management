@@ -14,7 +14,7 @@ import {
   bulkCreatePlanItems,
   type PlanItemCreateInput,
 } from "../../modules/pma/planItemsModule.js";
-import { getPlanById } from "../../modules/pma/plansModule.js";
+import { getPlanById, canUserAccessPlan } from "../../modules/pma/plansModule.js";
 
 const itemBase = z.object({
   item: z.string().min(1),
@@ -51,6 +51,7 @@ export async function pmaPlanItemsRoutes(app: FastifyInstance) {
 
   app.get("/", async (req) => {
     const { planId } = req.params as { planId: string };
+    if (!(await canUserAccessPlan(planId, req.user!))) throw Forbidden("No tienes acceso a este plan");
     return getPlanItems(planId);
   });
 
@@ -87,9 +88,11 @@ export async function pmaPlanItemsRoutes(app: FastifyInstance) {
     if (u.role === "ADMIN") {
       await assertPlanOwnership(planId, u.adminId);
     } else {
-      // For non-admins, verify the user is assigned to this item.
+      // For non-admins, verify the user is actually assigned to this plan/item
+      // (plan- or item-level). Confirming the item exists is not enough.
       const item = await getPlanItemById(itemId);
       if (!item || item.planId !== planId) throw NotFound();
+      if (!(await canUserAccessPlan(planId, u))) throw Forbidden("No tienes acceso a este plan");
     }
     await updatePlanItemObservation(itemId, planId, body.observation);
     return { ok: true };

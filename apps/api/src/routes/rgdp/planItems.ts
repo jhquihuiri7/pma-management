@@ -7,7 +7,7 @@ import {
   deletePlanItem, assignReporterToItem, unassignReporterFromItem,
   bulkCreatePlanItems, type RgdpPlanItemCreateInput,
 } from "../../modules/rgdp/planItemsModule.js";
-import { getPlanById } from "../../modules/rgdp/plansModule.js";
+import { getPlanById, canUserAccessPlan } from "../../modules/rgdp/plansModule.js";
 
 const itemBase = z.object({
   item: z.string().min(1),
@@ -43,7 +43,11 @@ export async function rgdpPlanItemsRoutes(app: FastifyInstance) {
   app.addHook("preHandler", authenticate);
   app.addHook("preHandler", requireApp("rgdp"));
 
-  app.get("/", async (req) => getPlanItems((req.params as any).planId));
+  app.get("/", async (req) => {
+    const planId = (req.params as any).planId as string;
+    if (!(await canUserAccessPlan(planId, req.user!))) throw Forbidden("No tienes acceso a este plan");
+    return getPlanItems(planId);
+  });
 
   app.post("/", { preHandler: requireRole("ADMIN") }, async (req, reply) => {
     const { planId } = req.params as { planId: string };

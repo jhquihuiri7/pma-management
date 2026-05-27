@@ -5,7 +5,7 @@ import type { Map as LeafletMap } from "leaflet";
 import type { FeatureCollection } from "geojson";
 import {
   PanelLeft, PanelRight, Table2, Info, Ruler, ZoomIn, ZoomOut, Home,
-  Search, Download, Upload, X, AlignLeft, Maximize, ArrowLeft,
+  Search, Download, Upload, X, AlignLeft, Maximize, Minimize, ArrowLeft,
 } from "lucide-react";
 import { toast } from "sonner";
 import LayersPanel from "./LayersPanel";
@@ -72,7 +72,7 @@ export default function GisEditor({ mapId, mapTitle, backHref, initialCenter, in
   const [showUpload, setShowUpload] = useState(false);
   const [identify, setIdentify] = useState<IdentifyInfo | null>(null);
   const [attrPanelOpen, setAttrPanelOpen] = useState(false);
-  const [coord, setCoord] = useState<[number, number]>([-1.6, -78.5]);
+  const [coord, setCoord] = useState<[number, number]>([-0.5, -90.5]);
   const [zoom, setZoom] = useState(7);
   const [showLegend, setShowLegend] = useState(true);
   const [showLeft, setShowLeft] = useState(true);
@@ -81,6 +81,7 @@ export default function GisEditor({ mapId, mapTitle, backHref, initialCenter, in
   const [mapInstance, setMapInstance] = useState<LeafletMap | null>(null);
   const [searchOpen, setSearchOpen] = useState(false);
   const [searchQ, setSearchQ] = useState("");
+  const [isFullscreen, setIsFullscreen] = useState(false);
   const [hydrated, setHydrated] = useState(false);
   const [saveState, setSaveState] = useState<"idle" | "saving" | "saved" | "error">("idle");
   const saveTimers = useRef<Record<string, ReturnType<typeof setTimeout>>>({});
@@ -155,6 +156,18 @@ export default function GisEditor({ mapId, mapTitle, backHref, initialCenter, in
     setZoom(mapInstance.getZoom());
     return () => { mapInstance.off("zoomend", onZoom); };
   }, [mapInstance]);
+
+  // Track fullscreen so the button can flip its icon/label and toggle back.
+  useEffect(() => {
+    const onFsChange = () => setIsFullscreen(!!document.fullscreenElement);
+    document.addEventListener("fullscreenchange", onFsChange);
+    return () => document.removeEventListener("fullscreenchange", onFsChange);
+  }, []);
+
+  const toggleFullscreen = () => {
+    if (document.fullscreenElement) document.exitFullscreen?.();
+    else document.documentElement.requestFullscreen?.();
+  };
 
   const activeLayer = layers.find((l) => l.id === activeLayerId);
 
@@ -252,7 +265,7 @@ export default function GisEditor({ mapId, mapTitle, backHref, initialCenter, in
   };
 
   const zoomTo = (delta: number) => mapInstance && mapInstance.setZoom(mapInstance.getZoom() + delta);
-  const goHome = () => mapInstance && mapInstance.setView([-1.6, -78.5], 7);
+  const goHome = () => mapInstance && mapInstance.setView([-0.5, -90.5], 9);
 
   const searchResults = searchQ.trim().length > 0 && activeLayer
     ? activeLayer.geojson.features.filter((f) =>
@@ -284,7 +297,7 @@ export default function GisEditor({ mapId, mapTitle, backHref, initialCenter, in
 
         <div className="tb-group">
           <button className={"tb-btn" + (tool === "identify" ? " active" : "")} onClick={() => setTool(tool === "identify" ? "pan" : "identify")} data-tip="Identificar"><Info size={14} /></button>
-          <button className="tb-btn" data-tip="Medir distancia" onClick={() => toast.info("Herramienta de medición — haz clic en el mapa para iniciar.")}><Ruler size={14} /></button>
+          <button className={"tb-btn" + (tool === "measure" ? " active" : "")} onClick={() => setTool(tool === "measure" ? "pan" : "measure")} data-tip="Medir distancia"><Ruler size={14} /></button>
         </div>
 
         <div className="tb-group">
@@ -305,7 +318,6 @@ export default function GisEditor({ mapId, mapTitle, backHref, initialCenter, in
               onFocus={() => setSearchOpen(true)}
               onBlur={() => setTimeout(() => setSearchOpen(false), 150)}
             />
-            <span className="kbd">⌘K</span>
           </div>
           {searchOpen && searchResults.length > 0 && activeLayer && (
             <div style={{ position: "absolute", top: "calc(100% + 4px)", left: 0, right: 0, background: "var(--background)", border: "1px solid var(--border)", borderRadius: 8, boxShadow: "var(--shadow-md)", zIndex: 50, overflow: "hidden" }}>
@@ -356,6 +368,7 @@ export default function GisEditor({ mapId, mapTitle, backHref, initialCenter, in
         <GisMap
           layers={layers}
           basemap={basemap}
+          tool={tool}
           initialCenter={initialCenter}
           initialZoom={initialZoom}
           onIdentify={handleIdentify}
@@ -367,8 +380,8 @@ export default function GisEditor({ mapId, mapTitle, backHref, initialCenter, in
 
         <div className="map-floating map-tools">
           <div className="tool-card">
-            <button className="tool-btn" data-tip="Pantalla completa" onClick={() => document.documentElement.requestFullscreen?.()}>
-              <Maximize size={14} />
+            <button className={"tool-btn" + (isFullscreen ? " active" : "")} data-tip={isFullscreen ? "Pantalla normal" : "Pantalla completa"} onClick={toggleFullscreen}>
+              {isFullscreen ? <Minimize size={14} /> : <Maximize size={14} />}
             </button>
             <button className={"tool-btn" + (showLegend ? " active" : "")} data-tip="Leyenda" onClick={() => setShowLegend(!showLegend)}>
               <AlignLeft size={14} />

@@ -81,6 +81,7 @@ function pathStyleFor(layer: GisLayer, colorFn: ColorFn) {
 interface Props {
   layers: GisLayer[];
   basemap: string;
+  tool?: "pan" | "identify" | "measure";
   initialCenter?: [number, number];
   initialZoom?: number;
   onIdentify?: (info: IdentifyInfo) => void;
@@ -90,25 +91,24 @@ interface Props {
   onMapReady?: (map: L.Map) => void;
 }
 
-export default function GisMap({ layers, basemap, initialCenter, initialZoom, onIdentify, onCoordChange, onViewportChange, focusFeature, onMapReady }: Props) {
+export default function GisMap({ layers, basemap, tool = "pan", initialCenter, initialZoom, onIdentify, onCoordChange, onViewportChange, focusFeature, onMapReady }: Props) {
   const mapRef = useRef<L.Map | null>(null);
   const containerRef = useRef<HTMLDivElement | null>(null);
   const basemapRef = useRef<L.TileLayer | null>(null);
   const layerRefs = useRef<Map<string, LayerRef>>(new Map());
   const labelLayerRef = useRef<L.FeatureGroup | null>(null);
-  const cbRef = useRef({ onIdentify, onCoordChange, onMapReady, onViewportChange });
-  cbRef.current = { onIdentify, onCoordChange, onMapReady, onViewportChange };
+  const cbRef = useRef({ onIdentify, onCoordChange, onMapReady, onViewportChange, tool });
+  cbRef.current = { onIdentify, onCoordChange, onMapReady, onViewportChange, tool };
 
   // Init (once)
   useEffect(() => {
     if (mapRef.current || !containerRef.current) return;
     const map = L.map(containerRef.current, {
-      center: initialCenter ?? [-1.6, -78.5],
-      zoom: initialZoom ?? 7,
+      center: initialCenter ?? [-0.5, -90.5],
+      zoom: initialZoom ?? 9,
       zoomControl: false,
       attributionControl: true,
     });
-    L.control.zoom({ position: "bottomright" }).addTo(map);
     mapRef.current = map;
 
     const base = BASEMAPS[basemap];
@@ -185,6 +185,8 @@ export default function GisMap({ layers, basemap, initialCenter, initialZoom, on
           },
           onEachFeature: (feature, lyr) => {
             lyr.on("click", (e: L.LeafletMouseEvent) => {
+              // While measuring, let the click bubble to the map so it adds a vertex.
+              if (cbRef.current.tool === "measure") return;
               L.DomEvent.stopPropagation(e);
               cbRef.current.onIdentify?.({ layerId: layer.id, layerName: layer.name, feature, latlng: e.latlng });
             });
@@ -264,6 +266,79 @@ export default function GisMap({ layers, basemap, initialCenter, initialZoom, on
       }
     });
   }, [focusFeature]);
+
+  // Distance-measuring tool: click to add vertices, double-click (or Esc) to finish.
+  useEffect(() => {
+    const map = mapRef.current;
+    if (!map || tool !== "measure") return;
+
+    const group = L.layerGroup().addTo(map);
+    const pts: L.LatLng[] = [];
+    let finished = false;
+    map.getContainer().style.cursor = "crosshair";
+    map.doubleClickZoom.disable();
+
+    const fmt = (m: number) => (m >= 1000 ? `${(m / 1000).toFixed(2)} km` : `${m.toFixed(0)} m`);
+    const total = (arr: L.LatLng[]) => {
+      let d = 0;
+      for (let i = 1; i < arr.length; i++) d += arr[i - 1].distanceTo(arr[i]);
+      return d;
+    };
+
+    const redraw = (cursor?: L.LatLng) => {
+      group.clearLayers();
+      const line = cursor && !finished ? [...pts, cursor] : [...pts];
+      if (line.length >= 2) {
+        L.polyline(line, { color: "#c0392b", weight: 2.5, dashArray: cursor && !finished ? "5,5" : undefined }).addTo(group);
+      }
+      pts.forEach((p) =>
+        L.circleMarker(p, { radius: 4, color: "#ffffff", weight: 2, fillColor: "#c0392b", fillOpacity: 1 }).addTo(group)
+      );
+      if (line.length >= 1) {
+        const last = line[line.length - 1];
+        const html = `<div class="measure-tip">${fmt(total(line))}${finished ? "" : " · doble clic para terminar"}</div>`;
+        L.marker(last, {
+          interactive: false,
+          icon: L.divIcon({ className: "measure-label", html, iconSize: [0, 0] }),
+        }).addTo(group);
+      }
+    };
+
+    // Detect the double-click manually (two clicks within 300 ms): the first
+    // click drops the final vertex, the second finishes without adding a point.
+    // This is more reliable than Leaflet's `dblclick`, which doesn't fire
+    // consistently when the clicks land on top of a feature.
+    let lastClickAt = 0;
+    const onClick = (e: L.LeafletMouseEvent) => {
+      if (finished) return;
+      const now = Date.now();
+      if (now - lastClickAt < 300) {
+        finished = true;
+        redraw();
+        return;
+      }
+      lastClickAt = now;
+      pts.push(e.latlng);
+      redraw();
+    };
+    const onMove = (e: L.LeafletMouseEvent) => { if (!finished) redraw(e.latlng); };
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === "Escape") { finished = true; redraw(); }
+    };
+
+    map.on("click", onClick);
+    map.on("mousemove", onMove);
+    window.addEventListener("keydown", onKey);
+
+    return () => {
+      map.off("click", onClick);
+      map.off("mousemove", onMove);
+      window.removeEventListener("keydown", onKey);
+      map.removeLayer(group);
+      map.getContainer().style.cursor = "";
+      map.doubleClickZoom.enable();
+    };
+  }, [tool]);
 
   return <div className="gis-map" ref={containerRef} />;
 }

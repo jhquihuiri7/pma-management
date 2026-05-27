@@ -15,6 +15,7 @@
  */
 
 import { createContext, useContext, useEffect, useState, useCallback, type ReactNode } from "react";
+import { useRouter } from "next/navigation";
 import { auth as authApi, ApiError } from "./api-client";
 
 export type AuthUser = {
@@ -39,6 +40,7 @@ const AuthContext = createContext<AuthState | null>(null);
 export function AuthProvider({ children }: { children: ReactNode }) {
   const [user, setUser] = useState<AuthUser | null>(null);
   const [status, setStatus] = useState<AuthState["status"]>("loading");
+  const router = useRouter();
 
   const refresh = useCallback(async () => {
     try {
@@ -92,7 +94,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     try { await authApi.logout(); } catch { /* ignore */ }
     setUser(null);
     setStatus("unauthenticated");
-  }, []);
+    router.push("/login");
+  }, [router]);
 
   return (
     <AuthContext.Provider value={{ user, status, login, logout, refresh }}>

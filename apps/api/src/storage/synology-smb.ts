@@ -1,5 +1,5 @@
 import { promises as fs, createReadStream } from "node:fs";
-import { join, dirname, normalize, resolve } from "node:path";
+import { join, dirname, normalize, resolve, sep } from "node:path";
 import type { StorageProvider } from "./index.js";
 
 /**
@@ -20,7 +20,10 @@ export class SynologySmbStorage implements StorageProvider {
   private absolute(p: string): string {
     const safe = normalize(p).replace(/^[/\\]+/, "");
     const abs = resolve(join(this.root, safe));
-    if (!abs.startsWith(this.root)) {
+    // Compare against root + separator so a sibling dir sharing the root's name
+    // (e.g. "/data/storage-secret" vs root "/data/storage") cannot pass a bare
+    // prefix check via "../storage-secret/...".
+    if (abs !== this.root && !abs.startsWith(this.root + sep)) {
       throw new Error(`Refusing path outside storage root: ${p}`);
     }
     return abs;

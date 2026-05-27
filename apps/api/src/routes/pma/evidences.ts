@@ -1,7 +1,7 @@
 import type { FastifyInstance, FastifyReply, FastifyRequest } from "fastify";
 import { z } from "zod";
 import { authenticate, requireRole, requireApp } from "../../auth/middleware.js";
-import { BadRequest } from "../../lib/errors.js";
+import { BadRequest, Forbidden } from "../../lib/errors.js";
 import {
   createEvidence,
   getEvidencesByPlan,
@@ -9,6 +9,7 @@ import {
   updateEvidenceValidation,
   deleteEvidence,
 } from "../../modules/pma/evidencesModule.js";
+import { canUserAccessPlan } from "../../modules/pma/plansModule.js";
 
 const validationSchema = z.object({
   status: z.enum(["valid", "invalid", "pending"]),
@@ -30,7 +31,10 @@ export async function pmaEvidencesRoutes(app: FastifyInstance) {
 
   app.get("/", async (req) => {
     const q = queryListSchema.parse(req.query);
-    if (q.planId) return getEvidencesByPlan(q.planId);
+    if (q.planId) {
+      if (!(await canUserAccessPlan(q.planId, req.user!))) throw Forbidden("No tienes acceso a este plan");
+      return getEvidencesByPlan(q.planId);
+    }
     if (q.mine) return getEvidencesByReporter(req.user!.sub);
     return [];
   });
