@@ -252,12 +252,3 @@ npm run typecheck
 npm run lint
 ```
 
----
-
-## Notas para entornos Codespaces / devcontainer
-
-En GitHub Codespaces el browser no puede acceder directamente a `localhost:4000`.
-El web server ya incluye un proxy en `/api-proxy/*` que reenvía al API server-side,
-por lo que las peticiones del browser pasan por Next.js sin necesidad de CORS.
-
-No se requiere configuración adicional para que funcione en Codespaces.

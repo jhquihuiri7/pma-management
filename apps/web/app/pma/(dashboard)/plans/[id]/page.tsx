@@ -763,12 +763,19 @@ export default function PlanDetailPage() {
 
   async function handleComplianceChange(planItemId: string, periodKey: string, status: PeriodComplianceStatus) {
     const res = await apiFetch(`/pma/api/plans/${id}/period-compliance`, {
-      method: "POST",
+      method: "PUT",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ planItemId, periodKey, status }),
+      body: JSON.stringify({ entries: [{ planItemId, periodKey, status }] }),
     });
     if (res.ok) {
-      const updated = await res.json() as PeriodCompliance;
+      const updated: PeriodCompliance = {
+        id: `${planItemId}:${periodKey}`,
+        planId: id,
+        planItemId,
+        periodKey,
+        status,
+        updatedAt: new Date().toISOString(),
+      };
       setComplianceRecords((prev) => {
         const exists = prev.some(
           (r) => r.planItemId === planItemId && r.periodKey === periodKey

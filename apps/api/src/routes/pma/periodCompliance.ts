@@ -6,6 +6,7 @@ import { getPlanById, canUserAccessPlan } from "../../modules/pma/plansModule.js
 import {
   getCompliance,
   bulkSetCompliance,
+  setCompliance,
 } from "../../modules/pma/periodComplianceModule.js";
 
 const entrySchema = z.object({
@@ -37,5 +38,18 @@ export async function pmaPeriodComplianceRoutes(app: FastifyInstance) {
     const body = bulkSchema.parse(req.body);
     await bulkSetCompliance(body.entries);
     return { ok: true };
+  });
+
+  app.post("/", { preHandler: requireRole("ADMIN") }, async (req) => {
+    const { planId } = req.params as { planId: string };
+    await assertPlanOwnership(planId, req.user!.adminId);
+    const body = entrySchema.parse(req.body);
+    await setCompliance(body.planItemId, body.periodKey, body.status);
+    return {
+      id: `${body.planItemId}:${body.periodKey}`,
+      planId,
+      ...body,
+      updatedAt: new Date().toISOString(),
+    };
   });
 }
