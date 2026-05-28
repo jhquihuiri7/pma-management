@@ -1,18 +1,16 @@
 # PMA Management
 
-Sistema de gestión ambiental (PMA, RGDP, PGLP, GEO) construido como monorepo con Next.js y Fastify.
+Sistema de gestión ambiental (PMA, RGDP, GEO) construido como monorepo con Next.js y Fastify.
 
 ## Arquitectura
 
 ```
 pma-management/
 ├── apps/
-│   ├── web/          Next.js 14 — frontend (puerto 3000)
-│   └── api/          Fastify + Drizzle + Postgres (puerto 4000 en dev / 3001 en Docker)
-├── packages/
-│   └── types/        Tipos TypeScript compartidos
-└── tools/
-    └── migration/    Pipeline ETL (Firestore + Drive → Postgres)
+│   ├── web/          Next.js 14 — frontend (puerto 3000 en dev / 8000 en Docker prod)
+│   └── api/          Fastify + Drizzle + Postgres (puerto 4000 en dev local / 3001 en Docker)
+└── packages/
+    └── types/        Tipos TypeScript compartidos
 ```
 
 ## Requisitos
@@ -150,7 +148,13 @@ npm run create:user -w apps/api
 
 ### Variables de entorno para Docker
 
-Crear un archivo `.env` en la raíz del proyecto (donde está `docker-compose.yml`):
+Crear el archivo `.env` en la raíz del proyecto (donde está `docker-compose.yml`):
+
+```bash
+cp .env.example .env
+```
+
+Editar `.env` con los valores correctos:
 
 ```env
 DB_NAME=pma_db
@@ -159,7 +163,14 @@ DB_PASSWORD=cambia_esto_en_produccion
 
 JWT_ACCESS_SECRET=<openssl rand -base64 48>
 JWT_REFRESH_SECRET=<openssl rand -base64 48>
+
+FRONTEND_ORIGIN=http://localhost:8000
+STORAGE_PUBLIC_BASE_URL=http://localhost:3001/storage
+COOKIE_SECURE=false
 ```
+
+En producción con HTTPS, usar `COOKIE_SECURE=true` y ajustar `FRONTEND_ORIGIN` /
+`STORAGE_PUBLIC_BASE_URL` al dominio público real.
 
 ### Levantar todos los servicios
 
@@ -169,20 +180,20 @@ docker compose up -d
 
 | Servicio    | URL                        |
 |-------------|----------------------------|
-| Web         | http://localhost:3000      |
+| Web         | http://localhost:8000      |
 | API         | http://localhost:3001      |
 | PostgreSQL  | localhost:5432             |
 
 ### Ejecutar migraciones en el contenedor
 
 ```bash
-docker compose exec api npm run db:migrate
+docker compose exec api node dist/apps/api/src/db/run-migrations.js
 ```
 
 ### Crear administrador en el contenedor
 
 ```bash
-docker compose exec -it api npm run seed:admin
+docker compose exec -it api node dist/apps/api/src/scripts/seed-admin.js
 ```
 
 ### Ver logs

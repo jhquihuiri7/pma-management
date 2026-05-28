@@ -7,7 +7,6 @@ WORKDIR /app
 COPY package-lock.json* package.json ./
 COPY packages ./packages
 COPY apps ./apps
-COPY tools ./tools
 
 RUN npm ci --workspace=@pma/api
 

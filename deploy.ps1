@@ -13,7 +13,7 @@ switch($action) {
         Write-Host "✅ Servicios levantados" -ForegroundColor Green
         Write-Host ""
         Write-Host "Acceso:" -ForegroundColor Cyan
-        Write-Host "  Web:      http://localhost:3000" -ForegroundColor White
+        Write-Host "  Web:      http://localhost:8000" -ForegroundColor White
         Write-Host "  API:      http://localhost:3001" -ForegroundColor White
         Write-Host "  Database: localhost:5432" -ForegroundColor White
     }
@@ -41,7 +41,7 @@ switch($action) {
 
     'migrate' {
         Write-Host "🗄️  Ejecutando migraciones..." -ForegroundColor Yellow
-        docker-compose exec api npm run db:migrate
+        docker-compose exec api node dist/apps/api/src/db/run-migrations.js
         Write-Host "✅ Migraciones completadas" -ForegroundColor Green
     }
 
