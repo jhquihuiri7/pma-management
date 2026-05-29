@@ -104,6 +104,7 @@ export default function PlanDetailPage() {
   const [selectedItem, setSelectedItem] = useState<PlanItem | null>(null);
   const [pendingAssign, setPendingAssign] = useState<{ reporter: User; category: ItemAssignmentCategory } | null>(null);
   const [obsItem, setObsItem] = useState<PlanItem | null>(null);
+  const [detailItem, setDetailItem] = useState<PlanItem | null>(null);
   const [obsText, setObsText] = useState("");
   const [savingObs, setSavingObs] = useState(false);
   const [editingItem, setEditingItem] = useState<PlanItem | null>(null);
@@ -1216,12 +1217,12 @@ export default function PlanDetailPage() {
                 <TableHeader>
                   <TableRow>
                     <TableHead>Item</TableHead>
-                    <TableHead>Subplan</TableHead>
+                    <TableHead className="min-w-[300px] w-[300px]">Subplan</TableHead>
                     <TableHead>Dirección</TableHead>
-                    <TableHead>Actividad Ambiental</TableHead>
-                    <TableHead>Impacto Identificado</TableHead>
-                    <TableHead>Medida Propuesta</TableHead>
-                    <TableHead>Indicador</TableHead>
+                    <TableHead className="min-w-[300px] w-[300px]">Actividad Ambiental</TableHead>
+                    <TableHead className="min-w-[300px] w-[300px]">Impacto Identificado</TableHead>
+                    <TableHead className="min-w-[300px] w-[300px]">Medida Propuesta</TableHead>
+                    <TableHead className="min-w-[300px] w-[300px]">Indicador</TableHead>
                     <TableHead>Método Verificación</TableHead>
                     <TableHead>Periodicidad</TableHead>
                     <TableHead>Presupuesto</TableHead>
@@ -1233,30 +1234,34 @@ export default function PlanDetailPage() {
                 </TableHeader>
                 <TableBody>
                   {visibleItems.map((pi) => (
-                    <TableRow key={pi.id}>
+                    <TableRow
+                      key={pi.id}
+                      className="cursor-pointer hover:bg-muted/50"
+                      onClick={() => setDetailItem(pi)}
+                    >
                       <TableCell className="font-medium whitespace-nowrap">
                         {pi.item}
                       </TableCell>
-                      <TableCell className="whitespace-nowrap">
-                        {pi.subplan}
+                      <TableCell className="min-w-[300px] w-[300px] max-w-[300px] align-top" title={pi.subplan}>
+                        <span className="line-clamp-2 whitespace-normal break-words">{pi.subplan}</span>
                       </TableCell>
-                      <TableCell className="max-w-[150px] truncate">
-                        {pi.direccion ?? ""}
+                      <TableCell className="max-w-[150px] align-top" title={pi.direccion ?? ""}>
+                        <span className="line-clamp-2 whitespace-normal break-words">{pi.direccion ?? ""}</span>
                       </TableCell>
-                      <TableCell className="max-w-[150px] truncate">
-                        {pi.environmental_activity}
+                      <TableCell className="min-w-[300px] w-[300px] max-w-[300px] align-top" title={pi.environmental_activity}>
+                        <span className="line-clamp-2 whitespace-normal break-words">{pi.environmental_activity}</span>
                       </TableCell>
-                      <TableCell className="max-w-[150px] truncate">
-                        {pi.identified_environmental_impact}
+                      <TableCell className="min-w-[300px] w-[300px] max-w-[300px] align-top" title={pi.identified_environmental_impact}>
+                        <span className="line-clamp-2 whitespace-normal break-words">{pi.identified_environmental_impact}</span>
                       </TableCell>
-                      <TableCell className="max-w-[150px] truncate">
-                        {pi.proposed_measure}
+                      <TableCell className="min-w-[300px] w-[300px] max-w-[300px] align-top" title={pi.proposed_measure}>
+                        <span className="line-clamp-2 whitespace-normal break-words">{pi.proposed_measure}</span>
                       </TableCell>
-                      <TableCell className="max-w-[120px] truncate">
-                        {pi.indicator}
+                      <TableCell className="min-w-[300px] w-[300px] max-w-[300px] align-top" title={pi.indicator}>
+                        <span className="line-clamp-2 whitespace-normal break-words">{pi.indicator}</span>
                       </TableCell>
-                      <TableCell className="max-w-[120px] truncate">
-                        {pi.verification_method}
+                      <TableCell className="max-w-[120px] align-top" title={pi.verification_method}>
+                        <span className="line-clamp-2 whitespace-normal break-words">{pi.verification_method}</span>
                       </TableCell>
                       <TableCell className="whitespace-nowrap">
                         {pi.periodicity}
@@ -1267,7 +1272,7 @@ export default function PlanDetailPage() {
                           currency: "USD",
                         })}
                       </TableCell>
-                      <TableCell>
+                      <TableCell onClick={(e) => e.stopPropagation()}>
                         <Button
                           variant="outline"
                           size="sm"
@@ -1284,14 +1289,15 @@ export default function PlanDetailPage() {
                         </Button>
                       </TableCell>
                       <TableCell
-                        className="max-w-[160px] cursor-pointer"
-                        onClick={() => {
+                        className="max-w-[160px] cursor-pointer align-top"
+                        onClick={(e) => {
+                          e.stopPropagation();
                           setObsItem(pi);
                           setObsText(pi.observation ?? "");
                         }}
                       >
                         {pi.observation ? (
-                          <span className="truncate block text-sm text-muted-foreground hover:text-foreground transition-colors">
+                          <span className="line-clamp-2 whitespace-normal break-words text-sm text-muted-foreground hover:text-foreground transition-colors">
                             {pi.observation}
                           </span>
                         ) : (
@@ -1301,7 +1307,7 @@ export default function PlanDetailPage() {
                         )}
                       </TableCell>
                       {isAdmin && (
-                        <TableCell>
+                        <TableCell onClick={(e) => e.stopPropagation()}>
                           <div className="flex gap-1">
                             <Button
                               variant="ghost"
@@ -2067,6 +2073,66 @@ export default function PlanDetailPage() {
               {savingObs ? "Guardando..." : "Guardar"}
             </Button>
           </div>
+        </DialogContent>
+      </Dialog>
+
+      {/* Item Detail Dialog */}
+      <Dialog open={!!detailItem} onOpenChange={(open) => { if (!open) setDetailItem(null); }}>
+        <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
+          <DialogHeader>
+            <DialogTitle>Detalle del Item — {detailItem?.item}</DialogTitle>
+          </DialogHeader>
+          {detailItem && (
+            <div className="space-y-4 mt-2 text-sm">
+              <div className="grid grid-cols-2 gap-4">
+                <div>
+                  <p className="text-xs font-medium text-muted-foreground">Subplan</p>
+                  <p className="whitespace-pre-wrap break-words">{detailItem.subplan || "—"}</p>
+                </div>
+                <div>
+                  <p className="text-xs font-medium text-muted-foreground">Dirección</p>
+                  <p className="whitespace-pre-wrap break-words">{detailItem.direccion || "—"}</p>
+                </div>
+                <div>
+                  <p className="text-xs font-medium text-muted-foreground">Periodicidad</p>
+                  <p className="whitespace-pre-wrap break-words">{detailItem.periodicity || "—"}</p>
+                </div>
+                <div>
+                  <p className="text-xs font-medium text-muted-foreground">Presupuesto</p>
+                  <p>
+                    {detailItem.budget.toLocaleString("en-US", {
+                      style: "currency",
+                      currency: "USD",
+                    })}
+                  </p>
+                </div>
+              </div>
+              <div>
+                <p className="text-xs font-medium text-muted-foreground">Actividad Ambiental</p>
+                <p className="whitespace-pre-wrap break-words">{detailItem.environmental_activity || "—"}</p>
+              </div>
+              <div>
+                <p className="text-xs font-medium text-muted-foreground">Impacto Ambiental Identificado</p>
+                <p className="whitespace-pre-wrap break-words">{detailItem.identified_environmental_impact || "—"}</p>
+              </div>
+              <div>
+                <p className="text-xs font-medium text-muted-foreground">Medida Propuesta</p>
+                <p className="whitespace-pre-wrap break-words">{detailItem.proposed_measure || "—"}</p>
+              </div>
+              <div>
+                <p className="text-xs font-medium text-muted-foreground">Indicador</p>
+                <p className="whitespace-pre-wrap break-words">{detailItem.indicator || "—"}</p>
+              </div>
+              <div>
+                <p className="text-xs font-medium text-muted-foreground">Método de Verificación</p>
+                <p className="whitespace-pre-wrap break-words">{detailItem.verification_method || "—"}</p>
+              </div>
+              <div>
+                <p className="text-xs font-medium text-muted-foreground">Observación</p>
+                <p className="whitespace-pre-wrap break-words">{detailItem.observation || "Sin observación"}</p>
+              </div>
+            </div>
+          )}
         </DialogContent>
       </Dialog>
 
