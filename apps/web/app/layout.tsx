@@ -19,7 +19,7 @@ export default function RootLayout({
       <body className="antialiased">
         <AuthProvider>
           {children}
-          <Toaster />
+          <Toaster position="top-center" />
         </AuthProvider>
       </body>
     </html>

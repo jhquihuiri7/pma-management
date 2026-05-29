@@ -9,6 +9,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Eye, EyeOff, Loader2 } from "lucide-react";
 import { useAuth } from "@/lib/auth-context";
 import { ApiError } from "@/lib/api-client";
+import { toast } from "sonner";
 
 function LoginForm() {
   const router = useRouter();
@@ -22,6 +23,8 @@ function LoginForm() {
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
+    if (loading) return;
+
     setError("");
     setLoading(true);
     try {
@@ -35,7 +38,14 @@ function LoginForm() {
         router.push("/select-app");
       }
     } catch (err) {
-      setError(err instanceof ApiError ? err.message : "Error al iniciar sesión");
+      if (err instanceof ApiError && err.status === 401) {
+        const message = "La contraseña es incorrecta";
+        toast.error(message);
+        return;
+      }
+
+      const message = err instanceof ApiError ? err.message : "Error al iniciar sesión";
+      setError(message);
     } finally {
       setLoading(false);
     }
@@ -88,7 +98,8 @@ function LoginForm() {
             </div>
           </div>
           {error && <p className="text-sm text-red-600">{error}</p>}
-          <Button type="submit" className="w-full" disabled={loading}>
+          <Button type="submit" className="w-full" disabled={loading} aria-busy={loading}>
+            {loading && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
             {loading ? "Iniciando sesión..." : "Iniciar sesión"}
           </Button>
           <div className="text-center">
