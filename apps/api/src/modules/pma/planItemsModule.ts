@@ -25,6 +25,32 @@ export type PlanItemCreateInput = {
 
 export type PlanItemUpdateInput = Partial<PlanItemCreateInput>;
 
+type PlanItemRow = typeof pmaPlanItems.$inferSelect;
+
+// Drizzle returns rows keyed in camelCase, but the API contract / frontend
+// expect snake_case for several fields. Serialize to the shape the client reads.
+function toApi(row: PlanItemRow) {
+  return {
+    id: row.id,
+    planId: row.planId,
+    item: row.item,
+    subplan: row.subplan,
+    direccion: row.direccion,
+    environmental_activity: row.environmentalActivity,
+    identified_environmental_impact: row.identifiedEnvironmentalImpact,
+    proposed_measure: row.proposedMeasure,
+    indicator: row.indicator,
+    verification_method: row.verificationMethod,
+    periodicity: row.periodicity,
+    budget: Number(row.budget),
+    report_per: row.reportPer,
+    observation: row.observation,
+    storagePath: row.storagePath,
+    createdAt: row.createdAt,
+    updatedAt: row.updatedAt,
+  };
+}
+
 function toDb(input: PlanItemCreateInput | PlanItemUpdateInput) {
   return {
     item: input.item,
@@ -62,7 +88,7 @@ export async function createPlanItem(planId: string, input: PlanItemCreateInput)
       observation: input.observation ?? null,
     })
     .returning();
-  return row;
+  return toApi(row);
 }
 
 export async function getPlanItems(planId: string) {
@@ -84,7 +110,7 @@ export async function getPlanItems(planId: string) {
     arr.push({ userId: a.userId, category: a.category });
     byItem.set(a.planItemId, arr);
   }
-  return items.map((i) => ({ ...i, assignedUsers: byItem.get(i.id) ?? [] }));
+  return items.map((i) => ({ ...toApi(i), assignedUsers: byItem.get(i.id) ?? [] }));
 }
 
 export async function getPlanItemById(itemId: string) {
@@ -105,7 +131,7 @@ export async function updatePlanItem(itemId: string, planId: string, updates: Pl
     .set({ ...cleaned, updatedAt: new Date() })
     .where(eq(pmaPlanItems.id, itemId))
     .returning();
-  return row;
+  return toApi(row);
 }
 
 export async function updatePlanItemObservation(itemId: string, planId: string, observation: string) {
@@ -178,7 +204,7 @@ export async function bulkCreatePlanItems(planId: string, items: PlanItemCreateI
   // ensure plan exists
   const plan = await db.select().from(pmaPlans).where(eq(pmaPlans.id, planId)).limit(1);
   if (plan.length === 0) throw NotFound("Plan not found");
-  return db
+  const rows = await db
     .insert(pmaPlanItems)
     .values(
       items.map((i) => ({
@@ -198,4 +224,5 @@ export async function bulkCreatePlanItems(planId: string, items: PlanItemCreateI
       }))
     )
     .returning();
+  return rows.map(toApi);
 }
