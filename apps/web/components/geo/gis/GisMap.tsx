@@ -81,24 +81,27 @@ function pathStyleFor(layer: GisLayer, colorFn: ColorFn) {
 interface Props {
   layers: GisLayer[];
   basemap: string;
-  tool?: "pan" | "identify" | "measure";
+  tool?: "pan" | "identify" | "measure" | "inspect";
   initialCenter?: [number, number];
   initialZoom?: number;
   onIdentify?: (info: IdentifyInfo) => void;
   onCoordChange?: (c: [number, number]) => void;
   onViewportChange?: (center: [number, number], zoom: number) => void;
+  onPointInspect?: (c: [number, number]) => void;
+  inspectPoint?: [number, number] | null;
   focusFeature?: FocusFeature | null;
   onMapReady?: (map: L.Map) => void;
 }
 
-export default function GisMap({ layers, basemap, tool = "pan", initialCenter, initialZoom, onIdentify, onCoordChange, onViewportChange, focusFeature, onMapReady }: Props) {
+export default function GisMap({ layers, basemap, tool = "pan", initialCenter, initialZoom, onIdentify, onCoordChange, onViewportChange, onPointInspect, inspectPoint, focusFeature, onMapReady }: Props) {
   const mapRef = useRef<L.Map | null>(null);
   const containerRef = useRef<HTMLDivElement | null>(null);
   const basemapRef = useRef<L.TileLayer | null>(null);
   const layerRefs = useRef<Map<string, LayerRef>>(new Map());
   const labelLayerRef = useRef<L.FeatureGroup | null>(null);
-  const cbRef = useRef({ onIdentify, onCoordChange, onMapReady, onViewportChange, tool });
-  cbRef.current = { onIdentify, onCoordChange, onMapReady, onViewportChange, tool };
+  const inspectMarkerRef = useRef<L.Marker | null>(null);
+  const cbRef = useRef({ onIdentify, onCoordChange, onMapReady, onViewportChange, onPointInspect, tool });
+  cbRef.current = { onIdentify, onCoordChange, onMapReady, onViewportChange, onPointInspect, tool };
 
   // Init (once)
   useEffect(() => {
@@ -185,8 +188,9 @@ export default function GisMap({ layers, basemap, tool = "pan", initialCenter, i
           },
           onEachFeature: (feature, lyr) => {
             lyr.on("click", (e: L.LeafletMouseEvent) => {
-              // While measuring, let the click bubble to the map so it adds a vertex.
-              if (cbRef.current.tool === "measure") return;
+              // While measuring or inspecting a point, let the click bubble to the
+              // map so it adds a vertex / drops the inspection pin.
+              if (cbRef.current.tool === "measure" || cbRef.current.tool === "inspect") return;
               L.DomEvent.stopPropagation(e);
               cbRef.current.onIdentify?.({ layerId: layer.id, layerName: layer.name, feature, latlng: e.latlng });
             });
@@ -266,6 +270,38 @@ export default function GisMap({ layers, basemap, tool = "pan", initialCenter, i
       }
     });
   }, [focusFeature]);
+
+  // Point-inspect tool: a single click reports the clicked coordinate so the
+  // editor can resolve which layers cover it.
+  useEffect(() => {
+    const map = mapRef.current;
+    if (!map || tool !== "inspect") return;
+    map.getContainer().style.cursor = "crosshair";
+    const onClick = (e: L.LeafletMouseEvent) => {
+      L.DomEvent.stop(e);
+      cbRef.current.onPointInspect?.([e.latlng.lat, e.latlng.lng]);
+    };
+    map.on("click", onClick);
+    return () => {
+      map.off("click", onClick);
+      map.getContainer().style.cursor = "";
+    };
+  }, [tool]);
+
+  // Drop / move / clear the inspection pin to mirror the editor's state.
+  useEffect(() => {
+    const map = mapRef.current;
+    if (!map) return;
+    if (inspectMarkerRef.current) { map.removeLayer(inspectMarkerRef.current); inspectMarkerRef.current = null; }
+    if (!inspectPoint) return;
+    const icon = L.divIcon({
+      className: "inspect-pin",
+      html: `<span class="inspect-pin-dot"></span>`,
+      iconSize: [18, 18],
+      iconAnchor: [9, 9],
+    });
+    inspectMarkerRef.current = L.marker(inspectPoint, { icon, interactive: false, zIndexOffset: 1000 }).addTo(map);
+  }, [inspectPoint]);
 
   // Distance-measuring tool: click to add vertices, double-click (or Esc) to finish.
   useEffect(() => {

@@ -74,7 +74,7 @@ export default function UploadModal({ onClose, onAdd, alreadyAdded }: {
   async function handleFile(file: File) {
     if (!file) return;
     if (!/\.(zip|shp)$/i.test(file.name)) {
-      toast.error("Formato no soportado. Sube un .zip con .shp + .dbf + .shx, o un .shp.");
+      toast.error("Formato no soportado. Sube un .zip con .shp + .shx + .dbf + .prj como mínimo, o un .shp.");
       return;
     }
     setParsing(file.name);
@@ -126,7 +126,7 @@ export default function UploadModal({ onClose, onAdd, alreadyAdded }: {
       onClose();
     } catch (err) {
       console.error(err);
-      toast.error("No se pudo leer el shapefile. Verifica que el .zip contenga .shp, .dbf y .shx.");
+      toast.error("No se pudo leer el shapefile. Verifica que el .zip contenga .shp, .shx, .dbf y .prj como mínimo.");
       setParsing(null);
     }
   }
@@ -137,7 +137,7 @@ export default function UploadModal({ onClose, onAdd, alreadyAdded }: {
         <div className="modal-head">
           <div>
             <div className="h-title">Agregar capa</div>
-            <div className="h-sub">Sube un shapefile (.shp + .dbf + .shx en .zip) o selecciona del catálogo</div>
+            <div className="h-sub">Sube un shapefile (.zip con .shp + .shx + .dbf + .prj como mínimo) o selecciona del catálogo</div>
           </div>
           <button className="icon-btn" onClick={onClose}><X size={14} /></button>
         </div>
@@ -173,7 +173,7 @@ export default function UploadModal({ onClose, onAdd, alreadyAdded }: {
               >
                 <div className="ic">⤓</div>
                 <div className="t">Arrastra .shp / .zip aquí</div>
-                <div className="s">O haz clic para seleccionar archivos · máx 50 MB</div>
+                <div className="s">.zip con .shp + .shx + .dbf + .prj como mínimo · máx 50 MB</div>
               </div>
               <div style={{ display: "flex", alignItems: "center", gap: 10, margin: "4px 0 10px" }}>
                 <div style={{ flex: 1, height: 1, background: "var(--border)" }} />

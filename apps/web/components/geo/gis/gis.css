@@ -849,6 +849,52 @@
   pointer-events: none;
 }
 
+/* Point-inspect pin */
+.inspect-pin { background: none; border: none; }
+.inspect-pin .inspect-pin-dot {
+  display: block;
+  width: 14px; height: 14px;
+  border-radius: 50%;
+  background: #2563eb;
+  border: 2px solid #fff;
+  box-shadow: 0 0 0 2px rgba(37, 99, 235, 0.35), 0 1px 4px rgba(0, 0, 0, 0.4);
+}
+
+/* Point-inspect popup */
+.gis-shell .point-inspect .pi-coords {
+  padding-bottom: 6px;
+  margin-bottom: 6px;
+  border-bottom: 1px solid var(--border);
+}
+.gis-shell .point-inspect .pi-section-title {
+  font-size: 9.5px; text-transform: uppercase; letter-spacing: 0.4px;
+  color: var(--muted-fg); font-weight: 600;
+  margin: 6px 0 2px;
+}
+.gis-shell .point-inspect .pi-hit {
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm, 6px);
+  padding: 6px 8px;
+  margin-top: 6px;
+}
+.gis-shell .point-inspect .pi-hit-head {
+  display: flex; align-items: center; justify-content: space-between;
+  gap: 6px; cursor: pointer;
+}
+.gis-shell .point-inspect .pi-hit-layer {
+  font-size: 9.5px; text-transform: uppercase; letter-spacing: 0.3px;
+  color: var(--muted-fg); font-weight: 600;
+}
+.gis-shell .point-inspect .pi-hit-badge {
+  font-size: 9.5px; font-weight: 600;
+  padding: 1px 6px; border-radius: 999px;
+  white-space: nowrap;
+}
+.gis-shell .point-inspect .pi-hit-badge.contiene { background: #dcfce7; color: #166534; }
+.gis-shell .point-inspect .pi-hit-badge.cercano { background: #e0e7ff; color: #3730a3; }
+.gis-shell .point-inspect .pi-hit-name { font-weight: 600; font-size: 12px; margin: 2px 0 3px; }
+.gis-shell .point-inspect .pi-hit-attrs .identify-row { padding: 3px 0; }
+
 @keyframes gis-slide-in-up {
   from { transform: translateY(10px); opacity: 0; }
   to   { transform: translateY(0); opacity: 1; }

@@ -6,6 +6,7 @@ import type { FeatureCollection } from "geojson";
 import {
   PanelLeft, PanelRight, Table2, Info, Ruler, ZoomIn, ZoomOut, Home,
   Search, Download, Upload, X, AlignLeft, Maximize, Minimize, ArrowLeft,
+  MousePointer, MapPin,
 } from "lucide-react";
 import { toast } from "sonner";
 import LayersPanel from "./LayersPanel";
@@ -13,6 +14,7 @@ import UploadModal from "./UploadModal";
 import GisMap from "./GisMap";
 import DashboardsPanel from "./DashboardsPanel";
 import { inferSchema, fmtNum, categoryCounts } from "./charts";
+import { toDMS, toUTM, formatUTM, inspectPoint as inspectLayersAt, formatDistance, type PointHit } from "./geo-point";
 import { BASEMAPS, BASEMAP_PREVIEWS, COLOR_RAMPS } from "./gis-data";
 import {
   fetchLayers, fetchLayerData, createLayerRemote, updateLayerRemote, deleteLayerRemote,
@@ -68,9 +70,10 @@ export default function GisEditor({ mapId, mapTitle, backHref, initialCenter, in
   const [layers, setLayers] = useState<GisLayer[]>([]);
   const [activeLayerId, setActiveLayerId] = useState<string | null>(null);
   const [basemap, setBasemap] = useState("light");
-  const [tool, setTool] = useState<"pan" | "identify" | "measure">("pan");
+  const [tool, setTool] = useState<"pan" | "identify" | "measure" | "inspect">("pan");
   const [showUpload, setShowUpload] = useState(false);
   const [identify, setIdentify] = useState<IdentifyInfo | null>(null);
+  const [inspectPoint, setInspectPoint] = useState<[number, number] | null>(null);
   const [attrPanelOpen, setAttrPanelOpen] = useState(false);
   const [coord, setCoord] = useState<[number, number]>([-0.5, -90.5]);
   const [zoom, setZoom] = useState(7);
@@ -296,6 +299,11 @@ export default function GisEditor({ mapId, mapTitle, backHref, initialCenter, in
         </div>
 
         <div className="tb-group">
+          <button
+            className={"tb-btn" + (tool === "inspect" ? " active" : "")}
+            onClick={() => { if (tool === "inspect") { setTool("pan"); setInspectPoint(null); } else setTool("inspect"); }}
+            data-tip="Consultar punto (coordenadas e info geográfica)"
+          ><MousePointer size={14} /></button>
           <button className={"tb-btn" + (tool === "identify" ? " active" : "")} onClick={() => setTool(tool === "identify" ? "pan" : "identify")} data-tip="Identificar"><Info size={14} /></button>
           <button className={"tb-btn" + (tool === "measure" ? " active" : "")} onClick={() => setTool(tool === "measure" ? "pan" : "measure")} data-tip="Medir distancia"><Ruler size={14} /></button>
         </div>
@@ -374,6 +382,8 @@ export default function GisEditor({ mapId, mapTitle, backHref, initialCenter, in
           onIdentify={handleIdentify}
           onCoordChange={setCoord}
           onViewportChange={handleViewportChange}
+          onPointInspect={setInspectPoint}
+          inspectPoint={inspectPoint}
           focusFeature={focusFeature}
           onMapReady={setMapInstance}
         />
@@ -407,6 +417,19 @@ export default function GisEditor({ mapId, mapTitle, backHref, initialCenter, in
         </div>
 
         {identify && <IdentifyPopup info={identify} onClose={() => setIdentify(null)} />}
+
+        {inspectPoint && (
+          <PointInspectPopup
+            lat={inspectPoint[0]}
+            lng={inspectPoint[1]}
+            hits={inspectLayersAt(inspectPoint[0], inspectPoint[1], layers)}
+            onFocus={(h) => {
+              setActiveLayerId(h.layerId);
+              setFocusFeature({ layerId: h.layerId, feature: h.feature });
+            }}
+            onClose={() => setInspectPoint(null)}
+          />
+        )}
 
         {attrPanelOpen && activeLayer && (
           <AttributeTablePanel
@@ -480,6 +503,78 @@ function IdentifyPopup({ info, onClose }: { info: IdentifyInfo; onClose: () => v
             </span>
           </div>
         ))}
+      </div>
+    </div>
+  );
+}
+
+// ────────────────────────────────────────────────────────────
+function PointInspectPopup({ lat, lng, hits, onFocus, onClose }: {
+  lat: number;
+  lng: number;
+  hits: PointHit[];
+  onFocus: (h: PointHit) => void;
+  onClose: () => void;
+}) {
+  const utm = toUTM(lat, lng);
+  return (
+    <div className="identify-popup point-inspect" style={{ left: 12, top: 60, width: 288 }}>
+      <div className="identify-popup-head">
+        <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
+          <MapPin size={14} />
+          <div className="ttl">Punto consultado</div>
+        </div>
+        <button className="icon-btn" onClick={onClose}><X size={14} /></button>
+      </div>
+      <div className="identify-popup-body">
+        <div className="pi-coords">
+          <div className="identify-row">
+            <span className="k">Decimal</span>
+            <span className="v" style={{ fontFamily: "var(--font-mono)" }}>{lat.toFixed(5)}°, {lng.toFixed(5)}°</span>
+          </div>
+          <div className="identify-row">
+            <span className="k">DMS</span>
+            <span className="v" style={{ fontFamily: "var(--font-mono)" }}>{toDMS(lat, "lat")} {toDMS(lng, "lng")}</span>
+          </div>
+          <div className="identify-row">
+            <span className="k">UTM</span>
+            <span className="v" style={{ fontFamily: "var(--font-mono)" }}>{formatUTM(utm)}</span>
+          </div>
+        </div>
+
+        <div className="pi-section-title">
+          Información geográfica{hits.length ? ` · ${hits.length}` : ""}
+        </div>
+        {hits.length === 0 && (
+          <div style={{ fontSize: 11.5, color: "var(--muted-fg)", padding: "4px 0" }}>
+            Ninguna capa cubre este punto.
+          </div>
+        )}
+        {hits.map((h, i) => {
+          const props = h.feature.properties || {};
+          const name = String(props.nombre || props.name || props.id || "Feature");
+          return (
+            <div className="pi-hit" key={`${h.layerId}-${i}`}>
+              <div className="pi-hit-head" onClick={() => onFocus(h)}>
+                <span className="pi-hit-layer">{h.layerName}</span>
+                <span className={"pi-hit-badge " + h.relation}>
+                  {h.relation === "contiene" ? "contiene" : `cercano · ${formatDistance(h.distanceM ?? 0)}`}
+                </span>
+              </div>
+              <div className="pi-hit-name">{name}</div>
+              <div className="pi-hit-attrs">
+                {Object.entries(props).map(([k, v]) => (
+                  <div className="identify-row" key={k}>
+                    <span className="k">{k}</span>
+                    <span className="v" style={{ fontFamily: typeof v === "number" ? "var(--font-mono)" : "inherit" }}>
+                      {typeof v === "number" ? fmtNum(v) : String(v)}
+                    </span>
+                  </div>
+                ))}
+              </div>
+            </div>
+          );
+        })}
       </div>
     </div>
   );
