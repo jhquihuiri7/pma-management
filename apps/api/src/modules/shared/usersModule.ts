@@ -4,12 +4,13 @@ import { getDb } from "../../db/client.js";
 import { users, userApps, passwordResets } from "../../db/schema/shared.js";
 import { Conflict, NotFound, Forbidden, BadRequest } from "../../lib/errors.js";
 import { getMail } from "../../mail/index.js";
+import { invitationEmail } from "../../mail/templates.js";
 import { env } from "../../lib/env.js";
 import { hashRefreshToken } from "../../auth/jwt.js";
 import type { UserRole } from "@pma/types";
 
-// API-side AppKey: legacy "pg" is normalized at the API boundary and never
-// reaches Postgres. The Drizzle enum only contains the canonical four keys.
+// API-side AppKey: legacy keys are normalized at the API boundary and never
+// reach Postgres. The Drizzle enum only contains the canonical keys.
 export type AppKey = "pma" | "rgdp" | "geo";
 
 const TOKEN_TTL_MS = 24 * 60 * 60 * 1000;
@@ -25,43 +26,56 @@ export type CreateUserGlobalInput = {
   apps?: AppKey[];
 };
 
-async function findUserRowByEmail(email: string) {
-  const db = getDb();
-  const rows = await db.select().from(users).where(eq(users.email, email)).limit(1);
-  return rows[0] ?? null;
+function createSetPasswordToken() {
+  const raw = randomBytes(32).toString("hex");
+  return {
+    raw,
+    tokenHash: hashRefreshToken(raw),
+    expiresAt: new Date(Date.now() + TOKEN_TTL_MS),
+  };
+}
+
+async function getUserAppsFrom(db: any, userId: string): Promise<AppKey[]> {
+  const rows = await db.select().from(userApps).where(eq(userApps.userId, userId));
+  return rows.map((r: { appKey: string }) => r.appKey as AppKey);
 }
 
 async function getUserApps(userId: string): Promise<AppKey[]> {
-  const db = getDb();
-  const rows = await db.select().from(userApps).where(eq(userApps.userId, userId));
-  return rows.map((r) => r.appKey as AppKey);
+  return getUserAppsFrom(getDb(), userId);
+}
+
+async function insertSetPasswordToken(db: any, userId: string): Promise<string> {
+  const token = createSetPasswordToken();
+  await db.insert(passwordResets).values({
+    userId,
+    tokenHash: token.tokenHash,
+    expiresAt: token.expiresAt,
+  });
+  return token.raw;
 }
 
 async function buildSetPasswordToken(userId: string): Promise<string> {
-  const raw = randomBytes(32).toString("hex");
-  const db = getDb();
-  await db.insert(passwordResets).values({
-    userId,
-    tokenHash: hashRefreshToken(raw),
-    expiresAt: new Date(Date.now() + TOKEN_TTL_MS),
-  });
-  return raw;
+  return insertSetPasswordToken(getDb(), userId);
 }
 
-function invitationHtml(name: string, link: string) {
-  return `<p>Hola ${name},</p>
-  <p>Te han invitado a la plataforma. Establece tu contraseña con este enlace:</p>
-  <p><a href="${link}">${link}</a></p>
-  <p>El enlace expira en 24 horas.</p>`;
+function mailErrorMessage(error: unknown): string {
+  if (error instanceof Error && error.message) return error.message;
+  return "El servicio de correo no respondió correctamente";
 }
 
 async function sendInvitation(email: string, name: string, token: string) {
   const link = `${env.FRONTEND_ORIGIN}/set-password?token=${token}`;
-  await getMail().send({
-    to: email,
-    subject: "Establece tu contraseña",
-    html: invitationHtml(name, link),
-  });
+  const content = invitationEmail({ name, link });
+  try {
+    await getMail().send({
+      to: email,
+      subject: content.subject,
+      html: content.html,
+      text: content.text,
+    });
+  } catch (error) {
+    throw BadRequest(`No se pudo enviar el correo de invitación: ${mailErrorMessage(error)}`);
+  }
 }
 
 // ---------------------------------------------------------------------------
@@ -71,62 +85,83 @@ async function sendInvitation(email: string, name: string, token: string) {
 export async function createUserGlobal(input: CreateUserGlobalInput) {
   const db = getDb();
   const normalizedEmail = input.email.trim().toLowerCase();
-  const existing = await findUserRowByEmail(normalizedEmail);
+  return db.transaction(async (tx) => {
+    const existingRows = await tx.select().from(users).where(eq(users.email, normalizedEmail)).limit(1);
+    const existing = existingRows[0] ?? null;
 
-  if (existing) {
-    if (existing.role !== input.role)
-      throw Conflict("Ya existe un usuario con ese correo y un rol diferente");
+    if (existing) {
+      if (existing.role !== input.role)
+        throw Conflict("Ya existe un usuario con ese correo y un rol diferente");
 
-    await db
-      .update(users)
-      .set({ name: input.name, unit: input.unit ?? null, position: input.position ?? null, updatedAt: new Date() })
-      .where(eq(users.id, existing.id));
+      await tx
+        .update(users)
+        .set({ name: input.name, unit: input.unit ?? null, position: input.position ?? null, updatedAt: new Date() })
+        .where(eq(users.id, existing.id));
 
-    const currentApps = await getUserApps(existing.id);
-    const newApps = (input.apps ?? []).filter((a) => !currentApps.includes(a));
-    for (const appKey of newApps) {
-      await db.insert(userApps).values({ userId: existing.id, appKey }).onConflictDoNothing();
+      const currentApps = await getUserAppsFrom(tx, existing.id);
+      const newApps = (input.apps ?? []).filter((a) => !currentApps.includes(a));
+      for (const appKey of newApps) {
+        await tx.insert(userApps).values({ userId: existing.id, appKey }).onConflictDoNothing();
+      }
+      const allApps = [...new Set([...currentApps, ...newApps])];
+      if (!existing.passwordSet) {
+        const token = await insertSetPasswordToken(tx, existing.id);
+        await sendInvitation(normalizedEmail, input.name, token);
+      }
+      return { id: existing.id, email: normalizedEmail, name: input.name, role: input.role, apps: allApps };
     }
-    const allApps = [...new Set([...currentApps, ...newApps])];
-    return { id: existing.id, email: normalizedEmail, name: input.name, role: input.role, apps: allApps };
-  }
 
-  const [row] = await db
-    .insert(users)
-    .values({
-      email: normalizedEmail,
-      name: input.name,
-      role: input.role as UserRole,
-      passwordSet: false,
-      unit: input.unit ?? null,
-      position: input.position ?? null,
-    })
-    .returning();
+    const [row] = await tx
+      .insert(users)
+      .values({
+        email: normalizedEmail,
+        name: input.name,
+        role: input.role as UserRole,
+        passwordSet: false,
+        unit: input.unit ?? null,
+        position: input.position ?? null,
+      })
+      .returning();
 
-  const assignedApps = input.apps ?? [];
-  for (const appKey of assignedApps) {
-    await db.insert(userApps).values({ userId: row.id, appKey }).onConflictDoNothing();
-  }
+    const assignedApps = input.apps ?? [];
+    for (const appKey of assignedApps) {
+      await tx.insert(userApps).values({ userId: row.id, appKey }).onConflictDoNothing();
+    }
 
-  const token = await buildSetPasswordToken(row.id);
-  try { await sendInvitation(normalizedEmail, input.name, token); } catch { /* ignore */ }
+    const token = await insertSetPasswordToken(tx, row.id);
+    await sendInvitation(normalizedEmail, input.name, token);
 
-  return { id: row.id, email: row.email, name: row.name, role: row.role, apps: assignedApps };
+    return { id: row.id, email: row.email, name: row.name, role: row.role, apps: assignedApps };
+  });
 }
 
 export async function updateManagedUser(
   userId: string,
-  updates: { name?: string; unit?: string | null; position?: string | null },
+  updates: { name?: string; unit?: string | null; position?: string | null; role?: ManagedRole },
+  requesterId?: string,
 ) {
   const db = getDb();
   const rows = await db.select().from(users).where(eq(users.id, userId)).limit(1);
   const u = rows[0];
   if (!u) throw NotFound("Usuario no encontrado");
 
+  // Role changes carry lockout risks: block self-demotion and removing the last
+  // admin so the org can never end up without an administrator.
+  if (updates.role !== undefined && updates.role !== u.role) {
+    if (requesterId && u.id === requesterId)
+      throw Forbidden("No puedes cambiar tu propio rol");
+    if (u.role === "ADMIN") {
+      const adminRows = await db.select({ id: users.id }).from(users).where(eq(users.role, "ADMIN"));
+      if (adminRows.length <= 1)
+        throw Forbidden("No puedes cambiar el rol del único administrador");
+    }
+  }
+
   await db.update(users).set({
     ...(updates.name !== undefined ? { name: updates.name } : {}),
     ...(updates.unit !== undefined ? { unit: updates.unit } : {}),
     ...(updates.position !== undefined ? { position: updates.position } : {}),
+    ...(updates.role !== undefined ? { role: updates.role as UserRole } : {}),
     updatedAt: new Date(),
   }).where(eq(users.id, userId));
 }

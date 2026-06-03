@@ -81,7 +81,9 @@ function CategoryCard({
 
 export default function GeoDashboardPage() {
   const { user: session} = useAuth();
-  const isAdmin = session?.role === "ADMIN";
+  // Any logged-in geo user (incl. VIEWER) can create/edit; only ADMIN can delete.
+  const canEdit = !!session;
+  const canDelete = session?.role === "ADMIN";
 
   const [search, setSearch] = useState("");
   const [activeCategory, setActiveCategory] = useState<string | null>(null);
@@ -169,7 +171,7 @@ export default function GeoDashboardPage() {
                 Visualiza datos espaciales de biodiversidad, clima, riesgos y más.
               </p>
             </div>
-            {isAdmin && (
+            {canEdit && (
               <div className="flex-shrink-0">
                 <AddMapDialog onAdd={handleAdd} />
               </div>
@@ -246,7 +248,8 @@ export default function GeoDashboardPage() {
                 <GeoMapCard
                   key={m.id}
                   geoMap={m}
-                  isAdmin={isAdmin}
+                  canEdit={canEdit}
+                  canDelete={canDelete}
                   onEdit={handleEdit}
                   onDelete={handleDelete}
                 />

@@ -35,8 +35,7 @@ export class SmtpMail implements MailProvider {
   async send(msg: MailMessage): Promise<void> {
     const t = this.getTransporter();
     if (!t) {
-      console.log("[mail] would send:", { to: msg.to, subject: msg.subject });
-      return;
+      throw new Error("SMTP_HOST no está configurado; no se puede enviar correo");
     }
     await t.sendMail({
       from: env.SMTP_FROM,

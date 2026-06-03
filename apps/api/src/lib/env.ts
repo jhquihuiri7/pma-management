@@ -46,7 +46,7 @@ const schema = z.object({
   SMTP_PORT: z.coerce.number().int().positive().default(587),
   SMTP_USER: z.string().optional(),
   SMTP_PASS: z.string().optional(),
-  SMTP_FROM: z.string().default("PMA Management <no-reply@example.com>"),
+  SMTP_FROM: z.string().default(""),
 });
 
 const parsed = schema.safeParse(process.env);
@@ -72,6 +72,8 @@ if (env.NODE_ENV === "production") {
   if (DEV_DEFAULT_SECRETS.has(env.JWT_REFRESH_SECRET)) problems.push("JWT_REFRESH_SECRET is the dev default");
   if (env.JWT_ACCESS_SECRET === env.JWT_REFRESH_SECRET) problems.push("JWT_ACCESS_SECRET and JWT_REFRESH_SECRET must differ");
   if (!env.DATABASE_URL) problems.push("DATABASE_URL is required");
+  if (env.SMTP_HOST && !env.SMTP_FROM) problems.push("SMTP_FROM is required when SMTP_HOST is configured");
+  if (env.SMTP_HOST && /@example\./i.test(env.SMTP_FROM)) problems.push("SMTP_FROM must be a verified SES identity, not example.com");
   if (problems.length > 0) {
     console.error("Refusing to start in production with insecure configuration:");
     for (const p of problems) console.error(`  - ${p}`);

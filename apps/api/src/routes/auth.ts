@@ -24,6 +24,9 @@ import {
   markPasswordResetUsed,
 } from "../modules/shared/userRepo.js";
 import { getMail } from "../mail/index.js";
+import { passwordResetEmail } from "../mail/templates.js";
+
+const PASSWORD_RESET_TTL_MS = 24 * 60 * 60 * 1000;
 
 const loginSchema = z.object({
   email: z.string().email(),
@@ -133,14 +136,20 @@ export async function authRoutes(app: FastifyInstance) {
     if (user) {
       const token = randomBytes(32).toString("hex");
       const tokenHash = hashRefreshToken(token); // reuse sha256 hasher
-      const expiresAt = new Date(Date.now() + 60 * 60 * 1000); // 1h
+      const expiresAt = new Date(Date.now() + PASSWORD_RESET_TTL_MS);
       await insertPasswordReset({ userId: user.id, tokenHash, expiresAt });
       const link = `${env.FRONTEND_ORIGIN}/reset-password?token=${token}`;
-      await getMail().send({
-        to: user.email,
-        subject: "Restablecer contraseña",
-        html: `<p>Hola ${user.name},</p><p>Para restablecer tu contraseña haz clic en <a href="${link}">este enlace</a>. Expira en 1 hora.</p>`,
-      });
+      const content = passwordResetEmail({ name: user.name, link });
+      try {
+        await getMail().send({
+          to: user.email,
+          subject: content.subject,
+          html: content.html,
+          text: content.text,
+        });
+      } catch {
+        throw BadRequest("No se pudo enviar el correo de recuperación. Inténtalo de nuevo más tarde.");
+      }
     }
     return { ok: true };
   });

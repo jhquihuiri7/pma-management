@@ -9,7 +9,7 @@ import {
   buildGeoRasterOriginalDir,
 } from "../storage/index.js";
 import { getRasterRow, markRasterProcessed, markRasterError } from "../modules/geo/rasterLayersModule.js";
-import { gdalInfo, buildCog } from "./gdal.js";
+import { gdalInfo, buildCog, resolveGdalInput } from "./gdal.js";
 import type { RasterJob } from "./boss.js";
 
 /**
@@ -42,8 +42,18 @@ export async function processRaster(job: RasterJob): Promise<void> {
   try {
     await fs.mkdir(absTmp, { recursive: true });
 
+    // 0) Resolve the GDAL input. A .tif is opened directly; a .zip is opened via
+    //    /vsizip/ pointed at the single .tif inside it. A handled zip problem
+    //    (no/multiple rasters) marks the row 'error' without a pg-boss retry.
+    const input = await resolveGdalInput(absInput, row.originalFilename, logPath);
+    if (!input.ok) {
+      await markRasterError(rasterLayerId, input.message);
+      await storage.deleteDir(tmpRel).catch(() => {});
+      return;
+    }
+
     // 1) Validate + read metadata.
-    const info = await gdalInfo(absInput, logPath);
+    const info = await gdalInfo(input.path, logPath);
     if (!info.crsWkt) {
       await markRasterError(
         rasterLayerId,
@@ -55,7 +65,7 @@ export async function processRaster(job: RasterJob): Promise<void> {
 
     // 2) Build the COG in tmp, then move it into cog/ (avoids a partial COG at
     //    the final path if the build is interrupted).
-    await buildCog(absInput, absTmpCog, info, logPath);
+    await buildCog(input.path, absTmpCog, info, logPath);
     await fs.mkdir(dirname(absCog), { recursive: true });
     await fs.rename(absTmpCog, absCog);
 

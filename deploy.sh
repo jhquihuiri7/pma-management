@@ -8,7 +8,7 @@ usage() {
     echo "Uso: $0 {dev|up|down|update|update-dev|rebuild|rebuild-dev|logs|dev-logs|migrate|restart} [servicio]"
     echo ""
     echo "  dev         Levanta en modo desarrollo (puerto 3000, hot reload)"
-    echo "  up          Levanta en modo producción  (puerto 8000)"
+    echo "  up          Levanta en modo producción con Nginx HTTPS (puertos 80/443)"
     echo "  down        Detiene todos los servicios"
     echo "  update      Reconstruye e inicia producción con el código actual"
     echo "  update-dev  Reconstruye e inicia desarrollo con el código actual"
@@ -39,9 +39,10 @@ case "$ACTION" in
         echo "✅ Servicios levantados (producción)"
         echo ""
         echo "Acceso:"
-        echo "  Web:      http://localhost:8000"
-        echo "  API:      http://localhost:3001"
-        echo "  Database: localhost:5432"
+        echo "  Web HTTPS: https://sigtar.gobiernogalapagos.gob.ec"
+        echo "  Web local: http://localhost:8000"
+        echo "  API local: http://localhost:3001"
+        echo "  Database:  localhost:5432"
         ;;
 
     down)

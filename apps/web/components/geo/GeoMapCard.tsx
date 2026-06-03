@@ -41,12 +41,14 @@ const CATEGORY_GRADIENT: Record<string, string> = {
 
 interface Props {
   geoMap: GeoMap;
-  isAdmin?: boolean;
+  /** Any geo user (incl. VIEWER) may edit; only ADMIN may delete. */
+  canEdit?: boolean;
+  canDelete?: boolean;
   onEdit?: (updated: GeoMap) => void;
   onDelete?: (id: string) => void;
 }
 
-export default function GeoMapCard({ geoMap, isAdmin, onEdit, onDelete }: Props) {
+export default function GeoMapCard({ geoMap, canEdit, canDelete, onEdit, onDelete }: Props) {
   const [editOpen, setEditOpen] = useState(false);
   const [confirmDelete, setConfirmDelete] = useState(false);
   const [deleting, setDeleting] = useState(false);
@@ -132,17 +134,19 @@ export default function GeoMapCard({ geoMap, isAdmin, onEdit, onDelete }: Props)
             </div>
 
             <div className="flex items-center gap-1">
-              {isAdmin && (
-                <>
-                  {/* Edit */}
-                  <button
-                    onClick={() => setEditOpen(true)}
-                    className="p-1.5 rounded-md text-slate-400 hover:text-teal-600 hover:bg-teal-50 transition-colors"
-                    title="Editar"
-                  >
-                    <Pencil className="w-3.5 h-3.5" />
-                  </button>
+              {canEdit && (
+                /* Edit */
+                <button
+                  onClick={() => setEditOpen(true)}
+                  className="p-1.5 rounded-md text-slate-400 hover:text-teal-600 hover:bg-teal-50 transition-colors"
+                  title="Editar"
+                >
+                  <Pencil className="w-3.5 h-3.5" />
+                </button>
+              )}
 
+              {canDelete && (
+                <>
                   {/* Delete */}
                   {confirmDelete ? (
                     <div className="flex items-center gap-1">

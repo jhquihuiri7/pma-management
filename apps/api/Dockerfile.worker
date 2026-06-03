@@ -4,7 +4,7 @@
 FROM node:20-bookworm-slim AS base
 
 RUN apt-get update \
-  && apt-get install -y --no-install-recommends gdal-bin \
+  && apt-get install -y --no-install-recommends gdal-bin unzip \
   && rm -rf /var/lib/apt/lists/*
 
 WORKDIR /app
@@ -22,7 +22,7 @@ RUN npm run build --workspace=@pma/api
 
 FROM node:20-bookworm-slim AS runner
 RUN apt-get update \
-  && apt-get install -y --no-install-recommends gdal-bin \
+  && apt-get install -y --no-install-recommends gdal-bin unzip \
   && rm -rf /var/lib/apt/lists/*
 
 WORKDIR /app

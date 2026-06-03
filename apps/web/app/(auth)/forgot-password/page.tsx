@@ -44,7 +44,7 @@ export default function ForgotPasswordPage() {
               <CheckCircle2 className="w-12 h-12 text-green-500" />
               <h2 className="text-lg font-semibold text-slate-800">Correo enviado</h2>
               <p className="text-sm text-muted-foreground">
-                Si existe una cuenta con ese correo, recibirás un enlace para restablecer tu contraseña en los próximos minutos. El enlace expira en <strong>1 hora</strong>.
+                Si existe una cuenta con ese correo, recibirás un enlace para restablecer tu contraseña en los próximos minutos. El enlace expira en <strong>24 horas</strong>.
               </p>
               <Button className="mt-2 w-full" variant="outline" onClick={() => router.push("/login")}>
                 Volver al inicio de sesión

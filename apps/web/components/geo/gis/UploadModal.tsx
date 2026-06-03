@@ -58,6 +58,25 @@ async function parseZipWithJsZip(buffer: ArrayBuffer): Promise<ParsedCollection[
   return out;
 }
 
+// Shapefile zips are tiny; orthophoto zips are huge. Only load a zip into memory
+// to inspect it when it's small enough that doing so is cheap — above this size a
+// .zip is, in practice, never a shapefile, so route it straight to the raster
+// channel (the server/worker rejects it cleanly if it isn't a GeoTIFF archive).
+const ZIP_PEEK_MAX_BYTES = 50 * 1024 * 1024;
+
+/** Decide whether a .zip is an orthophoto archive (contains a .tif) vs a shapefile. */
+async function isRasterZip(file: File): Promise<boolean> {
+  if (file.size > ZIP_PEEK_MAX_BYTES) return true;
+  try {
+    const zip = await JSZip.loadAsync(await file.arrayBuffer());
+    const names = Object.keys(zip.files).filter((p) => !zip.files[p].dir);
+    if (names.some((p) => RASTER_RE.test(p))) return true; // has a GeoTIFF → raster
+    return false; // a .shp (or anything else) → handled as a shapefile
+  } catch {
+    return false;
+  }
+}
+
 function humanSize(bytes: number): string {
   if (bytes >= 1e6) return (bytes / 1e6).toFixed(1) + " MB";
   if (bytes >= 1e3) return (bytes / 1e3).toFixed(0) + " KB";
@@ -75,36 +94,47 @@ export default function UploadModal({ onClose, onAdd, mapId, onRasterUploaded }:
   const [dragOver, setDragOver] = useState(false);
   const inputRef = useRef<HTMLInputElement>(null);
 
-  // Route a selection: a .tif/.tiff (+ optional sidecars) goes to the raster
-  // upload (streamed to the NAS, processed server-side); anything else is a
-  // shapefile handled in the browser as before.
+  // Stream a .tif (+ optional sidecars) or a .zip holding an orthophoto to the
+  // NAS for server-side COG processing.
+  async function uploadRaster(name: string, files: File[]) {
+    if (!mapId || !onRasterUploaded) {
+      toast.error("Guarda el mapa antes de subir ortofotos.");
+      return;
+    }
+    setUploadPct(0);
+    try {
+      const manifest = await createRasterRemote(mapId, { name, files, onProgress: setUploadPct });
+      onRasterUploaded(manifest);
+      toast.success("Ortofoto subida; procesando en segundo plano…");
+      onClose();
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : "No se pudo subir la ortofoto.");
+      setUploadPct(null);
+    }
+  }
+
+  // Route a selection: a loose .tif/.tiff (+ optional sidecars) — or a .zip that
+  // contains a .tif — goes to the raster upload (streamed to the NAS, processed
+  // server-side); any other .zip/.shp is a shapefile handled in the browser.
   async function handleFiles(fileList: FileList | File[]) {
     const files = Array.from(fileList);
     if (files.length === 0) return;
+
     const main = files.find((f) => RASTER_RE.test(f.name));
     if (main) {
-      if (!mapId || !onRasterUploaded) {
-        toast.error("Guarda el mapa antes de subir ortofotos.");
-        return;
-      }
       const sidecars = files.filter((f) => f !== main && RASTER_SIDECAR_RE.test(f.name));
-      const name = main.name.replace(RASTER_RE, "");
-      setUploadPct(0);
-      try {
-        const manifest = await createRasterRemote(mapId, {
-          name,
-          files: [main, ...sidecars],
-          onProgress: setUploadPct,
-        });
-        onRasterUploaded(manifest);
-        toast.success("Ortofoto subida; procesando en segundo plano…");
-        onClose();
-      } catch (err) {
-        toast.error(err instanceof Error ? err.message : "No se pudo subir la ortofoto.");
-        setUploadPct(null);
-      }
+      await uploadRaster(main.name.replace(RASTER_RE, ""), [main, ...sidecars]);
       return;
     }
+
+    // A single .zip might be an orthophoto archive (.tif inside) rather than a
+    // shapefile — peek inside to decide.
+    const zip = files.length === 1 && /\.zip$/i.test(files[0].name) ? files[0] : null;
+    if (zip && (await isRasterZip(zip))) {
+      await uploadRaster(zip.name.replace(/\.zip$/i, ""), [zip]);
+      return;
+    }
+
     await handleFile(files[0]);
   }
 
@@ -174,7 +204,7 @@ export default function UploadModal({ onClose, onAdd, mapId, onRasterUploaded }:
         <div className="modal-head">
           <div>
             <div className="h-title">Agregar capa</div>
-            <div className="h-sub">Sube un shapefile (.zip con .shp + .shx + .dbf + .prj como mínimo) o una ortofoto</div>
+            <div className="h-sub">Sube un shapefile (.zip con .shp + .shx + .dbf + .prj como mínimo) o una ortofoto (.tif/.tiff o .zip que la contenga)</div>
           </div>
           <button className="icon-btn" onClick={onClose}><X size={14} /></button>
         </div>
@@ -224,7 +254,7 @@ export default function UploadModal({ onClose, onAdd, mapId, onRasterUploaded }:
               >
                 <div className="ic">⤓</div>
                 <div className="t">Arrastra un shapefile o una ortofoto</div>
-                <div className="s">.zip / .shp (vector) · .tif / .tiff {mapId ? "+ sidecars (.tfw/.prj)" : ""} (ráster)</div>
+                <div className="s">.zip / .shp (vector) · .tif / .tiff / .zip {mapId ? "+ sidecars (.tfw/.prj)" : ""} (ráster)</div>
               </div>
             </>
           )}

@@ -20,7 +20,9 @@ const GisEditor = dynamic(() => import("@/components/geo/gis/GisEditor"), {
 export default function GisEditorPage() {
   const { id } = useParams<{ id: string }>();
   const { user, status } = useAuth();
-  const canEdit = user?.role?.toUpperCase() === "ADMIN";
+  // Any logged-in geo user (incl. VIEWER) can edit; only ADMIN can delete layers.
+  const canEdit = !!user;
+  const canDelete = user?.role?.toUpperCase() === "ADMIN";
   const [geoMap, setGeoMap] = useState<GeoMap | null>(null);
   const [loaded, setLoaded] = useState(false);
 
@@ -61,6 +63,7 @@ export default function GisEditorPage() {
       initialCenter={geoMap?.center}
       initialZoom={geoMap?.zoom}
       canEdit={canEdit}
+      canDelete={canDelete}
     />
   );
 }

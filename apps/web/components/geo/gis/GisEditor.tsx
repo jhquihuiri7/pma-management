@@ -84,15 +84,17 @@ function defaultStyleFor(geometry: GisGeometry, index = 0): LayerStyle {
   };
 }
 
-export default function GisEditor({ mapId, mapTitle, backHref, initialCenter, initialZoom, canEdit = false }: {
+export default function GisEditor({ mapId, mapTitle, backHref, initialCenter, initialZoom, canEdit = false, canDelete = false }: {
   mapId?: string;
   mapTitle?: string;
   backHref?: string;
   initialCenter?: [number, number];
   initialZoom?: number;
-  // When false (public / non-admin viewers) the editor is read-only: no add,
-  // remove, reorder, style edits, or server persistence.
+  // When false (public visitors) the editor is read-only: no add, remove,
+  // reorder, style edits, or server persistence. Any logged-in geo user (incl.
+  // VIEWER) gets canEdit; deleting layers stays ADMIN-only via canDelete.
   canEdit?: boolean;
+  canDelete?: boolean;
 }) {
   const [layers, setLayers] = useState<GisLayer[]>([]);
   const [rasterLayers, setRasterLayers] = useState<RasterLayer[]>([]);
@@ -451,6 +453,7 @@ export default function GisEditor({ mapId, mapTitle, backHref, initialCenter, in
         onMove={moveLayer}
         onOpenUpload={() => setShowUpload(true)}
         readOnly={!canEdit}
+        canDelete={canDelete}
         rasterLayers={rasterLayers}
         onRasterChange={updateRaster}
         onRasterRemove={removeRaster}

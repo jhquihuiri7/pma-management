@@ -30,8 +30,13 @@ const createSchema = z.object({
 });
 const updateSchema = createSchema.partial();
 
-// Mutations require a logged-in ADMIN with geo access. Reads are public so the
-// Geoportal can be browsed without a session (see middleware in apps/web).
+// Reads are public so the Geoportal can be browsed without a session (see
+// middleware in apps/web). For writes we distinguish two levels:
+//   - geoEditor: create/edit content — any logged-in user with geo access
+//     (incl. VIEWER). They can add maps, GIS layers and orthophotos and edit
+//     them, but not delete.
+//   - adminOnly: destructive ops (delete) stay restricted to ADMIN.
+const geoEditor = [authenticate, requireApp("geo")];
 const adminOnly = [authenticate, requireApp("geo"), requireRole("ADMIN")];
 
 export async function geoRoutes(app: FastifyInstance) {
@@ -44,13 +49,13 @@ export async function geoRoutes(app: FastifyInstance) {
     return getMapById(id);
   });
 
-  app.post("/maps", { preHandler: adminOnly }, async (req, reply) => {
+  app.post("/maps", { preHandler: geoEditor }, async (req, reply) => {
     const body = createSchema.parse(req.body);
     reply.status(201);
     return createMap(req.user!.adminId, req.user!.sub, body);
   });
 
-  app.put("/maps/:id", { preHandler: adminOnly }, async (req) => {
+  app.put("/maps/:id", { preHandler: geoEditor }, async (req) => {
     const { id } = req.params as { id: string };
     const body = updateSchema.parse(req.body);
     return updateMap(id, req.user!.adminId, body);
@@ -92,7 +97,7 @@ export async function geoRoutes(app: FastifyInstance) {
 
   // Create a layer. Multipart: file "data" (GeoJSON, required),
   // file "source" (original .zip/.shp, optional), plus text fields.
-  app.post("/maps/:id/layers", { preHandler: adminOnly }, async (req, reply) => {
+  app.post("/maps/:id/layers", { preHandler: geoEditor }, async (req, reply) => {
     const { id } = req.params as { id: string };
     let data: Buffer | null = null;
     let source: { data: Buffer; ext: string } | null = null;
@@ -140,7 +145,7 @@ export async function geoRoutes(app: FastifyInstance) {
     return layer;
   });
 
-  app.patch("/maps/:id/layers/:layerId", { preHandler: adminOnly }, async (req) => {
+  app.patch("/maps/:id/layers/:layerId", { preHandler: geoEditor }, async (req) => {
     const { id, layerId } = req.params as { id: string; layerId: string };
     const body = updateLayerSchema.parse(req.body);
     return updateLayer(id, layerId, body);
@@ -197,11 +202,13 @@ export async function geoRoutes(app: FastifyInstance) {
     return reply.send(body);
   });
 
-  // Upload an orthophoto. Multipart: one file ".tif/.tiff" (required) plus
-  // optional sidecars (.tfw/.wld/.prj/.ovr/.cpg/.xml) and text fields (name,
-  // visible, zIndex, opacity). The .tif is streamed straight to the NAS — never
-  // buffered in memory — and a worker (Phase 4/5) turns it into a COG.
-  app.post("/maps/:id/raster-layers", { preHandler: adminOnly }, async (req, reply) => {
+  // Upload an orthophoto. Multipart: one main file — a ".tif/.tiff" or a ".zip"
+  // containing one (required) — plus optional loose sidecars
+  // (.tfw/.wld/.prj/.ovr/.cpg/.xml) and text fields (name, visible, zIndex,
+  // opacity). The file is streamed straight to the NAS — never buffered in
+  // memory — and a worker (Phase 4/5) turns it into a COG (reading inside the zip
+  // via GDAL's /vsizip/ when needed).
+  app.post("/maps/:id/raster-layers", { preHandler: geoEditor }, async (req, reply) => {
     const { id } = req.params as { id: string };
     // Validate the map exists before streaming gigabytes to the NAS.
     await getMapById(id);
@@ -255,26 +262,30 @@ export async function geoRoutes(app: FastifyInstance) {
     }
     if (rejected) {
       await cleanup();
-      throw BadRequest(`Extensión no permitida: ${rejected}. Solo .tif/.tiff (+ sidecars .tfw/.wld/.prj/.ovr/.cpg/.xml).`);
+      throw BadRequest(`Extensión no permitida: ${rejected}. Solo .tif/.tiff o un .zip que lo contenga (+ sidecars .tfw/.wld/.prj/.ovr/.cpg/.xml).`);
     }
     if (extraMain) {
       await cleanup();
-      throw BadRequest("Solo se permite un archivo .tif/.tiff por capa ráster.");
+      throw BadRequest("Solo se permite un archivo .tif/.tiff o .zip por capa ráster.");
     }
     if (!mainPath || !mainFilename) {
       await cleanup();
-      throw BadRequest('Falta el archivo .tif/.tiff (campo "file").');
+      throw BadRequest('Falta el archivo .tif/.tiff o .zip (campo "file").');
     }
 
-    // MIME hardening: the extension can lie, so confirm the bytes are a TIFF
-    // before registering the layer. (gdalinfo in the worker is the deeper check.)
-    if (!(await isTiffFile(getStorage().resolve(mainPath)))) {
+    // MIME hardening: the extension can lie, so confirm the magic bytes match the
+    // declared kind before registering the layer. For a .zip the worker's unzip +
+    // gdalinfo is the deeper check; for a .tif gdalinfo is.
+    const isZip = /\.zip$/i.test(mainFilename);
+    const absMain = getStorage().resolve(mainPath);
+    const validBytes = isZip ? await isZipFile(absMain) : await isTiffFile(absMain);
+    if (!validBytes) {
       await cleanup();
-      throw BadRequest("El archivo no es un TIFF válido (.tif/.tiff).");
+      throw BadRequest(isZip ? "El archivo no es un ZIP válido (.zip)." : "El archivo no es un TIFF válido (.tif/.tiff).");
     }
 
-    const fileType = (/\.(tiff?)$/i.exec(mainFilename)?.[1] ?? "tif").toLowerCase();
-    const name = (fields.name || "").trim() || mainFilename.replace(/\.(tiff?)$/i, "");
+    const fileType = isZip ? "zip" : (/\.(tiff?)$/i.exec(mainFilename)?.[1] ?? "tif").toLowerCase();
+    const name = (fields.name || "").trim() || mainFilename.replace(/\.(tiff?|zip)$/i, "");
 
     try {
       const layer = await createRasterLayer(id, req.user!.sub, {
@@ -308,7 +319,7 @@ export async function geoRoutes(app: FastifyInstance) {
     }
   });
 
-  app.patch("/maps/:id/raster-layers/:layerId", { preHandler: adminOnly }, async (req) => {
+  app.patch("/maps/:id/raster-layers/:layerId", { preHandler: geoEditor }, async (req) => {
     const { id, layerId } = req.params as { id: string; layerId: string };
     const body = updateRasterSchema.parse(req.body);
     return updateRasterLayer(id, layerId, body);
@@ -321,7 +332,7 @@ export async function geoRoutes(app: FastifyInstance) {
   });
 
   // Re-process a failed/stuck raster layer.
-  app.post("/maps/:id/raster-layers/:layerId/retry", { preHandler: adminOnly }, async (req) => {
+  app.post("/maps/:id/raster-layers/:layerId/retry", { preHandler: geoEditor }, async (req) => {
     const { id, layerId } = req.params as { id: string; layerId: string };
     const layer = await resetRasterForRetry(id, layerId);
     try {
@@ -356,7 +367,9 @@ const updateRasterSchema = z.object({
 // `.tif.ovr` in `.ovr`, so both are covered by the sidecar suffixes below.
 function classifyRasterFile(filename: string): "main" | "sidecar" | null {
   const f = filename.toLowerCase();
-  if (/\.tiff?$/.test(f)) return "main";
+  // A .tif is the orthophoto itself; a .zip is an archive holding the .tif (+ its
+  // sidecars) — the worker reads it via GDAL's /vsizip/ virtual filesystem.
+  if (/\.(tiff?|zip)$/.test(f)) return "main";
   if (/\.(tfw|wld|prj|ovr|cpg|tab|xml)$/.test(f)) return "sidecar";
   return null;
 }
@@ -370,6 +383,23 @@ function drain(stream: NodeJS.ReadableStream): Promise<void> {
     stream.on("error", reject);
     stream.resume();
   });
+}
+
+// ZIP magic numbers: "PK\x03\x04" (local file header) or "PK\x05\x06" (empty
+// archive — End Of Central Directory with no entries).
+async function isZipFile(absPath: string): Promise<boolean> {
+  let fh: Awaited<ReturnType<typeof open>> | null = null;
+  try {
+    fh = await open(absPath, "r");
+    const buf = Buffer.alloc(4);
+    const { bytesRead } = await fh.read(buf, 0, 4, 0);
+    if (bytesRead < 4) return false;
+    return buf[0] === 0x50 && buf[1] === 0x4b && (buf[2] === 0x03 || buf[2] === 0x05) && (buf[3] === 0x04 || buf[3] === 0x06);
+  } catch {
+    return false;
+  } finally {
+    await fh?.close();
+  }
 }
 
 // TIFF magic numbers: "II*\0" / "MM\0*" (classic) and the 43-variant (BigTIFF).

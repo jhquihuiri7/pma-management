@@ -57,7 +57,8 @@ SMTP_HOST=
 SMTP_PORT=587
 SMTP_USER=
 SMTP_PASS=
-SMTP_FROM="PMA Management <no-reply@example.com>"
+# Debe ser una identidad verificada en SES (dominio o correo verificado).
+SMTP_FROM="PMA Management <no-reply@tudominio.com>"
 ```
 
 Generar secretos seguros para producción:
@@ -164,13 +165,18 @@ DB_PASSWORD=cambia_esto_en_produccion
 JWT_ACCESS_SECRET=<openssl rand -base64 48>
 JWT_REFRESH_SECRET=<openssl rand -base64 48>
 
-FRONTEND_ORIGIN=http://localhost:8000
-STORAGE_PUBLIC_BASE_URL=http://localhost:3001/storage
-COOKIE_SECURE=false
+FRONTEND_ORIGIN=https://sigtar.gobiernogalapagos.gob.ec
+STORAGE_PUBLIC_BASE_URL=https://sigtar.gobiernogalapagos.gob.ec/storage
+COOKIE_SECURE=true
+
+NGINX_HTTP_PORT=80
+NGINX_HTTPS_PORT=443
+NGINX_SSL_CERT_DIR=/etc/ssl/cgreg
 ```
 
-En producción con HTTPS, usar `COOKIE_SECURE=true` y ajustar `FRONTEND_ORIGIN` /
-`STORAGE_PUBLIC_BASE_URL` al dominio público real.
+El contenedor de Nginx monta los certificados desde `NGINX_SSL_CERT_DIR`.
+Para `sigtar.gobiernogalapagos.gob.ec` espera estos archivos en el servidor:
+`star_gobiernogalapagos_gob_ec.crt` y `gobiernogalapagos_wildcard.key`.
 
 ### Levantar todos los servicios
 
@@ -180,9 +186,15 @@ docker compose up -d
 
 | Servicio    | URL                        |
 |-------------|----------------------------|
-| Web         | http://localhost:8000      |
+| Nginx HTTPS | https://sigtar.gobiernogalapagos.gob.ec |
+| Web local   | http://localhost:8000      |
 | API         | http://localhost:3001      |
 | PostgreSQL  | localhost:5432             |
+
+`./deploy.sh up` ejecuta el mismo compose de producción y levanta Nginx junto
+con web, api, postgres, worker y titiler. Si el Nginx del host sigue usando los
+puertos 80/443, detenerlo antes de levantar el contenedor o cambiar
+`NGINX_HTTP_PORT` / `NGINX_HTTPS_PORT`.
 
 ### Ejecutar migraciones en el contenedor
 

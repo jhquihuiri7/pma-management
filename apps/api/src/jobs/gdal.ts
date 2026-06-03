@@ -22,6 +22,53 @@ export interface GdalInfo {
   bbox4326: [number, number, number, number] | null;
 }
 
+/** List file entries (paths) inside a .zip with the `unzip` CLI (zipinfo -1). */
+function listZipEntries(absZip: string, logPath: string): Promise<string[]> {
+  return new Promise((resolve, reject) => {
+    appendFile(logPath, `\n${new Date().toISOString()} $ unzip -Z1 ${absZip}\n`).catch(() => {});
+    const child = spawn("unzip", ["-Z1", absZip]);
+    let stdout = "";
+    let stderr = "";
+    child.stdout.on("data", (d) => { stdout += d.toString(); });
+    child.stderr.on("data", (d) => { stderr += d.toString(); });
+    child.on("error", reject); // ENOENT => `unzip` not in the worker image
+    child.on("close", (code) => {
+      if (stderr) appendFile(logPath, `[stderr] ${stderr}\n`).catch(() => {});
+      if (code === 0) resolve(stdout.split("\n").map((s) => s.trim()).filter(Boolean));
+      else reject(new Error(`unzip exited with code ${code}: ${stderr.slice(0, 500)}`));
+    });
+  });
+}
+
+export type GdalInputResult =
+  | { ok: true; path: string }
+  | { ok: false; message: string };
+
+/**
+ * Resolve the path GDAL should open for a given upload. A plain GeoTIFF is opened
+ * directly; a .zip is opened through GDAL's /vsizip/ virtual filesystem pointed at
+ * the single .tif/.tiff inside it (GDAL then reads any sibling .tfw/.prj sidecars
+ * from the archive too). Returns a handled error message — not a throw — when the
+ * zip has zero or multiple rasters, so the caller can mark the row 'error' without
+ * a pg-boss retry.
+ */
+export async function resolveGdalInput(
+  absInput: string,
+  originalFilename: string,
+  logPath: string,
+): Promise<GdalInputResult> {
+  if (!/\.zip$/i.test(originalFilename)) return { ok: true, path: absInput };
+  const entries = await listZipEntries(absInput, logPath);
+  const tifs = entries.filter((e) => /\.tiff?$/i.test(e));
+  if (tifs.length === 0) {
+    return { ok: false, message: "El ZIP no contiene ningún archivo .tif/.tiff." };
+  }
+  if (tifs.length > 1) {
+    return { ok: false, message: `El ZIP contiene varias ortofotos (${tifs.length} archivos .tif). Sube un ZIP con una sola.` };
+  }
+  return { ok: true, path: `/vsizip/${absInput}/${tifs[0]}` };
+}
+
 async function runGdal(bin: string, args: string[], logPath: string): Promise<string> {
   await appendFile(logPath, `\n${new Date().toISOString()} $ ${bin} ${args.join(" ")}\n`).catch(() => {});
   return new Promise<string>((resolve, reject) => {

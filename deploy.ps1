@@ -13,9 +13,10 @@ switch($action) {
         Write-Host "✅ Servicios levantados" -ForegroundColor Green
         Write-Host ""
         Write-Host "Acceso:" -ForegroundColor Cyan
-        Write-Host "  Web:      http://localhost:8000" -ForegroundColor White
-        Write-Host "  API:      http://localhost:3001" -ForegroundColor White
-        Write-Host "  Database: localhost:5432" -ForegroundColor White
+        Write-Host "  Web HTTPS: https://sigtar.gobiernogalapagos.gob.ec" -ForegroundColor White
+        Write-Host "  Web local: http://localhost:8000" -ForegroundColor White
+        Write-Host "  API local: http://localhost:3001" -ForegroundColor White
+        Write-Host "  Database:  localhost:5432" -ForegroundColor White
     }
 
     'down' {

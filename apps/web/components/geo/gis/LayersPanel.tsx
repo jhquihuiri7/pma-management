@@ -15,8 +15,8 @@ const RASTER_STATUS: Record<RasterStatus, { text: string; color: string }> = {
 };
 
 // One orthophoto row: status badge, opacity (when ready), retry (on error).
-function RasterItem({ layer, readOnly, onChange, onRemove, onRetry }: {
-  layer: RasterLayer; readOnly?: boolean;
+function RasterItem({ layer, readOnly, canDelete, onChange, onRemove, onRetry }: {
+  layer: RasterLayer; readOnly?: boolean; canDelete?: boolean;
   onChange: (l: RasterLayer) => void; onRemove: () => void; onRetry: () => void;
 }) {
   const st = RASTER_STATUS[layer.status];
@@ -47,7 +47,9 @@ function RasterItem({ layer, readOnly, onChange, onRemove, onRetry }: {
             {layer.status === "error" && (
               <button className="icon-btn" data-tip="Reintentar" onClick={onRetry}><RotateCcw size={13} /></button>
             )}
-            <button className="icon-btn" data-tip="Eliminar" onClick={onRemove}><Trash2 size={13} /></button>
+            {canDelete && (
+              <button className="icon-btn" data-tip="Eliminar" onClick={onRemove}><Trash2 size={13} /></button>
+            )}
           </div>
         )}
       </div>
@@ -213,8 +215,8 @@ function StyleEditor({ layer, onChange }: { layer: GisLayer; onChange: (l: GisLa
   );
 }
 
-function LayerItem({ layer, active, isFirst, isLast, readOnly, onClick, onChange, onRemove, onMove }: {
-  layer: GisLayer; active: boolean; isFirst: boolean; isLast: boolean; readOnly?: boolean;
+function LayerItem({ layer, active, isFirst, isLast, readOnly, canDelete, onClick, onChange, onRemove, onMove }: {
+  layer: GisLayer; active: boolean; isFirst: boolean; isLast: boolean; readOnly?: boolean; canDelete?: boolean;
   onClick: () => void; onChange: (l: GisLayer) => void; onRemove: () => void; onMove: (d: number) => void;
 }) {
   const [expanded, setExpanded] = useState(active);
@@ -248,7 +250,9 @@ function LayerItem({ layer, active, isFirst, isLast, readOnly, onClick, onChange
           <div className="layer-actions" onClick={(e) => e.stopPropagation()}>
             <button className="icon-btn" data-tip="Subir" disabled={isFirst} onClick={() => onMove(-1)} style={{ opacity: isFirst ? 0.4 : 1 }}>▲</button>
             <button className="icon-btn" data-tip="Bajar" disabled={isLast} onClick={() => onMove(1)} style={{ opacity: isLast ? 0.4 : 1 }}>▼</button>
-            <button className="icon-btn" data-tip="Eliminar" onClick={onRemove}><Trash2 size={13} /></button>
+            {canDelete && (
+              <button className="icon-btn" data-tip="Eliminar" onClick={onRemove}><Trash2 size={13} /></button>
+            )}
             <button className="icon-btn" data-tip={expanded ? "Cerrar" : "Estilos"} onClick={() => setExpanded(!expanded)}>
               <ChevronRight size={13} style={{ transform: expanded ? "rotate(90deg)" : "none", transition: "transform 0.15s" }} />
             </button>
@@ -266,7 +270,7 @@ function LayerItem({ layer, active, isFirst, isLast, readOnly, onClick, onChange
 }
 
 export default function LayersPanel({
-  layers, activeId, onActive, onChange, onRemove, onMove, onOpenUpload, readOnly,
+  layers, activeId, onActive, onChange, onRemove, onMove, onOpenUpload, readOnly, canDelete,
   rasterLayers = [], onRasterChange, onRasterRemove, onRasterRetry,
 }: {
   layers: GisLayer[];
@@ -277,6 +281,8 @@ export default function LayersPanel({
   onMove: (id: string, dir: number) => void;
   onOpenUpload: () => void;
   readOnly?: boolean;
+  /** Delete buttons are gated separately: only ADMIN may delete layers. */
+  canDelete?: boolean;
   rasterLayers?: RasterLayer[];
   onRasterChange?: (l: RasterLayer) => void;
   onRasterRemove?: (id: string) => void;
@@ -315,6 +321,7 @@ export default function LayersPanel({
             isFirst={idx === 0}
             isLast={idx === layers.length - 1}
             readOnly={readOnly}
+            canDelete={canDelete}
             onClick={() => onActive(layer.id)}
             onChange={onChange}
             onRemove={() => onRemove(layer.id)}
@@ -333,6 +340,7 @@ export default function LayersPanel({
               key={r.id}
               layer={r}
               readOnly={readOnly}
+              canDelete={canDelete}
               onChange={(l) => onRasterChange?.(l)}
               onRemove={() => onRasterRemove?.(r.id)}
               onRetry={() => onRasterRetry?.(r.id)}

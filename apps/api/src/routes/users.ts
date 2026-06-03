@@ -28,6 +28,7 @@ const updateSchema = z.object({
   name: z.string().min(1).optional(),
   unit: z.string().nullable().optional(),
   position: z.string().nullable().optional(),
+  role: z.enum(["ADMIN", "REPORTER", "VIEWER"]).optional(),
 });
 
 const assignAppSchema = z.object({
@@ -58,7 +59,7 @@ export async function usersRoutes(app: FastifyInstance) {
   app.put("/:id", async (req) => {
     const { id } = req.params as { id: string };
     const body = updateSchema.parse(req.body);
-    await updateManagedUser(id, body);
+    await updateManagedUser(id, body, req.user!.sub);
     return { ok: true };
   });
 

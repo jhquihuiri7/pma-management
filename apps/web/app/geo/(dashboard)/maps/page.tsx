@@ -14,7 +14,9 @@ import GeoMapCard from "@/components/geo/GeoMapCard";
 
 export default function MapsPage() {
   const { user: session} = useAuth();
-  const isAdmin = session?.role === "ADMIN";
+  // Any logged-in geo user (incl. VIEWER) can create/edit; only ADMIN can delete.
+  const canEdit = !!session;
+  const canDelete = session?.role === "ADMIN";
 
   const [maps, setMaps] = useState<GeoMap[]>([]);
   const [search, setSearch] = useState("");
@@ -68,7 +70,7 @@ export default function MapsPage() {
             {maps.length} mapas disponibles en el geoportal
           </p>
         </div>
-        {isAdmin && <AddMapDialog onAdd={handleAdd} />}
+        {canEdit && <AddMapDialog onAdd={handleAdd} />}
       </div>
 
       {/* Filters */}
@@ -125,7 +127,8 @@ export default function MapsPage() {
             <GeoMapCard
               key={m.id}
               geoMap={m}
-              isAdmin={isAdmin}
+              canEdit={canEdit}
+              canDelete={canDelete}
               onEdit={handleEdit}
               onDelete={handleDelete}
             />

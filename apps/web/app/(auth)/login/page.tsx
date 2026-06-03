@@ -107,7 +107,7 @@ function LoginForm() {
               href="/forgot-password"
               className="text-sm text-muted-foreground hover:text-slate-900 underline-offset-4 hover:underline"
             >
-              ¿Olvidaste tu contraseña?
+              Olvidé mi contraseña
             </a>
           </div>
         </form>

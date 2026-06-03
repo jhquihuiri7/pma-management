@@ -53,7 +53,12 @@ export default function AdminUsersPage() {
   const [editUser, setEditUser] = useState<User | null>(null);
   const [loading, setLoading] = useState(false);
   const [form, setForm] = useState(emptyForm);
-  const [editForm, setEditForm] = useState({ name: "", unit: "", position: "" });
+  const [editForm, setEditForm] = useState({
+    name: "",
+    unit: "",
+    position: "",
+    role: "REPORTER" as "ADMIN" | "REPORTER" | "VIEWER",
+  });
 
   async function loadUsers() {
     try {
@@ -105,6 +110,7 @@ export default function AdminUsersPage() {
         name: editForm.name || undefined,
         unit: editForm.unit || null,
         position: editForm.position || null,
+        role: editForm.role,
       });
       toast.success("Usuario actualizado");
       setEditUser(null);
@@ -156,7 +162,12 @@ export default function AdminUsersPage() {
 
   function openEdit(user: User) {
     setEditUser(user);
-    setEditForm({ name: user.name, unit: user.unit || "", position: user.position || "" });
+    setEditForm({
+      name: user.name,
+      unit: user.unit || "",
+      position: user.position || "",
+      role: user.role,
+    });
   }
 
   const admins = users.filter((u) => u.role === "ADMIN");
@@ -408,6 +419,25 @@ export default function AdminUsersPage() {
             <DialogTitle>Editar Usuario</DialogTitle>
           </DialogHeader>
           <form onSubmit={handleEdit} className="space-y-4 mt-2">
+            <div className="space-y-2">
+              <Label>Tipo de usuario</Label>
+              <div className="flex rounded-lg bg-slate-100 p-1">
+                {(["ADMIN", "REPORTER", "VIEWER"] as const).map((r) => (
+                  <button key={r} type="button"
+                    disabled={editUser?.id === session?.id}
+                    className={`flex-1 py-2 text-sm font-medium rounded-md transition-colors ${
+                      editForm.role === r ? "bg-white shadow-sm text-slate-900" : "text-slate-500 hover:text-slate-700"
+                    } disabled:opacity-60 disabled:cursor-not-allowed`}
+                    onClick={() => setEditForm({ ...editForm, role: r })}
+                  >
+                    {r === "ADMIN" ? "Administrador" : r === "REPORTER" ? "Reportero" : "Visualizador"}
+                  </button>
+                ))}
+              </div>
+              {editUser?.id === session?.id && (
+                <p className="text-xs text-muted-foreground">No puedes cambiar tu propio rol.</p>
+              )}
+            </div>
             <div className="space-y-2">
               <Label htmlFor="edit-name">Nombre Completo</Label>
               <Input id="edit-name" value={editForm.name} required

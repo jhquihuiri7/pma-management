@@ -27,6 +27,15 @@ const AUTH_PATHS = [
   "/set-password",
 ];
 
+// Token-based pages from invitation/recovery emails. These must always render
+// their form — even when the browser already carries a session cookie — so the
+// user can complete the set/reset flow instead of being bounced into the app.
+const TOKEN_PATHS = ["/reset-password", "/set-password"];
+
+function isTokenPath(pathname: string) {
+  return matchesPrefix(pathname, TOKEN_PATHS);
+}
+
 // Sections browsable without a session. The Geoportal is public in read-only
 // mode; edit/delete/add controls are gated client-side and on the API by role.
 const PUBLIC_PATHS = ["/geo"];
@@ -49,6 +58,9 @@ export default function middleware(req: NextRequest) {
   const onAuthPath = isAuthPath(pathname);
 
   if (hasCookie) {
+    // Token-based set/reset pages always render so the email link works even
+    // while another session is active in the same browser.
+    if (isTokenPath(pathname)) return NextResponse.next();
     // Logged in: the landing route and the auth pages all funnel to select-app.
     if (pathname === "/" || onAuthPath) {
       return NextResponse.redirect(new URL("/select-app", req.url));
