@@ -19,8 +19,10 @@ import { BASEMAPS, BASEMAP_PREVIEWS, COLOR_RAMPS } from "./gis-data";
 import {
   fetchLayers, fetchLayerData, createLayerRemote, updateLayerRemote, deleteLayerRemote,
   saveViewport, bboxOf, humanSize, type LayerManifest,
+  fetchRasterLayers, rasterTileUrl, updateRasterRemote, deleteRasterRemote, retryRasterRemote,
+  type RasterLayerManifest,
 } from "./persistence";
-import type { AddLayerInput, GisGeometry, GisLayer, IdentifyInfo, FocusFeature, LayerStyle } from "./types";
+import type { AddLayerInput, GisGeometry, GisLayer, RasterLayer, IdentifyInfo, FocusFeature, LayerStyle } from "./types";
 import "./gis.css";
 
 function manifestToLayer(m: LayerManifest, geojson: FeatureCollection): GisLayer {
@@ -37,6 +39,31 @@ function manifestToLayer(m: LayerManifest, geojson: FeatureCollection): GisLayer
     zIndex: m.zIndex,
     persisted: true,
   };
+}
+
+function manifestToRaster(m: RasterLayerManifest, mapId: string): RasterLayer {
+  return {
+    id: m.id,
+    name: m.name,
+    status: m.status,
+    errorMessage: m.errorMessage,
+    opacity: m.opacity,
+    visible: m.visible,
+    zIndex: m.zIndex,
+    bbox: m.bbox,
+    tileUrl: rasterTileUrl(mapId, m.id),
+  };
+}
+
+// Refresh worker-controlled fields (status/error/bbox) from the server while
+// keeping the user's local presentation (opacity/visible) that's debounce-saved.
+function mergeRasters(prev: RasterLayer[], manifests: RasterLayerManifest[], mapId: string): RasterLayer[] {
+  const byId = new Map(prev.map((r) => [r.id, r]));
+  return manifests.map((m) => {
+    const base = manifestToRaster(m, mapId);
+    const p = byId.get(m.id);
+    return p ? { ...base, opacity: p.opacity, visible: p.visible, zIndex: p.zIndex } : base;
+  });
 }
 
 function defaultStyleFor(geometry: GisGeometry, index = 0): LayerStyle {
@@ -68,6 +95,7 @@ export default function GisEditor({ mapId, mapTitle, backHref, initialCenter, in
   canEdit?: boolean;
 }) {
   const [layers, setLayers] = useState<GisLayer[]>([]);
+  const [rasterLayers, setRasterLayers] = useState<RasterLayer[]>([]);
   const [activeLayerId, setActiveLayerId] = useState<string | null>(null);
   const [basemap, setBasemap] = useState("light");
   const [tool, setTool] = useState<"pan" | "identify" | "measure" | "inspect">("pan");
@@ -88,6 +116,7 @@ export default function GisEditor({ mapId, mapTitle, backHref, initialCenter, in
   const [hydrated, setHydrated] = useState(false);
   const [saveState, setSaveState] = useState<"idle" | "saving" | "saved" | "error">("idle");
   const saveTimers = useRef<Record<string, ReturnType<typeof setTimeout>>>({});
+  const rasterSaveTimers = useRef<Record<string, ReturnType<typeof setTimeout>>>({});
   // Auto-fit happens once (first layer of an empty map); a remembered viewport
   // or any user pan/zoom disables it so the view is never yanked around.
   const hasAutoFitted = useRef(false);
@@ -122,6 +151,14 @@ export default function GisEditor({ mapId, mapTitle, backHref, initialCenter, in
           // Map opened with layers → respect the remembered viewport, never auto-fit.
           hasAutoFitted.current = true;
         }
+        // Raster (orthophoto) layers render independently, below the vectors.
+        try {
+          const rasters = await fetchRasterLayers(mapId);
+          if (!cancelled && rasters.length) {
+            setRasterLayers(rasters.map((m) => manifestToRaster(m, mapId)));
+            if (rasters.some((r) => r.status === "processed")) hasAutoFitted.current = true;
+          }
+        } catch { /* no rasters / offline */ }
       } catch { /* offline / no API → behave like a fresh editor */ }
       if (!cancelled) setHydrated(true);
     })();
@@ -175,10 +212,6 @@ export default function GisEditor({ mapId, mapTitle, backHref, initialCenter, in
   const activeLayer = layers.find((l) => l.id === activeLayerId);
 
   const addLayer = async (ds: AddLayerInput) => {
-    if (ds.id) {
-      const existing = layers.find((l) => l.sampleId === ds.id);
-      if (existing) { setActiveLayerId(existing.id); return; }
-    }
     const idx = layers.length;
     const wasEmpty = layers.length === 0;
     const style = defaultStyleFor(ds.geometry, idx);
@@ -222,7 +255,7 @@ export default function GisEditor({ mapId, mapTitle, backHref, initialCenter, in
     // Local-only fallback (no map id, or save failed).
     const id = "layer_" + Date.now() + "_" + Math.round(Math.random() * 1e4);
     const layer: GisLayer = {
-      id, sampleId: ds.id, name: ds.name, filename: ds.filename, geometry: ds.geometry,
+      id, name: ds.name, filename: ds.filename, geometry: ds.geometry,
       geojson: ds.geojson, size: ds.size, crs: ds.crs, visible: true, loadedAt: Date.now(),
       style, zIndex, persisted: false,
     };
@@ -261,6 +294,55 @@ export default function GisEditor({ mapId, mapTitle, backHref, initialCenter, in
       return next;
     });
   };
+
+  // ── Raster (orthophoto) layer handlers ───────────────────────────────────
+  const handleRasterUploaded = (m: RasterLayerManifest) => {
+    if (!mapId) return;
+    setRasterLayers((prev) => [manifestToRaster(m, mapId), ...prev.filter((r) => r.id !== m.id)]);
+  };
+
+  const updateRaster = (next: RasterLayer) => {
+    setRasterLayers((prev) => prev.map((r) => (r.id === next.id ? next : r)));
+    if (!mapId || !canEdit) return;
+    clearTimeout(rasterSaveTimers.current[next.id]);
+    setSaveState("saving");
+    rasterSaveTimers.current[next.id] = setTimeout(async () => {
+      try {
+        await updateRasterRemote(mapId, next.id, {
+          name: next.name, opacity: next.opacity, visible: next.visible, zIndex: next.zIndex,
+        });
+        setSaveState("saved");
+      } catch {
+        setSaveState("error");
+      }
+    }, 600);
+  };
+
+  const removeRaster = (id: string) => {
+    setRasterLayers((prev) => prev.filter((r) => r.id !== id));
+    if (mapId) deleteRasterRemote(mapId, id).catch(() => toast.error("No se pudo eliminar la ortofoto en el servidor."));
+  };
+
+  const retryRaster = (id: string) => {
+    if (!mapId) return;
+    retryRasterRemote(mapId, id)
+      .then((m) => setRasterLayers((prev) => prev.map((r) => (r.id === id ? { ...r, status: m.status, errorMessage: m.errorMessage } : r))))
+      .catch(() => toast.error("No se pudo reintentar el procesamiento."));
+  };
+
+  // Poll while any orthophoto is still uploading/processing, so the panel and
+  // map update when the worker finishes (or fails). Stops once nothing pends.
+  const hasPendingRaster = rasterLayers.some((r) => r.status === "uploaded" || r.status === "processing");
+  useEffect(() => {
+    if (!mapId || !hasPendingRaster) return;
+    const t = setInterval(async () => {
+      try {
+        const manifests = await fetchRasterLayers(mapId);
+        setRasterLayers((prev) => mergeRasters(prev, manifests, mapId));
+      } catch { /* transient — keep polling */ }
+    }, 3000);
+    return () => clearInterval(t);
+  }, [mapId, hasPendingRaster]);
 
   const handleIdentify = (info: IdentifyInfo) => {
     setIdentify(info);
@@ -369,12 +451,17 @@ export default function GisEditor({ mapId, mapTitle, backHref, initialCenter, in
         onMove={moveLayer}
         onOpenUpload={() => setShowUpload(true)}
         readOnly={!canEdit}
+        rasterLayers={rasterLayers}
+        onRasterChange={updateRaster}
+        onRasterRemove={removeRaster}
+        onRasterRetry={retryRaster}
       />
 
       {/* MAP AREA */}
       <div className="map-area">
         <GisMap
           layers={layers}
+          rasterLayers={rasterLayers}
           basemap={basemap}
           tool={tool}
           initialCenter={initialCenter}
@@ -474,7 +561,8 @@ export default function GisEditor({ mapId, mapTitle, backHref, initialCenter, in
         <UploadModal
           onClose={() => setShowUpload(false)}
           onAdd={addLayer}
-          alreadyAdded={layers.map((l) => l.sampleId).filter(Boolean) as string[]}
+          mapId={mapId}
+          onRasterUploaded={handleRasterUploaded}
         />
       )}
     </div>

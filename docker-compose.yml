@@ -32,6 +32,11 @@ services:
       STORAGE_ROOT: /data/storage
       STORAGE_PUBLIC_BASE_URL: ${STORAGE_PUBLIC_BASE_URL:-http://localhost:3001/storage}
       COOKIE_SECURE: ${COOKIE_SECURE:-false}
+      SMTP_HOST: ${SMTP_HOST:-}
+      SMTP_PORT: ${SMTP_PORT:-587}
+      SMTP_USER: ${SMTP_USER:-}
+      SMTP_PASS: ${SMTP_PASS:-}
+      SMTP_FROM: ${SMTP_FROM:-PMA Management <no-reply@example.com>}
     ports:
       - "3001:3001"
     volumes:
@@ -55,6 +60,47 @@ services:
       - "8000:3000"
     depends_on:
       - api
+    restart: unless-stopped
+
+  # Raster processing worker — Node + GDAL (apps/api/Dockerfile.worker). Shares
+  # the same NAS mount as the API and pulls jobs from pg-boss (in Postgres).
+  # JWT secrets are passed only to satisfy the shared env validation (the worker
+  # does no auth). Keep the image tag distinct from dev (pma-management/worker:dev).
+  worker:
+    image: pma-management/worker:prod
+    build:
+      context: .
+      dockerfile: apps/api/Dockerfile.worker
+    container_name: pma-worker
+    environment:
+      NODE_ENV: production
+      DATABASE_URL: postgresql://${DB_USER:-postgres}:${DB_PASSWORD:-postgres}@postgres:5432/${DB_NAME:-pma_db}
+      STORAGE_ROOT: /data/storage
+      JWT_ACCESS_SECRET: ${JWT_ACCESS_SECRET:?JWT_ACCESS_SECRET is required}
+      JWT_REFRESH_SECRET: ${JWT_REFRESH_SECRET:?JWT_REFRESH_SECRET is required}
+      GDAL_CACHEMAX: ${GDAL_CACHEMAX:-1024}
+      WORKER_CONCURRENCY: ${WORKER_CONCURRENCY:-1}
+      RASTER_KEEP_ORIGINAL: ${RASTER_KEEP_ORIGINAL:-true}
+    volumes:
+      - /mnt/synology_smb/sistema-ambiental:/data/storage
+    depends_on:
+      postgres:
+        condition: service_healthy
+    restart: unless-stopped
+
+  # Internal COG tile server. Deliberately has NO published port: only the API
+  # (same compose network) reaches it, and the API injects the file path — so
+  # TiTiler can never be driven to read arbitrary files from the browser. NAS is
+  # mounted read-only.
+  titiler:
+    image: ghcr.io/developmentseed/titiler:0.19.2
+    container_name: pma-titiler
+    environment:
+      PORT: "8000"
+      GDAL_DISABLE_READDIR_ON_OPEN: "EMPTY_DIR"
+      GDAL_CACHEMAX: "200"
+    volumes:
+      - /mnt/synology_smb/sistema-ambiental:/data/storage:ro
     restart: unless-stopped
 
 volumes:

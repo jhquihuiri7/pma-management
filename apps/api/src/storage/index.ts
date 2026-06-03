@@ -2,6 +2,13 @@ export interface StorageProvider {
   /** Write a file at the given storage-relative path. Creates parent dirs. */
   upload(args: { path: string; data: Buffer | Uint8Array; contentType?: string }): Promise<void>;
 
+  /**
+   * Write a file by streaming from a Readable, never buffering the whole payload
+   * in memory. For large uploads (orthophotos of several GB). Creates parent
+   * dirs and returns the number of bytes written.
+   */
+  uploadStream(path: string, readable: NodeJS.ReadableStream): Promise<number>;
+
   /** Read a file from the storage-relative path. */
   download(path: string): Promise<Buffer>;
 
@@ -19,6 +26,14 @@ export interface StorageProvider {
 
   /** Get a public URL for the file (proxied through the API). */
   getUrl(path: string): string;
+
+  /**
+   * Resolve a storage-relative path to an absolute filesystem path, applying the
+   * same traversal guard as every other method. The worker needs this to hand
+   * real paths to GDAL (which can't speak the storage abstraction). Only the
+   * worker/API — never the browser — sees these paths.
+   */
+  resolve(path: string): string;
 
   /** Move/rename a file or directory inside storage. */
   move(fromPath: string, toPath: string): Promise<void>;
@@ -88,6 +103,43 @@ export function buildGeoLayerDataPath(mapId: string, layerId: string): string {
 export function buildGeoLayerSourcePath(mapId: string, layerId: string, ext: string): string {
   const clean = ext.replace(/[^a-z0-9]/gi, "").toLowerCase() || "bin";
   return `${buildGeoLayerDir(mapId, layerId)}/source.${clean}`;
+}
+
+/**
+ * Storage layout for raster layers (orthophotos). Like the vector helpers above,
+ * every path is keyed by map/layer UUIDs (never user-supplied strings) so it is
+ * inherently traversal-safe. The user-supplied original filename is the only
+ * free-form segment and is sanitized with safeFileName().
+ *
+ *   GEO/maps/{mapId}/rasters/{rasterLayerId}/original/<name>.tif   uploaded original (+ sidecars)
+ *   GEO/maps/{mapId}/rasters/{rasterLayerId}/cog/cog.tif           generated COG (TiTiler reads this)
+ *   GEO/maps/{mapId}/rasters/{rasterLayerId}/tmp/                  transient processing scratch
+ *   GEO/maps/{mapId}/rasters/{rasterLayerId}/processing.log        GDAL stdout/stderr
+ */
+export function buildGeoRasterDir(mapId: string, rasterLayerId: string): string {
+  return `${buildGeoMapDir(mapId)}/rasters/${rasterLayerId}`;
+}
+
+export function buildGeoRasterOriginalDir(mapId: string, rasterLayerId: string): string {
+  return `${buildGeoRasterDir(mapId, rasterLayerId)}/original`;
+}
+
+/** Path to the uploaded original. Sidecars (.tfw/.prj/...) are stored in the same dir. */
+export function buildGeoRasterOriginalPath(mapId: string, rasterLayerId: string, fileName: string): string {
+  return `${buildGeoRasterOriginalDir(mapId, rasterLayerId)}/${safeFileName(fileName)}`;
+}
+
+/** Path to the generated COG. Fixed name (no user input) so it is always traversal-safe. */
+export function buildGeoRasterCogPath(mapId: string, rasterLayerId: string): string {
+  return `${buildGeoRasterDir(mapId, rasterLayerId)}/cog/cog.tif`;
+}
+
+export function buildGeoRasterTmpDir(mapId: string, rasterLayerId: string): string {
+  return `${buildGeoRasterDir(mapId, rasterLayerId)}/tmp`;
+}
+
+export function buildGeoRasterLogPath(mapId: string, rasterLayerId: string): string {
+  return `${buildGeoRasterDir(mapId, rasterLayerId)}/processing.log`;
 }
 
 export function buildFormatPath(args: {

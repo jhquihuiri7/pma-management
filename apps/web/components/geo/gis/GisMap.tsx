@@ -4,7 +4,7 @@ import { useEffect, useRef } from "react";
 import L from "leaflet";
 import "leaflet/dist/leaflet.css";
 import { BASEMAPS, COLOR_RAMPS } from "./gis-data";
-import type { GisLayer, IdentifyInfo, FocusFeature } from "./types";
+import type { GisLayer, RasterLayer, IdentifyInfo, FocusFeature } from "./types";
 
 type ColorFn = (props: Record<string, unknown>) => string;
 
@@ -80,6 +80,7 @@ function pathStyleFor(layer: GisLayer, colorFn: ColorFn) {
 
 interface Props {
   layers: GisLayer[];
+  rasterLayers?: RasterLayer[];
   basemap: string;
   tool?: "pan" | "identify" | "measure" | "inspect";
   initialCenter?: [number, number];
@@ -93,11 +94,12 @@ interface Props {
   onMapReady?: (map: L.Map) => void;
 }
 
-export default function GisMap({ layers, basemap, tool = "pan", initialCenter, initialZoom, onIdentify, onCoordChange, onViewportChange, onPointInspect, inspectPoint, focusFeature, onMapReady }: Props) {
+export default function GisMap({ layers, rasterLayers, basemap, tool = "pan", initialCenter, initialZoom, onIdentify, onCoordChange, onViewportChange, onPointInspect, inspectPoint, focusFeature, onMapReady }: Props) {
   const mapRef = useRef<L.Map | null>(null);
   const containerRef = useRef<HTMLDivElement | null>(null);
   const basemapRef = useRef<L.TileLayer | null>(null);
   const layerRefs = useRef<Map<string, LayerRef>>(new Map());
+  const rasterRefs = useRef<Map<string, L.TileLayer>>(new Map());
   const labelLayerRef = useRef<L.FeatureGroup | null>(null);
   const inspectMarkerRef = useRef<L.Marker | null>(null);
   const cbRef = useRef({ onIdentify, onCoordChange, onMapReady, onViewportChange, onPointInspect, tool });
@@ -116,6 +118,14 @@ export default function GisMap({ layers, basemap, tool = "pan", initialCenter, i
 
     const base = BASEMAPS[basemap];
     basemapRef.current = L.tileLayer(base.url, { attribution: base.attribution, maxZoom: 19 }).addTo(map);
+
+    // Dedicated pane for raster tiles, between the basemap (tilePane, z=200) and
+    // the vector overlays (overlayPane, z=400) — so orthophotos always sit under
+    // shapefiles/points/lines regardless of add order.
+    map.createPane("rasters");
+    const rasterPane = map.getPane("rasters");
+    if (rasterPane) rasterPane.style.zIndex = "250";
+
     labelLayerRef.current = L.featureGroup().addTo(map);
 
     map.on("mousemove", (e: L.LeafletMouseEvent) => cbRef.current.onCoordChange?.([e.latlng.lat, e.latlng.lng]));
@@ -147,6 +157,39 @@ export default function GisMap({ layers, basemap, tool = "pan", initialCenter, i
     basemapRef.current = L.tileLayer(base.url, { attribution: base.attribution, maxZoom: 19 }).addTo(map);
     if (basemapRef.current.bringToBack) basemapRef.current.bringToBack();
   }, [basemap]);
+
+  // Reconcile raster (orthophoto) tile layers. Only 'processed' + visible layers
+  // are drawn; opacity/visibility/order changes update in place.
+  useEffect(() => {
+    const map = mapRef.current;
+    if (!map) return;
+    const rasters = rasterLayers ?? [];
+    const ids = new Set(rasters.map((r) => r.id));
+
+    Array.from(rasterRefs.current.entries()).forEach(([id, tl]) => {
+      if (!ids.has(id)) { map.removeLayer(tl); rasterRefs.current.delete(id); }
+    });
+
+    rasters.forEach((r) => {
+      const show = r.visible && r.status === "processed";
+      const existing = rasterRefs.current.get(r.id);
+      if (!show) {
+        if (existing) { map.removeLayer(existing); rasterRefs.current.delete(r.id); }
+        return;
+      }
+      if (!existing) {
+        // maxZoom 19 matches the map/basemap ceiling (default would cap rasters at
+        // 18 and hide them at z19); TiTiler oversamples beyond native resolution.
+        const opts: L.TileLayerOptions = { pane: "rasters", opacity: r.opacity, zIndex: r.zIndex, maxZoom: 19 };
+        if (r.bbox) opts.bounds = L.latLngBounds([[r.bbox[1], r.bbox[0]], [r.bbox[3], r.bbox[2]]]);
+        const tl = L.tileLayer(r.tileUrl, opts).addTo(map);
+        rasterRefs.current.set(r.id, tl);
+      } else {
+        existing.setOpacity(r.opacity);
+        existing.setZIndex(r.zIndex);
+      }
+    });
+  }, [rasterLayers]);
 
   // Reconcile layers incrementally: only rebuild what actually changed.
   useEffect(() => {

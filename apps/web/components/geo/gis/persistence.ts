@@ -2,7 +2,7 @@
 
 import { apiFetch } from "@/lib/api-client";
 import type { Feature, FeatureCollection } from "geojson";
-import type { GisGeometry, LayerStyle } from "./types";
+import type { GisGeometry, LayerStyle, RasterStatus } from "./types";
 
 export interface LayerManifest {
   id: string;
@@ -90,6 +90,115 @@ export async function updateLayerRemote(
 export async function deleteLayerRemote(mapId: string, layerId: string): Promise<void> {
   const res = await apiFetch(`${base(mapId)}/${layerId}`, { method: "DELETE" });
   if (!res.ok) throw new Error(`deleteLayer ${res.status}`);
+}
+
+// ── Raster (orthophoto) layers ─────────────────────────────────────────────
+
+export interface RasterLayerManifest {
+  id: string;
+  mapId: string;
+  name: string;
+  status: RasterStatus;
+  errorMessage: string | null;
+  originalFilename: string;
+  fileType: string;
+  sizeBytes: number;
+  srid: number | null;
+  crs: string | null;
+  bbox: number[] | null;
+  widthPx: number | null;
+  heightPx: number | null;
+  bandCount: number | null;
+  hasAlpha: boolean;
+  resolutionX: number | null;
+  resolutionY: number | null;
+  minZoom: number | null;
+  maxZoom: number | null;
+  opacity: number;
+  visible: boolean;
+  zIndex: number;
+  createdAt: string;
+  updatedAt: string;
+  processedAt: string | null;
+}
+
+const rasterBase = (mapId: string) => `/geo/api/maps/${mapId}/raster-layers`;
+
+export async function fetchRasterLayers(mapId: string): Promise<RasterLayerManifest[]> {
+  const res = await apiFetch(rasterBase(mapId));
+  if (!res.ok) throw new Error(`fetchRasterLayers ${res.status}`);
+  return res.json();
+}
+
+export async function updateRasterRemote(
+  mapId: string,
+  layerId: string,
+  patch: Partial<Pick<RasterLayerManifest, "name" | "opacity" | "visible" | "zIndex">>,
+): Promise<void> {
+  const res = await apiFetch(`${rasterBase(mapId)}/${layerId}`, {
+    method: "PATCH",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(patch),
+  });
+  if (!res.ok) throw new Error(`updateRaster ${res.status}`);
+}
+
+export async function deleteRasterRemote(mapId: string, layerId: string): Promise<void> {
+  const res = await apiFetch(`${rasterBase(mapId)}/${layerId}`, { method: "DELETE" });
+  if (!res.ok) throw new Error(`deleteRaster ${res.status}`);
+}
+
+export async function retryRasterRemote(mapId: string, layerId: string): Promise<RasterLayerManifest> {
+  const res = await apiFetch(`${rasterBase(mapId)}/${layerId}/retry`, { method: "POST" });
+  if (!res.ok) throw new Error(`retryRaster ${res.status}`);
+  return res.json();
+}
+
+export interface CreateRasterArgs {
+  name: string;
+  /** The .tif/.tiff plus any sidecars (.tfw/.prj/...). */
+  files: File[];
+  onProgress?: (pct: number) => void;
+}
+
+/**
+ * Upload an orthophoto. Uses XHR (not fetch) to expose upload progress for the
+ * multi-GB transfer. Goes through the same proxy/base as the rest of the API and
+ * sends cookies (admin-only route).
+ */
+export function createRasterRemote(mapId: string, args: CreateRasterArgs): Promise<RasterLayerManifest> {
+  return new Promise((resolve, reject) => {
+    const form = new FormData();
+    form.append("name", args.name);
+    for (const f of args.files) form.append("file", f, f.name);
+
+    const xhr = new XMLHttpRequest();
+    xhr.open("POST", `${TILE_BASE}/geo/maps/${mapId}/raster-layers`);
+    xhr.withCredentials = true;
+    xhr.upload.onprogress = (e) => {
+      if (e.lengthComputable) args.onProgress?.(Math.round((e.loaded / e.total) * 100));
+    };
+    xhr.onload = () => {
+      if (xhr.status >= 200 && xhr.status < 300) {
+        try { resolve(JSON.parse(xhr.responseText)); }
+        catch { reject(new Error("Respuesta inválida del servidor")); }
+      } else {
+        let msg = `Error ${xhr.status}`;
+        try { msg = JSON.parse(xhr.responseText).message || msg; } catch { /* keep default */ }
+        reject(new Error(msg));
+      }
+    };
+    xhr.onerror = () => reject(new Error("Error de red al subir la ortofoto"));
+    xhr.send(form);
+  });
+}
+
+// Leaflet fetches tiles directly (not via apiFetch), so this must be a URL the
+// browser can hit — through the same Next proxy / API base used everywhere else.
+const TILE_BASE = (process.env.NEXT_PUBLIC_API_BASE_URL ?? "/api-proxy").replace(/\/+$/, "");
+
+export function rasterTileUrl(mapId: string, layerId: string): string {
+  return `${TILE_BASE}/geo/maps/${mapId}/raster-layers/${layerId}/tiles/{z}/{x}/{y}.png`;
 }
 
 /** Persist the current viewport (center [lat,lng] + zoom). Open to any geo user. */

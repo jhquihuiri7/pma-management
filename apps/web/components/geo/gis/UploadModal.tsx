@@ -6,9 +6,11 @@ import { toast } from "sonner";
 import * as shp from "shpjs";
 import JSZip from "jszip";
 import type { Feature, FeatureCollection, Geometry, GeoJsonProperties } from "geojson";
-import { SAMPLE_DATASETS } from "./gis-data";
-import GeomGlyph from "./GeomGlyph";
+import { createRasterRemote, type RasterLayerManifest } from "./persistence";
 import type { AddLayerInput, GisGeometry } from "./types";
+
+const RASTER_RE = /\.(tiff?)$/i;
+const RASTER_SIDECAR_RE = /\.(tfw|wld|prj|ovr|cpg|tab|xml)$/i;
 
 function geometryOf(features: Feature[]): GisGeometry {
   const t = features.find((f) => f.geometry)?.geometry?.type || "Polygon";
@@ -62,14 +64,49 @@ function humanSize(bytes: number): string {
   return bytes + " B";
 }
 
-export default function UploadModal({ onClose, onAdd, alreadyAdded }: {
+export default function UploadModal({ onClose, onAdd, mapId, onRasterUploaded }: {
   onClose: () => void;
   onAdd: (ds: AddLayerInput) => void | Promise<void>;
-  alreadyAdded: string[];
+  mapId?: string;
+  onRasterUploaded?: (m: RasterLayerManifest) => void;
 }) {
   const [parsing, setParsing] = useState<string | null>(null);
+  const [uploadPct, setUploadPct] = useState<number | null>(null);
   const [dragOver, setDragOver] = useState(false);
   const inputRef = useRef<HTMLInputElement>(null);
+
+  // Route a selection: a .tif/.tiff (+ optional sidecars) goes to the raster
+  // upload (streamed to the NAS, processed server-side); anything else is a
+  // shapefile handled in the browser as before.
+  async function handleFiles(fileList: FileList | File[]) {
+    const files = Array.from(fileList);
+    if (files.length === 0) return;
+    const main = files.find((f) => RASTER_RE.test(f.name));
+    if (main) {
+      if (!mapId || !onRasterUploaded) {
+        toast.error("Guarda el mapa antes de subir ortofotos.");
+        return;
+      }
+      const sidecars = files.filter((f) => f !== main && RASTER_SIDECAR_RE.test(f.name));
+      const name = main.name.replace(RASTER_RE, "");
+      setUploadPct(0);
+      try {
+        const manifest = await createRasterRemote(mapId, {
+          name,
+          files: [main, ...sidecars],
+          onProgress: setUploadPct,
+        });
+        onRasterUploaded(manifest);
+        toast.success("Ortofoto subida; procesando en segundo plano…");
+        onClose();
+      } catch (err) {
+        toast.error(err instanceof Error ? err.message : "No se pudo subir la ortofoto.");
+        setUploadPct(null);
+      }
+      return;
+    }
+    await handleFile(files[0]);
+  }
 
   async function handleFile(file: File) {
     if (!file) return;
@@ -137,7 +174,7 @@ export default function UploadModal({ onClose, onAdd, alreadyAdded }: {
         <div className="modal-head">
           <div>
             <div className="h-title">Agregar capa</div>
-            <div className="h-sub">Sube un shapefile (.zip con .shp + .shx + .dbf + .prj como mínimo) o selecciona del catálogo</div>
+            <div className="h-sub">Sube un shapefile (.zip con .shp + .shx + .dbf + .prj como mínimo) o una ortofoto</div>
           </div>
           <button className="icon-btn" onClick={onClose}><X size={14} /></button>
         </div>
@@ -155,56 +192,39 @@ export default function UploadModal({ onClose, onAdd, alreadyAdded }: {
                 Leyendo geometría y tabla de atributos…
               </div>
             </div>
+          ) : uploadPct !== null ? (
+            <div style={{ padding: "10px 4px 24px" }}>
+              <div style={{ fontSize: 12.5, marginBottom: 14 }}>
+                <b>Subiendo ortofoto…</b>
+                <div style={{ color: "var(--muted-fg)", fontFamily: "var(--font-mono)", fontSize: 11, marginTop: 6 }}>{uploadPct}%</div>
+              </div>
+              <div style={{ background: "var(--muted)", height: 6, borderRadius: 999, overflow: "hidden" }}>
+                <div style={{ height: "100%", width: `${uploadPct}%`, background: "var(--foreground)", transition: "width 0.2s ease" }} />
+              </div>
+              <div style={{ fontSize: 11, color: "var(--muted-fg)", marginTop: 8, fontFamily: "var(--font-mono)" }}>
+                No cierres esta ventana. El COG se generará en segundo plano.
+              </div>
+            </div>
           ) : (
             <>
               <input
                 ref={inputRef}
                 type="file"
-                accept=".zip,.shp"
+                accept=".zip,.shp,.tif,.tiff,.tfw,.wld,.prj,.ovr,.cpg"
+                multiple
                 style={{ display: "none" }}
-                onChange={(e) => { const f = e.target.files?.[0]; if (f) handleFile(f); e.target.value = ""; }}
+                onChange={(e) => { if (e.target.files?.length) handleFiles(e.target.files); e.target.value = ""; }}
               />
               <div
                 className={"upload-drop" + (dragOver ? " drag-over" : "")}
                 onClick={() => inputRef.current?.click()}
                 onDragOver={(e) => { e.preventDefault(); setDragOver(true); }}
                 onDragLeave={() => setDragOver(false)}
-                onDrop={(e) => { e.preventDefault(); setDragOver(false); const f = e.dataTransfer.files?.[0]; if (f) handleFile(f); }}
+                onDrop={(e) => { e.preventDefault(); setDragOver(false); if (e.dataTransfer.files?.length) handleFiles(e.dataTransfer.files); }}
               >
                 <div className="ic">⤓</div>
-                <div className="t">Arrastra .shp / .zip aquí</div>
-                <div className="s">.zip con .shp + .shx + .dbf + .prj como mínimo · máx 50 MB</div>
-              </div>
-              <div style={{ display: "flex", alignItems: "center", gap: 10, margin: "4px 0 10px" }}>
-                <div style={{ flex: 1, height: 1, background: "var(--border)" }} />
-                <span style={{ fontSize: 11, color: "var(--muted-fg)" }}>O ELIGE UNA MUESTRA</span>
-                <div style={{ flex: 1, height: 1, background: "var(--border)" }} />
-              </div>
-              <div className="sample-list">
-                {SAMPLE_DATASETS.map((ds) => (
-                  <div
-                    key={ds.id}
-                    className={"sample-item" + (alreadyAdded.includes(ds.id) ? " added" : "")}
-                    onClick={async () => {
-                      setParsing(ds.name);
-                      try {
-                        await onAdd({ id: ds.id, name: ds.name, filename: ds.filename, geometry: ds.geometry, geojson: ds.geojson, size: ds.size, crs: ds.crs, sourceFormat: "sample" });
-                        onClose();
-                      } catch {
-                        setParsing(null);
-                      }
-                    }}
-                  >
-                    <div className="geom-glyph"><GeomGlyph type={ds.geometry} color="#525252" /></div>
-                    <div>
-                      <div className="sample-name">{ds.name}</div>
-                      <div className="sample-meta">{ds.filename} · {ds.feature_count} feat · {ds.geometry} · {ds.crs}</div>
-                    </div>
-                    <div style={{ fontSize: 11, color: "var(--muted-fg)", fontFamily: "var(--font-mono)" }}>
-                      {alreadyAdded.includes(ds.id) ? "Agregado ✓" : ds.size}
-                    </div>
-                  </div>
-                ))}
+                <div className="t">Arrastra un shapefile o una ortofoto</div>
+                <div className="s">.zip / .shp (vector) · .tif / .tiff {mapId ? "+ sidecars (.tfw/.prj)" : ""} (ráster)</div>
               </div>
             </>
           )}

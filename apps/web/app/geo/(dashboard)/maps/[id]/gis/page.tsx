@@ -19,8 +19,8 @@ const GisEditor = dynamic(() => import("@/components/geo/gis/GisEditor"), {
 
 export default function GisEditorPage() {
   const { id } = useParams<{ id: string }>();
-  const { user } = useAuth();
-  const canEdit = user?.role === "ADMIN";
+  const { user, status } = useAuth();
+  const canEdit = user?.role?.toUpperCase() === "ADMIN";
   const [geoMap, setGeoMap] = useState<GeoMap | null>(null);
   const [loaded, setLoaded] = useState(false);
 
@@ -45,7 +45,7 @@ export default function GisEditorPage() {
   }, [id]);
 
   // Wait for the map so the editor initializes at the remembered viewport.
-  if (!loaded) {
+  if (!loaded || status === "loading") {
     return (
       <div className="fixed inset-0 z-50 flex items-center justify-center bg-white text-sm text-slate-500">
         Cargando editor GIS…

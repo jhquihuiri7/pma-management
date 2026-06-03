@@ -1,0 +1,35 @@
+# Worker image: Node + GDAL CLI. GDAL lives ONLY inside this image — never on
+# the host. Built on Debian (bookworm) because its gdal-bin ships the COG driver
+# with JPEG/WEBP/DEFLATE support, which the alpine GDAL package lacks.
+FROM node:20-bookworm-slim AS base
+
+RUN apt-get update \
+  && apt-get install -y --no-install-recommends gdal-bin \
+  && rm -rf /var/lib/apt/lists/*
+
+WORKDIR /app
+
+# Same monorepo layout as apps/api/Dockerfile so npm workspaces resolve.
+COPY package-lock.json* package.json ./
+COPY packages ./packages
+COPY apps ./apps
+
+RUN npm ci --workspace=@pma/api
+
+FROM base AS builder
+WORKDIR /app
+RUN npm run build --workspace=@pma/api
+
+FROM node:20-bookworm-slim AS runner
+RUN apt-get update \
+  && apt-get install -y --no-install-recommends gdal-bin \
+  && rm -rf /var/lib/apt/lists/*
+
+WORKDIR /app
+ENV NODE_ENV=production
+
+COPY --from=builder /app/apps/api/dist ./dist
+COPY --from=builder /app/node_modules ./node_modules
+COPY --from=builder /app/packages ./packages
+
+CMD ["node", "dist/apps/api/src/worker.js"]

@@ -30,10 +30,13 @@ services:
       PORT: 3001
       COOKIE_SECURE: "false"
       FRONTEND_ORIGIN: http://localhost:3000
+      STORAGE_ROOT: /data/storage
+      TITILER_DATA_ROOT: /data/storage
     ports:
       - "3001:3001"
     volumes:
       - ./apps/api:/app/apps/api
+      - /mnt/synology_smb/sistema-ambiental:/data/storage
     depends_on:
       postgres:
         condition: service_healthy
@@ -59,6 +62,42 @@ services:
       - ./apps/web:/app/apps/web
     depends_on:
       - api
+    restart: unless-stopped
+
+  # Raster worker (dev): Node + GDAL with hot-reload. Bind-mounts ./apps/api for
+  # source code and writes rasters to the same NAS mount as the API.
+  worker:
+    image: pma-management/worker:dev
+    build:
+      context: .
+      dockerfile: apps/api/Dockerfile.worker
+      target: base
+    container_name: pma-worker
+    command: npm run worker:watch --workspace=@pma/api
+    environment:
+      NODE_ENV: development
+      DATABASE_URL: postgresql://${DB_USER:-postgres}:${DB_PASSWORD:-postgres}@postgres:5432/${DB_NAME:-pma_db}
+      STORAGE_ROOT: /data/storage
+      GDAL_CACHEMAX: "1024"
+      WORKER_CONCURRENCY: "1"
+    volumes:
+      - ./apps/api:/app/apps/api
+      - /mnt/synology_smb/sistema-ambiental:/data/storage
+    depends_on:
+      postgres:
+        condition: service_healthy
+    restart: unless-stopped
+
+  # Internal COG tile server (dev). No published port; reads the NAS storage the
+  # dev api/worker write to.
+  titiler:
+    image: ghcr.io/developmentseed/titiler:0.19.2
+    container_name: pma-titiler
+    environment:
+      PORT: "8000"
+      GDAL_DISABLE_READDIR_ON_OPEN: "EMPTY_DIR"
+    volumes:
+      - /mnt/synology_smb/sistema-ambiental:/data/storage:ro
     restart: unless-stopped
 
 volumes:

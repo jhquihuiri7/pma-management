@@ -73,19 +73,21 @@
 .gis-shell.no-right .right-rail { display: none; }
 .gis-shell.no-left  { grid-template-columns: 0 1fr 360px; }
 .gis-shell.no-left  .left-rail   { display: none; }
+.gis-shell.no-left.no-right { grid-template-columns: 0 1fr 0; }
 
 /* ============================================================
    Topbar
    ============================================================ */
 .gis-shell .topbar {
   grid-area: topbar;
+  position: relative;
   display: flex;
   align-items: center;
   gap: 6px;
   padding: 0 12px 0 14px;
   border-bottom: 1px solid var(--border);
   background: var(--background);
-  z-index: 30;
+  z-index: 900;
 }
 
 .gis-shell .brand {
@@ -173,7 +175,13 @@
 .gis-shell .rail-title { font-weight: 600; font-size: 12.5px; }
 .gis-shell .rail-sub { color: var(--muted-fg); font-size: 11.5px; margin-top: 2px; }
 
-.gis-shell .layer-list { overflow-y: auto; padding: 6px 8px; flex: 1; }
+.gis-shell .layer-list {
+  overflow-y: auto;
+  overflow-x: hidden;
+  padding: 6px 8px;
+  flex: 1;
+  min-width: 0;
+}
 .gis-shell .layer-empty {
   padding: 24px 18px;
   text-align: center;
@@ -186,13 +194,16 @@
 .gis-shell .layer-empty b { color: var(--foreground); display: block; margin-bottom: 4px; font-weight: 600; font-size: 12.5px; }
 
 .gis-shell .layer-item {
+  position: relative;
   border: 1px solid var(--border);
   border-radius: var(--radius-md);
   background: var(--background);
   margin-bottom: 6px;
-  overflow: hidden;
+  max-width: 100%;
+  overflow: visible;
   transition: border-color 0.12s, box-shadow 0.12s;
 }
+.gis-shell .layer-item:hover { z-index: 40; }
 .gis-shell .layer-item.active {
   border-color: var(--border-strong);
   box-shadow: var(--shadow-sm);
@@ -200,17 +211,47 @@
 
 .gis-shell .layer-row {
   display: grid;
-  grid-template-columns: 16px 18px 1fr auto;
+  grid-template-columns: 16px 18px minmax(0, 1fr) auto;
   gap: 8px;
   align-items: center;
   padding: 8px 10px;
+  min-width: 0;
+  width: 100%;
 }
+.gis-shell .layer-row:first-child { border-radius: calc(var(--radius-md) - 1px) calc(var(--radius-md) - 1px) 0 0; }
+.gis-shell .layer-row:only-child { border-radius: calc(var(--radius-md) - 1px); }
 .gis-shell .layer-row:hover { background: var(--hover); }
+.gis-shell .layer-row-stacked {
+  grid-template-columns: 16px 18px minmax(0, 1fr);
+  grid-template-areas: "drag vis info";
+  align-items: start;
+}
+.gis-shell .layer-row-stacked.has-actions {
+  grid-template-areas:
+    "drag vis info"
+    "drag vis actions";
+  row-gap: 4px;
+}
+.gis-shell .layer-row-stacked .drag { grid-area: drag; margin-top: 3px; }
+.gis-shell .layer-row-stacked .layer-vis { grid-area: vis; margin-top: 1px; }
+.gis-shell .layer-row-stacked .layer-info { grid-area: info; }
+.gis-shell .layer-row-stacked .layer-actions {
+  grid-area: actions;
+  justify-self: end;
+}
 .gis-shell .layer-row .drag {
   cursor: grab;
   color: var(--muted-fg);
   font-size: 12px;
   user-select: none;
+}
+.gis-shell .layer-row .layer-slot {
+  cursor: default;
+}
+.gis-shell .layer-row .raster-kind {
+  cursor: default;
+  display: grid;
+  place-items: center;
 }
 .gis-shell .layer-vis {
   width: 18px; height: 18px;
@@ -223,14 +264,35 @@
 }
 .gis-shell .layer-vis.on { background: var(--foreground); color: var(--background); border-color: var(--foreground); }
 
+.gis-shell .layer-info {
+  min-width: 0;
+}
+.gis-shell .layer-title-line {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  min-width: 0;
+}
 .gis-shell .layer-name {
   font-weight: 500; font-size: 12.5px;
+  display: block;
+  flex: 1;
+  min-width: 0;
   white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
 }
-.gis-shell .layer-meta { font-size: 10.5px; color: var(--muted-fg); display: flex; gap: 6px; margin-top: 1px; }
+.gis-shell .layer-meta {
+  font-size: 10.5px;
+  color: var(--muted-fg);
+  display: flex;
+  gap: 6px;
+  margin-top: 1px;
+  min-width: 0;
+  overflow: hidden;
+  white-space: nowrap;
+}
 .gis-shell .layer-geom-icon { color: var(--muted-fg); }
 
-.gis-shell .layer-actions { display: flex; gap: 2px; }
+.gis-shell .layer-actions { display: flex; gap: 2px; flex-shrink: 0; }
 .gis-shell .icon-btn {
   width: 24px; height: 24px;
   border-radius: 5px; border: none; background: transparent;
@@ -238,6 +300,11 @@
   color: var(--muted-fg);
 }
 .gis-shell .icon-btn:hover { background: var(--hover); color: var(--foreground); }
+.gis-shell .layer-actions [data-tip]:hover::after {
+  left: auto;
+  right: 0;
+  transform: none;
+}
 
 .gis-shell .layer-expand {
   border-top: 1px solid var(--border);
@@ -685,7 +752,7 @@
 .gis-shell .attr-numeric { font-family: var(--font-mono); text-align: right; }
 
 /* ============================================================
-   Upload / sample modal
+   Upload modal
    ============================================================ */
 .gis-shell .modal-backdrop {
   position: fixed; inset: 0;
@@ -733,27 +800,12 @@
 .gis-shell .upload-drop .t { font-weight: 600; font-size: 13px; }
 .gis-shell .upload-drop .s { font-size: 11.5px; color: var(--muted-fg); margin-top: 2px; }
 
-.gis-shell .sample-list { display: grid; gap: 6px; }
-.gis-shell .sample-item {
-  display: grid;
-  grid-template-columns: 28px 1fr auto;
-  gap: 10px;
-  align-items: center;
-  padding: 9px 12px;
-  border: 1px solid var(--border);
-  border-radius: var(--radius-md);
-  background: var(--background);
-  cursor: pointer;
-}
-.gis-shell .sample-item:hover { border-color: var(--border-strong); background: var(--hover); }
-.gis-shell .sample-item.added { opacity: 0.55; pointer-events: none; }
-.gis-shell .sample-name { font-weight: 500; font-size: 12.5px; }
-.gis-shell .sample-meta { font-size: 10.5px; color: var(--muted-fg); margin-top: 2px; font-family: var(--font-mono); }
 .gis-shell .geom-glyph {
   width: 26px; height: 26px;
   background: var(--muted);
   border-radius: 5px;
   display: grid; place-items: center;
+  flex: 0 0 26px;
 }
 
 /* ============================================================
@@ -822,6 +874,7 @@
   background: var(--foreground); color: var(--background);
   padding: 3px 7px;
   border-radius: 4px;
+  box-shadow: var(--shadow-md);
   font-size: 10.5px;
   white-space: nowrap;
   z-index: 1000;
@@ -831,6 +884,7 @@
 .gis-shell .topbar [data-tip]:hover::after {
   bottom: auto;
   top: calc(100% + 6px);
+  z-index: 1100;
 }
 
 /* Distance-measure label */

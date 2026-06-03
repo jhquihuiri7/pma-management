@@ -5,6 +5,9 @@
   "type": "module",
   "scripts": {
     "dev": "tsx watch src/index.ts",
+    "worker": "tsx src/worker.ts",
+    "worker:watch": "tsx watch src/worker.ts",
+    "worker:start": "node dist/apps/api/src/worker.js",
     "build": "tsc -p tsconfig.json",
     "start": "node dist/index.js",
     "typecheck": "tsc --noEmit",
@@ -28,6 +31,7 @@
     "jose": "^5.9.6",
     "nodemailer": "^6.9.16",
     "pg": "^8.13.1",
+    "pg-boss": "^10.4.2",
     "pino-pretty": "^11.3.0",
     "zod": "^3.23.8"
   },

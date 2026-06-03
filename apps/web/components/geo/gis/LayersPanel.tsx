@@ -1,11 +1,80 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { Eye, EyeOff, Trash2, ChevronRight, Upload } from "lucide-react";
+import { Eye, EyeOff, Trash2, ChevronRight, Upload, RotateCcw } from "lucide-react";
 import { COLOR_RAMPS } from "./gis-data";
 import { inferSchema } from "./charts";
 import GeomGlyph from "./GeomGlyph";
-import type { GisLayer, LayerStyle } from "./types";
+import type { GisLayer, LayerStyle, RasterLayer, RasterStatus } from "./types";
+
+const RASTER_STATUS: Record<RasterStatus, { text: string; color: string }> = {
+  uploaded: { text: "En cola", color: "#6e5a2c" },
+  processing: { text: "Procesando…", color: "#2c5481" },
+  processed: { text: "Listo", color: "#3f7c5f" },
+  error: { text: "Error", color: "#9d4636" },
+};
+
+// One orthophoto row: status badge, opacity (when ready), retry (on error).
+function RasterItem({ layer, readOnly, onChange, onRemove, onRetry }: {
+  layer: RasterLayer; readOnly?: boolean;
+  onChange: (l: RasterLayer) => void; onRemove: () => void; onRetry: () => void;
+}) {
+  const st = RASTER_STATUS[layer.status];
+  const ready = layer.status === "processed";
+  return (
+    <div className={"layer-item" + (ready && layer.visible ? " active" : "")}>
+      <div className={"layer-row layer-row-stacked" + (!readOnly ? " has-actions" : "")}>
+        <div className="drag raster-kind" data-tip="Ortofoto">▦</div>
+        <div
+          className={"layer-vis" + (layer.visible && ready ? " on" : "")}
+          onClick={() => { if (ready) onChange({ ...layer, visible: !layer.visible }); }}
+          data-tip={ready ? (layer.visible ? "Ocultar" : "Mostrar") : "Disponible al terminar el procesamiento"}
+          style={{ opacity: ready ? 1 : 0.4, cursor: ready ? "pointer" : "default" }}
+        >
+          {layer.visible && ready ? <Eye size={13} /> : <EyeOff size={13} />}
+        </div>
+        <div className="layer-info">
+          <div className="layer-title-line">
+            <span className="layer-name">{layer.name}</span>
+          </div>
+          <div className="layer-meta">
+            <span style={{ color: st.color, fontWeight: 600 }}>{st.text}</span>
+            <span>•</span><span>ráster</span>
+          </div>
+        </div>
+        {!readOnly && (
+          <div className="layer-actions" onClick={(e) => e.stopPropagation()}>
+            {layer.status === "error" && (
+              <button className="icon-btn" data-tip="Reintentar" onClick={onRetry}><RotateCcw size={13} /></button>
+            )}
+            <button className="icon-btn" data-tip="Eliminar" onClick={onRemove}><Trash2 size={13} /></button>
+          </div>
+        )}
+      </div>
+
+      {layer.status === "error" && layer.errorMessage && (
+        <div style={{ padding: "2px 12px 8px 32px", fontSize: 11, color: "#9d4636", lineHeight: 1.4 }}>
+          {layer.errorMessage}
+        </div>
+      )}
+
+      {ready && !readOnly && (
+        <div className="layer-expand">
+          <div className="style-section">
+            <div className="style-label">Opacidad: {Math.round(layer.opacity * 100)}%</div>
+            <div className="slider-row">
+              <input
+                type="range" min="0" max="100" value={Math.round(layer.opacity * 100)}
+                onChange={(e) => onChange({ ...layer, opacity: parseInt(e.target.value) / 100 })}
+              />
+              <div className="slider-val">{Math.round(layer.opacity * 100)}%</div>
+            </div>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
 
 // ────────────────────────────────────────────────────────────
 // Style Editor (per layer, lives inside the layer list expand)
@@ -156,13 +225,17 @@ function LayerItem({ layer, active, isFirst, isLast, readOnly, onClick, onChange
 
   return (
     <div className={"layer-item" + (active ? " active" : "")}>
-      <div className="layer-row" onClick={onClick}>
-        {!readOnly && <div className="drag" data-tip="Reordenar" onClick={(e) => e.stopPropagation()}>⋮⋮</div>}
+      <div className={"layer-row layer-row-stacked" + (!readOnly ? " has-actions" : "")} onClick={onClick}>
+        {readOnly ? (
+          <div className="drag layer-slot" aria-hidden="true" />
+        ) : (
+          <div className="drag" data-tip="Reordenar" onClick={(e) => e.stopPropagation()}>⋮⋮</div>
+        )}
         <div className={"layer-vis" + (layer.visible ? " on" : "")} onClick={(e) => { e.stopPropagation(); onChange({ ...layer, visible: !layer.visible }); }} data-tip={layer.visible ? "Ocultar" : "Mostrar"}>
           {layer.visible ? <Eye size={13} /> : <EyeOff size={13} />}
         </div>
-        <div style={{ minWidth: 0 }}>
-          <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
+        <div className="layer-info">
+          <div className="layer-title-line">
             <GeomGlyph type={layer.geometry} color={layer.style.color} />
             <span className="layer-name">{layer.name}</span>
           </div>
@@ -171,18 +244,16 @@ function LayerItem({ layer, active, isFirst, isLast, readOnly, onClick, onChange
             <span>{layer.geojson.features.length} feat.</span>
           </div>
         </div>
-        <div className="layer-actions" onClick={(e) => e.stopPropagation()}>
-          {!readOnly && (
-            <>
-              <button className="icon-btn" data-tip="Subir" disabled={isFirst} onClick={() => onMove(-1)} style={{ opacity: isFirst ? 0.4 : 1 }}>▲</button>
-              <button className="icon-btn" data-tip="Bajar" disabled={isLast} onClick={() => onMove(1)} style={{ opacity: isLast ? 0.4 : 1 }}>▼</button>
-              <button className="icon-btn" data-tip="Eliminar" onClick={onRemove}><Trash2 size={13} /></button>
-              <button className="icon-btn" data-tip={expanded ? "Cerrar" : "Estilos"} onClick={() => setExpanded(!expanded)}>
-                <ChevronRight size={13} style={{ transform: expanded ? "rotate(90deg)" : "none", transition: "transform 0.15s" }} />
-              </button>
-            </>
-          )}
-        </div>
+        {!readOnly && (
+          <div className="layer-actions" onClick={(e) => e.stopPropagation()}>
+            <button className="icon-btn" data-tip="Subir" disabled={isFirst} onClick={() => onMove(-1)} style={{ opacity: isFirst ? 0.4 : 1 }}>▲</button>
+            <button className="icon-btn" data-tip="Bajar" disabled={isLast} onClick={() => onMove(1)} style={{ opacity: isLast ? 0.4 : 1 }}>▼</button>
+            <button className="icon-btn" data-tip="Eliminar" onClick={onRemove}><Trash2 size={13} /></button>
+            <button className="icon-btn" data-tip={expanded ? "Cerrar" : "Estilos"} onClick={() => setExpanded(!expanded)}>
+              <ChevronRight size={13} style={{ transform: expanded ? "rotate(90deg)" : "none", transition: "transform 0.15s" }} />
+            </button>
+          </div>
+        )}
       </div>
 
       {!readOnly && expanded && (
@@ -194,7 +265,10 @@ function LayerItem({ layer, active, isFirst, isLast, readOnly, onClick, onChange
   );
 }
 
-export default function LayersPanel({ layers, activeId, onActive, onChange, onRemove, onMove, onOpenUpload, readOnly }: {
+export default function LayersPanel({
+  layers, activeId, onActive, onChange, onRemove, onMove, onOpenUpload, readOnly,
+  rasterLayers = [], onRasterChange, onRasterRemove, onRasterRetry,
+}: {
   layers: GisLayer[];
   activeId: string | null;
   onActive: (id: string) => void;
@@ -203,28 +277,33 @@ export default function LayersPanel({ layers, activeId, onActive, onChange, onRe
   onMove: (id: string, dir: number) => void;
   onOpenUpload: () => void;
   readOnly?: boolean;
+  rasterLayers?: RasterLayer[];
+  onRasterChange?: (l: RasterLayer) => void;
+  onRasterRemove?: (id: string) => void;
+  onRasterRetry?: (id: string) => void;
 }) {
+  const total = layers.length + rasterLayers.length;
   return (
     <div className="left-rail">
       <div className="rail-header">
         <div>
           <div className="rail-title">Capas</div>
-          <div className="rail-sub">{layers.length} {layers.length === 1 ? "capa" : "capas"} cargada{layers.length === 1 ? "" : "s"}</div>
+          <div className="rail-sub">{total} {total === 1 ? "capa" : "capas"} cargada{total === 1 ? "" : "s"}</div>
         </div>
         {!readOnly && (
-          <button className="tb-btn primary" onClick={onOpenUpload} data-tip="Agregar capa (shapefile)">
+          <button className="tb-btn primary" onClick={onOpenUpload} data-tip="Agregar capa (shapefile u ortofoto)">
             <Upload size={14} />
           </button>
         )}
       </div>
 
       <div className="layer-list">
-        {layers.length === 0 && (
+        {total === 0 && (
           <div className="layer-empty">
             <b>Sin capas aún</b>
             {readOnly
               ? "Este mapa todavía no tiene capas publicadas."
-              : "Arrastra un archivo .shp / .zip o usa una muestra del catálogo para comenzar."}
+              : "Arrastra un .shp / .zip (vector) o un .tif / .tiff (ortofoto) para comenzar."}
           </div>
         )}
 
@@ -243,6 +322,24 @@ export default function LayersPanel({ layers, activeId, onActive, onChange, onRe
           />
         ))}
       </div>
+
+      {rasterLayers.length > 0 && (
+        <div className="layer-list" style={{ borderTop: "1px solid var(--border)" }}>
+          <div style={{ padding: "8px 12px 4px", fontSize: 10.5, textTransform: "uppercase", letterSpacing: 0.4, color: "var(--muted-fg)" }}>
+            Ortofotos
+          </div>
+          {rasterLayers.map((r) => (
+            <RasterItem
+              key={r.id}
+              layer={r}
+              readOnly={readOnly}
+              onChange={(l) => onRasterChange?.(l)}
+              onRemove={() => onRasterRemove?.(r.id)}
+              onRetry={() => onRasterRetry?.(r.id)}
+            />
+          ))}
+        </div>
+      )}
     </div>
   );
 }

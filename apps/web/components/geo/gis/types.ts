@@ -22,7 +22,6 @@ export interface LayerStyle {
 
 export interface GisLayer {
   id: string;
-  sampleId?: string;
   name: string;
   filename?: string;
   geometry: GisGeometry;
@@ -38,16 +37,25 @@ export interface GisLayer {
   persisted?: boolean;
 }
 
-export interface SampleDataset {
+export type RasterStatus = "uploaded" | "processing" | "processed" | "error";
+
+/**
+ * A raster (orthophoto) layer. Kept separate from GisLayer (vectors) because the
+ * render path is totally different: the browser consumes XYZ tiles from the API
+ * proxy, never the pixels. Drawn in a dedicated Leaflet pane below the vectors.
+ */
+export interface RasterLayer {
   id: string;
   name: string;
-  filename: string;
-  geometry: GisGeometry;
-  feature_count: number;
-  size: string;
-  crs: string;
-  geojson: FeatureCollection;
-  icon: string;
+  status: RasterStatus;
+  errorMessage?: string | null;
+  opacity: number;
+  visible: boolean;
+  zIndex: number;
+  /** [minX, minY, maxX, maxY] in EPSG:4326, for fitBounds / tile bounds. */
+  bbox: number[] | null;
+  /** XYZ template ".../tiles/{z}/{x}/{y}.png" consumed by L.tileLayer. */
+  tileUrl: string;
 }
 
 export interface Basemap {
@@ -82,7 +90,7 @@ export interface AddLayerInput {
   geojson: FeatureCollection;
   size?: string;
   crs?: string;
-  /** Original uploaded file (.zip/.shp), kept for provenance. Absent for samples. */
+  /** Original uploaded file (.zip/.shp), kept for provenance. */
   sourceFile?: File | null;
   sourceFormat?: string;
 }

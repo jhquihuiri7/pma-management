@@ -1,4 +1,5 @@
-import { promises as fs, createReadStream } from "node:fs";
+import { promises as fs, createReadStream, createWriteStream } from "node:fs";
+import { pipeline } from "node:stream/promises";
 import { join, dirname, normalize, resolve, sep } from "node:path";
 import type { StorageProvider } from "./index.js";
 
@@ -33,6 +34,16 @@ export class SynologySmbStorage implements StorageProvider {
     const abs = this.absolute(path);
     await fs.mkdir(dirname(abs), { recursive: true });
     await fs.writeFile(abs, data);
+  }
+
+  async uploadStream(path: string, readable: NodeJS.ReadableStream): Promise<number> {
+    const abs = this.absolute(path);
+    await fs.mkdir(dirname(abs), { recursive: true });
+    // pipeline cleans up (destroys streams) on error, so a failed/aborted upload
+    // never leaks file descriptors. The partial file is removed by the caller.
+    await pipeline(readable, createWriteStream(abs));
+    const st = await fs.stat(abs);
+    return st.size;
   }
 
   async download(path: string): Promise<Buffer> {
@@ -71,6 +82,10 @@ export class SynologySmbStorage implements StorageProvider {
   getUrl(path: string): string {
     const clean = path.replace(/^[/\\]+/, "");
     return `${this.publicBaseUrl.replace(/\/+$/, "")}/${clean}`;
+  }
+
+  resolve(path: string): string {
+    return this.absolute(path);
   }
 
   async move(fromPath: string, toPath: string): Promise<void> {
