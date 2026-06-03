@@ -137,10 +137,10 @@ npm run seed:admin -w apps/api
 
 # Crear administrador desde variables de entorno (automatizado)
 npm run seed:admin:env -w apps/api
-
-# Crear usuario con rol específico
-npm run create:user -w apps/api
 ```
+
+Los demás usuarios se crean desde el panel de administración (`/admin/users`),
+que también genera la invitación para establecer contraseña.
 
 ---
 
@@ -251,4 +251,3 @@ npm run typecheck
 # Lint de todos los workspaces
 npm run lint
 ```
-

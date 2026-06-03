@@ -16,8 +16,7 @@
     "db:push": "node --require tsx/cjs ../../node_modules/drizzle-kit/bin.cjs push",
     "db:studio": "node --require tsx/cjs ../../node_modules/drizzle-kit/bin.cjs studio",
     "seed:admin": "tsx src/scripts/seed-admin.ts",
-    "seed:admin:env": "tsx src/scripts/seed-admin-env.ts",
-    "create:user": "tsx src/scripts/create-user.ts"
+    "seed:admin:env": "tsx src/scripts/seed-admin-env.ts"
   },
   "dependencies": {
     "@fastify/cookie": "^9.3.1",

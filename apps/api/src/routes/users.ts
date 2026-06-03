@@ -7,7 +7,7 @@ import {
   deleteManagedUser,
   deleteUserGlobal,
   resendInvitationGlobal,
-  listManagedUsersForAdmin,
+  listManagedUsers,
   updateManagedUser,
   type AppKey,
 } from "../modules/shared/usersModule.js";
@@ -38,15 +38,14 @@ export async function usersRoutes(app: FastifyInstance) {
   app.addHook("preHandler", authenticate);
   app.addHook("preHandler", requireRole("ADMIN"));
 
-  app.get("/", async (req) => {
-    return listManagedUsersForAdmin(req.user!.adminId);
+  app.get("/", async () => {
+    return listManagedUsers();
   });
 
   app.post("/", async (req, reply) => {
     const body = createSchema.parse(req.body);
     reply.status(201);
     return createUserGlobal({
-      adminId: req.user!.adminId,
       name: body.name,
       email: body.email,
       role: body.role,
@@ -59,26 +58,26 @@ export async function usersRoutes(app: FastifyInstance) {
   app.put("/:id", async (req) => {
     const { id } = req.params as { id: string };
     const body = updateSchema.parse(req.body);
-    await updateManagedUser(id, req.user!.adminId, body);
+    await updateManagedUser(id, body);
     return { ok: true };
   });
 
   app.delete("/:id", async (req) => {
     const { id } = req.params as { id: string };
-    await deleteUserGlobal(id, req.user!.adminId, req.user!.sub);
+    await deleteUserGlobal(id, req.user!.sub);
     return { ok: true };
   });
 
   app.post("/:id/resend-invitation", async (req) => {
     const { id } = req.params as { id: string };
-    await resendInvitationGlobal(id, req.user!.adminId);
+    await resendInvitationGlobal(id);
     return { ok: true };
   });
 
   app.post("/:id/apps", async (req, reply) => {
     const { id } = req.params as { id: string };
     const body = assignAppSchema.parse(req.body);
-    await assignUserToApp(id, req.user!.adminId, body.appKey);
+    await assignUserToApp(id, body.appKey);
     reply.status(201);
     return { ok: true };
   });
@@ -87,7 +86,7 @@ export async function usersRoutes(app: FastifyInstance) {
     const { id, appKey } = req.params as { id: string; appKey: string };
     if (!VALID_APPS.includes(appKey as AppKey))
       throw NotFound("Aplicación no válida");
-    await deleteManagedUser(id, req.user!.adminId, appKey as AppKey);
+    await deleteManagedUser(id, appKey as AppKey);
     return { ok: true };
   });
 }

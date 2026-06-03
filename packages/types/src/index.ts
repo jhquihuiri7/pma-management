@@ -5,26 +5,12 @@ export interface User {
   id: string;
   name: string;
   email: string;
-  password?: string;
   passwordSet?: boolean;
-  passwordSetToken?: string;
-  passwordSetTokenExpiry?: string;
   role: UserRole;
   adminId: string;
   apps: AppKey[];
   unit?: string;
   position?: string;
-  createdAt: string;
-}
-
-export interface Admin {
-  id: string;
-  email: string;
-  name: string;
-  googleAccessToken: string;
-  googleRefreshToken: string;
-  tokenExpiresAt: number;
-  driveRootFolderId: string;
   createdAt: string;
 }
 

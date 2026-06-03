@@ -16,18 +16,7 @@ const TOKEN_TTL_MS = 24 * 60 * 60 * 1000;
 
 export type ManagedRole = "ADMIN" | "REPORTER" | "VIEWER";
 
-export type CreateManagedUserInput = {
-  adminId: string;
-  name: string;
-  email: string;
-  role: ManagedRole;
-  unit?: string;
-  position?: string;
-  app: AppKey;
-};
-
 export type CreateUserGlobalInput = {
-  adminId: string;
   name: string;
   email: string;
   role: ManagedRole;
@@ -127,7 +116,6 @@ export async function createUserGlobal(input: CreateUserGlobalInput) {
 
 export async function updateManagedUser(
   userId: string,
-  adminId: string,
   updates: { name?: string; unit?: string | null; position?: string | null },
 ) {
   const db = getDb();
@@ -143,7 +131,7 @@ export async function updateManagedUser(
   }).where(eq(users.id, userId));
 }
 
-export async function deleteUserGlobal(userId: string, adminId: string, requesterId: string) {
+export async function deleteUserGlobal(userId: string, requesterId: string) {
   const db = getDb();
   const rows = await db.select().from(users).where(eq(users.id, userId)).limit(1);
   const u = rows[0];
@@ -155,7 +143,7 @@ export async function deleteUserGlobal(userId: string, adminId: string, requeste
   await db.delete(users).where(eq(users.id, userId));
 }
 
-export async function assignUserToApp(userId: string, adminId: string, app: AppKey) {
+export async function assignUserToApp(userId: string, app: AppKey) {
   const db = getDb();
   const rows = await db.select().from(users).where(eq(users.id, userId)).limit(1);
   const u = rows[0];
@@ -167,7 +155,7 @@ export async function assignUserToApp(userId: string, adminId: string, app: AppK
   await db.insert(userApps).values({ userId, appKey: app }).onConflictDoNothing();
 }
 
-export async function resendInvitationGlobal(userId: string, adminId: string) {
+export async function resendInvitationGlobal(userId: string) {
   const db = getDb();
   const rows = await db.select().from(users).where(eq(users.id, userId)).limit(1);
   const u = rows[0];
@@ -182,7 +170,7 @@ export async function resendInvitationGlobal(userId: string, adminId: string) {
 // Per-app user management (subsystem routes)
 // ---------------------------------------------------------------------------
 
-export async function resendInvitation(userId: string, adminId: string, app: AppKey) {
+export async function resendInvitation(userId: string, app: AppKey) {
   const db = getDb();
   const rows = await db.select().from(users).where(eq(users.id, userId)).limit(1);
   const u = rows[0];
@@ -194,7 +182,7 @@ export async function resendInvitation(userId: string, adminId: string, app: App
   await sendInvitation(u.email, u.name, token);
 }
 
-export async function deleteManagedUser(userId: string, adminId: string, app: AppKey) {
+export async function deleteManagedUser(userId: string, app: AppKey) {
   const db = getDb();
   const rows = await db.select().from(users).where(eq(users.id, userId)).limit(1);
   const u = rows[0];
@@ -216,7 +204,7 @@ export async function deleteManagedUser(userId: string, adminId: string, app: Ap
   }
 }
 
-export async function listManagedUsersForAdmin(_adminId?: string, app?: AppKey) {
+export async function listManagedUsers(app?: AppKey) {
   const db = getDb();
   const rows = await db
     .select({
