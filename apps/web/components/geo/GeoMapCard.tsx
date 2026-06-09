@@ -7,11 +7,9 @@ import { useState } from "react";
 import {
   Map,
   TreePine,
-  Waves,
-  Thermometer,
-  Mountain,
-  AlertTriangle,
-  Shield,
+  Building2,
+  Users,
+  BriefcaseBusiness,
   Scale,
   Calendar,
   Tag,
@@ -26,17 +24,15 @@ import type { GeoMap } from "@/types/geo";
 import EditMapDialog from "@/components/geo/EditMapDialog";
 
 const CATEGORY_ICONS: Record<string, React.ElementType> = {
-  TreePine, Waves, Thermometer, Mountain, AlertTriangle, Shield, Scale,
+  TreePine, Building2, Users, BriefcaseBusiness, Scale,
 };
 
 const CATEGORY_GRADIENT: Record<string, string> = {
-  biodiversidad: "from-green-400 to-emerald-600",
-  "calidad-agua": "from-blue-400 to-cyan-600",
-  clima: "from-orange-400 to-amber-600",
-  suelo: "from-amber-400 to-yellow-600",
-  riesgo: "from-red-400 to-rose-600",
-  protegidas: "from-emerald-400 to-teal-600",
-  gobernanza: "from-purple-400 to-violet-600",
+  "fisico-ambiental": "from-green-400 to-emerald-600",
+  "asentamientos-humanos": "from-blue-400 to-cyan-600",
+  sociocultural: "from-rose-400 to-pink-600",
+  "economico-productivo": "from-amber-400 to-yellow-600",
+  "politico-institucional": "from-purple-400 to-violet-600",
 };
 
 interface Props {
@@ -100,6 +96,11 @@ export default function GeoMapCard({ geoMap, canEdit, canDelete, onEdit, onDelet
           {category && (
             <span className="absolute top-3 left-3 text-xs font-medium px-2.5 py-1 rounded-full bg-white/20 text-white backdrop-blur-sm">
               {category.name}
+            </span>
+          )}
+          {geoMap.thematic && (
+            <span className="absolute bottom-3 left-3 right-3 truncate text-xs font-medium px-2.5 py-1 rounded-full bg-white/20 text-white backdrop-blur-sm">
+              {geoMap.thematic}
             </span>
           )}
         </div>

@@ -2,6 +2,7 @@ export interface GeoCategory {
   id: string;
   name: string;
   description: string;
+  thematics: string[];
   iconName: string;
   bgClass: string;
   textClass: string;
@@ -27,6 +28,7 @@ export interface GeoMap {
   title: string;
   description: string;
   categoryId: string;
+  thematic?: string;
   layers: GeoLayer[];
   center: [number, number];
   zoom: number;

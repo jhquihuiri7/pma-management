@@ -50,6 +50,13 @@
       "when": 1779000000005,
       "tag": "0006_geo_raster_layers",
       "breakpoints": true
+    },
+    {
+      "idx": 7,
+      "version": "7",
+      "when": 1779000000006,
+      "tag": "0007_geo_map_thematic",
+      "breakpoints": true
     }
   ]
 }

@@ -55,6 +55,7 @@ export default function MapsPage() {
     const matchSearch = q
       ? m.title.toLowerCase().includes(q) ||
         m.description.toLowerCase().includes(q) ||
+        m.thematic?.toLowerCase().includes(q) ||
         m.tags?.some((t) => t.toLowerCase().includes(q))
       : true;
     return matchCat && matchSearch;

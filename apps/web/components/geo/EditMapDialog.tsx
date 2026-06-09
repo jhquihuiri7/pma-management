@@ -7,7 +7,7 @@ import { useState, useEffect } from "react";
 import { X } from "lucide-react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
-import { GEO_CATEGORIES } from "@/lib/geo-mock-data";
+import { GEO_CATEGORIES, getDefaultGeoThematic, getGeoThematics } from "@/lib/geo-mock-data";
 import type { GeoMap } from "@/types/geo";
 
 interface Props {
@@ -16,23 +16,37 @@ interface Props {
   onClose: () => void;
 }
 
+const normalizeCategoryId = (categoryId: string) =>
+  GEO_CATEGORIES.some((category) => category.id === categoryId)
+    ? categoryId
+    : GEO_CATEGORIES[0].id;
+
 export default function EditMapDialog({ map, onSave, onClose }: Props) {
   const [loading, setLoading] = useState(false);
+  const initialCategoryId = normalizeCategoryId(map.categoryId);
   const [form, setForm] = useState({
     title: map.title,
     description: map.description,
-    categoryId: map.categoryId,
+    categoryId: initialCategoryId,
+    thematic: map.thematic || getDefaultGeoThematic(initialCategoryId),
     tags: map.tags?.join(", ") ?? "",
   });
 
   useEffect(() => {
+    const categoryId = normalizeCategoryId(map.categoryId);
+    const thematics = getGeoThematics(categoryId);
     setForm({
       title: map.title,
       description: map.description,
-      categoryId: map.categoryId,
+      categoryId,
+      thematic: map.thematic && thematics.includes(map.thematic)
+        ? map.thematic
+        : getDefaultGeoThematic(categoryId),
       tags: map.tags?.join(", ") ?? "",
     });
   }, [map]);
+
+  const thematicOptions = getGeoThematics(form.categoryId);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -40,12 +54,13 @@ export default function EditMapDialog({ map, onSave, onClose }: Props) {
 
     try {
       const res = await apiFetch(`/geo/api/maps/${map.id}`, {
-        method: "PATCH",
+        method: "PUT",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           title: form.title.trim(),
           description: form.description.trim(),
           categoryId: form.categoryId,
+          thematic: form.thematic,
           tags: form.tags ? form.tags.split(",").map((t) => t.trim()).filter(Boolean) : [],
         }),
       });
@@ -106,12 +121,37 @@ export default function EditMapDialog({ map, onSave, onClose }: Props) {
             </label>
             <select
               value={form.categoryId}
-              onChange={(e) => setForm({ ...form, categoryId: e.target.value })}
+              onChange={(e) => {
+                const categoryId = e.target.value;
+                setForm({
+                  ...form,
+                  categoryId,
+                  thematic: getDefaultGeoThematic(categoryId),
+                });
+              }}
               className="w-full border border-slate-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-teal-500"
             >
               {GEO_CATEGORIES.map((cat) => (
                 <option key={cat.id} value={cat.id}>
                   {cat.name}
+                </option>
+              ))}
+            </select>
+          </div>
+
+          <div>
+            <label className="block text-sm font-medium text-slate-700 mb-1">
+              Temática <span className="text-red-500">*</span>
+            </label>
+            <select
+              value={form.thematic}
+              onChange={(e) => setForm({ ...form, thematic: e.target.value })}
+              required
+              className="w-full border border-slate-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-teal-500"
+            >
+              {thematicOptions.map((thematic) => (
+                <option key={thematic} value={thematic}>
+                  {thematic}
                 </option>
               ))}
             </select>

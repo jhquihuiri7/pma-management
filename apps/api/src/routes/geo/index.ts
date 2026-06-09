@@ -23,6 +23,7 @@ const createSchema = z.object({
   title: z.string().min(1),
   description: z.string().optional(),
   categoryId: z.string().min(1),
+  thematic: z.string().optional(),
   layers: z.array(z.unknown()).optional(),
   center: z.tuple([z.number(), z.number()]).optional(),
   zoom: z.number().int().min(0).max(22).optional(),
@@ -56,6 +57,12 @@ export async function geoRoutes(app: FastifyInstance) {
   });
 
   app.put("/maps/:id", { preHandler: geoEditor }, async (req) => {
+    const { id } = req.params as { id: string };
+    const body = updateSchema.parse(req.body);
+    return updateMap(id, req.user!.adminId, body);
+  });
+
+  app.patch("/maps/:id", { preHandler: geoEditor }, async (req) => {
     const { id } = req.params as { id: string };
     const body = updateSchema.parse(req.body);
     return updateMap(id, req.user!.adminId, body);

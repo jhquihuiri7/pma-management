@@ -2,9 +2,21 @@ import type { GeoCategory, GeoMap, GeoLayer } from "@/types/geo";
 
 export const GEO_CATEGORIES: GeoCategory[] = [
   {
-    id: "biodiversidad",
-    name: "Biodiversidad",
-    description: "Flora, fauna y ecosistemas del territorio",
+    id: "fisico-ambiental",
+    name: "Físico Ambiental",
+    description: "Recurso natural que sostiene y condiciona las diversas actividades de la población.",
+    thematics: [
+      "Recursos naturales no renovables",
+      "Recursos naturales renovables",
+      "Ecosistemas",
+      "Amenazas naturales",
+      "Amenazas climáticas",
+      "Clima",
+      "Conflictos ambientales",
+      "Zonas de protección, regeneración y recuperación ambiental",
+      "Calidad ambiental",
+      "Contaminación",
+    ],
     iconName: "TreePine",
     bgClass: "bg-green-50",
     textClass: "text-green-700",
@@ -12,59 +24,71 @@ export const GEO_CATEGORIES: GeoCategory[] = [
     accentClass: "bg-green-100",
   },
   {
-    id: "calidad-agua",
-    name: "Calidad del Agua",
-    description: "Monitoreo de cuencas y redes hídricas",
-    iconName: "Waves",
+    id: "asentamientos-humanos",
+    name: "Asentamientos Humanos",
+    description: "Distribución de la población, ocupación del territorio y vínculos entre asentamientos.",
+    thematics: [
+      "Distribución demográfica",
+      "Uso y ocupación del suelo",
+      "Movilidad, conectividad e infraestructura",
+    ],
+    iconName: "Building2",
     bgClass: "bg-blue-50",
     textClass: "text-blue-700",
     borderClass: "border-blue-200 hover:border-blue-400",
     accentClass: "bg-blue-100",
   },
   {
-    id: "clima",
-    name: "Cambio Climático",
-    description: "Temperatura, precipitación y variabilidad",
-    iconName: "Thermometer",
-    bgClass: "bg-orange-50",
-    textClass: "text-orange-700",
-    borderClass: "border-orange-200 hover:border-orange-400",
-    accentClass: "bg-orange-100",
+    id: "sociocultural",
+    name: "Sociocultural",
+    description: "Derechos sociales y culturales, inequidades y desequilibrios socioterritoriales.",
+    thematics: [
+      "Demografía y población",
+      "Servicios públicos y sociales",
+      "Patrimonio y diversidad cultural",
+      "Pobreza y desigualdad",
+      "Seguridad y convivencia ciudadana",
+    ],
+    iconName: "Users",
+    bgClass: "bg-rose-50",
+    textClass: "text-rose-700",
+    borderClass: "border-rose-200 hover:border-rose-400",
+    accentClass: "bg-rose-100",
   },
   {
-    id: "suelo",
-    name: "Uso del Suelo",
-    description: "Clasificación y uso del territorio",
-    iconName: "Mountain",
+    id: "economico-productivo",
+    name: "Económico Productivo",
+    description: "Factores vinculados con el desarrollo de la economía integral del territorio.",
+    thematics: [
+      "Actividades económicas y productivas",
+      "Empleo",
+      "Concentración y distribución de la riqueza",
+      "Servicios a la producción",
+      "Funcionalidad económica del territorio",
+      "Economía popular y solidaria",
+      "Modelos de consumo",
+      "Seguridad alimentaria",
+      "Desarrollo de tecnologías productivas limpias",
+      "Infraestructura productiva",
+    ],
+    iconName: "BriefcaseBusiness",
     bgClass: "bg-amber-50",
     textClass: "text-amber-700",
     borderClass: "border-amber-200 hover:border-amber-400",
     accentClass: "bg-amber-100",
   },
   {
-    id: "riesgo",
-    name: "Riesgo Ambiental",
-    description: "Zonas sísmicas, volcánicas e inundaciones",
-    iconName: "AlertTriangle",
-    bgClass: "bg-red-50",
-    textClass: "text-red-700",
-    borderClass: "border-red-200 hover:border-red-400",
-    accentClass: "bg-red-100",
-  },
-  {
-    id: "protegidas",
-    name: "Zonas Protegidas",
-    description: "Reservas, parques y áreas protegidas",
-    iconName: "Shield",
-    bgClass: "bg-emerald-50",
-    textClass: "text-emerald-700",
-    borderClass: "border-emerald-200 hover:border-emerald-400",
-    accentClass: "bg-emerald-100",
-  },
-  {
-    id: "gobernanza",
-    name: "Gobernanza",
-    description: "Límites administrativos y áreas de gestión",
+    id: "politico-institucional",
+    name: "Político Institucional",
+    description: "Capacidad institucional y de actores territoriales para la gestión del territorio.",
+    thematics: [
+      "Capacidades institucionales locales",
+      "Gobernanza del riesgo",
+      "Articulación interinstitucional",
+      "Actores territoriales y organización social",
+      "Participación ciudadana",
+      "Sistema de protección de derechos",
+    ],
     iconName: "Scale",
     bgClass: "bg-purple-50",
     textClass: "text-purple-700",
@@ -72,6 +96,18 @@ export const GEO_CATEGORIES: GeoCategory[] = [
     accentClass: "bg-purple-100",
   },
 ];
+
+export function getGeoCategory(categoryId: string) {
+  return GEO_CATEGORIES.find((category) => category.id === categoryId);
+}
+
+export function getGeoThematics(categoryId: string) {
+  return getGeoCategory(categoryId)?.thematics ?? [];
+}
+
+export function getDefaultGeoThematic(categoryId: string) {
+  return getGeoThematics(categoryId)[0] ?? "";
+}
 
 const OSM: GeoLayer = {
   id: "osm",
@@ -112,7 +148,8 @@ export const GEO_MAPS: GeoMap[] = [
     title: "Cobertura Vegetal del Ecuador",
     description:
       "Distribución espacial de la cobertura vegetal en el territorio ecuatoriano, incluyendo bosques nativos, páramos y zonas de cultivo. Actualizado con datos de teledetección.",
-    categoryId: "biodiversidad",
+    categoryId: "fisico-ambiental",
+    thematic: "Ecosistemas",
     center: [-1.8, -78.2],
     zoom: 7,
     tags: ["vegetación", "bosques", "páramos"],
@@ -125,7 +162,8 @@ export const GEO_MAPS: GeoMap[] = [
     title: "Red Hídrica Nacional",
     description:
       "Cuencas hidrográficas principales, ríos y cuerpos de agua del Ecuador con indicadores de calidad y caudal medido en estaciones hidrométricas.",
-    categoryId: "calidad-agua",
+    categoryId: "fisico-ambiental",
+    thematic: "Recursos naturales renovables",
     center: [-1.8, -78.2],
     zoom: 7,
     tags: ["ríos", "cuencas", "hidrología"],
@@ -138,7 +176,8 @@ export const GEO_MAPS: GeoMap[] = [
     title: "Calidad de Agua - Costa Ecuatoriana",
     description:
       "Monitoreo de la calidad del agua en la zona costera, ríos y estuarios de la región litoral. Incluye parámetros fisicoquímicos y biológicos.",
-    categoryId: "calidad-agua",
+    categoryId: "fisico-ambiental",
+    thematic: "Calidad ambiental",
     center: [-1.0, -80.5],
     zoom: 8,
     tags: ["costa", "calidad", "litoral"],
@@ -151,7 +190,8 @@ export const GEO_MAPS: GeoMap[] = [
     title: "Variabilidad Climática Amazónica",
     description:
       "Análisis de temperatura, precipitación y eventos climáticos extremos en la región amazónica ecuatoriana con proyecciones al 2050.",
-    categoryId: "clima",
+    categoryId: "fisico-ambiental",
+    thematic: "Clima",
     center: [-1.5, -76.5],
     zoom: 8,
     tags: ["amazonía", "precipitación", "temperatura"],
@@ -164,7 +204,8 @@ export const GEO_MAPS: GeoMap[] = [
     title: "Uso del Suelo Urbano - Guayaquil",
     description:
       "Clasificación detallada del uso del suelo en el área metropolitana de Guayaquil: residencial, comercial, industrial y zonas de expansión.",
-    categoryId: "suelo",
+    categoryId: "asentamientos-humanos",
+    thematic: "Uso y ocupación del suelo",
     center: [-2.19, -79.89],
     zoom: 12,
     tags: ["urbano", "Guayaquil", "planificación"],
@@ -177,7 +218,8 @@ export const GEO_MAPS: GeoMap[] = [
     title: "Zonas de Riesgo Sísmico y Volcánico",
     description:
       "Amenazas geológicas activas: zonas sísmicas, áreas de influencia volcánica, fallas activas y probabilidad de deslizamientos.",
-    categoryId: "riesgo",
+    categoryId: "fisico-ambiental",
+    thematic: "Amenazas naturales",
     center: [-0.5, -78.5],
     zoom: 8,
     tags: ["sísmica", "volcánica", "geología"],
@@ -190,7 +232,8 @@ export const GEO_MAPS: GeoMap[] = [
     title: "Reserva Marina Galápagos",
     description:
       "Delimitación y zonificación de la Reserva Marina de Galápagos. Incluye zonas de protección absoluta, uso sostenible y reserva.",
-    categoryId: "protegidas",
+    categoryId: "fisico-ambiental",
+    thematic: "Zonas de protección, regeneración y recuperación ambiental",
     center: [-0.95, -90.97],
     zoom: 9,
     tags: ["Galápagos", "marina", "reserva"],
@@ -203,7 +246,8 @@ export const GEO_MAPS: GeoMap[] = [
     title: "Bosque Protector Chocó",
     description:
       "Área de bosque protector en la región del Chocó ecuatoriano, uno de los hotspots de biodiversidad más importantes del planeta.",
-    categoryId: "biodiversidad",
+    categoryId: "fisico-ambiental",
+    thematic: "Ecosistemas",
     center: [0.5, -78.5],
     zoom: 9,
     tags: ["Chocó", "bosque", "endémicas"],
@@ -216,7 +260,8 @@ export const GEO_MAPS: GeoMap[] = [
     title: "Límites Administrativos Ambientales",
     description:
       "Circunscripciones territoriales, zonas de control ambiental y áreas de gestión de las autoridades ambientales nacionales y provinciales.",
-    categoryId: "gobernanza",
+    categoryId: "politico-institucional",
+    thematic: "Capacidades institucionales locales",
     center: [-1.8, -78.2],
     zoom: 7,
     tags: ["administrativo", "límites", "gestión"],
@@ -229,7 +274,8 @@ export const GEO_MAPS: GeoMap[] = [
     title: "Zonas de Inundación - Región Costa",
     description:
       "Identificación de zonas susceptibles a inundaciones durante la época lluviosa y eventos El Niño, con niveles de amenaza y afectación histórica.",
-    categoryId: "riesgo",
+    categoryId: "fisico-ambiental",
+    thematic: "Amenazas climáticas",
     center: [-1.8, -79.8],
     zoom: 8,
     tags: ["inundación", "El Niño", "riesgo hídrico"],

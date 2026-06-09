@@ -7,11 +7,9 @@ import { useState, useEffect } from "react";
 import { useAuth } from "@/lib/auth-context";
 import {
   TreePine,
-  Waves,
-  Thermometer,
-  Mountain,
-  AlertTriangle,
-  Shield,
+  Building2,
+  Users,
+  BriefcaseBusiness,
   Scale,
   Search,
   Map,
@@ -23,17 +21,53 @@ import AddMapDialog from "@/components/geo/AddMapDialog";
 import GeoMapCard from "@/components/geo/GeoMapCard";
 
 const CATEGORY_ICONS: Record<string, React.ElementType> = {
-  TreePine, Waves, Thermometer, Mountain, AlertTriangle, Shield, Scale,
+  TreePine, Building2, Users, BriefcaseBusiness, Scale,
 };
 
 const CATEGORY_GRADIENT: Record<string, string> = {
-  biodiversidad: "from-green-400 to-emerald-600",
-  "calidad-agua": "from-blue-400 to-cyan-600",
-  clima: "from-orange-400 to-amber-600",
-  suelo: "from-amber-400 to-yellow-600",
-  riesgo: "from-red-400 to-rose-600",
-  protegidas: "from-emerald-400 to-teal-600",
-  gobernanza: "from-purple-400 to-violet-600",
+  "fisico-ambiental": "from-green-400 to-emerald-600",
+  "asentamientos-humanos": "from-blue-400 to-cyan-600",
+  sociocultural: "from-rose-400 to-pink-600",
+  "economico-productivo": "from-amber-400 to-yellow-600",
+  "politico-institucional": "from-purple-400 to-violet-600",
+};
+
+const CATEGORY_CARD_STYLES: Record<string, {
+  active: string;
+  inactive: string;
+  activeTitle: string;
+  count: string;
+}> = {
+  "fisico-ambiental": {
+    active: "border-green-500 bg-green-50 shadow-md",
+    inactive: "border-green-200 hover:border-green-400 bg-white hover:shadow-sm",
+    activeTitle: "text-green-800",
+    count: "bg-green-100 text-green-700",
+  },
+  "asentamientos-humanos": {
+    active: "border-blue-500 bg-blue-50 shadow-md",
+    inactive: "border-blue-200 hover:border-blue-400 bg-white hover:shadow-sm",
+    activeTitle: "text-blue-800",
+    count: "bg-blue-100 text-blue-700",
+  },
+  sociocultural: {
+    active: "border-rose-500 bg-rose-50 shadow-md",
+    inactive: "border-rose-200 hover:border-rose-400 bg-white hover:shadow-sm",
+    activeTitle: "text-rose-800",
+    count: "bg-rose-100 text-rose-700",
+  },
+  "economico-productivo": {
+    active: "border-amber-500 bg-amber-50 shadow-md",
+    inactive: "border-amber-200 hover:border-amber-400 bg-white hover:shadow-sm",
+    activeTitle: "text-amber-800",
+    count: "bg-amber-100 text-amber-700",
+  },
+  "politico-institucional": {
+    active: "border-purple-500 bg-purple-50 shadow-md",
+    inactive: "border-purple-200 hover:border-purple-400 bg-white hover:shadow-sm",
+    activeTitle: "text-purple-800",
+    count: "bg-purple-100 text-purple-700",
+  },
 };
 
 function CategoryCard({
@@ -48,13 +82,17 @@ function CategoryCard({
   count: number;
 }) {
   const Icon = CATEGORY_ICONS[category.iconName] || Map;
+  const styles = CATEGORY_CARD_STYLES[category.id] ?? {
+    active: "border-slate-500 bg-slate-50 shadow-md",
+    inactive: "border-slate-200 hover:border-slate-400 bg-white hover:shadow-sm",
+    activeTitle: "text-slate-800",
+    count: "bg-slate-100 text-slate-700",
+  };
   return (
     <button
       onClick={onClick}
       className={`group flex flex-col items-center gap-3 p-5 rounded-2xl border-2 transition-all text-center cursor-pointer w-full ${
-        active
-          ? "border-teal-500 bg-teal-50 shadow-md"
-          : `${category.borderClass} bg-white hover:shadow-sm`
+        active ? styles.active : styles.inactive
       }`}
     >
       <div
@@ -63,15 +101,13 @@ function CategoryCard({
         <Icon className="w-6 h-6 text-white" />
       </div>
       <div>
-        <p className={`text-sm font-semibold ${active ? "text-teal-800" : "text-slate-800"}`}>
+        <p className={`text-sm font-semibold ${active ? styles.activeTitle : "text-slate-800"}`}>
           {category.name}
         </p>
         <p className="text-xs text-slate-500 mt-0.5 leading-tight">{category.description}</p>
       </div>
       <span
-        className={`text-xs font-medium px-2 py-0.5 rounded-full ${
-          active ? "bg-teal-100 text-teal-700" : `${category.accentClass} ${category.textClass}`
-        }`}
+        className={`text-xs font-medium px-2 py-0.5 rounded-full ${styles.count}`}
       >
         {count} {count === 1 ? "mapa" : "mapas"}
       </span>
@@ -126,6 +162,7 @@ export default function GeoDashboardPage() {
     const matchSearch = q
       ? m.title.toLowerCase().includes(q) ||
         m.description.toLowerCase().includes(q) ||
+        m.thematic?.toLowerCase().includes(q) ||
         m.tags?.some((t) => t.toLowerCase().includes(q))
       : true;
     return matchCat && matchSearch;
@@ -168,7 +205,7 @@ export default function GeoDashboardPage() {
               </h1>
               <p className="text-teal-100 text-base max-w-xl">
                 Accede y explora mapas ambientales interactivos organizados por temática.
-                Visualiza datos espaciales de biodiversidad, clima, riesgos y más.
+                Visualiza datos espaciales por sistema, temática y territorio.
               </p>
             </div>
             {canEdit && (
@@ -208,7 +245,7 @@ export default function GeoDashboardPage() {
               </button>
             )}
           </div>
-          <div className="grid grid-cols-2 sm:grid-cols-4 lg:grid-cols-7 gap-3">
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-3">
             {GEO_CATEGORIES.map((cat) => (
               <CategoryCard
                 key={cat.id}

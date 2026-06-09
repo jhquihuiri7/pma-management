@@ -7,7 +7,7 @@ import { useState } from "react";
 import { Plus, X } from "lucide-react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
-import { GEO_CATEGORIES } from "@/lib/geo-mock-data";
+import { GEO_CATEGORIES, getDefaultGeoThematic, getGeoThematics } from "@/lib/geo-mock-data";
 import type { GeoMap } from "@/types/geo";
 
 interface Props {
@@ -21,11 +21,20 @@ export default function AddMapDialog({ onAdd }: Props) {
     title: "",
     description: "",
     categoryId: GEO_CATEGORIES[0].id,
+    thematic: getDefaultGeoThematic(GEO_CATEGORIES[0].id),
     tags: "",
   });
 
   const reset = () =>
-    setForm({ title: "", description: "", categoryId: GEO_CATEGORIES[0].id, tags: "" });
+    setForm({
+      title: "",
+      description: "",
+      categoryId: GEO_CATEGORIES[0].id,
+      thematic: getDefaultGeoThematic(GEO_CATEGORIES[0].id),
+      tags: "",
+    });
+
+  const thematicOptions = getGeoThematics(form.categoryId);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -39,6 +48,7 @@ export default function AddMapDialog({ onAdd }: Props) {
           title: form.title.trim(),
           description: form.description.trim(),
           categoryId: form.categoryId,
+          thematic: form.thematic,
           tags: form.tags ? form.tags.split(",").map((t) => t.trim()).filter(Boolean) : [],
         }),
       });
@@ -117,12 +127,37 @@ export default function AddMapDialog({ onAdd }: Props) {
             </label>
             <select
               value={form.categoryId}
-              onChange={(e) => setForm({ ...form, categoryId: e.target.value })}
+              onChange={(e) => {
+                const categoryId = e.target.value;
+                setForm({
+                  ...form,
+                  categoryId,
+                  thematic: getDefaultGeoThematic(categoryId),
+                });
+              }}
               className="w-full border border-slate-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-teal-500"
             >
               {GEO_CATEGORIES.map((cat) => (
                 <option key={cat.id} value={cat.id}>
                   {cat.name}
+                </option>
+              ))}
+            </select>
+          </div>
+
+          <div>
+            <label className="block text-sm font-medium text-slate-700 mb-1">
+              Temática <span className="text-red-500">*</span>
+            </label>
+            <select
+              value={form.thematic}
+              onChange={(e) => setForm({ ...form, thematic: e.target.value })}
+              required
+              className="w-full border border-slate-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-teal-500"
+            >
+              {thematicOptions.map((thematic) => (
+                <option key={thematic} value={thematic}>
+                  {thematic}
                 </option>
               ))}
             </select>
