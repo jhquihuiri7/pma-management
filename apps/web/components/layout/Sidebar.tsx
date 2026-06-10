@@ -6,7 +6,6 @@ import { useAuth } from "@/lib/auth-context";
 import {
   LayoutDashboard,
   FileText,
-  Users,
   LogOut,
   LayoutTemplate,
   ArrowLeft,
@@ -17,7 +16,6 @@ import { Separator } from "@/components/ui/separator";
 const adminLinks = [
   { href: "/pma/dashboard", label: "Panel Principal", icon: LayoutDashboard },
   { href: "/pma/plans", label: "Planes", icon: FileText },
-  { href: "/pma/users", label: "Usuarios", icon: Users },
 ];
 
 const reporterLinks = [
@@ -71,7 +69,7 @@ export default function Sidebar() {
           );
         })}
 
-        {role === "ADMIN" && (
+        {(role === "ADMIN" || role === "VIEWER") && (
           <>
             <div className="pt-4 pb-1">
               <p className="px-3 text-xs font-semibold text-slate-400 uppercase tracking-wider">

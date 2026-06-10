@@ -39,9 +39,14 @@ const assignSchema = z.object({
   category: z.enum(["Responsable", "Colaborador"]),
 });
 
-async function assertPlanOwnership(planId: string, adminId: string) {
+async function assertPlanAccess(
+  planId: string,
+  user: { sub: string; role: "ADMIN" | "REPORTER" | "VIEWER" }
+) {
   const plan = await getPlanById(planId);
   if (!plan) throw NotFound("Plan not found");
+  // ADMINs pass through; non-admins (e.g. VIEWER) must be assigned to the plan.
+  if (!(await canUserAccessPlan(planId, user))) throw Forbidden("No tienes acceso a este plan");
   return plan;
 }
 
@@ -55,27 +60,27 @@ export async function pmaPlanItemsRoutes(app: FastifyInstance) {
     return getPlanItems(planId);
   });
 
-  app.post("/", { preHandler: requireRole("ADMIN") }, async (req, reply) => {
+  app.post("/", { preHandler: requireRole("ADMIN", "VIEWER") }, async (req, reply) => {
     const { planId } = req.params as { planId: string };
-    await assertPlanOwnership(planId, req.user!.adminId);
+    await assertPlanAccess(planId, req.user!);
     const body = itemBase.parse(req.body) as PlanItemCreateInput;
     const row = await createPlanItem(planId, body);
     reply.status(201);
     return row;
   });
 
-  app.post("/bulk", { preHandler: requireRole("ADMIN") }, async (req, reply) => {
+  app.post("/bulk", { preHandler: requireRole("ADMIN", "VIEWER") }, async (req, reply) => {
     const { planId } = req.params as { planId: string };
-    await assertPlanOwnership(planId, req.user!.adminId);
+    await assertPlanAccess(planId, req.user!);
     const { items } = bulkSchema.parse(req.body);
     const rows = await bulkCreatePlanItems(planId, items as PlanItemCreateInput[]);
     reply.status(201);
     return rows;
   });
 
-  app.patch("/:itemId", { preHandler: requireRole("ADMIN") }, async (req) => {
+  app.patch("/:itemId", { preHandler: requireRole("ADMIN", "VIEWER") }, async (req) => {
     const { planId, itemId } = req.params as { planId: string; itemId: string };
-    await assertPlanOwnership(planId, req.user!.adminId);
+    await assertPlanAccess(planId, req.user!);
     const body = itemUpdate.parse(req.body);
     return updatePlanItem(itemId, planId, body);
   });
@@ -83,40 +88,36 @@ export async function pmaPlanItemsRoutes(app: FastifyInstance) {
   app.patch("/:itemId/observation", async (req) => {
     const { planId, itemId } = req.params as { planId: string; itemId: string };
     const body = observationSchema.parse(req.body);
-    // Reporters can update observation; admins of the plan too.
     const u = req.user!;
-    if (u.role === "ADMIN") {
-      await assertPlanOwnership(planId, u.adminId);
-    } else {
-      // For non-admins, verify the user is actually assigned to this plan/item
-      // (plan- or item-level). Confirming the item exists is not enough.
-      const item = await getPlanItemById(itemId);
-      if (!item || item.planId !== planId) throw NotFound();
-      if (!(await canUserAccessPlan(planId, u))) throw Forbidden("No tienes acceso a este plan");
-    }
+    // Confirm the item belongs to the plan (existence alone is not enough),
+    // then check plan access — admins pass through, others must be assigned.
+    const item = await getPlanItemById(itemId);
+    if (!item || item.planId !== planId) throw NotFound();
+    await assertPlanAccess(planId, u);
     await updatePlanItemObservation(itemId, planId, body.observation);
     return { ok: true };
   });
 
+  // Deleting items is ADMIN-only.
   app.delete("/:itemId", { preHandler: requireRole("ADMIN") }, async (req) => {
     const { planId, itemId } = req.params as { planId: string; itemId: string };
-    await assertPlanOwnership(planId, req.user!.adminId);
+    await assertPlanAccess(planId, req.user!);
     await deletePlanItem(itemId, planId);
     return { ok: true };
   });
 
-  app.post("/:itemId/assign", { preHandler: requireRole("ADMIN") }, async (req) => {
+  app.post("/:itemId/assign", { preHandler: requireRole("ADMIN", "VIEWER") }, async (req) => {
     const { planId, itemId } = req.params as { planId: string; itemId: string };
-    await assertPlanOwnership(planId, req.user!.adminId);
+    await assertPlanAccess(planId, req.user!);
     const body = assignSchema.parse(req.body);
     await assignReporterToItem(itemId, body.userId, body.category);
     return { ok: true };
   });
 
-  app.delete("/:itemId/assign", { preHandler: requireRole("ADMIN") }, async (req) => {
+  app.delete("/:itemId/assign", { preHandler: requireRole("ADMIN", "VIEWER") }, async (req) => {
     const { planId, itemId } = req.params as { planId: string; itemId: string };
     const { userId } = req.body as { userId: string };
-    await assertPlanOwnership(planId, req.user!.adminId);
+    await assertPlanAccess(planId, req.user!);
     await unassignReporterFromItem(itemId, userId);
     return { ok: true };
   });

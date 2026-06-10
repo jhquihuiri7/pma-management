@@ -21,9 +21,14 @@ const findingSchema = z.object({
 
 const findingUpdate = findingSchema.omit({ planId: true });
 
-async function assertPlanOwnership(planId: string, adminId: string) {
+async function assertPlanAccess(
+  planId: string,
+  user: { sub: string; role: "ADMIN" | "REPORTER" | "VIEWER" }
+) {
   const plan = await getPlanById(planId);
   if (!plan) throw NotFound("Plan not found");
+  // ADMINs pass through; non-admins (e.g. VIEWER) must be assigned to the plan.
+  if (!(await canUserAccessPlan(planId, user))) throw Forbidden("No tienes acceso a este plan");
 }
 
 export async function pmaFindingsRoutes(app: FastifyInstance) {
@@ -37,29 +42,30 @@ export async function pmaFindingsRoutes(app: FastifyInstance) {
     return getFindingsByPlan(planId);
   });
 
-  app.post("/", { preHandler: requireRole("ADMIN") }, async (req, reply) => {
+  app.post("/", { preHandler: requireRole("ADMIN", "VIEWER") }, async (req, reply) => {
     const body = findingSchema.parse(req.body);
     const u = req.user!;
-    await assertPlanOwnership(body.planId, u.adminId);
+    await assertPlanAccess(body.planId, u);
     const row = await createFinding(body.planId, u.sub, u.name, body);
     reply.status(201);
     return row;
   });
 
-  app.put("/:id", { preHandler: requireRole("ADMIN") }, async (req) => {
+  app.put("/:id", { preHandler: requireRole("ADMIN", "VIEWER") }, async (req) => {
     const { id } = req.params as { id: string };
     const body = findingUpdate.parse(req.body);
     const planId = (req.query as any).planId as string | undefined;
     if (!planId) throw BadRequest("planId required");
-    await assertPlanOwnership(planId, req.user!.adminId);
+    await assertPlanAccess(planId, req.user!);
     return updateFinding(id, planId, body);
   });
 
+  // Deleting findings is ADMIN-only.
   app.delete("/:id", { preHandler: requireRole("ADMIN") }, async (req) => {
     const { id } = req.params as { id: string };
     const planId = (req.query as any).planId as string | undefined;
     if (!planId) throw BadRequest("planId required");
-    await assertPlanOwnership(planId, req.user!.adminId);
+    await assertPlanAccess(planId, req.user!);
     await deleteFinding(id, planId);
     return { ok: true };
   });

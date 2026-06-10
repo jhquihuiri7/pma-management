@@ -26,6 +26,8 @@ export default function PlansPage() {
   const { user: session} = useAuth();
   const isAdmin = session?.role === "ADMIN";
   const isViewer = session?.role === "VIEWER";
+  // VIEWERs can edit plans they're assigned to, but cannot create or delete them.
+  const canEdit = isAdmin || isViewer;
   const [plans, setPlans] = useState<Plan[]>([]);
   const [open, setOpen] = useState(false);
   const [editOpen, setEditOpen] = useState(false);
@@ -117,11 +119,6 @@ export default function PlansPage() {
               ? "Gestionar planes ambientales"
               : "Planes asignados a ti"}
           </p>
-          {isViewer && (
-            <span className="inline-flex items-center rounded-md bg-slate-100 px-2 py-1 text-xs font-medium text-slate-600 mt-1">
-              Solo lectura
-            </span>
-          )}
         </div>
 
         {isAdmin && (
@@ -325,7 +322,7 @@ export default function PlansPage() {
                         Visualizar
                       </Button>
                     )}
-                    {isAdmin && (
+                    {canEdit && (
                       <Button
                         variant="ghost"
                         size="sm"

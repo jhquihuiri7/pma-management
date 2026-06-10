@@ -12,6 +12,8 @@ import {
   deletePlan,
   getAssignedUserIds,
   canUserAccessPlan,
+  assignUserToPlan,
+  unassignUserFromPlan,
 } from "../../modules/pma/plansModule.js";
 import { getEvidencesByPlan } from "../../modules/pma/evidencesModule.js";
 import { getFindingsByPlan } from "../../modules/pma/findingsModule.js";
@@ -30,6 +32,10 @@ const planCreateSchema = z.object({
 });
 
 const planUpdateSchema = planCreateSchema.partial();
+
+const assignSchema = z.object({
+  userId: z.string().uuid(),
+});
 
 export async function pmaPlansRoutes(app: FastifyInstance) {
   app.addHook("preHandler", authenticate);
@@ -73,10 +79,12 @@ export async function pmaPlansRoutes(app: FastifyInstance) {
     return { plan, evidences, findings, assignedUsers };
   });
 
-  app.put("/:id", { preHandler: requireRole("ADMIN") }, async (req) => {
+  app.put("/:id", { preHandler: requireRole("ADMIN", "VIEWER") }, async (req) => {
     const { id } = req.params as { id: string };
     const body = planUpdateSchema.parse(req.body);
     const u = req.user!;
+    // ADMINs pass through; non-admins (e.g. VIEWER) must be assigned to the plan.
+    if (!(await canUserAccessPlan(id, u))) throw Forbidden("No tienes acceso a este plan");
     return updatePlan(id, u.adminId, {
       title: body.title,
       description: body.description,
@@ -93,6 +101,24 @@ export async function pmaPlansRoutes(app: FastifyInstance) {
     const { id } = req.params as { id: string };
     const u = req.user!;
     await deletePlan(id, u.adminId);
+    return { ok: true };
+  });
+
+  app.post("/:id/assign", { preHandler: requireRole("ADMIN", "VIEWER") }, async (req) => {
+    const { id } = req.params as { id: string };
+    const body = assignSchema.parse(req.body);
+    const u = req.user!;
+    if (!(await canUserAccessPlan(id, u))) throw Forbidden("No tienes acceso a este plan");
+    await assignUserToPlan(id, body.userId, u.adminId);
+    return { ok: true };
+  });
+
+  app.delete("/:id/assign", { preHandler: requireRole("ADMIN", "VIEWER") }, async (req) => {
+    const { id } = req.params as { id: string };
+    const body = assignSchema.parse(req.body);
+    const u = req.user!;
+    if (!(await canUserAccessPlan(id, u))) throw Forbidden("No tienes acceso a este plan");
+    await unassignUserFromPlan(id, body.userId, u.adminId);
     return { ok: true };
   });
 }

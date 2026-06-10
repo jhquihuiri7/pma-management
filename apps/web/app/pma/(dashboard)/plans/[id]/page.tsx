@@ -84,6 +84,10 @@ export default function PlanDetailPage() {
   const router = useRouter();
   const isAdmin = session?.role === "ADMIN";
   const isViewer = session?.role === "VIEWER";
+  // VIEWERs can do everything an admin can on an assigned plan EXCEPT delete
+  // (plans, items, evidences, findings) and creating plans. Edit-capable actions
+  // use `canEdit`; destructive ones stay gated by `isAdmin`.
+  const canEdit = isAdmin || isViewer;
   const deepLinkEvidenceId = searchParams.get("evidenceId");
 
   const [plan, setPlan] = useState<Plan | null>(null);
@@ -165,7 +169,7 @@ export default function PlanDetailPage() {
   }, [loadPlan, loadItems, loadCompliance]);
 
   useEffect(() => {
-    if (isAdmin) {
+    if (canEdit) {
       apiFetch("/pma/api/users")
         .then((r) => r.json())
         .then((data) => {
@@ -175,7 +179,7 @@ export default function PlanDetailPage() {
           }
         });
     }
-  }, [isAdmin]);
+  }, [canEdit]);
 
   useEffect(() => {
     if (!deepLinkEvidenceId || evidences.length === 0) return;
@@ -826,11 +830,6 @@ export default function PlanDetailPage() {
         <div className="flex items-center justify-between mb-1">
           <div className="flex items-center gap-2">
             <h1 className="text-2xl font-bold">{plan.title}</h1>
-            {isViewer && (
-              <span className="inline-flex items-center rounded-md bg-slate-100 px-2 py-1 text-xs font-medium text-slate-600">
-                Solo lectura
-              </span>
-            )}
           </div>
           {isAdmin && (
             <Button
@@ -851,8 +850,8 @@ export default function PlanDetailPage() {
         </p>
       </div>
 
-      {/* Viewers assigned to this plan (admin only) */}
-      {isAdmin && (
+      {/* Viewers assigned to this plan */}
+      {canEdit && (
         <Card>
           <CardHeader className="flex flex-row items-center justify-between">
             <CardTitle className="text-base">
@@ -904,7 +903,7 @@ export default function PlanDetailPage() {
           <CardTitle className="text-base">
             Items del Plan ({visibleItems.length})
           </CardTitle>
-          {isAdmin && (
+          {canEdit && (
             <div className="flex gap-2">
             <Button
               size="sm"
@@ -1209,7 +1208,7 @@ export default function PlanDetailPage() {
           {visibleItems.length === 0 ? (
             <p className="text-sm text-muted-foreground text-center py-8">
               Sin Items aún.{" "}
-              {isAdmin && "Usa el botón \"Agregar Item\" para comenzar."}
+              {canEdit && "Usa el botón \"Agregar Item\" para comenzar."}
             </p>
           ) : (
             <div className="overflow-x-auto">
@@ -1229,7 +1228,7 @@ export default function PlanDetailPage() {
                     <TableHead>Reporteros</TableHead>
                     <TableHead>Observación</TableHead>
                     <TableHead className="w-[60px]"></TableHead>
-                    {isAdmin && <TableHead className="w-[60px]"></TableHead>}
+                    {canEdit && <TableHead className="w-[60px]"></TableHead>}
                   </TableRow>
                 </TableHeader>
                 <TableBody>
@@ -1306,7 +1305,7 @@ export default function PlanDetailPage() {
                           </span>
                         )}
                       </TableCell>
-                      {isAdmin && (
+                      {canEdit && (
                         <TableCell onClick={(e) => e.stopPropagation()}>
                           <div className="flex gap-1">
                             <Button
@@ -1339,13 +1338,15 @@ export default function PlanDetailPage() {
                             >
                               <Pencil className="w-4 h-4 text-blue-500" />
                             </Button>
-                            <Button
-                              variant="ghost"
-                              size="sm"
-                              onClick={() => handleDeleteItem(pi.id)}
-                            >
-                              <Trash2 className="w-4 h-4 text-red-500" />
-                            </Button>
+                            {isAdmin && (
+                              <Button
+                                variant="ghost"
+                                size="sm"
+                                onClick={() => handleDeleteItem(pi.id)}
+                              >
+                                <Trash2 className="w-4 h-4 text-red-500" />
+                              </Button>
+                            )}
                           </div>
                         </TableCell>
                       )}
@@ -1576,8 +1577,7 @@ export default function PlanDetailPage() {
                                     </span>
                                   ) : (
                                     <button
-                                      onClick={() => { if (!isViewer) setCalUpload({ item: pi, month: m }); }}
-                                      disabled={isViewer}
+                                      onClick={() => setCalUpload({ item: pi, month: m })}
                                       className="w-full rounded flex items-center justify-center font-bold leading-none transition-opacity hover:opacity-75 disabled:cursor-default disabled:opacity-100"
                                       style={{
                                         height: "24px",
@@ -1586,7 +1586,7 @@ export default function PlanDetailPage() {
                                         fontSize: "10px",
                                         border: `1px solid ${style.border}`,
                                       }}
-                                      title={isViewer ? titleText.replace("Subir evidencia", "Sin evidencia") : titleText}
+                                      title={titleText}
                                     >
                                       {evStatus !== "none" ? style.label : periodicLabel}
                                     </button>
@@ -1619,7 +1619,7 @@ export default function PlanDetailPage() {
                               key={i}
                               className="border-2 border-border p-0.5"
                             >
-                              {isAdmin ? (
+                              {canEdit ? (
                                 <DropdownMenu>
                                   <DropdownMenuTrigger
                                     className="w-full rounded flex items-center justify-center font-bold leading-none transition-opacity hover:opacity-75 bg-transparent border-0 cursor-pointer"
@@ -1817,7 +1817,7 @@ export default function PlanDetailPage() {
                         </div>
                         <div className="flex items-center gap-2">
                           <Badge variant="secondary">{a.category}</Badge>
-                          {isAdmin && (
+                          {canEdit && (
                             <Button variant="ghost" size="sm" onClick={() => handleUnassignFromItem(a.userId)}>
                               <Trash2 className="w-4 h-4 text-red-500" />
                             </Button>
@@ -1860,7 +1860,7 @@ export default function PlanDetailPage() {
             )}
 
             {/* Unassigned reporters list */}
-            {isAdmin && !pendingAssign && (
+            {canEdit && !pendingAssign && (
               <div>
                 <p className="text-xs font-medium text-muted-foreground mb-2">Agregar reportero</p>
                 {allReporters.filter((r) => !(selectedItem?.assignedUsers ?? []).some((a) => a.userId === r.id)).length === 0 ? (
@@ -2247,7 +2247,7 @@ export default function PlanDetailPage() {
           <CardTitle className="text-base">
             Hallazgos ({visibleFindings.length})
           </CardTitle>
-          {isAdmin && (
+          {canEdit && (
             <Button size="sm" onClick={openCreateFindingDialog}>
               <Plus className="w-4 h-4 mr-1" />
               Nuevo hallazgo
@@ -2270,7 +2270,7 @@ export default function PlanDetailPage() {
                   <TableHead>Propuestas de solución</TableHead>
                   <TableHead>Creado por</TableHead>
                   <TableHead>Fecha</TableHead>
-                  {isAdmin && <TableHead className="w-[96px]">Acciones</TableHead>}
+                  {canEdit && <TableHead className="w-[96px]">Acciones</TableHead>}
                 </TableRow>
               </TableHeader>
               <TableBody>
@@ -2293,7 +2293,7 @@ export default function PlanDetailPage() {
                     <TableCell>
                       {new Date(finding.createdAt).toLocaleString()}
                     </TableCell>
-                    {isAdmin && (
+                    {canEdit && (
                       <TableCell>
                         <div className="flex gap-1">
                           <Button
@@ -2304,14 +2304,16 @@ export default function PlanDetailPage() {
                           >
                             <Pencil className="w-4 h-4" />
                           </Button>
-                          <Button
-                            size="icon"
-                            variant="ghost"
-                            onClick={() => handleDeleteFinding(finding.id)}
-                            title="Eliminar hallazgo"
-                          >
-                            <Trash2 className="w-4 h-4 text-red-500" />
-                          </Button>
+                          {isAdmin && (
+                            <Button
+                              size="icon"
+                              variant="ghost"
+                              onClick={() => handleDeleteFinding(finding.id)}
+                              title="Eliminar hallazgo"
+                            >
+                              <Trash2 className="w-4 h-4 text-red-500" />
+                            </Button>
+                          )}
                         </div>
                       </TableCell>
                     )}
@@ -2330,7 +2332,7 @@ export default function PlanDetailPage() {
             <CardTitle className="text-base">
               Evidencias ({visibleEvidences.length})
             </CardTitle>
-            {isAdmin && (
+            {canEdit && (
               <Button
                 size="sm"
                 onClick={() => setManualEvidenceOpen(true)}
@@ -2373,7 +2375,7 @@ export default function PlanDetailPage() {
                     }
                   >
                     <TableCell>
-                      {isAdmin ? (
+                      {canEdit ? (
                         <DropdownMenu>
                           <DropdownMenuTrigger className="p-0 h-auto bg-transparent border-0 cursor-pointer inline-flex items-center justify-center rounded hover:opacity-75 transition-opacity">
                               {(ev.validationStatus ?? "pending") === "valid" && (

@@ -16,6 +16,7 @@ import {
 import { Button } from "@/components/ui/button";
 import { Separator } from "@/components/ui/separator";
 import { Format, FormatFunctionality } from "@/types";
+import { useAuth } from "@/lib/auth-context";
 
 interface FunctionalityConfig {
   key: FormatFunctionality;
@@ -33,6 +34,8 @@ const FUNCTIONALITIES: FunctionalityConfig[] = [
 ];
 
 export default function FormatosPage() {
+  const { user: session } = useAuth();
+  const isAdmin = session?.role === "ADMIN";
   const [formats, setFormats] = useState<Format[]>([]);
   const [loading, setLoading] = useState(true);
   const [uploading, setUploading] = useState<FormatFunctionality | null>(null);
@@ -185,15 +188,17 @@ export default function FormatosPage() {
                             <ExternalLink className="w-3.5 h-3.5" />
                           </Button>
                         </a>
-                        <Button
-                          variant="ghost"
-                          size="sm"
-                          className="h-8 w-8 p-0 text-red-500 hover:text-red-700 hover:bg-red-50"
-                          disabled={deleting === currentFormat.id}
-                          onClick={() => handleDelete(currentFormat)}
-                        >
-                          <Trash2 className="w-3.5 h-3.5" />
-                        </Button>
+                        {isAdmin && (
+                          <Button
+                            variant="ghost"
+                            size="sm"
+                            className="h-8 w-8 p-0 text-red-500 hover:text-red-700 hover:bg-red-50"
+                            disabled={deleting === currentFormat.id}
+                            onClick={() => handleDelete(currentFormat)}
+                          >
+                            <Trash2 className="w-3.5 h-3.5" />
+                          </Button>
+                        )}
                         <input
                           type="file"
                           accept=".docx,.doc,application/vnd.openxmlformats-officedocument.wordprocessingml.document,application/msword"

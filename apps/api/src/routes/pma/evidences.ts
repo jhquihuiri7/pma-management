@@ -1,11 +1,12 @@
 import type { FastifyInstance, FastifyReply, FastifyRequest } from "fastify";
 import { z } from "zod";
 import { authenticate, requireRole, requireApp } from "../../auth/middleware.js";
-import { BadRequest, Forbidden } from "../../lib/errors.js";
+import { BadRequest, Forbidden, NotFound } from "../../lib/errors.js";
 import {
   createEvidence,
   getEvidencesByPlan,
   getEvidencesByReporter,
+  getEvidenceById,
   updateEvidenceValidation,
   deleteEvidence,
 } from "../../modules/pma/evidencesModule.js";
@@ -47,10 +48,14 @@ export async function pmaEvidencesRoutes(app: FastifyInstance) {
     return { ok: true };
   });
 
-  app.put("/:id/validation", { preHandler: requireRole("ADMIN") }, async (req) => {
+  app.put("/:id/validation", { preHandler: requireRole("ADMIN", "VIEWER") }, async (req) => {
     const { id } = req.params as { id: string };
     const body = validationSchema.parse(req.body);
     const u = req.user!;
+    const evidence = await getEvidenceById(id);
+    if (!evidence) throw NotFound("Evidence not found");
+    // ADMINs pass through; non-admins (e.g. VIEWER) must be assigned to the plan.
+    if (!(await canUserAccessPlan(evidence.planId, u))) throw Forbidden("No tienes acceso a este plan");
     return updateEvidenceValidation(id, body.status, u.adminId, u.sub, body.comment);
   });
 
@@ -72,6 +77,8 @@ export async function uploadPmaEvidence(req: FastifyRequest, reply: FastifyReply
     if (f && typeof f === "object" && "value" in f) fields[k] = f.value as string;
   }
   if (!fields.planId) throw BadRequest("planId required");
+  // Anyone (ADMIN/REPORTER/VIEWER) may upload, but only to a plan they can access.
+  if (!(await canUserAccessPlan(fields.planId, u))) throw Forbidden("No tienes acceso a este plan");
   const ev = await createEvidence(u.adminId, {
     planId: fields.planId,
     planItemId: fields.planItemId || undefined,

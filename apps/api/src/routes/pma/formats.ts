@@ -13,7 +13,7 @@ export async function pmaFormatsRoutes(app: FastifyInstance) {
 
   app.get("/", async (req) => listFormats(req.user!.adminId));
 
-  app.post("/", { preHandler: requireRole("ADMIN") }, async (req, reply) => {
+  app.post("/", { preHandler: requireRole("ADMIN", "VIEWER") }, async (req, reply) => {
     const file = await req.file();
     if (!file) throw BadRequest("file required");
     const fields: Record<string, string> = {};

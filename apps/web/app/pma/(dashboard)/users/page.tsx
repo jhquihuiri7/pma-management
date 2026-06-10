@@ -1,10 +1,5 @@
-import SubsystemUsersPage from "@/components/users/SubsystemUsersPage";
+import { redirect } from "next/navigation";
 
 export default function PmaUsersPage() {
-  return (
-    <SubsystemUsersPage
-      appLabel="Plan de Manejo Ambiental"
-      apiPrefix="/pma"
-    />
-  );
+  redirect("/admin/users");
 }

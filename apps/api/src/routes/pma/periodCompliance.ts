@@ -17,9 +17,14 @@ const entrySchema = z.object({
 
 const bulkSchema = z.object({ entries: z.array(entrySchema).min(1) });
 
-async function assertPlanOwnership(planId: string, adminId: string) {
+async function assertPlanAccess(
+  planId: string,
+  user: { sub: string; role: "ADMIN" | "REPORTER" | "VIEWER" }
+) {
   const plan = await getPlanById(planId);
   if (!plan) throw NotFound("Plan not found");
+  // ADMINs pass through; non-admins (e.g. VIEWER) must be assigned to the plan.
+  if (!(await canUserAccessPlan(planId, user))) throw Forbidden("No tienes acceso a este plan");
 }
 
 export async function pmaPeriodComplianceRoutes(app: FastifyInstance) {
@@ -32,17 +37,17 @@ export async function pmaPeriodComplianceRoutes(app: FastifyInstance) {
     return getCompliance(planId);
   });
 
-  app.put("/", { preHandler: requireRole("ADMIN") }, async (req) => {
+  app.put("/", { preHandler: requireRole("ADMIN", "VIEWER") }, async (req) => {
     const { planId } = req.params as { planId: string };
-    await assertPlanOwnership(planId, req.user!.adminId);
+    await assertPlanAccess(planId, req.user!);
     const body = bulkSchema.parse(req.body);
     await bulkSetCompliance(body.entries);
     return { ok: true };
   });
 
-  app.post("/", { preHandler: requireRole("ADMIN") }, async (req) => {
+  app.post("/", { preHandler: requireRole("ADMIN", "VIEWER") }, async (req) => {
     const { planId } = req.params as { planId: string };
-    await assertPlanOwnership(planId, req.user!.adminId);
+    await assertPlanAccess(planId, req.user!);
     const body = entrySchema.parse(req.body);
     await setCompliance(body.planItemId, body.periodKey, body.status);
     return {
