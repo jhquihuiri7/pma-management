@@ -16,6 +16,31 @@ export type EvidenceCreateInput = {
   contentType?: string;
 };
 
+type EvidenceRow = typeof rgdpEvidences.$inferSelect;
+
+function toApi(row: EvidenceRow) {
+  const storageUrl = getStorage().getUrl(row.storagePath);
+  return {
+    id: row.id,
+    planId: row.planId,
+    planItemId: row.planItemId ?? undefined,
+    uploadedBy: row.uploadedBy,
+    uploaderName: row.uploaderName,
+    fileName: row.fileName,
+    storagePath: row.storagePath,
+    storageUrl,
+    driveFileId: row.storagePath,
+    driveUrl: storageUrl,
+    description: row.description,
+    validationStatus: row.validationStatus,
+    validationComment: row.validationComment ?? undefined,
+    validatedBy: row.validatedBy ?? undefined,
+    validatedAt: row.validatedAt ?? undefined,
+    activityMonth: row.activityMonth ?? undefined,
+    createdAt: row.createdAt,
+  };
+}
+
 export async function createEvidence(adminId: string, input: EvidenceCreateInput) {
   const db = getDb();
   const plan = await db.select().from(rgdpPlans).where(eq(rgdpPlans.id, input.planId)).limit(1);
@@ -73,7 +98,7 @@ export async function createEvidence(adminId: string, input: EvidenceCreateInput
       activityMonth: input.activityMonth ?? null,
     })
     .returning();
-  return row;
+  return toApi(row);
 }
 
 const MONTHS_ES = ["ene", "feb", "mar", "abr", "may", "jun", "jul", "ago", "sep", "oct", "nov", "dic"];
@@ -84,15 +109,27 @@ function getMonthlyFolderName(activityMonth: string): string {
   return `${MONTHS_ES[month - 1]}${year}`;
 }
 
-export const getEvidencesByPlan = (planId: string) =>
-  getDb().select().from(rgdpEvidences).where(eq(rgdpEvidences.planId, planId)).orderBy(desc(rgdpEvidences.createdAt));
+export async function getEvidencesByPlan(planId: string) {
+  const rows = await getDb()
+    .select()
+    .from(rgdpEvidences)
+    .where(eq(rgdpEvidences.planId, planId))
+    .orderBy(desc(rgdpEvidences.createdAt));
+  return rows.map(toApi);
+}
 
-export const getEvidencesByReporter = (userId: string) =>
-  getDb().select().from(rgdpEvidences).where(eq(rgdpEvidences.uploadedBy, userId)).orderBy(desc(rgdpEvidences.createdAt));
+export async function getEvidencesByReporter(userId: string) {
+  const rows = await getDb()
+    .select()
+    .from(rgdpEvidences)
+    .where(eq(rgdpEvidences.uploadedBy, userId))
+    .orderBy(desc(rgdpEvidences.createdAt));
+  return rows.map(toApi);
+}
 
 async function getEvidenceById(id: string) {
   const rows = await getDb().select().from(rgdpEvidences).where(eq(rgdpEvidences.id, id)).limit(1);
-  return rows[0] ?? null;
+  return rows[0] ? toApi(rows[0]) : null;
 }
 
 export async function updateEvidenceValidation(
@@ -118,7 +155,7 @@ export async function updateEvidenceValidation(
     })
     .where(eq(rgdpEvidences.id, evidenceId))
     .returning();
-  return { evidence: row, previousStatus };
+  return { evidence: toApi(row), previousStatus };
 }
 
 export async function deleteEvidence(evidenceId: string, adminId: string) {

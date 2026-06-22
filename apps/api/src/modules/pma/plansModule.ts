@@ -6,7 +6,7 @@ import {
   pmaItemAssignments,
   pmaPlanItems,
 } from "../../db/schema/pma.js";
-import { Forbidden, NotFound } from "../../lib/errors.js";
+import { NotFound } from "../../lib/errors.js";
 
 export type PlanCreateInput = {
   title: string;
@@ -20,6 +20,41 @@ export type PlanCreateInput = {
 };
 
 export type PlanUpdateInput = Partial<PlanCreateInput>;
+
+type PlanRow = typeof pmaPlans.$inferSelect;
+
+function toDateOnly(value: Date | string | null): string | null {
+  if (!value) return null;
+  if (value instanceof Date) return value.toISOString().slice(0, 10);
+
+  const match = /^(\d{4}-\d{2}-\d{2})/.exec(value);
+  return match ? match[1] : value;
+}
+
+function toApi(row: PlanRow) {
+  return {
+    id: row.id,
+    createdBy: row.createdBy,
+    adminId: row.createdBy,
+    title: row.title,
+    description: row.description,
+    tipo: row.tipo,
+    fase: row.fase,
+    enfoque: row.enfoque,
+    report_per: row.reportPer,
+    start_date: toDateOnly(row.startDate),
+    visualization_url: row.visualizationUrl,
+    storagePath: row.storagePath,
+    location: row.location,
+    ciiu: row.ciiu,
+    zoneType: row.zoneType,
+    coordinateFormat: row.coordinateFormat,
+    geographicArea: row.geographicArea,
+    implantationArea: row.implantationArea,
+    createdAt: row.createdAt,
+    updatedAt: row.updatedAt,
+  };
+}
 
 export async function createPlan(adminId: string, input: PlanCreateInput) {
   const db = getDb();
@@ -37,31 +72,33 @@ export async function createPlan(adminId: string, input: PlanCreateInput) {
       visualizationUrl: input.visualizationUrl ?? null,
     })
     .returning();
-  return row;
+  return toApi(row);
 }
 
 export async function getPlansByAdmin(_adminId?: string) {
   // Single shared organization: every admin sees all plans.
   const db = getDb();
-  return db.select().from(pmaPlans).orderBy(desc(pmaPlans.createdAt));
+  const rows = await db.select().from(pmaPlans).orderBy(desc(pmaPlans.createdAt));
+  return rows.map(toApi);
 }
 
 export async function getPlanById(planId: string) {
   const db = getDb();
   const rows = await db.select().from(pmaPlans).where(eq(pmaPlans.id, planId)).limit(1);
-  return rows[0] ?? null;
+  return rows[0] ? toApi(rows[0]) : null;
 }
 
 export async function updatePlan(planId: string, adminId: string, updates: PlanUpdateInput) {
   const db = getDb();
   const plan = await getPlanById(planId);
   if (!plan) throw NotFound("Plan not found");
+  const cleaned = Object.fromEntries(Object.entries(updates).filter(([, v]) => v !== undefined));
   const [row] = await db
     .update(pmaPlans)
-    .set({ ...updates, updatedAt: new Date() })
+    .set({ ...cleaned, updatedAt: new Date() })
     .where(eq(pmaPlans.id, planId))
     .returning();
-  return row;
+  return toApi(row);
 }
 
 export async function deletePlan(planId: string, adminId: string) {
@@ -107,7 +144,8 @@ export async function getPlansForReporter(userId: string) {
 
   const planIds = Array.from(new Set([...planLevel, ...itemLevel].map((r) => r.planId)));
   if (planIds.length === 0) return [];
-  return db.select().from(pmaPlans).where(inArray(pmaPlans.id, planIds));
+  const rows = await db.select().from(pmaPlans).where(inArray(pmaPlans.id, planIds));
+  return rows.map(toApi);
 }
 
 export async function getPlansForViewer(userId: string) {
@@ -118,7 +156,8 @@ export async function getPlansForViewer(userId: string) {
     .where(eq(pmaPlanAssignments.userId, userId));
   const planIds = planLevel.map((r) => r.planId);
   if (planIds.length === 0) return [];
-  return db.select().from(pmaPlans).where(inArray(pmaPlans.id, planIds));
+  const rows = await db.select().from(pmaPlans).where(inArray(pmaPlans.id, planIds));
+  return rows.map(toApi);
 }
 
 export async function getAssignedUserIds(planId: string): Promise<string[]> {

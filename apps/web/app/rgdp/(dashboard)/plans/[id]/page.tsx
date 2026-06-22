@@ -241,13 +241,13 @@ export default function PlanDetailPage() {
     status: EvidenceValidationStatus,
     validationComment?: string
   ) {
-    const res = await apiFetch(`/rgdp/api/evidences?id=${evidenceId}`, {
-      method: "PATCH",
+    const res = await apiFetch(`/rgdp/api/evidences/${evidenceId}/validation`, {
+      method: "PUT",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
-        validationStatus: status,
+        status,
         ...(status === "invalid"
-          ? { validationComment: validationComment?.trim() ?? "" }
+          ? { comment: validationComment?.trim() ?? "" }
           : {}),
       }),
     });

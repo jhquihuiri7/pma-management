@@ -7,6 +7,7 @@ import { pmaPeriodComplianceRoutes } from "./periodCompliance.js";
 import { pmaNotificationsRoutes } from "./notifications.js";
 import { pmaFormatsRoutes } from "./formats.js";
 import { pmaUsersRoutes } from "./users.js";
+import { pmaDownloadRoutes } from "./download.js";
 import { authenticate, requireApp } from "../../auth/middleware.js";
 
 export async function pmaRoutes(app: FastifyInstance) {
@@ -19,4 +20,5 @@ export async function pmaRoutes(app: FastifyInstance) {
   await app.register(pmaNotificationsRoutes, { prefix: "/notifications" });
   await app.register(pmaFormatsRoutes, { prefix: "/formats" });
   await app.register(pmaUsersRoutes, { prefix: "/users" });
+  await app.register(pmaDownloadRoutes, { prefix: "/download" });
 }

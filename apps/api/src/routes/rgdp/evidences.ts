@@ -13,9 +13,18 @@ const validationSchema = z.object({
   comment: z.string().optional(),
 });
 
+const legacyValidationSchema = z.object({
+  validationStatus: z.enum(["valid", "invalid", "pending"]),
+  validationComment: z.string().optional(),
+});
+
 const queryListSchema = z.object({
   planId: z.string().uuid().optional(),
   mine: z.coerce.boolean().optional(),
+});
+
+const evidenceIdQuerySchema = z.object({
+  id: z.string().uuid(),
 });
 
 const deleteQuerySchema = z.object({
@@ -42,6 +51,13 @@ export async function rgdpEvidencesRoutes(app: FastifyInstance) {
     const { id } = deleteQuerySchema.parse(req.query);
     await deleteEvidence(id, req.user!.adminId);
     return { ok: true };
+  });
+
+  app.patch("/", { preHandler: requireRole("ADMIN") }, async (req) => {
+    const { id } = evidenceIdQuerySchema.parse(req.query);
+    const body = legacyValidationSchema.parse(req.body);
+    const u = req.user!;
+    return updateEvidenceValidation(id, body.validationStatus, u.adminId, u.sub, body.validationComment);
   });
 
   app.put("/:id/validation", { preHandler: requireRole("ADMIN") }, async (req) => {

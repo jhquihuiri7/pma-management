@@ -8,6 +8,7 @@ import { rgdpMonthlyGenerationsRoutes } from "./monthlyGenerations.js";
 import { rgdpNotificationsRoutes } from "./notifications.js";
 import { rgdpFormatsRoutes } from "./formats.js";
 import { rgdpUsersRoutes } from "./users.js";
+import { rgdpDownloadRoutes } from "./download.js";
 import { authenticate, requireApp } from "../../auth/middleware.js";
 
 export async function rgdpRoutes(app: FastifyInstance) {
@@ -21,4 +22,5 @@ export async function rgdpRoutes(app: FastifyInstance) {
   await app.register(rgdpNotificationsRoutes, { prefix: "/notifications" });
   await app.register(rgdpFormatsRoutes, { prefix: "/formats" });
   await app.register(rgdpUsersRoutes, { prefix: "/users" });
+  await app.register(rgdpDownloadRoutes, { prefix: "/download" });
 }

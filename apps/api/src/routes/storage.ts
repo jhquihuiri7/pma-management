@@ -22,13 +22,23 @@ const MIME: Record<string, string> = {
   ".zip": "application/zip",
 };
 
-export async function storageRoutes(app: FastifyInstance) {
-  app.addHook("preHandler", authenticate);
+const PUBLIC_STORAGE_ROOTS = new Set(["PMA", "RGDP", "GEO"]);
 
+function isPublicStoragePath(path: string): boolean {
+  const clean = path.replace(/^[/\\]+/, "");
+  const segments = clean.split(/[\\/]+/);
+  if (segments.length < 2 || segments.some((segment) => segment === "..")) return false;
+  return PUBLIC_STORAGE_ROOTS.has(segments[0]);
+}
+
+export async function storageRoutes(app: FastifyInstance) {
   // GET /storage/*  (path after /storage/ is the storage-relative path)
   app.get("/*", async (req, reply) => {
     const path = (req.params as any)["*"] as string;
     if (!path) throw NotFound();
+    if (!isPublicStoragePath(path)) {
+      await authenticate(req, reply);
+    }
     const storage = getStorage();
     if (!(await storage.exists(path))) throw NotFound("File not found");
     const ext = extname(path).toLowerCase();

@@ -17,9 +17,18 @@ const validationSchema = z.object({
   comment: z.string().optional(),
 });
 
+const legacyValidationSchema = z.object({
+  validationStatus: z.enum(["valid", "invalid", "pending"]),
+  validationComment: z.string().optional(),
+});
+
 const queryListSchema = z.object({
   planId: z.string().uuid().optional(),
   mine: z.coerce.boolean().optional(),
+});
+
+const evidenceIdQuerySchema = z.object({
+  id: z.string().uuid(),
 });
 
 const deleteQuerySchema = z.object({
@@ -46,6 +55,16 @@ export async function pmaEvidencesRoutes(app: FastifyInstance) {
     const { id } = deleteQuerySchema.parse(req.query);
     await deleteEvidence(id, req.user!.adminId);
     return { ok: true };
+  });
+
+  app.patch("/", { preHandler: requireRole("ADMIN", "VIEWER") }, async (req) => {
+    const { id } = evidenceIdQuerySchema.parse(req.query);
+    const body = legacyValidationSchema.parse(req.body);
+    const u = req.user!;
+    const evidence = await getEvidenceById(id);
+    if (!evidence) throw NotFound("Evidence not found");
+    if (!(await canUserAccessPlan(evidence.planId, u))) throw Forbidden("No tienes acceso a este plan");
+    return updateEvidenceValidation(id, body.validationStatus, u.adminId, u.sub, body.validationComment);
   });
 
   app.put("/:id/validation", { preHandler: requireRole("ADMIN", "VIEWER") }, async (req) => {

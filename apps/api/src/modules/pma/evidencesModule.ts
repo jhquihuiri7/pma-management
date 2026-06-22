@@ -16,6 +16,31 @@ export type EvidenceCreateInput = {
   contentType?: string;
 };
 
+type EvidenceRow = typeof pmaEvidences.$inferSelect;
+
+function toApi(row: EvidenceRow) {
+  const storageUrl = getStorage().getUrl(row.storagePath);
+  return {
+    id: row.id,
+    planId: row.planId,
+    planItemId: row.planItemId ?? undefined,
+    uploadedBy: row.uploadedBy,
+    uploaderName: row.uploaderName,
+    fileName: row.fileName,
+    storagePath: row.storagePath,
+    storageUrl,
+    driveFileId: row.storagePath,
+    driveUrl: storageUrl,
+    description: row.description,
+    validationStatus: row.validationStatus,
+    validationComment: row.validationComment ?? undefined,
+    validatedBy: row.validatedBy ?? undefined,
+    validatedAt: row.validatedAt ?? undefined,
+    activityMonth: row.activityMonth ?? undefined,
+    createdAt: row.createdAt,
+  };
+}
+
 export async function createEvidence(adminId: string, input: EvidenceCreateInput) {
   const db = getDb();
   const plan = await db
@@ -80,7 +105,7 @@ export async function createEvidence(adminId: string, input: EvidenceCreateInput
       activityMonth: input.activityMonth ?? null,
     })
     .returning();
-  return row;
+  return toApi(row);
 }
 
 const MONTHS_ES = ["ene", "feb", "mar", "abr", "may", "jun", "jul", "ago", "sep", "oct", "nov", "dic"];
@@ -117,26 +142,28 @@ function getActivityPeriodFolder(
 
 export async function getEvidencesByPlan(planId: string) {
   const db = getDb();
-  return db
+  const rows = await db
     .select()
     .from(pmaEvidences)
     .where(eq(pmaEvidences.planId, planId))
     .orderBy(desc(pmaEvidences.createdAt));
+  return rows.map(toApi);
 }
 
 export async function getEvidencesByReporter(userId: string) {
   const db = getDb();
-  return db
+  const rows = await db
     .select()
     .from(pmaEvidences)
     .where(eq(pmaEvidences.uploadedBy, userId))
     .orderBy(desc(pmaEvidences.createdAt));
+  return rows.map(toApi);
 }
 
 export async function getEvidenceById(id: string) {
   const db = getDb();
   const rows = await db.select().from(pmaEvidences).where(eq(pmaEvidences.id, id)).limit(1);
-  return rows[0] ?? null;
+  return rows[0] ? toApi(rows[0]) : null;
 }
 
 export async function updateEvidenceValidation(
@@ -163,7 +190,7 @@ export async function updateEvidenceValidation(
     })
     .where(eq(pmaEvidences.id, evidenceId))
     .returning();
-  return { evidence: row, previousStatus };
+  return { evidence: toApi(row), previousStatus };
 }
 
 export async function deleteEvidence(evidenceId: string, adminId: string) {

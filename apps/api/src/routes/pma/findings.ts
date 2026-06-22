@@ -20,6 +20,10 @@ const findingSchema = z.object({
 });
 
 const findingUpdate = findingSchema.omit({ planId: true });
+const findingIdQuery = z.object({
+  id: z.string().uuid(),
+  planId: z.string().uuid().optional(),
+});
 
 async function assertPlanAccess(
   planId: string,
@@ -49,6 +53,24 @@ export async function pmaFindingsRoutes(app: FastifyInstance) {
     const row = await createFinding(body.planId, u.sub, u.name, body);
     reply.status(201);
     return row;
+  });
+
+  // Compatibility for older web builds that sent PATCH /findings?id=...
+  app.patch("/", { preHandler: requireRole("ADMIN", "VIEWER") }, async (req) => {
+    const { id, planId: queryPlanId } = findingIdQuery.parse(req.query);
+    const body = findingSchema.parse(req.body);
+    const planId = queryPlanId ?? body.planId;
+    await assertPlanAccess(planId, req.user!);
+    return updateFinding(id, planId, body);
+  });
+
+  // Compatibility for older web builds that sent DELETE /findings?id=...
+  app.delete("/", { preHandler: requireRole("ADMIN") }, async (req) => {
+    const { id, planId } = findingIdQuery.parse(req.query);
+    if (!planId) throw BadRequest("planId required");
+    await assertPlanAccess(planId, req.user!);
+    await deleteFinding(id, planId);
+    return { ok: true };
   });
 
   app.put("/:id", { preHandler: requireRole("ADMIN", "VIEWER") }, async (req) => {

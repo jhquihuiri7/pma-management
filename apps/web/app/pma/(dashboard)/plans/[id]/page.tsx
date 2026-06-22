@@ -254,13 +254,13 @@ export default function PlanDetailPage() {
     status: EvidenceValidationStatus,
     validationComment?: string
   ) {
-    const res = await apiFetch(`/pma/api/evidences?id=${evidenceId}`, {
-      method: "PATCH",
+    const res = await apiFetch(`/pma/api/evidences/${evidenceId}/validation`, {
+      method: "PUT",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
-        validationStatus: status,
+        status,
         ...(status === "invalid"
-          ? { validationComment: validationComment?.trim() ?? "" }
+          ? { comment: validationComment?.trim() ?? "" }
           : {}),
       }),
     });
@@ -348,8 +348,9 @@ export default function PlanDetailPage() {
     setSavingFinding(true);
     try {
       if (editingFinding) {
-        const res = await apiFetch(`/pma/api/findings?id=${editingFinding.id}`, {
-          method: "PATCH",
+        const params = new URLSearchParams({ planId: plan.id });
+        const res = await apiFetch(`/pma/api/findings/${editingFinding.id}?${params.toString()}`, {
+          method: "PUT",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify(payload),
         });
@@ -394,11 +395,8 @@ export default function PlanDetailPage() {
     if (!plan) return;
     if (!confirm("¿Eliminar este hallazgo?")) return;
 
-    const params = new URLSearchParams({
-      id: findingId,
-      planId: plan.id,
-    });
-    const res = await apiFetch(`/pma/api/findings?${params.toString()}`, {
+    const params = new URLSearchParams({ planId: plan.id });
+    const res = await apiFetch(`/pma/api/findings/${findingId}?${params.toString()}`, {
       method: "DELETE",
     });
 
@@ -2005,7 +2003,9 @@ export default function PlanDetailPage() {
                   required
                 >
                   {(() => {
-                    const startYear = plan ? new Date(plan.start_date ?? plan.createdAt).getFullYear() : new Date().getFullYear();
+                    const startYear = plan
+                      ? (parseDateOnly(plan.start_date) ?? new Date(plan.createdAt)).getFullYear()
+                      : new Date().getFullYear();
                     const endYear = new Date().getFullYear();
                     const years = [];
                     for (let y = startYear; y <= endYear; y++) {
