@@ -1388,6 +1388,7 @@ export default function PlanDetailPage() {
         };
 
         const periodicityInterval: Record<string, number> = {
+          "Al finalizar la etapa de operacion": 9999,
           "Al finalizar la etapa de operación": 9999,
           "En caso de suceder": 1,
           Diaria: 1,
@@ -1396,14 +1397,17 @@ export default function PlanDetailPage() {
           Bimensual: 2,
           Bianual: 24,
           Trimestral: 3,
+          Cuatrimestral: 4,
           Trianual: 36,
           Semestral: 6,
           Anual: 12,
           Permanente: 1,
+          "Unica vez": 9999,
           "Única vez": 9999,
         };
 
         const periodicityLabel: Record<string, string> = {
+          "Al finalizar la etapa de operacion": "Fin",
           "Al finalizar la etapa de operación": "Fin",
           "En caso de suceder": "CS",
           Diaria: "D",
@@ -1412,10 +1416,12 @@ export default function PlanDetailPage() {
           Bimensual: "B",
           Bianual: "Bi",
           Trimestral: "T",
+          Cuatrimestral: "Cuat",
           Trianual: "3A",
           Semestral: "S",
           Anual: "A",
           Permanente: "P",
+          "Unica vez": "1x",
           "Única vez": "1x",
         };
 
@@ -1551,45 +1557,51 @@ export default function PlanDetailPage() {
                             const periodicLabel = periodicityLabel[pi.periodicity] ?? "";
                             const monthKey = `${m.getFullYear()}-${String(m.getMonth() + 1).padStart(2, "0")}`;
                             const evStatus = evidenceMonthStatus.get(`${pi.id}-${monthKey}`) ?? "none";
-                            const style = statusStyle[evStatus];
+                            const hasEvidence = evStatus !== "none";
+                            const inactiveStyle = {
+                              bg: "transparent",
+                              color: "#94a3b8",
+                              border: "#cbd5e1",
+                              label: "+",
+                            };
+                            const style = active || hasEvidence ? statusStyle[evStatus] : inactiveStyle;
+                            const buttonLabel = hasEvidence
+                              ? style.label
+                              : isStart
+                                ? "Inicio"
+                                : active
+                                  ? periodicLabel
+                                  : "+";
 
                             const titleText =
                               evStatus === "valid"   ? `Válido "” ${m.toLocaleString("es", { month: "long", year: "numeric" })}` :
                               evStatus === "invalid" ? `Rechazado "” ${m.toLocaleString("es", { month: "long", year: "numeric" })}` :
                               evStatus === "pending" ? `Pendiente de aprobación "” ${m.toLocaleString("es", { month: "long", year: "numeric" })}` :
                               isStart ? `Subir evidencia de inicio "” ${planStartDate.toLocaleDateString("es")}` :
-                              `Subir evidencia "” ${m.toLocaleString("es", { month: "long", year: "numeric" })}`;
+                              active ? `Subir evidencia "” ${m.toLocaleString("es", { month: "long", year: "numeric" })}` :
+                              `Registrar evidencia fuera de cronograma "” ${m.toLocaleString("es", { month: "long", year: "numeric" })}`;
 
                             return (
                               <td
                                 key={i}
                                 className={`border border-border p-0.5${isToday ? " bg-primary/5" : ""}`}
                               >
-                                {active && (
-                                  isStart && evStatus === "none" ? (
-                                    <span
-                                      className="w-full flex items-center justify-center leading-none select-none"
-                                      style={{ height: "24px", fontSize: "10px", color: "#111827", fontWeight: 600 }}
-                                    >
-                                      Inicio
-                                    </span>
-                                  ) : (
-                                    <button
-                                      onClick={() => setCalUpload({ item: pi, month: m })}
-                                      className="w-full rounded flex items-center justify-center font-bold leading-none transition-opacity hover:opacity-75 disabled:cursor-default disabled:opacity-100"
-                                      style={{
-                                        height: "24px",
-                                        backgroundColor: style.bg,
-                                        color: style.color,
-                                        fontSize: "10px",
-                                        border: `1px solid ${style.border}`,
-                                      }}
-                                      title={titleText}
-                                    >
-                                      {evStatus !== "none" ? style.label : periodicLabel}
-                                    </button>
-                                  )
-                                )}
+                                <button
+                                  onClick={() => setCalUpload({ item: pi, month: m })}
+                                  className="w-full rounded flex items-center justify-center font-bold leading-none transition-opacity hover:opacity-75"
+                                  style={{
+                                    height: "24px",
+                                    backgroundColor: style.bg,
+                                    color: style.color,
+                                    fontSize: "10px",
+                                    border: active || hasEvidence
+                                      ? `1px solid ${style.border}`
+                                      : `1px dashed ${style.border}`,
+                                  }}
+                                  title={titleText}
+                                >
+                                  {buttonLabel}
+                                </button>
                               </td>
                             );
                           }
@@ -2332,7 +2344,7 @@ export default function PlanDetailPage() {
             <CardTitle className="text-base">
               Evidencias ({visibleEvidences.length})
             </CardTitle>
-            {canEdit && (
+            {visibleItems.length > 0 && (
               <Button
                 size="sm"
                 onClick={() => setManualEvidenceOpen(true)}
