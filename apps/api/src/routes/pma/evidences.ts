@@ -51,9 +51,14 @@ export async function pmaEvidencesRoutes(app: FastifyInstance) {
 
   app.post("/", uploadPmaEvidence);
 
-  app.delete("/", { preHandler: requireRole("ADMIN") }, async (req) => {
+  // Any role (ADMIN/VIEWER/REPORTER) may delete an evidence on a plan they can access.
+  app.delete("/", async (req) => {
     const { id } = deleteQuerySchema.parse(req.query);
-    await deleteEvidence(id, req.user!.adminId);
+    const u = req.user!;
+    const evidence = await getEvidenceById(id);
+    if (!evidence) throw NotFound("Evidence not found");
+    if (!(await canUserAccessPlan(evidence.planId, u))) throw Forbidden("No tienes acceso a este plan");
+    await deleteEvidence(id, u.adminId);
     return { ok: true };
   });
 
@@ -78,9 +83,14 @@ export async function pmaEvidencesRoutes(app: FastifyInstance) {
     return updateEvidenceValidation(id, body.status, u.adminId, u.sub, body.comment);
   });
 
-  app.delete("/:id", { preHandler: requireRole("ADMIN") }, async (req) => {
+  // Any role (ADMIN/VIEWER/REPORTER) may delete an evidence on a plan they can access.
+  app.delete("/:id", async (req) => {
     const { id } = req.params as { id: string };
-    await deleteEvidence(id, req.user!.adminId);
+    const u = req.user!;
+    const evidence = await getEvidenceById(id);
+    if (!evidence) throw NotFound("Evidence not found");
+    if (!(await canUserAccessPlan(evidence.planId, u))) throw Forbidden("No tienes acceso a este plan");
+    await deleteEvidence(id, u.adminId);
     return { ok: true };
   });
 }

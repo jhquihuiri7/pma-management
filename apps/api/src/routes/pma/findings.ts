@@ -65,7 +65,7 @@ export async function pmaFindingsRoutes(app: FastifyInstance) {
   });
 
   // Compatibility for older web builds that sent DELETE /findings?id=...
-  app.delete("/", { preHandler: requireRole("ADMIN") }, async (req) => {
+  app.delete("/", { preHandler: requireRole("ADMIN", "VIEWER") }, async (req) => {
     const { id, planId } = findingIdQuery.parse(req.query);
     if (!planId) throw BadRequest("planId required");
     await assertPlanAccess(planId, req.user!);
@@ -82,8 +82,8 @@ export async function pmaFindingsRoutes(app: FastifyInstance) {
     return updateFinding(id, planId, body);
   });
 
-  // Deleting findings is ADMIN-only.
-  app.delete("/:id", { preHandler: requireRole("ADMIN") }, async (req) => {
+  // ADMINs and VIEWERs (on a plan they can access) may delete findings.
+  app.delete("/:id", { preHandler: requireRole("ADMIN", "VIEWER") }, async (req) => {
     const { id } = req.params as { id: string };
     const planId = (req.query as any).planId as string | undefined;
     if (!planId) throw BadRequest("planId required");

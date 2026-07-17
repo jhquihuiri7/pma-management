@@ -47,7 +47,7 @@ import {
 import { SUBPLAN_OPTIONS, PERIODICITY_OPTIONS } from "@/lib/planItemConstants";
 import { parseExcelFile, ParsedItemRow } from "@/lib/excelImport";
 import { parseDateOnly } from "@/lib/dateOnly";
-import { createPeriodHelpers } from "@/lib/planPeriods";
+import { createPeriodHelpers, getItemRanges, type ItemRange } from "@/lib/planPeriods";
 
 const EMPTY_ITEM_FORM = {
   item: "",
@@ -112,7 +112,8 @@ export default function PlanDetailPage() {
   const [obsText, setObsText] = useState("");
   const [savingObs, setSavingObs] = useState(false);
   const [editingItem, setEditingItem] = useState<PlanItem | null>(null);
-  const [calUpload, setCalUpload] = useState<{ item: PlanItem; month: Date } | null>(null);
+  const [calUpload, setCalUpload] = useState<{ item: PlanItem; range: ItemRange } | null>(null);
+  const [calUploadMonth, setCalUploadMonth] = useState<string>("");
   const [uploadingCal, setUploadingCal] = useState(false);
   const [selectedReportPeriods, setSelectedReportPeriods] = useState<Record<string, string>>({});
   const [downloadingPeriod, setDownloadingPeriod] = useState<string | null>(null);
@@ -640,16 +641,25 @@ export default function PlanDetailPage() {
   }
 
 
+  function openCalUpload(item: PlanItem, range: ItemRange) {
+    const now = new Date();
+    const todayKey = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}`;
+    const months = range.selectableMonthKeys;
+    // Default to the current month if it falls in the range, otherwise the deadline.
+    const def = months.includes(todayKey) ? todayKey : months[months.length - 1];
+    setCalUpload({ item, range });
+    setCalUploadMonth(def ?? range.key);
+  }
+
   async function handleCalUploadSubmit(e: React.FormEvent<HTMLFormElement>) {
     e.preventDefault();
     if (!calUpload) return;
     setUploadingCal(true);
 
-    const monthKey = `${calUpload.month.getFullYear()}-${String(calUpload.month.getMonth() + 1).padStart(2, "0")}`;
     const formData = new FormData(e.currentTarget);
     formData.set("planId", id);
     formData.set("planItemId", calUpload.item.id);
-    formData.set("activityMonth", monthKey);
+    formData.set("activityMonth", calUploadMonth);
 
     const res = await apiFetch("/pma/api/upload", { method: "POST", body: formData });
     setUploadingCal(false);
@@ -1336,7 +1346,7 @@ export default function PlanDetailPage() {
                             >
                               <Pencil className="w-4 h-4 text-blue-500" />
                             </Button>
-                            {isAdmin && (
+                            {canEdit && (
                               <Button
                                 variant="ghost"
                                 size="sm"
@@ -1387,44 +1397,6 @@ export default function PlanDetailPage() {
           valid:   { bg: "#dcfce7", color: "#166534", border: "#86efac", label: "✓“" },
         };
 
-        const periodicityInterval: Record<string, number> = {
-          "Al finalizar la etapa de operacion": 9999,
-          "Al finalizar la etapa de operación": 9999,
-          "En caso de suceder": 1,
-          Diaria: 1,
-          Semanal: 1,
-          Mensual: 1,
-          Bimensual: 2,
-          Bianual: 24,
-          Trimestral: 3,
-          Cuatrimestral: 4,
-          Trianual: 36,
-          Semestral: 6,
-          Anual: 12,
-          Permanente: 1,
-          "Unica vez": 9999,
-          "Única vez": 9999,
-        };
-
-        const periodicityLabel: Record<string, string> = {
-          "Al finalizar la etapa de operacion": "Fin",
-          "Al finalizar la etapa de operación": "Fin",
-          "En caso de suceder": "CS",
-          Diaria: "D",
-          Semanal: "Sem",
-          Mensual: "M",
-          Bimensual: "B",
-          Bianual: "Bi",
-          Trimestral: "T",
-          Cuatrimestral: "Cuat",
-          Trianual: "3A",
-          Semestral: "S",
-          Anual: "A",
-          Permanente: "P",
-          "Unica vez": "1x",
-          "Única vez": "1x",
-        };
-
         const today = new Date();
         const todayMonth = new Date(today.getFullYear(), today.getMonth(), 1);
 
@@ -1437,18 +1409,6 @@ export default function PlanDetailPage() {
         while (cur < rangeEnd) {
           months.push(new Date(cur));
           cur.setMonth(cur.getMonth() + 1);
-        }
-
-        function isActive(pi: PlanItem, month: Date): boolean {
-          const s = parseDateOnly(p.start_date) ?? new Date(p.createdAt);
-          const sm = new Date(s.getFullYear(), s.getMonth(), 1);
-          const mm = new Date(month.getFullYear(), month.getMonth(), 1);
-          if (mm < sm) return false;
-          const diff =
-            (mm.getFullYear() - sm.getFullYear()) * 12 +
-            (mm.getMonth() - sm.getMonth());
-          const interval = periodicityInterval[pi.periodicity] ?? 1;
-          return diff % interval === 0;
         }
 
         // Period block helpers (based on plan's report_per)
@@ -1537,131 +1497,107 @@ export default function PlanDetailPage() {
                     </tr>
                   </thead>
                   <tbody>
-                    {visibleItems.map((pi, rowIdx) => (
-                      <tr
-                        key={pi.id}
-                        className={rowIdx % 2 === 0 ? "bg-background" : "bg-muted/20"}
-                      >
-                        <td className="sticky left-0 z-10 border border-border px-3 py-1.5 font-medium truncate max-w-[200px] bg-inherit">
-                          {pi.item}
-                        </td>
-                        {vcols.map((vc, i) => {
-                          if (vc.type === "month") {
-                            const m = vc.date;
-                            const active = isActive(pi, m);
-                            const planStartDate = parseDateOnly(p.start_date) ?? new Date(p.createdAt);
-                            const isStart =
-                              planStartDate.getFullYear() === m.getFullYear() &&
-                              planStartDate.getMonth() === m.getMonth();
-                            const isToday = m.getTime() === todayMonth.getTime();
-                            const periodicLabel = periodicityLabel[pi.periodicity] ?? "";
-                            const monthKey = `${m.getFullYear()}-${String(m.getMonth() + 1).padStart(2, "0")}`;
-                            const evStatus = evidenceMonthStatus.get(`${pi.id}-${monthKey}`) ?? "none";
-                            const hasEvidence = evStatus !== "none";
-                            const inactiveStyle = {
-                              bg: "transparent",
-                              color: "#94a3b8",
-                              border: "#cbd5e1",
-                              label: "+",
-                            };
-                            const style = active || hasEvidence ? statusStyle[evStatus] : inactiveStyle;
-                            const buttonLabel = hasEvidence
-                              ? style.label
-                              : isStart
-                                ? "Inicio"
-                                : active
-                                  ? periodicLabel
-                                  : "+";
+                    {visibleItems.map((pi, rowIdx) => {
+                      // Evidence upload ranges for this item, based on its periodicity.
+                      const ranges = getItemRanges(p, pi.periodicity);
+                      const rangeByMonth = new Map<string, ItemRange>();
+                      ranges.forEach((r) => r.monthKeys.forEach((mk) => rangeByMonth.set(mk, r)));
 
-                            const titleText =
-                              evStatus === "valid"   ? `Válido "” ${m.toLocaleString("es", { month: "long", year: "numeric" })}` :
-                              evStatus === "invalid" ? `Rechazado "” ${m.toLocaleString("es", { month: "long", year: "numeric" })}` :
-                              evStatus === "pending" ? `Pendiente de aprobación "” ${m.toLocaleString("es", { month: "long", year: "numeric" })}` :
-                              isStart ? `Subir evidencia de inicio "” ${planStartDate.toLocaleDateString("es")}` :
-                              active ? `Subir evidencia "” ${m.toLocaleString("es", { month: "long", year: "numeric" })}` :
-                              `Registrar evidencia fuera de cronograma "” ${m.toLocaleString("es", { month: "long", year: "numeric" })}`;
+                      // Highest-priority evidence status across the range's months.
+                      const rangeStatus = (range: ItemRange): "none" | EvidenceValidationStatus => {
+                        let best: "none" | EvidenceValidationStatus = "none";
+                        for (const mk of range.monthKeys) {
+                          const s = evidenceMonthStatus.get(`${pi.id}-${mk}`);
+                          if (s && (best === "none" || statusPriority[s] > statusPriority[best])) best = s;
+                        }
+                        return best;
+                      };
 
-                            return (
-                              <td
-                                key={i}
-                                className={`border border-border p-0.5${isToday ? " bg-primary/5" : ""}`}
+                      const renderRangeCell = (
+                        range: ItemRange,
+                        colSpan: number,
+                        firstSegment: boolean,
+                        cellKey: string
+                      ) => {
+                        const evStatus = rangeStatus(range);
+                        const hasEvidence = evStatus !== "none";
+                        const started = range.started;
+                        const style = hasEvidence
+                          ? statusStyle[evStatus]
+                          : started
+                            ? statusStyle.none
+                            : { bg: "transparent", color: "#cbd5e1", border: "#e2e8f0", label: "" };
+                        const label = hasEvidence ? style.label : firstSegment ? range.label : "";
+                        const titleText =
+                          evStatus === "valid"   ? `Válido · ${range.label}` :
+                          evStatus === "invalid" ? `Rechazado · ${range.label}` :
+                          evStatus === "pending" ? `Pendiente de aprobación · ${range.label}` :
+                          started ? `Subir evidencia · ${range.label}` :
+                          `Periodo futuro (aún no disponible) · ${range.label}`;
+
+                        return (
+                          <td key={cellKey} colSpan={colSpan} className="border border-border p-0.5">
+                            {started ? (
+                              <button
+                                onClick={() => openCalUpload(pi, range)}
+                                className="w-full rounded flex items-center justify-center font-semibold leading-none transition-opacity hover:opacity-75 px-1"
+                                style={{
+                                  height: "24px",
+                                  backgroundColor: style.bg,
+                                  color: style.color,
+                                  fontSize: "10px",
+                                  border: `1px solid ${style.border}`,
+                                }}
+                                title={titleText}
                               >
-                                <button
-                                  onClick={() => setCalUpload({ item: pi, month: m })}
-                                  className="w-full rounded flex items-center justify-center font-bold leading-none transition-opacity hover:opacity-75"
-                                  style={{
-                                    height: "24px",
-                                    backgroundColor: style.bg,
-                                    color: style.color,
-                                    fontSize: "10px",
-                                    border: active || hasEvidence
-                                      ? `1px solid ${style.border}`
-                                      : `1px dashed ${style.border}`,
-                                  }}
-                                  title={titleText}
-                                >
-                                  {buttonLabel}
-                                </button>
-                              </td>
-                            );
-                          }
+                                <span className="truncate">{label}</span>
+                              </button>
+                            ) : (
+                              <div
+                                className="w-full rounded flex items-center justify-center leading-none px-1 cursor-not-allowed"
+                                style={{
+                                  height: "24px",
+                                  backgroundColor: style.bg,
+                                  color: style.color,
+                                  fontSize: "10px",
+                                  border: `1px dashed ${style.border}`,
+                                }}
+                                title={titleText}
+                              >
+                                <span className="truncate">{label}</span>
+                              </div>
+                            )}
+                          </td>
+                        );
+                      };
 
-                          // Compliance column
-                          const compStatus = complianceMap.get(`${pi.id}::${vc.periodKey}`);
-                          const compBg =
-                            compStatus === "C"                          ? "#dcfce7" :
-                            compStatus === "NC+" || compStatus === "NC-" ? "#fee2e2" :
-                            compStatus === "N/A"                        ? "#fef9c3" :
-                            "#f8fafc";
-                          const compColor =
-                            compStatus === "C"                          ? "#166534" :
-                            compStatus === "NC+" || compStatus === "NC-" ? "#991b1b" :
-                            compStatus === "N/A"                        ? "#854d0e" :
-                            "#94a3b8";
-                          const compBorder =
-                            compStatus === "C"                          ? "#86efac" :
-                            compStatus === "NC+" || compStatus === "NC-" ? "#fca5a5" :
-                            compStatus === "N/A"                        ? "#fde047" :
-                            "#e2e8f0";
+                      const renderComplianceCell = (
+                        vc: Extract<VCol, { type: "compliance" }>,
+                        cellKey: string
+                      ) => {
+                        const compStatus = complianceMap.get(`${pi.id}::${vc.periodKey}`);
+                        const compBg =
+                          compStatus === "C"                          ? "#dcfce7" :
+                          compStatus === "NC+" || compStatus === "NC-" ? "#fee2e2" :
+                          compStatus === "N/A"                        ? "#fef9c3" :
+                          "#f8fafc";
+                        const compColor =
+                          compStatus === "C"                          ? "#166534" :
+                          compStatus === "NC+" || compStatus === "NC-" ? "#991b1b" :
+                          compStatus === "N/A"                        ? "#854d0e" :
+                          "#94a3b8";
+                        const compBorder =
+                          compStatus === "C"                          ? "#86efac" :
+                          compStatus === "NC+" || compStatus === "NC-" ? "#fca5a5" :
+                          compStatus === "N/A"                        ? "#fde047" :
+                          "#e2e8f0";
 
-                          return (
-                            <td
-                              key={i}
-                              className="border-2 border-border p-0.5"
-                            >
-                              {canEdit ? (
-                                <DropdownMenu>
-                                  <DropdownMenuTrigger
-                                    className="w-full rounded flex items-center justify-center font-bold leading-none transition-opacity hover:opacity-75 bg-transparent border-0 cursor-pointer"
-                                    style={{
-                                      height: "24px",
-                                      backgroundColor: compBg,
-                                      color: compColor,
-                                      fontSize: "10px",
-                                      border: `1px solid ${compBorder}`,
-                                    }}
-                                    title={vc.periodLabel}
-                                  >
-                                    {compStatus ?? ""}
-                                  </DropdownMenuTrigger>
-                                  <DropdownMenuContent align="center">
-                                    <DropdownMenuItem onClick={() => handleComplianceChange(pi.id, vc.periodKey, "C")}>
-                                      <span className="font-bold text-green-600 mr-2">C</span> Conforme
-                                    </DropdownMenuItem>
-                                    <DropdownMenuItem onClick={() => handleComplianceChange(pi.id, vc.periodKey, "NC+")}>
-                                      <span className="font-bold text-red-600 mr-2">NC+</span> No conforme mayor
-                                    </DropdownMenuItem>
-                                    <DropdownMenuItem onClick={() => handleComplianceChange(pi.id, vc.periodKey, "NC-")}>
-                                      <span className="font-bold text-red-600 mr-2">NC-</span> No conforme menor
-                                    </DropdownMenuItem>
-                                    <DropdownMenuItem onClick={() => handleComplianceChange(pi.id, vc.periodKey, "N/A")}>
-                                      <span className="font-bold text-yellow-600 mr-2">N/A</span> No aplica
-                                    </DropdownMenuItem>
-                                  </DropdownMenuContent>
-                                </DropdownMenu>
-                              ) : (
-                                <div
-                                  className="w-full rounded flex items-center justify-center font-bold leading-none"
+                        return (
+                          <td key={cellKey} className="border-2 border-border p-0.5">
+                            {canEdit ? (
+                              <DropdownMenu>
+                                <DropdownMenuTrigger
+                                  className="w-full rounded flex items-center justify-center font-bold leading-none transition-opacity hover:opacity-75 bg-transparent border-0 cursor-pointer"
                                   style={{
                                     height: "24px",
                                     backgroundColor: compBg,
@@ -1672,13 +1608,87 @@ export default function PlanDetailPage() {
                                   title={vc.periodLabel}
                                 >
                                   {compStatus ?? ""}
-                                </div>
-                              )}
-                            </td>
-                          );
-                        })}
-                      </tr>
-                    ))}
+                                </DropdownMenuTrigger>
+                                <DropdownMenuContent align="center">
+                                  <DropdownMenuItem onClick={() => handleComplianceChange(pi.id, vc.periodKey, "C")}>
+                                    <span className="font-bold text-green-600 mr-2">C</span> Conforme
+                                  </DropdownMenuItem>
+                                  <DropdownMenuItem onClick={() => handleComplianceChange(pi.id, vc.periodKey, "NC+")}>
+                                    <span className="font-bold text-red-600 mr-2">NC+</span> No conforme mayor
+                                  </DropdownMenuItem>
+                                  <DropdownMenuItem onClick={() => handleComplianceChange(pi.id, vc.periodKey, "NC-")}>
+                                    <span className="font-bold text-red-600 mr-2">NC-</span> No conforme menor
+                                  </DropdownMenuItem>
+                                  <DropdownMenuItem onClick={() => handleComplianceChange(pi.id, vc.periodKey, "N/A")}>
+                                    <span className="font-bold text-yellow-600 mr-2">N/A</span> No aplica
+                                  </DropdownMenuItem>
+                                </DropdownMenuContent>
+                              </DropdownMenu>
+                            ) : (
+                              <div
+                                className="w-full rounded flex items-center justify-center font-bold leading-none"
+                                style={{
+                                  height: "24px",
+                                  backgroundColor: compBg,
+                                  color: compColor,
+                                  fontSize: "10px",
+                                  border: `1px solid ${compBorder}`,
+                                }}
+                                title={vc.periodLabel}
+                              >
+                                {compStatus ?? ""}
+                              </div>
+                            )}
+                          </td>
+                        );
+                      };
+
+                      // Group consecutive month columns that share a range into a
+                      // single colSpan cell, splitting around compliance columns.
+                      const cells: React.ReactNode[] = [];
+                      const seenRange = new Set<number>();
+                      let group: { range: ItemRange; count: number; startIdx: number } | null = null;
+                      const flush = () => {
+                        if (!group) return;
+                        const first = !seenRange.has(group.range.index);
+                        seenRange.add(group.range.index);
+                        cells.push(renderRangeCell(group.range, group.count, first, `r-${group.startIdx}`));
+                        group = null;
+                      };
+                      vcols.forEach((vc, i) => {
+                        if (vc.type === "month") {
+                          const mk = `${vc.date.getFullYear()}-${String(vc.date.getMonth() + 1).padStart(2, "0")}`;
+                          const r = rangeByMonth.get(mk);
+                          if (!r) {
+                            flush();
+                            cells.push(<td key={`e-${i}`} className="border border-border p-0.5" />);
+                            return;
+                          }
+                          if (group && group.range.index === r.index) {
+                            group.count += 1;
+                          } else {
+                            flush();
+                            group = { range: r, count: 1, startIdx: i };
+                          }
+                        } else {
+                          flush();
+                          cells.push(renderComplianceCell(vc, `c-${i}`));
+                        }
+                      });
+                      flush();
+
+                      return (
+                        <tr
+                          key={pi.id}
+                          className={rowIdx % 2 === 0 ? "bg-background" : "bg-muted/20"}
+                        >
+                          <td className="sticky left-0 z-10 border border-border px-3 py-1.5 font-medium truncate max-w-[200px] bg-background">
+                            {pi.item}
+                          </td>
+                          {cells}
+                        </tr>
+                      );
+                    })}
                   </tbody>
                 </table>
               </div>
@@ -1700,27 +1710,15 @@ export default function PlanDetailPage() {
                   Válido
                 </span>
                 <span className="flex items-center gap-1.5">
+                  <span className="inline-block w-10 h-4 rounded" style={{ backgroundColor: "transparent", border: "1px dashed #e2e8f0" }} />
+                  Periodo futuro (aún no disponible)
+                </span>
+                <span className="flex items-center gap-1.5">
                   <span className="inline-block w-10 h-4 rounded border-2" style={{ backgroundColor: "#f8fafc", borderColor: "#e2e8f0" }} />
                   Columna de cumplimiento (C / NC+ / NC-)
                 </span>
-                <span className="ml-auto flex gap-3">
-                  {([
-                    "Al finalizar la etapa de operación",
-                    "Anual",
-                    "Bianual",
-                    "Diaria",
-                    "En caso de suceder",
-                    "Mensual",
-                    "Permanente",
-                    "Semanal",
-                    "Semestral",
-                    "Trianual",
-                    "Trimestral",
-                    "Única vez",
-                    "Bimensual",
-                  ] as const).map((p) => (
-                    <span key={p}><span className="font-semibold">{periodicityLabel[p]}</span> = {p}</span>
-                  ))}
+                <span className="ml-auto italic">
+                  Cada celda cubre un periodo completo según la periodicidad del item.
                 </span>
               </div>
             </CardContent>
@@ -1913,14 +1911,35 @@ export default function PlanDetailPage() {
           {calUpload && (
             <div className="space-y-1 mb-2">
               <p className="text-sm font-medium">{calUpload.item.item}</p>
-              <p className="text-xs text-muted-foreground capitalize">
-                {calUpload.month.toLocaleString("es", { month: "long", year: "numeric" })}
-                {" Â· "}
+              <p className="text-xs text-muted-foreground">
+                Periodo <span className="font-medium">{calUpload.range.label}</span>
+                {" · "}
                 {calUpload.item.periodicity}
               </p>
             </div>
           )}
           <form onSubmit={handleCalUploadSubmit} className="space-y-4">
+            {calUpload && calUpload.range.selectableMonthKeys.length > 1 && (
+              <div className="space-y-2">
+                <Label htmlFor="cal-month">Mes de la actividad</Label>
+                <select
+                  id="cal-month"
+                  className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                  value={calUploadMonth}
+                  onChange={(e) => setCalUploadMonth(e.target.value)}
+                  required
+                >
+                  {calUpload.range.selectableMonthKeys.map((mk) => {
+                    const [y, mo] = mk.split("-").map(Number);
+                    return (
+                      <option key={mk} value={mk}>
+                        {new Date(y, mo - 1).toLocaleString("es", { month: "long", year: "numeric" })}
+                      </option>
+                    );
+                  })}
+                </select>
+              </div>
+            )}
             <div className="space-y-2">
               <Label htmlFor="cal-file">Archivo (máx 10MB)</Label>
               <Input id="cal-file" name="file" type="file" required />
@@ -2316,7 +2335,7 @@ export default function PlanDetailPage() {
                           >
                             <Pencil className="w-4 h-4" />
                           </Button>
-                          {isAdmin && (
+                          {canEdit && (
                             <Button
                               size="icon"
                               variant="ghost"
@@ -2464,15 +2483,13 @@ export default function PlanDetailPage() {
                             <ExternalLink className="w-4 h-4" />
                           </Button>
                         </a>
-                        {isAdmin && (
-                          <Button
-                            variant="ghost"
-                            size="sm"
-                            onClick={() => handleDeleteEvidence(ev.id)}
-                          >
-                            <Trash2 className="w-4 h-4 text-red-500" />
-                          </Button>
-                        )}
+                        <Button
+                          variant="ghost"
+                          size="sm"
+                          onClick={() => handleDeleteEvidence(ev.id)}
+                        >
+                          <Trash2 className="w-4 h-4 text-red-500" />
+                        </Button>
                       </div>
                     </TableCell>
                   </TableRow>
@@ -2486,43 +2503,13 @@ export default function PlanDetailPage() {
       {/* Reportería */}
       {visibleItems.length > 0 && (() => {
         const p = plan!;
-        function getBlockSize(report_per: string | undefined): number {
-          const s = (report_per ?? "").toLowerCase();
-          if (s.startsWith("2")) return 24;
-          if (s.startsWith("1")) return 12;
-          return 6;
-        }
 
+        // Downloadable periods follow the item's evidence ranges (by periodicity),
+        // matching the calendar. Only ranges that have already started are listed.
         function getAvailablePeriods(pi: PlanItem): { key: string; label: string }[] {
-          const blockSize = getBlockSize(pi.report_per);
-          const startYear = (parseDateOnly(p.start_date) ?? new Date(p.createdAt)).getFullYear();
-          const blockOrigin = new Date(startYear, 0, 1);
-          const today = new Date();
-          const todayMonth = new Date(today.getFullYear(), today.getMonth(), 1);
-
-          const periods: { key: string; label: string }[] = [];
-          let blockIndex = 0;
-
-          while (blockIndex < 100) {
-            const blockStart = new Date(
-              blockOrigin.getFullYear(),
-              blockOrigin.getMonth() + blockIndex * blockSize,
-              1
-            );
-            if (blockStart > todayMonth) break;
-            const blockEndMonth = new Date(
-              blockOrigin.getFullYear(),
-              blockOrigin.getMonth() + (blockIndex + 1) * blockSize - 1,
-              1
-            );
-            const key = `${blockStart.getFullYear()}-${String(blockStart.getMonth() + 1).padStart(2, "0")}`;
-            const startLabel = blockStart.toLocaleString("es", { month: "short", year: "numeric" });
-            const endLabel = blockEndMonth.toLocaleString("es", { month: "short", year: "numeric" });
-            periods.push({ key, label: `${startLabel} "“ ${endLabel}` });
-            blockIndex++;
-          }
-
-          return periods;
+          return getItemRanges(p, pi.periodicity)
+            .filter((r) => r.started)
+            .map((r) => ({ key: r.key, label: r.label }));
         }
 
         return (

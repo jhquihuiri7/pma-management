@@ -7,6 +7,7 @@ import { pmaEvidences, pmaPlanItems } from "../../db/schema/pma.js";
 import { BadRequest, Forbidden, NotFound } from "../../lib/errors.js";
 import { createZip } from "../../lib/zip.js";
 import { canUserAccessPlan } from "../../modules/pma/plansModule.js";
+import { getPeriodicityInterval } from "../../modules/pma/evidencesModule.js";
 import { getStorage } from "../../storage/index.js";
 
 const itemPeriodQuery = z.object({
@@ -14,13 +15,6 @@ const itemPeriodQuery = z.object({
   planItemId: z.string().uuid(),
   periodStart: z.string().regex(/^\d{4}-\d{2}$/),
 });
-
-function getBlockSize(reportPer: string | undefined): number {
-  const s = (reportPer ?? "").toLowerCase();
-  if (s.startsWith("2")) return 24;
-  if (s.startsWith("1")) return 12;
-  return 6;
-}
 
 function addMonthsKey(periodStart: string, months: number): string {
   const [year, month] = periodStart.split("-").map(Number);
@@ -63,7 +57,7 @@ export async function pmaDownloadRoutes(app: FastifyInstance) {
     const item = itemRows[0];
     if (!item) throw NotFound("Item not found");
 
-    const periodEnd = addMonthsKey(query.periodStart, getBlockSize(item.reportPer));
+    const periodEnd = addMonthsKey(query.periodStart, getPeriodicityInterval(item.periodicity));
     const evidences = await db
       .select()
       .from(pmaEvidences)

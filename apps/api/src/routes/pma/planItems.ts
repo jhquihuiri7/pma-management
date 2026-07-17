@@ -98,8 +98,8 @@ export async function pmaPlanItemsRoutes(app: FastifyInstance) {
     return { ok: true };
   });
 
-  // Deleting items is ADMIN-only.
-  app.delete("/:itemId", { preHandler: requireRole("ADMIN") }, async (req) => {
+  // ADMINs and VIEWERs (on a plan they can access) may delete items.
+  app.delete("/:itemId", { preHandler: requireRole("ADMIN", "VIEWER") }, async (req) => {
     const { planId, itemId } = req.params as { planId: string; itemId: string };
     await assertPlanAccess(planId, req.user!);
     await deletePlanItem(itemId, planId);

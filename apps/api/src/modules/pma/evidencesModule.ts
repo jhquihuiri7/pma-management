@@ -64,6 +64,11 @@ export async function createEvidence(adminId: string, input: EvidenceCreateInput
     if (!planItem) throw NotFound("Plan item not found");
     if (planItem.planId !== input.planId) throw BadRequest("Plan item does not belong to plan");
     subsystemName = planItem.subplan || subsystemName;
+
+    // Only allow uploads within ranges that have already started.
+    if (input.activityMonth && isFutureRange(input.activityMonth, planRow.startDate, planRow.createdAt, planItem.periodicity)) {
+      throw BadRequest("No se puede subir evidencia en un periodo que aún no ha iniciado");
+    }
   } else {
     const firstItemRows = await db
       .select()
@@ -109,6 +114,58 @@ export async function createEvidence(adminId: string, input: EvidenceCreateInput
 }
 
 const MONTHS_ES = ["ene", "feb", "mar", "abr", "may", "jun", "jul", "ago", "sep", "oct", "nov", "dic"];
+
+// Months an item's evidence range spans, keyed by periodicity (>=1200 = single
+// open range). Mirrors PERIODICITY_INTERVAL on the web side (lib/planPeriods).
+const PERIODICITY_INTERVAL: Record<string, number> = {
+  "Al finalizar la etapa de operacion": 9999,
+  "Al finalizar la etapa de operación": 9999,
+  "En caso de suceder": 1,
+  Diaria: 1,
+  Semanal: 1,
+  Mensual: 1,
+  Bimensual: 2,
+  Bianual: 24,
+  Trimestral: 3,
+  Cuatrimestral: 4,
+  Trianual: 36,
+  Semestral: 6,
+  Anual: 12,
+  Permanente: 1,
+  "Unica vez": 9999,
+  "Única vez": 9999,
+};
+
+export function getPeriodicityInterval(periodicity: string | undefined): number {
+  return PERIODICITY_INTERVAL[periodicity ?? ""] ?? 1;
+}
+
+/**
+ * True when the range that `activityMonth` belongs to has not started yet
+ * (its first month is after the current month). Used to reject uploads to
+ * periods that are still in the future.
+ */
+function isFutureRange(
+  activityMonth: string,
+  startDate: string | null,
+  createdAt: Date,
+  periodicity: string
+): boolean {
+  const [year, month] = activityMonth.split("-").map(Number);
+  if (!year || !month || month < 1 || month > 12) return false;
+  const interval = PERIODICITY_INTERVAL[periodicity] ?? 1;
+  const planStart = startDate ? new Date(`${startDate}T00:00:00`) : createdAt;
+  const origin = new Date(planStart.getFullYear(), planStart.getMonth(), 1);
+  const target = new Date(year, month - 1, 1);
+  const diff =
+    (target.getFullYear() - origin.getFullYear()) * 12 + (target.getMonth() - origin.getMonth());
+  if (diff < 0) return false; // before the plan start; not a future range
+  const rangeIndex = Math.floor(diff / interval);
+  const rangeStart = new Date(origin.getFullYear(), origin.getMonth() + rangeIndex * interval, 1);
+  const now = new Date();
+  const todayMonth = new Date(now.getFullYear(), now.getMonth(), 1);
+  return rangeStart > todayMonth;
+}
 
 function getBlockSize(reportPer: string | undefined): number {
   const s = (reportPer ?? "").toLowerCase();
