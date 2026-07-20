@@ -16,6 +16,16 @@
   "Plan de Cierre, Abandono y Entrega del Area",
 ] as const;
 
+// Canonical "direcciones". The field is a fixed selector (no free text) to
+// avoid the spelling variants that used to fragment direccion-based grouping.
+export const DIRECCION_OPTIONS = [
+  "DAF",
+  "DGTAR",
+  "DOSPPSVR",
+  "DOSPPSVR / DGTAR",
+  "OPC",
+] as const;
+
 export const PERIODICITY_OPTIONS = [
   "Al finalizar la etapa de operacion",
   "Anual",

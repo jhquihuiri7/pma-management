@@ -1,4 +1,4 @@
-import { eq, and, asc, inArray } from "drizzle-orm";
+import { eq, and, asc, ne, inArray } from "drizzle-orm";
 import { getDb } from "../../db/client.js";
 import {
   pmaPlanItems,
@@ -68,6 +68,78 @@ function toDb(input: PlanItemCreateInput | PlanItemUpdateInput) {
   };
 }
 
+type Db = ReturnType<typeof getDb>;
+type ReporterAssignment = { userId: string; category: "Responsable" | "Colaborador" };
+
+// Reporters currently assigned across a plan's "direccion" group, deduped into
+// a single set. When a reporter appears with different categories, "Responsable"
+// wins — matching how assignments are unified elsewhere in the app.
+async function direccionReporterUnion(
+  db: Db,
+  planId: string,
+  direccion: string,
+  excludeItemId?: string
+): Promise<ReporterAssignment[]> {
+  const filters = [
+    eq(pmaPlanItems.planId, planId),
+    eq(pmaPlanItems.direccion, direccion),
+  ];
+  if (excludeItemId) filters.push(ne(pmaPlanItems.id, excludeItemId));
+  const rows = await db
+    .select({ userId: pmaItemAssignments.userId, category: pmaItemAssignments.category })
+    .from(pmaItemAssignments)
+    .innerJoin(pmaPlanItems, eq(pmaItemAssignments.planItemId, pmaPlanItems.id))
+    .where(and(...filters));
+  const map = new Map<string, "Responsable" | "Colaborador">();
+  for (const r of rows) {
+    if (map.get(r.userId) === "Responsable") continue;
+    map.set(r.userId, r.category as "Responsable" | "Colaborador");
+  }
+  return Array.from(map.entries()).map(([userId, category]) => ({ userId, category }));
+}
+
+// Persist a set of reporters onto a single item and guarantee each can see the
+// plan. `replace` overwrites the item's existing reporters (used when an item
+// moves to a new direccion); otherwise assignments are only added.
+async function writeItemAssignments(
+  db: Db,
+  planId: string,
+  itemId: string,
+  reporters: ReporterAssignment[],
+  { replace }: { replace: boolean }
+) {
+  if (replace) {
+    await db.delete(pmaItemAssignments).where(eq(pmaItemAssignments.planItemId, itemId));
+  }
+  if (reporters.length === 0) return;
+  await db
+    .insert(pmaItemAssignments)
+    .values(reporters.map((r) => ({ planItemId: itemId, userId: r.userId, category: r.category })))
+    .onConflictDoNothing();
+  await db
+    .insert(pmaPlanAssignments)
+    .values(reporters.map((r) => ({ planId, userId: r.userId })))
+    .onConflictDoNothing();
+}
+
+// Drop plan-level access for any of `userIds` who no longer hold an item-level
+// assignment anywhere in the plan (mirrors the unassign cleanup logic).
+async function cleanupOrphanPlanAssignments(db: Db, planId: string, userIds: string[]) {
+  for (const userId of userIds) {
+    const remaining = await db
+      .select({ id: pmaItemAssignments.planItemId })
+      .from(pmaItemAssignments)
+      .innerJoin(pmaPlanItems, eq(pmaItemAssignments.planItemId, pmaPlanItems.id))
+      .where(and(eq(pmaPlanItems.planId, planId), eq(pmaItemAssignments.userId, userId)))
+      .limit(1);
+    if (remaining.length === 0) {
+      await db
+        .delete(pmaPlanAssignments)
+        .where(and(eq(pmaPlanAssignments.planId, planId), eq(pmaPlanAssignments.userId, userId)));
+    }
+  }
+}
+
 export async function createPlanItem(planId: string, input: PlanItemCreateInput) {
   const db = getDb();
   const [row] = await db
@@ -88,6 +160,12 @@ export async function createPlanItem(planId: string, input: PlanItemCreateInput)
       observation: input.observation ?? null,
     })
     .returning();
+  // Inherit the reporters already assigned to this item's direccion group.
+  const direccion = (input.direccion ?? "").trim();
+  if (direccion) {
+    const union = await direccionReporterUnion(db, planId, direccion);
+    await writeItemAssignments(db, planId, row.id, union, { replace: false });
+  }
   return toApi(row);
 }
 
@@ -131,6 +209,26 @@ export async function updatePlanItem(itemId: string, planId: string, updates: Pl
     .set({ ...cleaned, updatedAt: new Date() })
     .where(eq(pmaPlanItems.id, itemId))
     .returning();
+
+  // If the item moved to a different (non-empty) direccion, make it conform to
+  // that group's reporters. When the target group already has reporters, they
+  // replace this item's own; when it has none, the item keeps its reporters and
+  // seeds the group. Orphaned plan-level access is cleaned up afterwards.
+  const oldDireccion = (existing.direccion ?? "").trim();
+  const newDireccion = (row.direccion ?? "").trim();
+  if (updates.direccion !== undefined && newDireccion && newDireccion !== oldDireccion) {
+    const previous = await db
+      .select({ userId: pmaItemAssignments.userId })
+      .from(pmaItemAssignments)
+      .where(eq(pmaItemAssignments.planItemId, itemId));
+    const union = await direccionReporterUnion(db, planId, newDireccion, itemId);
+    if (union.length > 0) {
+      await writeItemAssignments(db, planId, itemId, union, { replace: true });
+      const kept = new Set(union.map((u) => u.userId));
+      const removed = previous.map((p) => p.userId).filter((id) => !kept.has(id));
+      await cleanupOrphanPlanAssignments(db, planId, removed);
+    }
+  }
   return toApi(row);
 }
 
@@ -153,35 +251,51 @@ export async function deletePlanItem(itemId: string, planId: string) {
   await db.delete(pmaPlanItems).where(eq(pmaPlanItems.id, itemId));
 }
 
-export async function assignReporterToItem(
-  itemId: string,
+export async function assignReporterToDireccion(
+  planId: string,
+  direccion: string,
   userId: string,
   category: "Responsable" | "Colaborador"
 ) {
   const db = getDb();
-  const item = await getPlanItemById(itemId);
-  if (!item) throw NotFound("Plan item not found");
+  const items = await db
+    .select({ id: pmaPlanItems.id })
+    .from(pmaPlanItems)
+    .where(and(eq(pmaPlanItems.planId, planId), eq(pmaPlanItems.direccion, direccion)));
+  if (items.length === 0) throw NotFound("No hay items con esa dirección");
 
-  // Upsert item-level assignment (delete + insert pattern since category may change)
-  await db
-    .delete(pmaItemAssignments)
-    .where(and(eq(pmaItemAssignments.planItemId, itemId), eq(pmaItemAssignments.userId, userId)));
-  await db.insert(pmaItemAssignments).values({ planItemId: itemId, userId, category });
+  // Upsert item-level assignment for every item in the direccion group
+  // (delete + insert pattern since the category may change).
+  for (const it of items) {
+    await db
+      .delete(pmaItemAssignments)
+      .where(and(eq(pmaItemAssignments.planItemId, it.id), eq(pmaItemAssignments.userId, userId)));
+    await db.insert(pmaItemAssignments).values({ planItemId: it.id, userId, category });
+  }
 
   // Ensure a plan-level assignment exists so the reporter can see the plan
   await db
     .insert(pmaPlanAssignments)
-    .values({ planId: item.planId, userId })
+    .values({ planId, userId })
     .onConflictDoNothing();
 }
 
-export async function unassignReporterFromItem(itemId: string, userId: string) {
+export async function unassignReporterFromDireccion(
+  planId: string,
+  direccion: string,
+  userId: string
+) {
   const db = getDb();
-  const item = await getPlanItemById(itemId);
-  if (!item) throw NotFound("Plan item not found");
-  await db
-    .delete(pmaItemAssignments)
-    .where(and(eq(pmaItemAssignments.planItemId, itemId), eq(pmaItemAssignments.userId, userId)));
+  const items = await db
+    .select({ id: pmaPlanItems.id })
+    .from(pmaPlanItems)
+    .where(and(eq(pmaPlanItems.planId, planId), eq(pmaPlanItems.direccion, direccion)));
+  const ids = items.map((i) => i.id);
+  if (ids.length > 0) {
+    await db
+      .delete(pmaItemAssignments)
+      .where(and(inArray(pmaItemAssignments.planItemId, ids), eq(pmaItemAssignments.userId, userId)));
+  }
 
   // If the user has no remaining item-level assignment in this plan, remove
   // the plan-level assignment too.
@@ -189,12 +303,12 @@ export async function unassignReporterFromItem(itemId: string, userId: string) {
     .select({ id: pmaItemAssignments.planItemId })
     .from(pmaItemAssignments)
     .innerJoin(pmaPlanItems, eq(pmaItemAssignments.planItemId, pmaPlanItems.id))
-    .where(and(eq(pmaPlanItems.planId, item.planId), eq(pmaItemAssignments.userId, userId)))
+    .where(and(eq(pmaPlanItems.planId, planId), eq(pmaItemAssignments.userId, userId)))
     .limit(1);
   if (remaining.length === 0) {
     await db
       .delete(pmaPlanAssignments)
-      .where(and(eq(pmaPlanAssignments.planId, item.planId), eq(pmaPlanAssignments.userId, userId)));
+      .where(and(eq(pmaPlanAssignments.planId, planId), eq(pmaPlanAssignments.userId, userId)));
   }
 }
 
@@ -224,5 +338,12 @@ export async function bulkCreatePlanItems(planId: string, items: PlanItemCreateI
       }))
     )
     .returning();
+  // Each new item inherits the reporters of its direccion group (if any).
+  for (const row of rows) {
+    const direccion = (row.direccion ?? "").trim();
+    if (!direccion) continue;
+    const union = await direccionReporterUnion(db, planId, direccion, row.id);
+    await writeItemAssignments(db, planId, row.id, union, { replace: false });
+  }
   return rows.map(toApi);
 }

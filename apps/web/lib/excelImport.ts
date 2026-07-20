@@ -2,6 +2,7 @@ import * as XLSX from "xlsx";
 import {
   SUBPLAN_OPTIONS,
   PERIODICITY_OPTIONS,
+  DIRECCION_OPTIONS,
   matchClosestOption,
 } from "./planItemConstants";
 
@@ -149,7 +150,7 @@ export async function parseExcelFile(file: File): Promise<ParseResult> {
       };
 
       const item = cellToString(get("item"));
-      const direccion = cellToString(get("direccion"));
+      const rawDireccion = cellToString(get("direccion"));
       const environmental_activity = cellToString(get("environmental_activity"));
       const identified_environmental_impact = cellToString(get("identified_environmental_impact"));
       const proposed_measure = cellToString(get("proposed_measure"));
@@ -159,7 +160,7 @@ export async function parseExcelFile(file: File): Promise<ParseResult> {
 
       const rowAllEmpty =
         !item &&
-        !direccion &&
+        !rawDireccion &&
         !environmental_activity &&
         !identified_environmental_impact &&
         !proposed_measure &&
@@ -171,12 +172,26 @@ export async function parseExcelFile(file: File): Promise<ParseResult> {
       const warnings: string[] = [];
 
       if (!item) warnings.push("Falta Ítem");
-      if (!direccion) warnings.push("Falta Dirección");
       if (!environmental_activity) warnings.push("Falta Actividad/Aspecto Ambiental");
       if (!identified_environmental_impact) warnings.push("Falta Impacto Ambiental Identificado");
       if (!proposed_measure) warnings.push("Falta Medida Propuesta");
       if (!indicator) warnings.push("Falta Indicador");
       if (!verification_method) warnings.push("Falta Medio de Verificación");
+
+      let direccion = "";
+      if (rawDireccion) {
+        const matched = matchClosestOption(rawDireccion, DIRECCION_OPTIONS);
+        if (matched) {
+          direccion = matched;
+          if (matched !== rawDireccion) {
+            warnings.push(`Dirección ajustada a "${matched}"`);
+          }
+        } else {
+          warnings.push(`Dirección "${rawDireccion}" no coincide con las opciones, dejada en blanco`);
+        }
+      } else {
+        warnings.push("Falta Dirección");
+      }
 
       const rawSubplan = cellToString(get("subplan"));
       let subplan = "";

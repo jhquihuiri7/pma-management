@@ -9,17 +9,22 @@ import {
   updatePlanItem,
   updatePlanItemObservation,
   deletePlanItem,
-  assignReporterToItem,
-  unassignReporterFromItem,
+  assignReporterToDireccion,
+  unassignReporterFromDireccion,
   bulkCreatePlanItems,
   type PlanItemCreateInput,
 } from "../../modules/pma/planItemsModule.js";
 import { getPlanById, canUserAccessPlan } from "../../modules/pma/plansModule.js";
 
+// Canonical "direcciones" — kept in sync with the frontend selector
+// (apps/web/lib/planItemConstants.ts). Free-text values are rejected; an empty
+// string is allowed for items that have no direccion assigned.
+const DIRECCION_VALUES = ["DAF", "DGTAR", "DOSPPSVR", "DOSPPSVR / DGTAR", "OPC"] as const;
+
 const itemBase = z.object({
   item: z.string().min(1),
   subplan: z.string().min(1),
-  direccion: z.string().optional(),
+  direccion: z.enum(DIRECCION_VALUES).or(z.literal("")).optional(),
   environmental_activity: z.string().optional(),
   identified_environmental_impact: z.string().optional(),
   proposed_measure: z.string().optional(),
@@ -34,9 +39,14 @@ const itemBase = z.object({
 const itemUpdate = itemBase.partial();
 const bulkSchema = z.object({ items: z.array(itemBase).min(1) });
 const observationSchema = z.object({ observation: z.string() });
-const assignSchema = z.object({
+const assignDireccionSchema = z.object({
+  direccion: z.string().min(1),
   userId: z.string().uuid(),
   category: z.enum(["Responsable", "Colaborador"]),
+});
+const unassignDireccionSchema = z.object({
+  direccion: z.string().min(1),
+  userId: z.string().uuid(),
 });
 
 async function assertPlanAccess(
@@ -106,19 +116,20 @@ export async function pmaPlanItemsRoutes(app: FastifyInstance) {
     return { ok: true };
   });
 
-  app.post("/:itemId/assign", { preHandler: requireRole("ADMIN", "VIEWER") }, async (req) => {
-    const { planId, itemId } = req.params as { planId: string; itemId: string };
+  // Assign / unassign a reporter to every item that shares a "direccion".
+  app.post("/assign-direccion", { preHandler: requireRole("ADMIN", "VIEWER") }, async (req) => {
+    const { planId } = req.params as { planId: string };
     await assertPlanAccess(planId, req.user!);
-    const body = assignSchema.parse(req.body);
-    await assignReporterToItem(itemId, body.userId, body.category);
+    const body = assignDireccionSchema.parse(req.body);
+    await assignReporterToDireccion(planId, body.direccion, body.userId, body.category);
     return { ok: true };
   });
 
-  app.delete("/:itemId/assign", { preHandler: requireRole("ADMIN", "VIEWER") }, async (req) => {
-    const { planId, itemId } = req.params as { planId: string; itemId: string };
-    const { userId } = req.body as { userId: string };
+  app.delete("/assign-direccion", { preHandler: requireRole("ADMIN", "VIEWER") }, async (req) => {
+    const { planId } = req.params as { planId: string };
     await assertPlanAccess(planId, req.user!);
-    await unassignReporterFromItem(itemId, userId);
+    const body = unassignDireccionSchema.parse(req.body);
+    await unassignReporterFromDireccion(planId, body.direccion, body.userId);
     return { ok: true };
   });
 }

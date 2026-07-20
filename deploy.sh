@@ -23,6 +23,8 @@ usage() {
 
 case "$ACTION" in
     dev)
+        echo "🛑 Bajando producción (si está activa) para evitar conflicto de contenedores/puertos..."
+        docker compose down --remove-orphans
         echo "🔧 Levantando servicios en modo desarrollo..."
         docker compose -f docker-compose.dev.yml up -d
         echo "✅ Servicios levantados (desarrollo)"
@@ -34,6 +36,8 @@ case "$ACTION" in
         ;;
 
     up)
+        echo "🛑 Bajando desarrollo (si está activo) para evitar conflicto de contenedores/puertos..."
+        docker compose -f docker-compose.dev.yml down --remove-orphans
         echo "🚀 Levantando servicios en modo producción..."
         docker compose up -d
         echo "✅ Servicios levantados (producción)"
@@ -53,6 +57,8 @@ case "$ACTION" in
         ;;
 
     update)
+        echo "🛑 Bajando desarrollo (si está activo) para evitar conflicto de contenedores/puertos..."
+        docker compose -f docker-compose.dev.yml down --remove-orphans
         if [ -n "$SERVICE" ]; then
             echo "🔄 Actualizando $SERVICE (producción)..."
             docker compose up -d --build "$SERVICE"
@@ -64,6 +70,8 @@ case "$ACTION" in
         ;;
 
     update-dev)
+        echo "🛑 Bajando producción (si está activa) para evitar conflicto de contenedores/puertos..."
+        docker compose down --remove-orphans
         if [ -n "$SERVICE" ]; then
             echo "🔄 Actualizando $SERVICE (desarrollo)..."
             docker compose -f docker-compose.dev.yml up -d --build "$SERVICE"

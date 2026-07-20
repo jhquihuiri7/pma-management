@@ -132,33 +132,53 @@ export async function deletePlanItem(itemId: string, planId: string) {
   await getDb().delete(rgdpPlanItems).where(eq(rgdpPlanItems.id, itemId));
 }
 
-export async function assignReporterToItem(itemId: string, userId: string, category: "Responsable" | "Colaborador") {
+export async function assignReporterToDireccion(
+  planId: string,
+  direccion: string,
+  userId: string,
+  category: "Responsable" | "Colaborador"
+) {
   const db = getDb();
-  const item = await getPlanItemById(itemId);
-  if (!item) throw NotFound("Plan item not found");
-  await db
-    .delete(rgdpItemAssignments)
-    .where(and(eq(rgdpItemAssignments.planItemId, itemId), eq(rgdpItemAssignments.userId, userId)));
-  await db.insert(rgdpItemAssignments).values({ planItemId: itemId, userId, category });
-  await db.insert(rgdpPlanAssignments).values({ planId: item.planId, userId }).onConflictDoNothing();
+  const items = await db
+    .select({ id: rgdpPlanItems.id })
+    .from(rgdpPlanItems)
+    .where(and(eq(rgdpPlanItems.planId, planId), eq(rgdpPlanItems.direccion, direccion)));
+  if (items.length === 0) throw NotFound("No hay items con esa dirección");
+
+  for (const it of items) {
+    await db
+      .delete(rgdpItemAssignments)
+      .where(and(eq(rgdpItemAssignments.planItemId, it.id), eq(rgdpItemAssignments.userId, userId)));
+    await db.insert(rgdpItemAssignments).values({ planItemId: it.id, userId, category });
+  }
+  await db.insert(rgdpPlanAssignments).values({ planId, userId }).onConflictDoNothing();
 }
 
-export async function unassignReporterFromItem(itemId: string, userId: string) {
+export async function unassignReporterFromDireccion(
+  planId: string,
+  direccion: string,
+  userId: string
+) {
   const db = getDb();
-  const item = await getPlanItemById(itemId);
-  if (!item) throw NotFound("Plan item not found");
-  await db
-    .delete(rgdpItemAssignments)
-    .where(and(eq(rgdpItemAssignments.planItemId, itemId), eq(rgdpItemAssignments.userId, userId)));
+  const items = await db
+    .select({ id: rgdpPlanItems.id })
+    .from(rgdpPlanItems)
+    .where(and(eq(rgdpPlanItems.planId, planId), eq(rgdpPlanItems.direccion, direccion)));
+  const ids = items.map((i) => i.id);
+  if (ids.length > 0) {
+    await db
+      .delete(rgdpItemAssignments)
+      .where(and(inArray(rgdpItemAssignments.planItemId, ids), eq(rgdpItemAssignments.userId, userId)));
+  }
   const remaining = await db
     .select({ id: rgdpItemAssignments.planItemId })
     .from(rgdpItemAssignments)
     .innerJoin(rgdpPlanItems, eq(rgdpItemAssignments.planItemId, rgdpPlanItems.id))
-    .where(and(eq(rgdpPlanItems.planId, item.planId), eq(rgdpItemAssignments.userId, userId)))
+    .where(and(eq(rgdpPlanItems.planId, planId), eq(rgdpItemAssignments.userId, userId)))
     .limit(1);
   if (remaining.length === 0) {
     await db
       .delete(rgdpPlanAssignments)
-      .where(and(eq(rgdpPlanAssignments.planId, item.planId), eq(rgdpPlanAssignments.userId, userId)));
+      .where(and(eq(rgdpPlanAssignments.planId, planId), eq(rgdpPlanAssignments.userId, userId)));
   }
 }

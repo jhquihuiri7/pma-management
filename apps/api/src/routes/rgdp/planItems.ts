@@ -4,7 +4,8 @@ import { authenticate, requireRole, requireApp } from "../../auth/middleware.js"
 import { Forbidden, NotFound } from "../../lib/errors.js";
 import {
   createPlanItem, getPlanItems, getPlanItemById, updatePlanItem,
-  deletePlanItem, assignReporterToItem, unassignReporterFromItem,
+  deletePlanItem,
+  assignReporterToDireccion, unassignReporterFromDireccion,
   bulkCreatePlanItems, type RgdpPlanItemCreateInput,
 } from "../../modules/rgdp/planItemsModule.js";
 import { getPlanById, canUserAccessPlan } from "../../modules/rgdp/plansModule.js";
@@ -32,7 +33,8 @@ const itemBase = z.object({
 });
 const itemUpdate = itemBase.partial();
 const bulkSchema = z.object({ items: z.array(itemBase).min(1) });
-const assignSchema = z.object({ userId: z.string().uuid(), category: z.enum(["Responsable", "Colaborador"]) });
+const assignDireccionSchema = z.object({ direccion: z.string().min(1), userId: z.string().uuid(), category: z.enum(["Responsable", "Colaborador"]) });
+const unassignDireccionSchema = z.object({ direccion: z.string().min(1), userId: z.string().uuid() });
 
 async function assertPlanOwnership(planId: string, adminId: string) {
   const plan = await getPlanById(planId);
@@ -80,19 +82,20 @@ export async function rgdpPlanItemsRoutes(app: FastifyInstance) {
     return { ok: true };
   });
 
-  app.post("/:itemId/assign", { preHandler: requireRole("ADMIN") }, async (req) => {
-    const { planId, itemId } = req.params as { planId: string; itemId: string };
+  // Assign / unassign a reporter to every item that shares a "direccion".
+  app.post("/assign-direccion", { preHandler: requireRole("ADMIN") }, async (req) => {
+    const { planId } = req.params as { planId: string };
     await assertPlanOwnership(planId, req.user!.adminId);
-    const body = assignSchema.parse(req.body);
-    await assignReporterToItem(itemId, body.userId, body.category);
+    const body = assignDireccionSchema.parse(req.body);
+    await assignReporterToDireccion(planId, body.direccion, body.userId, body.category);
     return { ok: true };
   });
 
-  app.delete("/:itemId/assign", { preHandler: requireRole("ADMIN") }, async (req) => {
-    const { planId, itemId } = req.params as { planId: string; itemId: string };
-    const { userId } = req.body as { userId: string };
+  app.delete("/assign-direccion", { preHandler: requireRole("ADMIN") }, async (req) => {
+    const { planId } = req.params as { planId: string };
     await assertPlanOwnership(planId, req.user!.adminId);
-    await unassignReporterFromItem(itemId, userId);
+    const body = unassignDireccionSchema.parse(req.body);
+    await unassignReporterFromDireccion(planId, body.direccion, body.userId);
     return { ok: true };
   });
 }

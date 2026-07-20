@@ -44,7 +44,7 @@ import {
   DropdownMenuItem,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
-import { SUBPLAN_OPTIONS, PERIODICITY_OPTIONS } from "@/lib/planItemConstants";
+import { SUBPLAN_OPTIONS, PERIODICITY_OPTIONS, DIRECCION_OPTIONS } from "@/lib/planItemConstants";
 import { parseExcelFile, ParsedItemRow } from "@/lib/excelImport";
 import { parseDateOnly } from "@/lib/dateOnly";
 import { createPeriodHelpers, getItemRanges, type ItemRange } from "@/lib/planPeriods";
@@ -101,12 +101,9 @@ export default function PlanDetailPage() {
   const [addItemOpen, setAddItemOpen] = useState(false);
   const [itemForm, setItemForm] = useState(EMPTY_ITEM_FORM);
   const [savingItem, setSavingItem] = useState(false);
-  const [itemAssignments, setItemAssignments] = useState<
-    { userId: string; category: ItemAssignmentCategory }[]
-  >([]);
-  const [assignItemOpen, setAssignItemOpen] = useState(false);
-  const [selectedItem, setSelectedItem] = useState<PlanItem | null>(null);
-  const [pendingAssign, setPendingAssign] = useState<{ reporter: User; category: ItemAssignmentCategory } | null>(null);
+  const [selectedDireccion, setSelectedDireccion] = useState<string>("");
+  const [direccionPendingAssign, setDireccionPendingAssign] = useState<{ reporter: User; category: ItemAssignmentCategory } | null>(null);
+  const [savingDireccionAssign, setSavingDireccionAssign] = useState(false);
   const [obsItem, setObsItem] = useState<PlanItem | null>(null);
   const [detailItem, setDetailItem] = useState<PlanItem | null>(null);
   const [obsText, setObsText] = useState("");
@@ -421,15 +418,9 @@ export default function PlanDetailPage() {
           body: JSON.stringify({ ...itemForm, budget: Number(itemForm.budget) }),
         });
         if (res.ok) {
-          await syncItemAssignments(
-            editingItem.id,
-            editingItem.assignedUsers ?? [],
-            itemAssignments
-          );
           toast.success("Item actualizado correctamente");
           setEditingItem(null);
           setItemForm(EMPTY_ITEM_FORM);
-          setItemAssignments([]);
           setAddItemOpen(false);
           await loadItems();
         } else {
@@ -446,11 +437,8 @@ export default function PlanDetailPage() {
       });
 
       if (res.ok) {
-        const createdItem = await res.json();
-        await syncItemAssignments(createdItem.id, [], itemAssignments);
         toast.success("Item agregado correctamente");
         setItemForm(EMPTY_ITEM_FORM);
-        setItemAssignments([]);
         setAddItemOpen(false);
         await loadItems();
       } else {
@@ -458,7 +446,7 @@ export default function PlanDetailPage() {
         toast.error(data.error || "Error al agregar item");
       }
     } catch {
-      toast.error("Error al guardar asignaciones del item");
+      toast.error("Error al guardar el item");
     } finally {
       setSavingItem(false);
     }
@@ -559,87 +547,46 @@ export default function PlanDetailPage() {
     }
   }
 
-  async function handleAssignToItem(userId: string, category: ItemAssignmentCategory) {
-    if (!selectedItem) return;
-    const res = await apiFetch(`/pma/api/plans/${id}/items/${selectedItem.id}/assign`, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ userId, category }),
-    });
-    if (res.ok) {
-      toast.success("Reportero asignado al Item");
-      setPendingAssign(null);
-      const updated = await apiFetch(`/pma/api/plans/${id}/items`);
-      if (updated.ok) {
-        const items = await updated.json();
-        setPlanItems(items);
-        setSelectedItem(items.find((i: PlanItem) => i.id === selectedItem.id) ?? null);
+  async function handleAssignToDireccion(userId: string, category: ItemAssignmentCategory) {
+    if (!selectedDireccion) return;
+    setSavingDireccionAssign(true);
+    try {
+      const res = await apiFetch(`/pma/api/plans/${id}/items/assign-direccion`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ direccion: selectedDireccion, userId, category }),
+      });
+      if (res.ok) {
+        toast.success("Reportero asignado a la dirección");
+        setDireccionPendingAssign(null);
+        await loadItems();
+      } else {
+        toast.error("Error al asignar");
       }
-    } else {
-      toast.error("Error al asignar");
+    } finally {
+      setSavingDireccionAssign(false);
     }
   }
 
-  async function handleUnassignFromItem(userId: string) {
-    if (!selectedItem) return;
-    const res = await apiFetch(`/pma/api/plans/${id}/items/${selectedItem.id}/assign`, {
-      method: "DELETE",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ userId }),
-    });
-    if (res.ok) {
-      toast.success("Reportero desasignado del Item");
-      const updated = await apiFetch(`/pma/api/plans/${id}/items`);
-      if (updated.ok) {
-        const items = await updated.json();
-        setPlanItems(items);
-        setSelectedItem(items.find((i: PlanItem) => i.id === selectedItem.id) ?? null);
+  async function handleUnassignFromDireccion(userId: string) {
+    if (!selectedDireccion) return;
+    setSavingDireccionAssign(true);
+    try {
+      const res = await apiFetch(`/pma/api/plans/${id}/items/assign-direccion`, {
+        method: "DELETE",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ direccion: selectedDireccion, userId }),
+      });
+      if (res.ok) {
+        toast.success("Reportero desasignado de la dirección");
+        await loadItems();
+      } else {
+        toast.error("Error al desasignar");
       }
-    } else {
-      toast.error("Error al desasignar");
+    } finally {
+      setSavingDireccionAssign(false);
     }
   }
-
-  async function syncItemAssignments(
-    itemId: string,
-    currentAssignments: { userId: string; category: ItemAssignmentCategory }[],
-    desiredAssignments: { userId: string; category: ItemAssignmentCategory }[]
-  ) {
-    const currentByUserId = new Map(
-      currentAssignments.map((a) => [a.userId, a.category])
-    );
-    const desiredByUserId = new Map(
-      desiredAssignments.map((a) => [a.userId, a.category])
-    );
-
-    const toRemove = currentAssignments
-      .filter((a) => !desiredByUserId.has(a.userId))
-      .map((a) => a.userId);
-    const toUpsert = desiredAssignments.filter(
-      (a) => currentByUserId.get(a.userId) !== a.category
-    );
-
-    const responses = await Promise.all([
-      ...toRemove.map((userId) =>
-        apiFetch(`/pma/api/plans/${id}/items/${itemId}/assign`, {
-          method: "DELETE",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ userId }),
-        })
-      ),
-      ...toUpsert.map(({ userId, category }) =>
-        apiFetch(`/pma/api/plans/${id}/items/${itemId}/assign`, {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ userId, category }),
-        })
-      ),
-    ]);
-    if (responses.some((res) => !res.ok)) {
-      throw new Error("No se pudo sincronizar asignaciones del item");
-    }
-  }
-
 
   function openCalUpload(item: PlanItem, range: ItemRange) {
     const now = new Date();
@@ -831,6 +778,33 @@ export default function PlanDetailPage() {
       );
   const visibleFindings = findings;
 
+  // Distinct "direcciones" present across this plan's items, used by the
+  // "Asignar por dirección" card to assign a reporter to a whole group at once.
+  const direcciones = Array.from(
+    new Set(
+      planItems.map((pi) => (pi.direccion ?? "").trim()).filter((d) => d.length > 0)
+    )
+  ).sort((a, b) => a.localeCompare(b));
+  // Items missing a "direccion". While any exist, assigning reporters by
+  // direccion is disabled: those items would silently fall outside every group.
+  const itemsSinDireccion = planItems.filter(
+    (pi) => (pi.direccion ?? "").trim().length === 0
+  );
+  const direccionItems = selectedDireccion
+    ? planItems.filter((pi) => (pi.direccion ?? "").trim() === selectedDireccion)
+    : [];
+  // Union of reporters assigned to at least one item in the selected direccion,
+  // keeping the category from the first item where each reporter appears.
+  const direccionAssignments = (() => {
+    const map = new Map<string, ItemAssignmentCategory>();
+    for (const pi of direccionItems) {
+      for (const a of pi.assignedUsers ?? []) {
+        if (!map.has(a.userId)) map.set(a.userId, a.category);
+      }
+    }
+    return Array.from(map.entries()).map(([userId, category]) => ({ userId, category }));
+  })();
+
   return (
     <div className="space-y-6">
       {/* Plan Header */}
@@ -905,6 +879,147 @@ export default function PlanDetailPage() {
         </Card>
       )}
 
+      {/* Assign reporters by direccion */}
+      {canEdit && (
+        <Card>
+          <CardHeader>
+            <CardTitle className="text-base">Asignar reporteros por dirección</CardTitle>
+          </CardHeader>
+          <CardContent className="space-y-4">
+            {itemsSinDireccion.length > 0 ? (
+              <div className="flex items-start gap-3 rounded-lg border border-yellow-500/50 bg-yellow-500/10 p-3">
+                <AlertTriangle className="w-5 h-5 text-yellow-500 shrink-0 mt-0.5" />
+                <div className="space-y-0.5">
+                  <p className="text-sm font-medium">
+                    Completa la dirección de todos los items para asignar por dirección.
+                  </p>
+                  <p className="text-xs text-muted-foreground">
+                    Hay {itemsSinDireccion.length} item(s) sin dirección
+                    {itemsSinDireccion.length <= 10 && (
+                      <> ({itemsSinDireccion.map((pi) => pi.item).join(", ")})</>
+                    )}
+                    . Mientras existan, quedarían fuera de cualquier grupo.
+                  </p>
+                </div>
+              </div>
+            ) : direcciones.length === 0 ? (
+              <p className="text-sm text-muted-foreground">
+                No hay direcciones en los items de este plan.
+              </p>
+            ) : (
+              <>
+                <div className="space-y-1.5">
+                  <Label>Dirección</Label>
+                  <select
+                    className="flex h-9 w-full rounded-md border border-input bg-background px-3 py-1 text-sm ring-offset-background focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                    value={selectedDireccion}
+                    onChange={(e) => {
+                      setSelectedDireccion(e.target.value);
+                      setDireccionPendingAssign(null);
+                    }}
+                  >
+                    <option value="">Selecciona una dirección…</option>
+                    {direcciones.map((d) => (
+                      <option key={d} value={d}>{d}</option>
+                    ))}
+                  </select>
+                  {selectedDireccion && (
+                    <p className="text-xs text-muted-foreground">
+                      {direccionItems.length} item(s) en esta dirección. La asignación aplica a todos.
+                    </p>
+                  )}
+                </div>
+
+                {selectedDireccion && (
+                  <div className="space-y-4">
+                    {/* Reporters currently assigned to this direccion */}
+                    {direccionAssignments.length > 0 && (
+                      <div>
+                        <p className="text-xs font-medium text-muted-foreground mb-2">Asignados a la dirección</p>
+                        <div className="space-y-1">
+                          {direccionAssignments.map((a) => {
+                            const reporter = allReporters.find((r) => r.id === a.userId);
+                            return (
+                              <div key={a.userId} className="flex items-center justify-between p-2 rounded-lg border">
+                                <div>
+                                  <p className="text-sm font-medium">{reporter?.name || a.userId}</p>
+                                  <p className="text-xs text-muted-foreground">{reporter?.email}</p>
+                                </div>
+                                <div className="flex items-center gap-2">
+                                  <Badge variant="secondary">{a.category}</Badge>
+                                  <Button variant="ghost" size="sm" disabled={savingDireccionAssign} onClick={() => handleUnassignFromDireccion(a.userId)}>
+                                    <Trash2 className="w-4 h-4 text-red-500" />
+                                  </Button>
+                                </div>
+                              </div>
+                            );
+                          })}
+                        </div>
+                      </div>
+                    )}
+
+                    {/* Category picker for a pending assignment */}
+                    {direccionPendingAssign && (
+                      <div className="rounded-lg border p-3 space-y-3 bg-muted/40">
+                        <p className="text-sm font-medium">
+                          Asignar a <span className="text-foreground">{direccionPendingAssign.reporter.name}</span> como:
+                        </p>
+                        <div className="flex gap-2">
+                          {(["Responsable", "Colaborador"] as ItemAssignmentCategory[]).map((cat) => (
+                            <Button
+                              key={cat}
+                              size="sm"
+                              variant={direccionPendingAssign.category === cat ? "default" : "outline"}
+                              onClick={() => setDireccionPendingAssign({ ...direccionPendingAssign, category: cat })}
+                            >
+                              {cat}
+                            </Button>
+                          ))}
+                        </div>
+                        <div className="flex gap-2">
+                          <Button size="sm" className="flex-1" disabled={savingDireccionAssign} onClick={() => handleAssignToDireccion(direccionPendingAssign.reporter.id, direccionPendingAssign.category)}>
+                            {savingDireccionAssign ? "Asignando…" : "Confirmar"}
+                          </Button>
+                          <Button size="sm" variant="outline" onClick={() => setDireccionPendingAssign(null)}>
+                            Cancelar
+                          </Button>
+                        </div>
+                      </div>
+                    )}
+
+                    {/* Add a reporter to the direccion */}
+                    {!direccionPendingAssign && (
+                      <div>
+                        <p className="text-xs font-medium text-muted-foreground mb-2">Agregar reportero</p>
+                        {allReporters.filter((r) => !direccionAssignments.some((a) => a.userId === r.id)).length === 0 ? (
+                          <p className="text-sm text-muted-foreground text-center py-3">Todos los reporteros ya están asignados a esta dirección.</p>
+                        ) : (
+                          <div className="space-y-1">
+                            {allReporters
+                              .filter((r) => !direccionAssignments.some((a) => a.userId === r.id))
+                              .map((reporter) => (
+                                <div key={reporter.id} className="flex items-center justify-between p-2 rounded-lg border">
+                                  <div>
+                                    <p className="text-sm font-medium">{reporter.name}</p>
+                                    <p className="text-xs text-muted-foreground">{reporter.email}</p>
+                                  </div>
+                                  <Button size="sm" onClick={() => setDireccionPendingAssign({ reporter, category: "Responsable" })}>
+                                    Asignar
+                                  </Button>
+                                </div>
+                              ))}
+                          </div>
+                        )}
+                      </div>
+                    )}
+                  </div>
+                )}
+              </>
+            )}
+          </CardContent>
+        </Card>
+      )}
+
       {/* Plan Items */}
       <Card>
         <CardHeader className="flex flex-row items-center justify-between">
@@ -934,7 +1049,6 @@ export default function PlanDetailPage() {
                   if (!open) {
                     setEditingItem(null);
                     setItemForm(EMPTY_ITEM_FORM);
-                    setItemAssignments([]);
                   } else if (open && !editingItem && planItems.length > 0) {
                     const last = planItems[planItems.length - 1];
                     setItemForm({
@@ -951,10 +1065,8 @@ export default function PlanDetailPage() {
                       budget: String(last.budget),
                       report_per: last.report_per ?? "6 meses",
                     });
-                    setItemAssignments([]);
                   } else if (open && !editingItem) {
                     setItemForm(EMPTY_ITEM_FORM);
-                    setItemAssignments([]);
                   }
                   setAddItemOpen(open);
                 }}
@@ -1003,14 +1115,24 @@ export default function PlanDetailPage() {
                     </div>
                     <div className="space-y-2">
                       <Label htmlFor="direccion">Dirección</Label>
-                      <Input
+                      <select
                         id="direccion"
                         value={itemForm.direccion}
                         onChange={(e) =>
                           setItemForm({ ...itemForm, direccion: e.target.value })
                         }
                         required
-                      />
+                        className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                      >
+                        <option value="" disabled>
+                          Seleccionar dirección...
+                        </option>
+                        {DIRECCION_OPTIONS.map((option) => (
+                          <option key={option} value={option}>
+                            {option}
+                          </option>
+                        ))}
+                      </select>
                     </div>
                     <div className="space-y-2">
                       <Label htmlFor="periodicity">Periodicidad</Label>
@@ -1132,76 +1254,6 @@ export default function PlanDetailPage() {
                     />
                   </div>
 
-                  <div className="space-y-2">
-                    <Label>Asignar reporteros</Label>
-                    {allReporters.length === 0 ? (
-                      <p className="text-sm text-muted-foreground">
-                        No hay reporteros disponibles para asignar.
-                      </p>
-                    ) : (
-                      <div className="space-y-2 rounded-md border p-3 max-h-56 overflow-y-auto">
-                        {allReporters.map((reporter) => {
-                          const assignment = itemAssignments.find(
-                            (a) => a.userId === reporter.id
-                          );
-                          const isChecked = Boolean(assignment);
-                          return (
-                            <div
-                              key={reporter.id}
-                              className="flex items-center justify-between gap-3"
-                            >
-                              <label className="flex items-center gap-2 text-sm">
-                                <input
-                                  type="checkbox"
-                                  checked={isChecked}
-                                  onChange={(e) => {
-                                    if (e.target.checked) {
-                                      setItemAssignments((prev) => [
-                                        ...prev,
-                                        { userId: reporter.id, category: "Responsable" },
-                                      ]);
-                                    } else {
-                                      setItemAssignments((prev) =>
-                                        prev.filter((a) => a.userId !== reporter.id)
-                                      );
-                                    }
-                                  }}
-                                />
-                                <span>
-                                  {reporter.name}
-                                  <span className="text-xs text-muted-foreground ml-1">
-                                    ({reporter.email})
-                                  </span>
-                                </span>
-                              </label>
-                              {isChecked && (
-                                <select
-                                  className="flex h-9 rounded-md border border-input bg-background px-3 py-1 text-sm ring-offset-background focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
-                                  value={assignment?.category ?? "Responsable"}
-                                  onChange={(e) =>
-                                    setItemAssignments((prev) =>
-                                      prev.map((a) =>
-                                        a.userId === reporter.id
-                                          ? {
-                                              ...a,
-                                              category: e.target
-                                                .value as ItemAssignmentCategory,
-                                            }
-                                          : a
-                                      )
-                                    )
-                                  }
-                                >
-                                  <option value="Responsable">Responsable</option>
-                                  <option value="Colaborador">Colaborador</option>
-                                </select>
-                              )}
-                            </div>
-                          );
-                        })}
-                      </div>
-                    )}
-                  </div>
 
                   <Button type="submit" className="w-full" disabled={savingItem}>
                     {savingItem ? "Guardando..." : editingItem ? "Guardar cambios" : "Agregar Item"}
@@ -1219,24 +1271,16 @@ export default function PlanDetailPage() {
               {canEdit && "Usa el botón \"Agregar Item\" para comenzar."}
             </p>
           ) : (
-            <div className="overflow-x-auto">
-              <Table>
+            <div className="w-full">
+              <Table className="w-full table-fixed">
                 <TableHeader>
                   <TableRow>
-                    <TableHead>Item</TableHead>
-                    <TableHead className="min-w-[300px] w-[300px]">Subplan</TableHead>
-                    <TableHead>Dirección</TableHead>
-                    <TableHead className="min-w-[300px] w-[300px]">Actividad Ambiental</TableHead>
-                    <TableHead className="min-w-[300px] w-[300px]">Impacto Identificado</TableHead>
-                    <TableHead className="min-w-[300px] w-[300px]">Medida Propuesta</TableHead>
-                    <TableHead className="min-w-[300px] w-[300px]">Indicador</TableHead>
-                    <TableHead>Método Verificación</TableHead>
-                    <TableHead>Periodicidad</TableHead>
-                    <TableHead>Presupuesto</TableHead>
-                    <TableHead>Reporteros</TableHead>
-                    <TableHead>Observación</TableHead>
-                    <TableHead className="w-[60px]"></TableHead>
-                    {canEdit && <TableHead className="w-[60px]"></TableHead>}
+                    <TableHead className="w-[8%]">Item</TableHead>
+                    <TableHead className="w-[11%]">Dirección</TableHead>
+                    <TableHead className="w-[30%]">Medida Propuesta</TableHead>
+                    <TableHead className="w-[23%]">Método Verificación</TableHead>
+                    <TableHead className="w-[20%]">Observación</TableHead>
+                    {canEdit && <TableHead className="w-[8%]">Acciones</TableHead>}
                   </TableRow>
                 </TableHeader>
                 <TableBody>
@@ -1246,57 +1290,20 @@ export default function PlanDetailPage() {
                       className="cursor-pointer hover:bg-muted/50"
                       onClick={() => setDetailItem(pi)}
                     >
-                      <TableCell className="font-medium whitespace-nowrap">
+                      <TableCell className="font-medium align-top break-words">
                         {pi.item}
                       </TableCell>
-                      <TableCell className="min-w-[300px] w-[300px] max-w-[300px] align-top" title={pi.subplan}>
-                        <span className="line-clamp-2 whitespace-normal break-words">{pi.subplan}</span>
-                      </TableCell>
-                      <TableCell className="max-w-[150px] align-top" title={pi.direccion ?? ""}>
+                      <TableCell className="align-top" title={pi.direccion ?? ""}>
                         <span className="line-clamp-2 whitespace-normal break-words">{pi.direccion ?? ""}</span>
                       </TableCell>
-                      <TableCell className="min-w-[300px] w-[300px] max-w-[300px] align-top" title={pi.environmental_activity}>
-                        <span className="line-clamp-2 whitespace-normal break-words">{pi.environmental_activity}</span>
-                      </TableCell>
-                      <TableCell className="min-w-[300px] w-[300px] max-w-[300px] align-top" title={pi.identified_environmental_impact}>
-                        <span className="line-clamp-2 whitespace-normal break-words">{pi.identified_environmental_impact}</span>
-                      </TableCell>
-                      <TableCell className="min-w-[300px] w-[300px] max-w-[300px] align-top" title={pi.proposed_measure}>
+                      <TableCell className="align-top" title={pi.proposed_measure}>
                         <span className="line-clamp-2 whitespace-normal break-words">{pi.proposed_measure}</span>
                       </TableCell>
-                      <TableCell className="min-w-[300px] w-[300px] max-w-[300px] align-top" title={pi.indicator}>
-                        <span className="line-clamp-2 whitespace-normal break-words">{pi.indicator}</span>
-                      </TableCell>
-                      <TableCell className="max-w-[120px] align-top" title={pi.verification_method}>
+                      <TableCell className="align-top" title={pi.verification_method}>
                         <span className="line-clamp-2 whitespace-normal break-words">{pi.verification_method}</span>
                       </TableCell>
-                      <TableCell className="whitespace-nowrap">
-                        {pi.periodicity}
-                      </TableCell>
-                      <TableCell className="whitespace-nowrap">
-                        {pi.budget.toLocaleString("en-US", {
-                          style: "currency",
-                          currency: "USD",
-                        })}
-                      </TableCell>
-                      <TableCell onClick={(e) => e.stopPropagation()}>
-                        <Button
-                          variant="outline"
-                          size="sm"
-                          onClick={() => {
-                            setSelectedItem(pi);
-                            setAssignItemOpen(true);
-                          }}
-                          className="flex items-center gap-1 whitespace-nowrap"
-                        >
-                          <Users className="w-3.5 h-3.5" />
-                          {(pi.assignedUsers ?? []).length > 0
-                            ? `${(pi.assignedUsers ?? []).length} asignado(s)`
-                            : "Asignar"}
-                        </Button>
-                      </TableCell>
                       <TableCell
-                        className="max-w-[160px] cursor-pointer align-top"
+                        className="cursor-pointer align-top"
                         onClick={(e) => {
                           e.stopPropagation();
                           setObsItem(pi);
@@ -1314,11 +1321,12 @@ export default function PlanDetailPage() {
                         )}
                       </TableCell>
                       {canEdit && (
-                        <TableCell onClick={(e) => e.stopPropagation()}>
-                          <div className="flex gap-1">
+                        <TableCell className="align-top" onClick={(e) => e.stopPropagation()}>
+                          <div className="flex gap-1 items-center">
                             <Button
                               variant="ghost"
                               size="sm"
+                              className="h-8 w-8 p-0"
                               title="Editar Item"
                               onClick={() => {
                                 setEditingItem(pi);
@@ -1335,12 +1343,6 @@ export default function PlanDetailPage() {
                                   budget: String(pi.budget),
                                   report_per: pi.report_per ?? "6 meses",
                                 });
-                                setItemAssignments(
-                                  (pi.assignedUsers ?? []).map((a) => ({
-                                    userId: a.userId,
-                                    category: a.category,
-                                  }))
-                                );
                                 setAddItemOpen(true);
                               }}
                             >
@@ -1350,6 +1352,7 @@ export default function PlanDetailPage() {
                               <Button
                                 variant="ghost"
                                 size="sm"
+                                className="h-8 w-8 p-0"
                                 onClick={() => handleDeleteItem(pi.id)}
                               >
                                 <Trash2 className="w-4 h-4 text-red-500" />
@@ -1798,102 +1801,6 @@ export default function PlanDetailPage() {
               <p className="text-sm text-muted-foreground text-center py-3">
                 No hay visualizadores creados aún. Crea uno en la sección de Usuarios.
               </p>
-            )}
-          </div>
-        </DialogContent>
-      </Dialog>
-
-      {/* Assign reporters to item dialog */}
-      <Dialog open={assignItemOpen} onOpenChange={(open) => { setAssignItemOpen(open); if (!open) setPendingAssign(null); }}>
-        <DialogContent>
-          <DialogHeader>
-            <DialogTitle>Reporteros - {selectedItem?.item}</DialogTitle>
-          </DialogHeader>
-          <div className="space-y-4 mt-2">
-            {/* Assigned */}
-            {(selectedItem?.assignedUsers ?? []).length > 0 && (
-              <div>
-                <p className="text-xs font-medium text-muted-foreground mb-2">Asignados</p>
-                <div className="space-y-1">
-                  {(selectedItem?.assignedUsers ?? []).map((a) => {
-                    const reporter = allReporters.find((r) => r.id === a.userId);
-                    return (
-                      <div key={a.userId} className="flex items-center justify-between p-2 rounded-lg border">
-                        <div>
-                          <p className="text-sm font-medium">{reporter?.name || a.userId}</p>
-                          <p className="text-xs text-muted-foreground">{reporter?.email}</p>
-                        </div>
-                        <div className="flex items-center gap-2">
-                          <Badge variant="secondary">{a.category}</Badge>
-                          {canEdit && (
-                            <Button variant="ghost" size="sm" onClick={() => handleUnassignFromItem(a.userId)}>
-                              <Trash2 className="w-4 h-4 text-red-500" />
-                            </Button>
-                          )}
-                        </div>
-                      </div>
-                    );
-                  })}
-                </div>
-              </div>
-            )}
-
-            {/* Category picker for pending assignment */}
-            {pendingAssign && (
-              <div className="rounded-lg border p-3 space-y-3 bg-muted/40">
-                <p className="text-sm font-medium">
-                  Asignar a <span className="text-foreground">{pendingAssign.reporter.name}</span> como:
-                </p>
-                <div className="flex gap-2">
-                  {(["Responsable", "Colaborador"] as ItemAssignmentCategory[]).map((cat) => (
-                    <Button
-                      key={cat}
-                      size="sm"
-                      variant={pendingAssign.category === cat ? "default" : "outline"}
-                      onClick={() => setPendingAssign({ ...pendingAssign, category: cat })}
-                    >
-                      {cat}
-                    </Button>
-                  ))}
-                </div>
-                <div className="flex gap-2">
-                  <Button size="sm" className="flex-1" onClick={() => handleAssignToItem(pendingAssign.reporter.id, pendingAssign.category)}>
-                    Confirmar
-                  </Button>
-                  <Button size="sm" variant="outline" onClick={() => setPendingAssign(null)}>
-                    Cancelar
-                  </Button>
-                </div>
-              </div>
-            )}
-
-            {/* Unassigned reporters list */}
-            {canEdit && !pendingAssign && (
-              <div>
-                <p className="text-xs font-medium text-muted-foreground mb-2">Agregar reportero</p>
-                {allReporters.filter((r) => !(selectedItem?.assignedUsers ?? []).some((a) => a.userId === r.id)).length === 0 ? (
-                  <p className="text-sm text-muted-foreground text-center py-3">Todos los reporteros ya están asignados.</p>
-                ) : (
-                  <div className="space-y-1">
-                    {allReporters
-                      .filter((r) => !(selectedItem?.assignedUsers ?? []).some((a) => a.userId === r.id))
-                      .map((reporter) => (
-                        <div key={reporter.id} className="flex items-center justify-between p-2 rounded-lg border">
-                          <div>
-                            <p className="text-sm font-medium">{reporter.name}</p>
-                            <p className="text-xs text-muted-foreground">{reporter.email}</p>
-                          </div>
-                          <Button
-                            size="sm"
-                            onClick={() => setPendingAssign({ reporter, category: "Responsable" })}
-                          >
-                            Asignar
-                          </Button>
-                        </div>
-                      ))}
-                  </div>
-                )}
-              </div>
             )}
           </div>
         </DialogContent>
