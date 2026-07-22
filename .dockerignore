@@ -3,7 +3,9 @@ Dockerfile
 .git
 .gitignore
 .env*
+**/.env*
 node_modules
 .next
+.next.docker-bak
 README.md
 deploy.sh

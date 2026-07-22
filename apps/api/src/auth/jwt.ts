@@ -71,14 +71,18 @@ export function hashRefreshToken(token: string): string {
 }
 
 function parseExpiry(ttl: string): Date {
-  const m = ttl.match(/^(\d+)([smhd])$/);
+  return new Date(Date.now() + ttlToSeconds(ttl) * 1000);
+}
+
+export function ttlToSeconds(ttl: string): number {
+  const m = ttl.match(/^([1-9]\d*)([smhd])$/);
   if (!m) throw new Error(`Invalid TTL: ${ttl}`);
   const n = parseInt(m[1], 10);
   const unit = m[2];
-  const ms =
-    unit === "s" ? n * 1000 :
-    unit === "m" ? n * 60_000 :
-    unit === "h" ? n * 3_600_000 :
-    n * 86_400_000;
-  return new Date(Date.now() + ms);
+  const seconds = unit === "s" ? n :
+    unit === "m" ? n * 60 :
+    unit === "h" ? n * 3_600 :
+    n * 86_400;
+  if (!Number.isSafeInteger(seconds)) throw new Error(`TTL is too large: ${ttl}`);
+  return seconds;
 }

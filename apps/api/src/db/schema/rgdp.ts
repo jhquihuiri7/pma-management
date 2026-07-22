@@ -9,7 +9,9 @@ import {
   date,
   primaryKey,
   index,
+  uniqueIndex,
 } from "drizzle-orm/pg-core";
+import { sql } from "drizzle-orm";
 import {
   planTipoEnum,
   planFaseEnum,
@@ -97,6 +99,7 @@ export const rgdpPlanAssignments = pgTable(
     userId: uuid("user_id")
       .notNull()
       .references(() => users.id, { onDelete: "cascade" }),
+    explicitAccess: boolean("explicit_access").notNull().default(true),
     createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
   },
   (t) => ({
@@ -128,9 +131,7 @@ export const rgdpEvidences = pgTable(
       .notNull()
       .references(() => rgdpPlans.id, { onDelete: "cascade" }),
     planItemId: uuid("plan_item_id").references(() => rgdpPlanItems.id, { onDelete: "cascade" }),
-    uploadedBy: uuid("uploaded_by")
-      .notNull()
-      .references(() => users.id, { onDelete: "set null" } as any),
+    uploadedBy: uuid("uploaded_by").references(() => users.id, { onDelete: "set null" }),
     uploaderName: text("uploader_name").notNull(),
     fileName: text("file_name").notNull(),
     storagePath: text("storage_path").notNull(),
@@ -146,6 +147,7 @@ export const rgdpEvidences = pgTable(
   (t) => ({
     planIdx: index("rgdp_evidences_plan_idx").on(t.planId),
     itemIdx: index("rgdp_evidences_item_idx").on(t.planItemId),
+    storagePathIdx: index("rgdp_evidences_storage_path_idx").on(t.storagePath),
   })
 );
 
@@ -216,17 +218,20 @@ export const rgdpNotifications = pgTable(
     metadata: jsonb("metadata"),
     readAt: timestamp("read_at", { withTimezone: true }),
     createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
-    expiresAt: timestamp("expires_at", { withTimezone: true }),
+    expiresAt: timestamp("expires_at", { withTimezone: true }).notNull(),
   },
   (t) => ({
     userIdx: index("rgdp_notifications_user_idx").on(t.userId),
+    evidenceEventUniqueIdx: uniqueIndex("rgdp_notifications_evidence_event_unique_idx")
+      .on(t.userId, t.type, t.evidenceId)
+      .where(sql`${t.evidenceId} IS NOT NULL AND ${t.type} IN ('evidence_submitted'::notification_type, 'evidence_approved'::notification_type, 'evidence_rejected'::notification_type)`),
   })
 );
 
 export const rgdpFormats = pgTable("rgdp_formats", {
   id: uuid("id").primaryKey().defaultRandom(),
   createdBy: uuid("created_by").references(() => users.id, { onDelete: "set null" }),
-  functionality: formatFunctionalityEnum("functionality").notNull(),
+  functionality: formatFunctionalityEnum("functionality").notNull().unique(),
   functionalityLabel: text("functionality_label").notNull(),
   storagePath: text("storage_path").notNull(),
   fileName: text("file_name").notNull(),

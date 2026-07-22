@@ -1,11 +1,9 @@
 "use client";
 
-import { apiFetch } from "@/lib/api-client";
-
-
+import { api, requirePersistedEntity } from "@/lib/api-client";
+import { useConfirmedMutation } from "@/lib/use-confirmed-mutation";
 import { useState } from "react";
 import { Plus, X } from "lucide-react";
-import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { GEO_CATEGORIES, getDefaultGeoThematic, getGeoThematics } from "@/lib/geo-mock-data";
 import type { GeoMap } from "@/types/geo";
@@ -16,7 +14,6 @@ interface Props {
 
 export default function AddMapDialog({ onAdd }: Props) {
   const [open, setOpen] = useState(false);
-  const [loading, setLoading] = useState(false);
   const [form, setForm] = useState({
     title: "",
     description: "",
@@ -36,39 +33,35 @@ export default function AddMapDialog({ onAdd }: Props) {
 
   const thematicOptions = getGeoThematics(form.categoryId);
 
+  const createMap = useConfirmedMutation<{
+    title: string;
+    description: string;
+    categoryId: string;
+    thematic: string;
+    tags: string[];
+  }, GeoMap>({
+    mutation: async (payload, signal) => requirePersistedEntity<GeoMap>(
+      await api.post<unknown>("/geo/maps", payload, { signal }),
+      "El servidor no confirmó la creación del mapa"
+    ),
+    successMessage: "Mapa agregado correctamente",
+    errorMessage: "Error al agregar el mapa",
+    onConfirmed: (newMap) => {
+      onAdd(newMap);
+      setOpen(false);
+      reset();
+    },
+  });
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    setLoading(true);
-
-    try {
-      const res = await apiFetch("/geo/api/maps", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          title: form.title.trim(),
-          description: form.description.trim(),
-          categoryId: form.categoryId,
-          thematic: form.thematic,
-          tags: form.tags ? form.tags.split(",").map((t) => t.trim()).filter(Boolean) : [],
-        }),
-      });
-
-      if (res.ok) {
-        const newMap = await res.json();
-        onAdd(newMap);
-        toast.success("Mapa agregado correctamente");
-        setOpen(false);
-        reset();
-      } else {
-        const data = await res.json();
-        toast.error(data.error || "Error al agregar el mapa");
-      }
-    } catch (error) {
-      console.error(error);
-      toast.error("Error al agregar el mapa");
-    } finally {
-      setLoading(false);
-    }
+    await createMap.mutate({
+      title: form.title.trim(),
+      description: form.description.trim(),
+      categoryId: form.categoryId,
+      thematic: form.thematic,
+      tags: form.tags ? form.tags.split(",").map((t) => t.trim()).filter(Boolean) : [],
+    });
   };
 
   if (!open) {
@@ -89,7 +82,8 @@ export default function AddMapDialog({ onAdd }: Props) {
         <div className="flex items-center justify-between px-6 py-4 border-b border-slate-200 bg-slate-50">
           <h2 className="text-base font-semibold text-slate-900">Agregar nuevo mapa</h2>
           <button
-            onClick={() => { setOpen(false); reset(); }}
+            onClick={() => { if (!createMap.isPending) { setOpen(false); reset(); } }}
+            disabled={createMap.isPending}
             className="text-slate-400 hover:text-slate-700"
           >
             <X className="w-5 h-5" />
@@ -182,12 +176,12 @@ export default function AddMapDialog({ onAdd }: Props) {
               variant="outline"
               className="flex-1"
               onClick={() => { setOpen(false); reset(); }}
-              disabled={loading}
+              disabled={createMap.isPending}
             >
               Cancelar
             </Button>
-            <Button type="submit" className="flex-1 bg-teal-600 hover:bg-teal-700 text-white" disabled={loading}>
-              {loading ? "Guardando..." : "Agregar mapa"}
+            <Button type="submit" className="flex-1 bg-teal-600 hover:bg-teal-700 text-white" disabled={createMap.isPending}>
+              {createMap.isPending ? "Guardando..." : "Agregar mapa"}
             </Button>
           </div>
         </form>

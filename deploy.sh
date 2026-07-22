@@ -26,7 +26,7 @@ case "$ACTION" in
         echo "🛑 Bajando producción (si está activa) para evitar conflicto de contenedores/puertos..."
         docker compose down --remove-orphans
         echo "🔧 Levantando servicios en modo desarrollo..."
-        docker compose -f docker-compose.dev.yml up -d
+        docker compose -f docker-compose.dev.yml up -d --wait
         echo "✅ Servicios levantados (desarrollo)"
         echo ""
         echo "Acceso:"
@@ -39,14 +39,12 @@ case "$ACTION" in
         echo "🛑 Bajando desarrollo (si está activo) para evitar conflicto de contenedores/puertos..."
         docker compose -f docker-compose.dev.yml down --remove-orphans
         echo "🚀 Levantando servicios en modo producción..."
-        docker compose up -d
+        docker compose up -d --wait
         echo "✅ Servicios levantados (producción)"
         echo ""
         echo "Acceso:"
         echo "  Web HTTPS: https://sigtar.gobiernogalapagos.gob.ec"
-        echo "  Web local: http://localhost:8000"
-        echo "  API local: http://localhost:3001"
-        echo "  Database:  localhost:5432"
+        echo "  API y base de datos: sólo red interna de Docker"
         ;;
 
     down)
@@ -61,10 +59,10 @@ case "$ACTION" in
         docker compose -f docker-compose.dev.yml down --remove-orphans
         if [ -n "$SERVICE" ]; then
             echo "🔄 Actualizando $SERVICE (producción)..."
-            docker compose up -d --build "$SERVICE"
+            docker compose up -d --build --wait "$SERVICE"
         else
             echo "🔄 Actualizando todos los servicios (producción)..."
-            docker compose up -d --build
+            docker compose up -d --build --wait
         fi
         echo "✅ Actualización completada"
         ;;
@@ -74,10 +72,10 @@ case "$ACTION" in
         docker compose down --remove-orphans
         if [ -n "$SERVICE" ]; then
             echo "🔄 Actualizando $SERVICE (desarrollo)..."
-            docker compose -f docker-compose.dev.yml up -d --build "$SERVICE"
+            docker compose -f docker-compose.dev.yml up -d --build --wait "$SERVICE"
         else
             echo "🔄 Actualizando todos los servicios (desarrollo)..."
-            docker compose -f docker-compose.dev.yml up -d --build
+            docker compose -f docker-compose.dev.yml up -d --build --wait
         fi
         echo "✅ Actualización completada"
         ;;
@@ -114,7 +112,8 @@ case "$ACTION" in
 
     migrate)
         echo "🗄️  Ejecutando migraciones..."
-        docker compose exec api node dist/apps/api/src/db/run-migrations.js
+        docker compose up -d --wait postgres
+        docker compose run --rm --build --no-deps -T migrate
         echo "✅ Migraciones completadas"
         ;;
 

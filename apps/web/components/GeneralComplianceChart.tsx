@@ -16,6 +16,7 @@ import {
   Legend,
 } from "recharts";
 import { toPng } from "html-to-image";
+import { toast } from "sonner";
 import { Download } from "lucide-react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -278,7 +279,7 @@ export default function GeneralComplianceChart({ planCharts, periodMode = "block
       link.href = dataUrl;
       link.click();
     } catch {
-      // silent
+      toast.error("No se pudo generar la imagen del gráfico");
     } finally {
       setDownloadingId(null);
     }

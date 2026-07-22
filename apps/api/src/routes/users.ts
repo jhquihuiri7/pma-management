@@ -14,26 +14,31 @@ import {
 import { NotFound } from "../lib/errors.js";
 
 const VALID_APPS: AppKey[] = ["pma", "rgdp", "geo"];
+const idParamsSchema = z.object({ id: z.string().uuid() }).strict();
+const appParamsSchema = z.object({
+  id: z.string().uuid(),
+  appKey: z.enum(["pma", "rgdp", "geo"]),
+}).strict();
 
 const createSchema = z.object({
-  name: z.string().min(1),
+  name: z.string().trim().min(1).max(200),
   email: z.string().email(),
   role: z.enum(["ADMIN", "REPORTER", "VIEWER"]),
-  unit: z.string().optional(),
-  position: z.string().optional(),
-  apps: z.array(z.enum(["pma", "rgdp", "geo"])).optional(),
-});
+  unit: z.string().trim().max(200).optional(),
+  position: z.string().trim().max(200).optional(),
+  apps: z.array(z.enum(["pma", "rgdp", "geo"])).max(3).optional(),
+}).strict();
 
 const updateSchema = z.object({
-  name: z.string().min(1).optional(),
-  unit: z.string().nullable().optional(),
-  position: z.string().nullable().optional(),
+  name: z.string().trim().min(1).max(200).optional(),
+  unit: z.string().trim().max(200).nullable().optional(),
+  position: z.string().trim().max(200).nullable().optional(),
   role: z.enum(["ADMIN", "REPORTER", "VIEWER"]).optional(),
-});
+}).strict().refine((body) => Object.keys(body).length > 0, "Se requiere al menos un cambio");
 
 const assignAppSchema = z.object({
   appKey: z.enum(["pma", "rgdp", "geo"]),
-});
+}).strict();
 
 export async function usersRoutes(app: FastifyInstance) {
   app.addHook("preHandler", authenticate);
@@ -46,7 +51,7 @@ export async function usersRoutes(app: FastifyInstance) {
   app.post("/", async (req, reply) => {
     const body = createSchema.parse(req.body);
     reply.status(201);
-    return createUserGlobal({
+    return createUserGlobal(req.user!.sub, {
       name: body.name,
       email: body.email,
       role: body.role,
@@ -57,37 +62,33 @@ export async function usersRoutes(app: FastifyInstance) {
   });
 
   app.put("/:id", async (req) => {
-    const { id } = req.params as { id: string };
+    const { id } = idParamsSchema.parse(req.params);
     const body = updateSchema.parse(req.body);
-    await updateManagedUser(id, body, req.user!.sub);
-    return { ok: true };
+    return updateManagedUser(id, body, req.user!.sub);
   });
 
   app.delete("/:id", async (req) => {
-    const { id } = req.params as { id: string };
-    await deleteUserGlobal(id, req.user!.sub);
-    return { ok: true };
+    const { id } = idParamsSchema.parse(req.params);
+    return deleteUserGlobal(id, req.user!.sub);
   });
 
   app.post("/:id/resend-invitation", async (req) => {
-    const { id } = req.params as { id: string };
-    await resendInvitationGlobal(id);
-    return { ok: true };
+    const { id } = idParamsSchema.parse(req.params);
+    return resendInvitationGlobal(id, req.user!.sub);
   });
 
   app.post("/:id/apps", async (req, reply) => {
-    const { id } = req.params as { id: string };
+    const { id } = idParamsSchema.parse(req.params);
     const body = assignAppSchema.parse(req.body);
-    await assignUserToApp(id, body.appKey);
+    const result = await assignUserToApp(id, body.appKey, req.user!.sub);
     reply.status(201);
-    return { ok: true };
+    return result;
   });
 
   app.delete("/:id/apps/:appKey", async (req) => {
-    const { id, appKey } = req.params as { id: string; appKey: string };
+    const { id, appKey } = appParamsSchema.parse(req.params);
     if (!VALID_APPS.includes(appKey as AppKey))
       throw NotFound("Aplicación no válida");
-    await deleteManagedUser(id, appKey as AppKey);
-    return { ok: true };
+    return deleteManagedUser(id, appKey as AppKey, req.user!.sub);
   });
 }

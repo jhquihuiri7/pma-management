@@ -9,13 +9,57 @@ interface PlanLike {
 export type PeriodMode = "block" | "monthly";
 
 export function getBlockSize(report_per: string | undefined): number {
-  const s = (report_per ?? "").toLowerCase();
-  if (s.startsWith("2")) return 24;
-  if (s.startsWith("1")) return 12;
-  return 6;
+  const value = (report_per ?? "").trim().toLowerCase();
+  if (value === "2 años") return 24;
+  if (value === "1 año") return 12;
+  if (value === "6 meses") return 6;
+  throw new RangeError(`Periodo de reporte no soportado: ${report_per ?? "vacío"}`);
 }
 
 const MONTHS_ES = ["ene", "feb", "mar", "abr", "may", "jun", "jul", "ago", "sep", "oct", "nov", "dic"];
+const BUSINESS_TIME_ZONE = "Pacific/Galapagos";
+
+/**
+ * Converts an instant into the Galápagos business calendar. The returned
+ * `Date` is only a local calendar-arithmetic carrier; its instant is not used.
+ */
+export function getBusinessCalendarDate(now = new Date()): Date {
+  if (Number.isNaN(now.getTime())) {
+    throw new RangeError("Fecha operativa inválida");
+  }
+  const parts = new Intl.DateTimeFormat("en-CA", {
+    timeZone: BUSINESS_TIME_ZONE,
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+  }).formatToParts(now);
+  const year = Number(parts.find((part) => part.type === "year")?.value);
+  const month = Number(parts.find((part) => part.type === "month")?.value);
+  const day = Number(parts.find((part) => part.type === "day")?.value);
+  if (!Number.isInteger(year) || !Number.isInteger(month) || !Number.isInteger(day)) {
+    throw new Error("No se pudo determinar la fecha operativa");
+  }
+  return new Date(year, month - 1, day);
+}
+
+/** Calendar month used by the backend's evidence-period policy. */
+export function getBusinessMonth(now = new Date()): Date {
+  const calendarDate = getBusinessCalendarDate(now);
+  const year = calendarDate.getFullYear();
+  const month = calendarDate.getMonth() + 1;
+  return new Date(year, month - 1, 1);
+}
+
+/**
+ * Resolves an explicit date-only plan start, or the creation instant expressed
+ * in the same Galápagos calendar used by the backend when legacy data has no
+ * `start_date`.
+ */
+export function getPlanStartDate(plan: PlanLike): Date {
+  const explicitStart = parseDateOnly(plan.start_date ?? "");
+  if (explicitStart) return explicitStart;
+  return getBusinessCalendarDate(new Date(plan.createdAt));
+}
 
 /**
  * Number of months an item's evidence range spans, derived from the item's
@@ -42,7 +86,11 @@ export const PERIODICITY_INTERVAL: Record<string, number> = {
 };
 
 export function getPeriodicityInterval(periodicity?: string): number {
-  return PERIODICITY_INTERVAL[periodicity ?? ""] ?? 1;
+  const interval = PERIODICITY_INTERVAL[periodicity ?? ""];
+  if (interval === undefined) {
+    throw new RangeError(`Periodicidad no soportada: ${periodicity ?? "vacía"}`);
+  }
+  return interval;
 }
 
 export interface ItemRange {
@@ -87,12 +135,11 @@ function rangeLabel(start: Date, realEnd: Date, single: boolean): string {
  */
 export function getItemRanges(plan: PlanLike, periodicity?: string): ItemRange[] {
   const interval = getPeriodicityInterval(periodicity);
-  const planStartDate = parseDateOnly(plan.start_date ?? "") ?? new Date(plan.createdAt);
+  const planStartDate = getPlanStartDate(plan);
   const origin = new Date(planStartDate.getFullYear(), planStartDate.getMonth(), 1);
-  const today = new Date();
-  const todayMonth = new Date(today.getFullYear(), today.getMonth(), 1);
+  const todayMonth = getBusinessMonth();
   // Calendar shows up to today + 1 month (its range end is today + 2, exclusive).
-  const lastVisible = new Date(today.getFullYear(), today.getMonth() + 1, 1);
+  const lastVisible = new Date(todayMonth.getFullYear(), todayMonth.getMonth() + 1, 1);
   const single = interval >= 1200;
 
   const ranges: ItemRange[] = [];
@@ -107,11 +154,14 @@ export function getItemRanges(plan: PlanLike, periodicity?: string): ItemRange[]
       monthKeys.push(monthKeyOf(c));
     }
 
-    // For an open ("once / at the end") range, only let the user pick up to today.
-    const selectEnd = single ? (todayMonth < startMonth ? startMonth : todayMonth) : realEndMonth;
+    // Evidence may only be attributed to a month that has already begun. This
+    // applies to every periodicity, not only open-ended/one-time ranges.
+    const selectEnd = todayMonth < realEndMonth ? todayMonth : realEndMonth;
     const selectableMonthKeys: string[] = [];
-    for (let c = new Date(startMonth); c <= selectEnd; c.setMonth(c.getMonth() + 1)) {
-      selectableMonthKeys.push(monthKeyOf(c));
+    if (startMonth <= selectEnd) {
+      for (let c = new Date(startMonth); c <= selectEnd; c.setMonth(c.getMonth() + 1)) {
+        selectableMonthKeys.push(monthKeyOf(c));
+      }
     }
 
     ranges.push({
@@ -132,7 +182,7 @@ export function getItemRanges(plan: PlanLike, periodicity?: string): ItemRange[]
 
 export function createPeriodHelpers(plan: PlanLike) {
   const blockSize = getBlockSize(plan.report_per);
-  const planStartDate = parseDateOnly(plan.start_date ?? "") ?? new Date(plan.createdAt);
+  const planStartDate = getPlanStartDate(plan);
   const blockOrigin = new Date(planStartDate.getFullYear(), planStartDate.getMonth(), 1);
 
   function diffFromOrigin(month: Date): number {
@@ -203,11 +253,12 @@ export function getPlanPeriodsByMode(
   }
 
   const { isBlockEnd, getPeriodLabel } = createPeriodHelpers(plan);
-  const planStartDate = parseDateOnly(plan.start_date ?? "") ?? new Date(plan.createdAt);
+  const planStartDate = getPlanStartDate(plan);
 
-  const today = new Date();
+  const today = getBusinessMonth();
   const rangeStart = new Date(planStartDate.getFullYear(), planStartDate.getMonth(), 1);
-  const rangeEnd = new Date(today.getFullYear(), today.getMonth() + 2, 1);
+  // Exclusive end: include the current month, never a future monthly period.
+  const rangeEnd = new Date(today.getFullYear(), today.getMonth() + 1, 1);
 
   const months: Date[] = [];
   const cur = new Date(rangeStart);
@@ -238,10 +289,10 @@ export function getPlanPeriodsByMode(
 }
 
 function getMonthlyPlanPeriods(plan: PlanLike): { key: string; label: string }[] {
-  const planStartDate = parseDateOnly(plan.start_date ?? "") ?? new Date(plan.createdAt);
-  const today = new Date();
+  const planStartDate = getPlanStartDate(plan);
+  const today = getBusinessMonth();
   const rangeStart = new Date(planStartDate.getFullYear(), planStartDate.getMonth(), 1);
-  const rangeEnd = new Date(today.getFullYear(), today.getMonth() + 2, 1);
+  const rangeEnd = new Date(today.getFullYear(), today.getMonth() + 1, 1);
 
   const periods: { key: string; label: string }[] = [];
   const cur = new Date(rangeStart);

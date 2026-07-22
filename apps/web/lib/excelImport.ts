@@ -75,19 +75,37 @@ function buildHeaderMap(headers: string[]): Map<keyof typeof COLUMN_ALIASES, num
   return map;
 }
 
-function parseBudget(raw: unknown): { value: number; coerced: boolean } {
-  if (raw === null || raw === undefined || raw === "") return { value: 0, coerced: false };
-  if (typeof raw === "number") return { value: Number.isFinite(raw) ? raw : 0, coerced: !Number.isFinite(raw) };
+function parseBudget(raw: unknown): { value: number; error?: string } {
+  if (raw === null || raw === undefined || raw === "") return { value: 0, error: "Falta Presupuesto" };
+  if (typeof raw === "number") {
+    if (!Number.isFinite(raw)) return { value: 0, error: "Presupuesto no numérico" };
+    if (raw < 0) return { value: 0, error: "El Presupuesto no puede ser negativo" };
+    if (raw > 999_999_999_999.99) return { value: 0, error: "El Presupuesto excede el máximo permitido" };
+    return { value: raw };
+  }
 
   const str = String(raw).trim();
-  if (!str || str === "-") return { value: 0, coerced: false };
+  if (!str || str === "-") return { value: 0, error: "Falta Presupuesto" };
 
-  const cleaned = str.replace(/[$\s]/g, "").replace(/,/g, "");
-  if (cleaned === "-" || cleaned === "") return { value: 0, coerced: false };
+  let cleaned = str.replace(/[$\s]/g, "");
+  const comma = cleaned.lastIndexOf(",");
+  const dot = cleaned.lastIndexOf(".");
+  if (comma >= 0 && dot >= 0) {
+    cleaned = comma > dot
+      ? cleaned.replace(/\./g, "").replace(",", ".")
+      : cleaned.replace(/,/g, "");
+  } else if (comma >= 0) {
+    const decimalDigits = cleaned.length - comma - 1;
+    cleaned = decimalDigits > 0 && decimalDigits <= 2
+      ? cleaned.replace(",", ".")
+      : cleaned.replace(/,/g, "");
+  }
 
   const n = Number(cleaned);
-  if (Number.isFinite(n)) return { value: n, coerced: false };
-  return { value: 0, coerced: true };
+  if (!Number.isFinite(n)) return { value: 0, error: "Presupuesto no numérico" };
+  if (n < 0) return { value: 0, error: "El Presupuesto no puede ser negativo" };
+  if (n > 999_999_999_999.99) return { value: 0, error: "El Presupuesto excede el máximo permitido" };
+  return { value: n };
 }
 
 function cellToString(raw: unknown): string {
@@ -131,6 +149,8 @@ export async function parseExcelFile(file: File): Promise<ParseResult> {
       "proposed_measure",
       "indicator",
       "verification_method",
+      "periodicity",
+      "budget",
     ];
     const missingColumns = required
       .filter((f) => !headerMap.has(f))
@@ -171,12 +191,12 @@ export async function parseExcelFile(file: File): Promise<ParseResult> {
       const errors: string[] = [];
       const warnings: string[] = [];
 
-      if (!item) warnings.push("Falta Ítem");
-      if (!environmental_activity) warnings.push("Falta Actividad/Aspecto Ambiental");
-      if (!identified_environmental_impact) warnings.push("Falta Impacto Ambiental Identificado");
-      if (!proposed_measure) warnings.push("Falta Medida Propuesta");
-      if (!indicator) warnings.push("Falta Indicador");
-      if (!verification_method) warnings.push("Falta Medio de Verificación");
+      if (!item) errors.push("Falta Ítem");
+      if (!environmental_activity) errors.push("Falta Actividad/Aspecto Ambiental");
+      if (!identified_environmental_impact) errors.push("Falta Impacto Ambiental Identificado");
+      if (!proposed_measure) errors.push("Falta Medida Propuesta");
+      if (!indicator) errors.push("Falta Indicador");
+      if (!verification_method) errors.push("Falta Medio de Verificación");
 
       let direccion = "";
       if (rawDireccion) {
@@ -187,10 +207,10 @@ export async function parseExcelFile(file: File): Promise<ParseResult> {
             warnings.push(`Dirección ajustada a "${matched}"`);
           }
         } else {
-          warnings.push(`Dirección "${rawDireccion}" no coincide con las opciones, dejada en blanco`);
+          errors.push(`Dirección "${rawDireccion}" no coincide con las opciones`);
         }
       } else {
-        warnings.push("Falta Dirección");
+        errors.push("Falta Dirección");
       }
 
       const rawSubplan = cellToString(get("subplan"));
@@ -203,10 +223,10 @@ export async function parseExcelFile(file: File): Promise<ParseResult> {
             warnings.push(`Subplan ajustado a "${matched}"`);
           }
         } else {
-          warnings.push(`Subplan "${rawSubplan}" no coincide, dejado en blanco`);
+          errors.push(`Subplan "${rawSubplan}" no coincide con las opciones`);
         }
       } else {
-        warnings.push("Subplan vacío");
+        errors.push("Falta Subplan");
       }
 
       const rawPeriodicity = cellToString(get("periodicity"));
@@ -219,16 +239,14 @@ export async function parseExcelFile(file: File): Promise<ParseResult> {
             warnings.push(`Periodicidad ajustada a "${matched}"`);
           }
         } else {
-          warnings.push(`Periodicidad "${rawPeriodicity}" no coincide, dejada en blanco`);
+          errors.push(`Periodicidad "${rawPeriodicity}" no coincide con las opciones`);
         }
       } else {
-        warnings.push("Periodicidad vacía");
+        errors.push("Falta Periodicidad");
       }
 
       const budgetParsed = parseBudget(get("budget"));
-      if (budgetParsed.coerced) {
-        warnings.push("Presupuesto no numérico, se usó 0");
-      }
+      if (budgetParsed.error) errors.push(budgetParsed.error);
 
       rows.push({
         rowNumber: i + 1,

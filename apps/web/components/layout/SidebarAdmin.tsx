@@ -9,7 +9,7 @@ import { Separator } from "@/components/ui/separator";
 
 export default function SidebarAdmin() {
   const pathname = usePathname();
-  const { user: session, logout } = useAuth();
+  const { user: session, logout, logoutPending } = useAuth();
 
   return (
     <aside className="w-64 h-screen bg-white border-r border-slate-200 flex flex-col fixed left-0 top-0">
@@ -59,6 +59,8 @@ export default function SidebarAdmin() {
             size="icon"
             className="h-8 w-8 shrink-0 text-slate-500 hover:text-slate-900"
             onClick={() => logout()}
+            disabled={logoutPending}
+            aria-busy={logoutPending}
             title="Cerrar sesión"
           >
             <LogOut className="w-4 h-4" />

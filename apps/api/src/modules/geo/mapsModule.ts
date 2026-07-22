@@ -1,8 +1,10 @@
-import { eq, and, desc } from "drizzle-orm";
+import { eq, desc } from "drizzle-orm";
 import { getDb } from "../../db/client.js";
 import { geoMaps } from "../../db/schema/geo.js";
-import { Forbidden, NotFound } from "../../lib/errors.js";
-import { deleteMapStorage } from "./layersModule.js";
+import { NotFound } from "../../lib/errors.js";
+import { buildGeoMapDir } from "../../storage/index.js";
+import { enqueueStorageDirectoryCleanup } from "../shared/storageCleanup.js";
+import { lockAndAssertGeoAdmin, lockAndAssertGeoEditor } from "./authorization.js";
 
 export type GeoMapInput = {
   title: string;
@@ -15,23 +17,27 @@ export type GeoMapInput = {
   tags?: string[];
 };
 
-export async function createMap(_adminId: string, userId: string, input: GeoMapInput) {
-  const [row] = await getDb()
-    .insert(geoMaps)
-    .values({
-      title: input.title,
-      description: input.description ?? "",
-      categoryId: input.categoryId,
-      thematic: input.thematic ?? "",
-      layers: (input.layers ?? []) as any,
-      centerLat: input.center?.[0] ?? -1.8,
-      centerLng: input.center?.[1] ?? -78.2,
-      zoom: input.zoom ?? 7,
-      tags: (input.tags ?? null) as any,
-      createdBy: userId,
-    })
-    .returning();
-  return rowToApi(row);
+export async function createMap(actorId: string, input: GeoMapInput) {
+  return getDb().transaction(async (tx) => {
+    const actor = await lockAndAssertGeoEditor(tx, actorId);
+    const [row] = await tx
+      .insert(geoMaps)
+      .values({
+        title: input.title,
+        description: input.description ?? "",
+        categoryId: input.categoryId,
+        thematic: input.thematic ?? "",
+        layers: (input.layers ?? []) as any,
+        centerLat: input.center?.[0] ?? -1.8,
+        centerLng: input.center?.[1] ?? -78.2,
+        zoom: input.zoom ?? 7,
+        tags: (input.tags ?? null) as any,
+        createdBy: actor.id,
+      })
+      .returning();
+    if (!row) throw new Error("Map insert returned no row");
+    return rowToApi(row);
+  });
 }
 
 export async function listMaps(_adminId?: string) {
@@ -48,9 +54,7 @@ export async function getMapById(id: string, _adminId?: string) {
   return rowToApi(rows[0]);
 }
 
-export async function updateMap(id: string, _adminId: string, updates: Partial<GeoMapInput>) {
-  const rows = await getDb().select().from(geoMaps).where(eq(geoMaps.id, id)).limit(1);
-  if (rows.length === 0) throw NotFound("Map not found");
+export async function updateMap(id: string, actorId: string, updates: Partial<GeoMapInput>) {
   const set: Record<string, unknown> = { updatedAt: new Date() };
   if (updates.title !== undefined) set.title = updates.title;
   if (updates.description !== undefined) set.description = updates.description;
@@ -63,28 +67,50 @@ export async function updateMap(id: string, _adminId: string, updates: Partial<G
   }
   if (updates.zoom !== undefined) set.zoom = updates.zoom;
   if (updates.tags !== undefined) set.tags = updates.tags;
-  const [row] = await getDb().update(geoMaps).set(set).where(eq(geoMaps.id, id)).returning();
-  return rowToApi(row);
+  return getDb().transaction(async (tx) => {
+    await lockAndAssertGeoEditor(tx, actorId);
+    const [row] = await tx.update(geoMaps).set(set).where(eq(geoMaps.id, id)).returning();
+    if (!row) throw NotFound("Map not found");
+    return rowToApi(row);
+  });
 }
 
 /** Lightweight viewport save — usable by any geo user (no ADMIN required). */
-export async function updateMapViewport(id: string, center: [number, number], zoom: number) {
-  const rows = await getDb().select({ id: geoMaps.id }).from(geoMaps).where(eq(geoMaps.id, id)).limit(1);
-  if (rows.length === 0) throw NotFound("Map not found");
-  const [row] = await getDb()
-    .update(geoMaps)
-    .set({ centerLat: center[0], centerLng: center[1], zoom, updatedAt: new Date() })
-    .where(eq(geoMaps.id, id))
-    .returning();
-  return rowToApi(row);
+export async function updateMapViewport(
+  id: string,
+  actorId: string,
+  center: [number, number],
+  zoom: number,
+) {
+  return getDb().transaction(async (tx) => {
+    await lockAndAssertGeoEditor(tx, actorId);
+    const [row] = await tx
+      .update(geoMaps)
+      .set({ centerLat: center[0], centerLng: center[1], zoom, updatedAt: new Date() })
+      .where(eq(geoMaps.id, id))
+      .returning();
+    if (!row) throw NotFound("Map not found");
+    return rowToApi(row);
+  });
 }
 
-export async function deleteMap(id: string, _adminId?: string) {
-  const rows = await getDb().select().from(geoMaps).where(eq(geoMaps.id, id)).limit(1);
-  if (rows.length === 0) throw NotFound("Map not found");
-  // Layer rows cascade via FK; remove their NAS files explicitly.
-  await deleteMapStorage(id);
-  await getDb().delete(geoMaps).where(eq(geoMaps.id, id));
+export async function deleteMap(id: string, actorId: string) {
+  await getDb().transaction(async (tx) => {
+    await lockAndAssertGeoAdmin(tx, actorId);
+    const rows = await tx
+      .select({ id: geoMaps.id })
+      .from(geoMaps)
+      .where(eq(geoMaps.id, id))
+      .limit(1)
+      .for("update");
+    if (rows.length === 0) throw NotFound("Map not found");
+    // The aggregate disappears atomically with a durable cleanup intent. NAS
+    // deletion is retried by the worker and cannot leave a live half-map if it
+    // is temporarily unavailable.
+    await enqueueStorageDirectoryCleanup(tx, buildGeoMapDir(id), `geo:map:${id}`);
+    const deleted = await tx.delete(geoMaps).where(eq(geoMaps.id, id)).returning({ id: geoMaps.id });
+    if (deleted.length !== 1) throw NotFound("Map not found");
+  });
 }
 
 function rowToApi(row: typeof geoMaps.$inferSelect) {

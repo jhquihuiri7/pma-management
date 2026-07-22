@@ -1,8 +1,7 @@
 "use client";
 
-import { apiFetch } from "@/lib/api-client";
-
-
+import { api, requireOkReceipt } from "@/lib/api-client";
+import { useConfirmedMutation } from "@/lib/use-confirmed-mutation";
 import { useState } from "react";
 import {
   Map,
@@ -11,6 +10,7 @@ import {
   Users,
   BriefcaseBusiness,
   Scale,
+  Database,
   Calendar,
   Tag,
   ChevronRight,
@@ -18,16 +18,16 @@ import {
   Trash2,
   Layers,
 } from "lucide-react";
-import { toast } from "sonner";
 import { GEO_CATEGORIES } from "@/lib/geo-mock-data";
 import type { GeoMap } from "@/types/geo";
 import EditMapDialog from "@/components/geo/EditMapDialog";
 
 const CATEGORY_ICONS: Record<string, React.ElementType> = {
-  TreePine, Building2, Users, BriefcaseBusiness, Scale,
+  TreePine, Building2, Users, BriefcaseBusiness, Scale, Database,
 };
 
 const CATEGORY_GRADIENT: Record<string, string> = {
+  "informacion-base": "from-slate-400 to-slate-600",
   "fisico-ambiental": "from-green-400 to-emerald-600",
   "asentamientos-humanos": "from-blue-400 to-cyan-600",
   sociocultural: "from-rose-400 to-pink-600",
@@ -47,28 +47,17 @@ interface Props {
 export default function GeoMapCard({ geoMap, canEdit, canDelete, onEdit, onDelete }: Props) {
   const [editOpen, setEditOpen] = useState(false);
   const [confirmDelete, setConfirmDelete] = useState(false);
-  const [deleting, setDeleting] = useState(false);
-
-  const handleDelete = async () => {
-    setDeleting(true);
-    try {
-      const res = await apiFetch(`/geo/api/maps/${geoMap.id}`, {
-        method: "DELETE",
-      });
-
-      if (res.ok) {
-        onDelete?.(geoMap.id);
-        toast.success("Mapa eliminado correctamente");
-      } else {
-        toast.error("Error al eliminar el mapa");
-      }
-    } catch (error) {
-      console.error(error);
-      toast.error("Error al eliminar el mapa");
-    } finally {
-      setDeleting(false);
-    }
-  };
+  const deleteMap = useConfirmedMutation<void, void>({
+    mutation: async (_args, signal) => {
+      requireOkReceipt(
+        await api.delete<unknown>(`/geo/maps/${geoMap.id}`, { signal }),
+        "El servidor no confirmó la eliminación del mapa"
+      );
+    },
+    successMessage: "Mapa eliminado correctamente",
+    errorMessage: "Error al eliminar el mapa",
+    onConfirmed: () => onDelete?.(geoMap.id),
+  });
 
   const category = GEO_CATEGORIES.find((c) => c.id === geoMap.categoryId);
   const Icon = category ? (CATEGORY_ICONS[category.iconName] || Map) : Map;
@@ -152,15 +141,15 @@ export default function GeoMapCard({ geoMap, canEdit, canDelete, onEdit, onDelet
                   {confirmDelete ? (
                     <div className="flex items-center gap-1">
                       <button
-                        onClick={handleDelete}
-                        disabled={deleting}
+                        onClick={() => void deleteMap.mutate(undefined)}
+                        disabled={deleteMap.isPending}
                         className="text-xs font-medium px-2 py-1 rounded-md bg-red-500 text-white hover:bg-red-600 disabled:opacity-50 transition-colors"
                       >
-                        {deleting ? "..." : "Sí"}
+                        {deleteMap.isPending ? "..." : "Sí"}
                       </button>
                       <button
                         onClick={() => setConfirmDelete(false)}
-                        disabled={deleting}
+                        disabled={deleteMap.isPending}
                         className="text-xs font-medium px-2 py-1 rounded-md bg-slate-100 text-slate-600 hover:bg-slate-200 disabled:opacity-50 transition-colors"
                       >
                         No
@@ -181,6 +170,8 @@ export default function GeoMapCard({ geoMap, canEdit, canDelete, onEdit, onDelet
               {/* Open GIS editor */}
               <a
                 href={`/geo/maps/${geoMap.id}/gis`}
+                aria-disabled={deleteMap.isPending}
+                onClick={(event) => { if (deleteMap.isPending) event.preventDefault(); }}
                 className="inline-flex items-center gap-1 text-xs font-medium text-teal-600 hover:text-teal-800 transition-colors ml-1"
                 title="Abrir mapa en el GIS"
               >

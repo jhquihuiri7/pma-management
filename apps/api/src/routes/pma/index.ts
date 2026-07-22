@@ -8,10 +8,12 @@ import { pmaNotificationsRoutes } from "./notifications.js";
 import { pmaFormatsRoutes } from "./formats.js";
 import { pmaUsersRoutes } from "./users.js";
 import { pmaDownloadRoutes } from "./download.js";
-import { authenticate, requireApp } from "../../auth/middleware.js";
+import { authenticate, requireApp, requireRole } from "../../auth/middleware.js";
 
 export async function pmaRoutes(app: FastifyInstance) {
-  app.post("/upload", { preHandler: [authenticate, requireApp("pma")] }, uploadPmaEvidence);
+  app.post("/upload", {
+    preHandler: [authenticate, requireApp("pma"), requireRole("ADMIN", "REPORTER", "VIEWER")],
+  }, uploadPmaEvidence);
   await app.register(pmaPlansRoutes, { prefix: "/plans" });
   await app.register(pmaPlanItemsRoutes, { prefix: "/plans/:planId/items" });
   await app.register(pmaPeriodComplianceRoutes, { prefix: "/plans/:planId/period-compliance" });

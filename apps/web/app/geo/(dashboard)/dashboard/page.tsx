@@ -1,8 +1,6 @@
 "use client";
 
-import { apiFetch } from "@/lib/api-client";
-
-
+import { api, apiErrorMessage } from "@/lib/api-client";
 import { useState, useEffect } from "react";
 import { useAuth } from "@/lib/auth-context";
 import {
@@ -11,6 +9,7 @@ import {
   Users,
   BriefcaseBusiness,
   Scale,
+  Database,
   Search,
   Map,
 } from "lucide-react";
@@ -20,11 +19,14 @@ import type { GeoCategory, GeoMap } from "@/types/geo";
 import AddMapDialog from "@/components/geo/AddMapDialog";
 import GeoMapCard from "@/components/geo/GeoMapCard";
 
+const ENABLE_GEO_MOCKS = process.env.NEXT_PUBLIC_ENABLE_GEO_MOCKS === "true";
+
 const CATEGORY_ICONS: Record<string, React.ElementType> = {
-  TreePine, Building2, Users, BriefcaseBusiness, Scale,
+  TreePine, Building2, Users, BriefcaseBusiness, Scale, Database,
 };
 
 const CATEGORY_GRADIENT: Record<string, string> = {
+  "informacion-base": "from-slate-400 to-slate-600",
   "fisico-ambiental": "from-green-400 to-emerald-600",
   "asentamientos-humanos": "from-blue-400 to-cyan-600",
   sociocultural: "from-rose-400 to-pink-600",
@@ -38,6 +40,12 @@ const CATEGORY_CARD_STYLES: Record<string, {
   activeTitle: string;
   count: string;
 }> = {
+  "informacion-base": {
+    active: "border-slate-500 bg-slate-50 shadow-md",
+    inactive: "border-slate-200 hover:border-slate-400 bg-white hover:shadow-sm",
+    activeTitle: "text-slate-800",
+    count: "bg-slate-100 text-slate-700",
+  },
   "fisico-ambiental": {
     active: "border-green-500 bg-green-50 shadow-md",
     inactive: "border-green-200 hover:border-green-400 bg-white hover:shadow-sm",
@@ -117,13 +125,15 @@ function CategoryCard({
 
 export default function GeoDashboardPage() {
   const { user: session} = useAuth();
-  // Any logged-in geo user (incl. VIEWER) can create/edit; only ADMIN can delete.
-  const canEdit = !!session;
+  // Public visitors can browse. Mutations require an ADMIN or an explicit GEO
+  // app grant, matching requireApp("geo") in the API.
+  const canEdit = session?.role === "ADMIN" || session?.apps.includes("geo") === true;
   const canDelete = session?.role === "ADMIN";
 
   const [search, setSearch] = useState("");
   const [activeCategory, setActiveCategory] = useState<string | null>(null);
   const [maps, setMaps] = useState<GeoMap[]>([]);
+  const [loadError, setLoadError] = useState<string | null>(null);
 
   useEffect(() => {
     loadMaps();
@@ -131,18 +141,13 @@ export default function GeoDashboardPage() {
 
   async function loadMaps() {
     try {
-      const res = await apiFetch("/geo/api/maps");
-      if (res.ok) {
-        const data = await res.json();
-        setMaps(data);
-      } else {
-        toast.error("Error loading maps");
-        setMaps(GEO_MAPS);
-      }
+      setMaps(await api.get<GeoMap[]>("/geo/api/maps"));
+      setLoadError(null);
     } catch (error) {
-      console.error(error);
-      toast.error("Error loading maps");
-      setMaps(GEO_MAPS);
+      const message = apiErrorMessage(error, "No se pudieron cargar los mapas");
+      toast.error(message);
+      setLoadError(message);
+      setMaps(ENABLE_GEO_MOCKS ? GEO_MAPS : []);
     }
   }
 
@@ -161,7 +166,7 @@ export default function GeoDashboardPage() {
     const q = search.toLowerCase();
     const matchSearch = q
       ? m.title.toLowerCase().includes(q) ||
-        m.description.toLowerCase().includes(q) ||
+        (m.description ?? "").toLowerCase().includes(q) ||
         m.thematic?.toLowerCase().includes(q) ||
         m.tags?.some((t) => t.toLowerCase().includes(q))
       : true;
@@ -230,6 +235,14 @@ export default function GeoDashboardPage() {
       </div>
 
       <div className="max-w-5xl mx-auto px-8 mt-6 pb-16">
+        {loadError && !ENABLE_GEO_MOCKS && (
+          <div className="mb-6 rounded-lg border border-red-200 bg-red-50 p-4 text-sm text-red-700">
+            <p>{loadError}</p>
+            <button type="button" className="mt-2 underline" onClick={() => void loadMaps()}>
+              Reintentar
+            </button>
+          </div>
+        )}
         {/* Category tiles */}
         <div className="bg-white rounded-2xl shadow-xl border border-slate-100 p-6 mb-8">
           <div className="flex items-center justify-between mb-4">

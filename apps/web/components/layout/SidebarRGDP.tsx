@@ -31,7 +31,7 @@ const viewerLinks = [
 
 export default function SidebarRGDP() {
   const pathname = usePathname();
-  const { user: session, logout } = useAuth();
+  const { user: session, logout, logoutPending } = useAuth();
   const role = session?.role;
   const links =
     role === "ADMIN" ? adminLinks : role === "VIEWER" ? viewerLinks : reporterLinks;
@@ -118,6 +118,8 @@ export default function SidebarRGDP() {
             size="icon"
             className="h-8 w-8 shrink-0 text-slate-500 hover:text-slate-900"
             onClick={() => logout()}
+            disabled={logoutPending}
+            aria-busy={logoutPending}
             title="Cerrar sesión"
           >
             <LogOut className="w-4 h-4" />

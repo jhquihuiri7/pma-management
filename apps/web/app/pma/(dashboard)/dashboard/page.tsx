@@ -1,10 +1,9 @@
 "use client";
 
-import { apiFetch } from "@/lib/api-client";
-
-
+import { api, apiErrorMessage } from "@/lib/api-client";
 import { useAuth } from "@/lib/auth-context";
 import { useEffect, useState } from "react";
+import { toast } from "sonner";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { FileText, Users, Upload } from "lucide-react";
 import { Plan, PeriodCompliance, PlanItem } from "@/types";
@@ -29,84 +28,78 @@ export default function DashboardPage() {
   const { user: session} = useAuth();
   const isAdmin = session?.role === "ADMIN";
   const isViewer = session?.role === "VIEWER";
+  const isReporter = session?.role === "REPORTER";
   const [stats, setStats] = useState<Stats>({ plans: 0, reporters: 0, evidences: 0 });
   const [planCharts, setPlanCharts] = useState<PlanChartData[]>([]);
   const [chartsLoading, setChartsLoading] = useState(false);
+  const [dashboardError, setDashboardError] = useState<string | null>(null);
   const [activeTab, setActiveTab] = useState<"por-plan" | "general">("por-plan");
 
   useEffect(() => {
+    let cancelled = false;
     async function loadStats() {
-      const requests: Promise<Response>[] = [apiFetch("/pma/api/plans")];
-      if (!isAdmin) requests.push(apiFetch("/pma/api/evidences"));
-      const [plansRes, evidencesRes] = await Promise.all(requests);
-      const plans: Plan[] = plansRes.ok ? await plansRes.json() : [];
-      const evidences = evidencesRes?.ok ? await evidencesRes.json() : [];
+      setChartsLoading(true);
+      setDashboardError(null);
+      try {
+        const [plans, evidences] = await Promise.all([
+          api.get<Plan[]>("/pma/plans"),
+          isReporter ? api.get<unknown[]>("/pma/evidences?mine=true") : Promise.resolve([]),
+        ]);
+        const statsData: Stats = {
+          plans: plans.length,
+          reporters: 0,
+          evidences: evidences.length,
+        };
 
-      const statsData: Stats = {
-        plans: Array.isArray(plans) ? plans.length : 0,
-        reporters: 0,
-        evidences: Array.isArray(evidences) ? evidences.length : 0,
-      };
-
-      if (isAdmin) {
-        const usersRes = await apiFetch("/pma/api/users");
-        if (usersRes.ok) {
-          const users = await usersRes.json();
-          statsData.reporters = Array.isArray(users) ? users.length : 0;
+        if (isAdmin) {
+          statsData.reporters = (await api.get<unknown[]>("/pma/users")).length;
         }
-      }
 
-      setStats(statsData);
-
-      // Load chart data for each plan in parallel
-      if (Array.isArray(plans) && plans.length > 0) {
-        setChartsLoading(true);
-        try {
-          const chartResults = await Promise.all(
-            plans.map(async (plan) => {
-              const [itemsRes, complianceRes] = await Promise.all([
-                apiFetch(`/pma/api/plans/${plan.id}/items`),
-                apiFetch(`/pma/api/plans/${plan.id}/period-compliance`),
-              ]);
-              const items: PlanItem[] = itemsRes.ok ? await itemsRes.json() : [];
-              const complianceRecords: PeriodCompliance[] = complianceRes.ok
-                ? await complianceRes.json()
-                : [];
-
-              const counts = new Map<string, number>();
-              for (const it of Array.isArray(items) ? items : []) {
-                const raw = typeof it?.direccion === "string" ? it.direccion : "";
-                const key = raw.trim() || "Sin dirección";
-                counts.set(key, (counts.get(key) ?? 0) + 1);
-              }
-              const directionCounts = Array.from(counts.entries())
+        const chartResults = await Promise.all(
+          plans.map(async (plan) => {
+            const [items, complianceRecords] = await Promise.all([
+              api.get<PlanItem[]>(`/pma/plans/${plan.id}/items`),
+              api.get<PeriodCompliance[]>(`/pma/plans/${plan.id}/period-compliance`),
+            ]);
+            const counts = new Map<string, number>();
+            for (const item of items) {
+              const key = (typeof item.direccion === "string" ? item.direccion.trim() : "") || "Sin dirección";
+              counts.set(key, (counts.get(key) ?? 0) + 1);
+            }
+            return {
+              plan,
+              itemCount: items.length,
+              directionCounts: Array.from(counts.entries())
                 .map(([name, value]) => ({ name, value }))
-                .sort((a, b) => b.value - a.value || a.name.localeCompare(b.name));
+                .sort((a, b) => b.value - a.value || a.name.localeCompare(b.name)),
+              items: items.map(({ id, direccion }) => ({ id, direccion })),
+              complianceRecords,
+            };
+          })
+        );
 
-              return {
-                plan,
-                itemCount: Array.isArray(items) ? items.length : 0,
-                directionCounts,
-                items: (Array.isArray(items) ? items : []).map((it) => ({
-                  id: it.id,
-                  direccion: it.direccion,
-                })),
-                complianceRecords,
-              };
-            })
-          );
+        if (!cancelled) {
+          setStats(statsData);
           setPlanCharts(chartResults);
-        } finally {
-          setChartsLoading(false);
         }
+      } catch (error) {
+        if (!cancelled) {
+          const message = apiErrorMessage(error, "No se pudo cargar el panel PMA");
+          setDashboardError(message);
+          toast.error(message);
+        }
+      } finally {
+        if (!cancelled) setChartsLoading(false);
       }
     }
 
-    if (session) loadStats();
-  }, [session, isAdmin]);
+    if (session) void loadStats();
+    return () => { cancelled = true; };
+  }, [session, isAdmin, isReporter]);
 
   return (
     <div className="space-y-8">
+      {dashboardError && <p className="text-sm text-red-600" role="alert">{dashboardError}</p>}
       <div>
         <h1 className="text-2xl font-bold mb-1">Panel Principal</h1>
         <p className="text-muted-foreground mb-6">

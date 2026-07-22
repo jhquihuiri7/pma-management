@@ -6,11 +6,12 @@ const schema = z.object({
   FRONTEND_ORIGIN: z.string().default("http://localhost:3000"),
   COOKIE_DOMAIN: z.string().optional(),
   COOKIE_SECURE: z.preprocess((v) => v !== "false" && v !== "0" && v !== false, z.boolean()).default(true),
+  TRUST_PROXY_HOPS: z.coerce.number().int().min(0).max(10).default(0),
 
   JWT_ACCESS_SECRET: z.string().min(32).default("dev-access-secret-change-me-please-32chars-min"),
   JWT_REFRESH_SECRET: z.string().min(32).default("dev-refresh-secret-change-me-please-32chars-min"),
-  JWT_ACCESS_TTL: z.string().default("15m"),
-  JWT_REFRESH_TTL: z.string().default("7d"),
+  JWT_ACCESS_TTL: z.string().regex(/^[1-9]\d*[smhd]$/).default("15m"),
+  JWT_REFRESH_TTL: z.string().regex(/^[1-9]\d*[smhd]$/).default("7d"),
 
   DATABASE_URL: z.string().optional(),
 

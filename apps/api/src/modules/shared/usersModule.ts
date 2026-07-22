@@ -1,13 +1,26 @@
-import { eq, and, desc, inArray } from "drizzle-orm";
+import { eq, and, desc, inArray, isNull } from "drizzle-orm";
 import { randomBytes } from "node:crypto";
 import { getDb } from "../../db/client.js";
 import { users, userApps, passwordResets } from "../../db/schema/shared.js";
+import {
+  pmaEvidences,
+  pmaItemAssignments,
+  pmaNotifications,
+  pmaPlanAssignments,
+} from "../../db/schema/pma.js";
+import {
+  rgdpEvidences,
+  rgdpItemAssignments,
+  rgdpNotifications,
+  rgdpPlanAssignments,
+} from "../../db/schema/rgdp.js";
 import { Conflict, NotFound, Forbidden, BadRequest } from "../../lib/errors.js";
-import { getMail } from "../../mail/index.js";
 import { invitationEmail } from "../../mail/templates.js";
 import { env } from "../../lib/env.js";
 import { hashRefreshToken } from "../../auth/jwt.js";
 import type { UserRole } from "@pma/types";
+import { enqueueMail } from "./mailOutbox.js";
+import { lockAndAssertActor, lockAndAssertGlobalAdmin } from "./transactionalActor.js";
 
 // API-side AppKey: legacy keys are normalized at the API boundary and never
 // reach Postgres. The Drizzle enum only contains the canonical keys.
@@ -40,76 +53,96 @@ async function getUserAppsFrom(db: any, userId: string): Promise<AppKey[]> {
   return rows.map((r: { appKey: string }) => r.appKey as AppKey);
 }
 
-async function getUserApps(userId: string): Promise<AppKey[]> {
-  return getUserAppsFrom(getDb(), userId);
+/**
+ * Remove authorization state that must never survive an app revocation.
+ * Historical evidence rows remain available to administrators, but their
+ * nullable actor references are detached so re-adding the app cannot restore
+ * reporter ownership implicitly.
+ */
+async function revokeSubsystemState(db: any, userId: string, app: AppKey): Promise<void> {
+  if (app === "pma") {
+    await db.delete(pmaItemAssignments).where(eq(pmaItemAssignments.userId, userId));
+    await db.delete(pmaPlanAssignments).where(eq(pmaPlanAssignments.userId, userId));
+    await db.delete(pmaNotifications).where(eq(pmaNotifications.userId, userId));
+    await db
+      .update(pmaEvidences)
+      .set({ uploadedBy: null })
+      .where(eq(pmaEvidences.uploadedBy, userId));
+    await db
+      .update(pmaEvidences)
+      .set({ validatedBy: null })
+      .where(eq(pmaEvidences.validatedBy, userId));
+    return;
+  }
+
+  if (app === "rgdp") {
+    await db.delete(rgdpItemAssignments).where(eq(rgdpItemAssignments.userId, userId));
+    await db.delete(rgdpPlanAssignments).where(eq(rgdpPlanAssignments.userId, userId));
+    await db.delete(rgdpNotifications).where(eq(rgdpNotifications.userId, userId));
+    await db
+      .update(rgdpEvidences)
+      .set({ uploadedBy: null })
+      .where(eq(rgdpEvidences.uploadedBy, userId));
+    await db
+      .update(rgdpEvidences)
+      .set({ validatedBy: null })
+      .where(eq(rgdpEvidences.validatedBy, userId));
+  }
 }
 
-async function insertSetPasswordToken(db: any, userId: string): Promise<string> {
+/**
+ * Plan and item grants encode role-specific capabilities. Discard them on
+ * every actual role transition so a formerly valid grant cannot acquire a new
+ * meaning under the replacement role. App memberships and GEO state remain
+ * untouched.
+ */
+async function revokeRoleBoundAssignments(db: any, userId: string): Promise<void> {
+  await db.delete(pmaItemAssignments).where(eq(pmaItemAssignments.userId, userId));
+  await db.delete(pmaPlanAssignments).where(eq(pmaPlanAssignments.userId, userId));
+  await db.delete(rgdpItemAssignments).where(eq(rgdpItemAssignments.userId, userId));
+  await db.delete(rgdpPlanAssignments).where(eq(rgdpPlanAssignments.userId, userId));
+}
+
+async function insertSetPasswordToken(db: any, userId: string) {
   const token = createSetPasswordToken();
+  // Only the newest invitation/reset link remains usable.
+  await db
+    .update(passwordResets)
+    .set({ usedAt: new Date() })
+    .where(and(eq(passwordResets.userId, userId), isNull(passwordResets.usedAt)));
   await db.insert(passwordResets).values({
     userId,
     tokenHash: token.tokenHash,
     expiresAt: token.expiresAt,
   });
-  return token.raw;
+  return token;
 }
 
-async function buildSetPasswordToken(userId: string): Promise<string> {
-  return insertSetPasswordToken(getDb(), userId);
-}
-
-function mailErrorMessage(error: unknown): string {
-  if (error instanceof Error && error.message) return error.message;
-  return "El servicio de correo no respondió correctamente";
-}
-
-async function sendInvitation(email: string, name: string, token: string) {
-  const link = `${env.FRONTEND_ORIGIN}/set-password?token=${token}`;
+async function queueInvitation(db: any, userId: string, email: string, name: string) {
+  const token = await insertSetPasswordToken(db, userId);
+  const link = `${env.FRONTEND_ORIGIN}/set-password?token=${token.raw}`;
   const content = invitationEmail({ name, link });
-  try {
-    await getMail().send({
-      to: email,
-      subject: content.subject,
-      html: content.html,
-      text: content.text,
-    });
-  } catch (error) {
-    throw BadRequest(`No se pudo enviar el correo de invitación: ${mailErrorMessage(error)}`);
-  }
+  const [operationId] = await enqueueMail(db, {
+    to: email,
+    subject: content.subject,
+    html: content.html,
+    text: content.text,
+  }, token.expiresAt);
+  return operationId;
 }
 
 // ---------------------------------------------------------------------------
 // Global user management (central /api/users module)
 // ---------------------------------------------------------------------------
 
-export async function createUserGlobal(input: CreateUserGlobalInput) {
+export async function createUserGlobal(requesterId: string, input: CreateUserGlobalInput) {
   const db = getDb();
   const normalizedEmail = input.email.trim().toLowerCase();
   return db.transaction(async (tx) => {
+    await lockAndAssertGlobalAdmin(tx, requesterId);
     const existingRows = await tx.select().from(users).where(eq(users.email, normalizedEmail)).limit(1);
     const existing = existingRows[0] ?? null;
-
-    if (existing) {
-      if (existing.role !== input.role)
-        throw Conflict("Ya existe un usuario con ese correo y un rol diferente");
-
-      await tx
-        .update(users)
-        .set({ name: input.name, unit: input.unit ?? null, position: input.position ?? null, updatedAt: new Date() })
-        .where(eq(users.id, existing.id));
-
-      const currentApps = await getUserAppsFrom(tx, existing.id);
-      const newApps = (input.apps ?? []).filter((a) => !currentApps.includes(a));
-      for (const appKey of newApps) {
-        await tx.insert(userApps).values({ userId: existing.id, appKey }).onConflictDoNothing();
-      }
-      const allApps = [...new Set([...currentApps, ...newApps])];
-      if (!existing.passwordSet) {
-        const token = await insertSetPasswordToken(tx, existing.id);
-        await sendInvitation(normalizedEmail, input.name, token);
-      }
-      return { id: existing.id, email: normalizedEmail, name: input.name, role: input.role, apps: allApps };
-    }
+    if (existing) throw Conflict("Ya existe un usuario con ese correo");
 
     const [row] = await tx
       .insert(users)
@@ -123,120 +156,157 @@ export async function createUserGlobal(input: CreateUserGlobalInput) {
       })
       .returning();
 
-    const assignedApps = input.apps ?? [];
+    const assignedApps = [...new Set(input.apps ?? [])];
     for (const appKey of assignedApps) {
       await tx.insert(userApps).values({ userId: row.id, appKey }).onConflictDoNothing();
     }
 
-    const token = await insertSetPasswordToken(tx, row.id);
-    await sendInvitation(normalizedEmail, input.name, token);
+    const operationId = await queueInvitation(tx, row.id, normalizedEmail, input.name);
 
-    return { id: row.id, email: row.email, name: row.name, role: row.role, apps: assignedApps };
+    return {
+      id: row.id,
+      email: row.email,
+      name: row.name,
+      role: row.role,
+      apps: assignedApps,
+      invitation: { status: "queued" as const, operationId },
+    };
   });
 }
 
 export async function updateManagedUser(
   userId: string,
   updates: { name?: string; unit?: string | null; position?: string | null; role?: ManagedRole },
-  requesterId?: string,
+  requesterId: string,
 ) {
   const db = getDb();
-  const rows = await db.select().from(users).where(eq(users.id, userId)).limit(1);
-  const u = rows[0];
-  if (!u) throw NotFound("Usuario no encontrado");
+  return db.transaction(async (tx) => {
+    await lockAndAssertGlobalAdmin(tx, requesterId);
+    const rows = await tx.select().from(users).where(eq(users.id, userId)).limit(1).for("update");
+    const u = rows[0];
+    if (!u) throw NotFound("Usuario no encontrado");
 
-  // Role changes carry lockout risks: block self-demotion and removing the last
-  // admin so the org can never end up without an administrator.
-  if (updates.role !== undefined && updates.role !== u.role) {
-    if (requesterId && u.id === requesterId)
-      throw Forbidden("No puedes cambiar tu propio rol");
-    if (u.role === "ADMIN") {
-      const adminRows = await db.select({ id: users.id }).from(users).where(eq(users.role, "ADMIN"));
-      if (adminRows.length <= 1)
-        throw Forbidden("No puedes cambiar el rol del único administrador");
+    // Role changes carry lockout risks: block self-demotion and removing the
+    // last admin. The advisory lock makes the count and update one atomic
+    // decision even when two administrators act concurrently.
+    if (updates.role !== undefined && updates.role !== u.role) {
+      if (u.id === requesterId)
+        throw Forbidden("No puedes cambiar tu propio rol");
+      if (u.role === "ADMIN") {
+        const adminRows = await tx.select({ id: users.id }).from(users).where(eq(users.role, "ADMIN"));
+        if (adminRows.length <= 1)
+          throw Forbidden("No puedes cambiar el rol del único administrador");
+      }
+      await revokeRoleBoundAssignments(tx, userId);
     }
-  }
 
-  await db.update(users).set({
-    ...(updates.name !== undefined ? { name: updates.name } : {}),
-    ...(updates.unit !== undefined ? { unit: updates.unit } : {}),
-    ...(updates.position !== undefined ? { position: updates.position } : {}),
-    ...(updates.role !== undefined ? { role: updates.role as UserRole } : {}),
-    updatedAt: new Date(),
-  }).where(eq(users.id, userId));
+    const changed = await tx.update(users).set({
+      ...(updates.name !== undefined ? { name: updates.name } : {}),
+      ...(updates.unit !== undefined ? { unit: updates.unit } : {}),
+      ...(updates.position !== undefined ? { position: updates.position } : {}),
+      ...(updates.role !== undefined ? { role: updates.role as UserRole } : {}),
+      updatedAt: new Date(),
+    }).where(eq(users.id, userId)).returning({ id: users.id });
+    if (changed.length !== 1) throw NotFound("Usuario no encontrado");
+    return { ok: true as const, id: userId };
+  });
 }
 
 export async function deleteUserGlobal(userId: string, requesterId: string) {
   const db = getDb();
-  const rows = await db.select().from(users).where(eq(users.id, userId)).limit(1);
-  const u = rows[0];
-  if (!u) throw NotFound("Usuario no encontrado");
-  if (u.id === requesterId)
-    throw Forbidden("No puedes eliminar tu propia cuenta");
+  return db.transaction(async (tx) => {
+    await lockAndAssertGlobalAdmin(tx, requesterId);
+    const rows = await tx.select().from(users).where(eq(users.id, userId)).limit(1).for("update");
+    const u = rows[0];
+    if (!u) throw NotFound("Usuario no encontrado");
+    if (u.id === requesterId)
+      throw Forbidden("No puedes eliminar tu propia cuenta");
+    if (u.role === "ADMIN") {
+      const adminRows = await tx.select({ id: users.id }).from(users).where(eq(users.role, "ADMIN"));
+      if (adminRows.length <= 1) throw Forbidden("No puedes eliminar al único administrador");
+    }
 
-  // FK cascades remove userApps, plan/item assignments and notifications.
-  await db.delete(users).where(eq(users.id, userId));
+    // FK cascades remove userApps, plan/item assignments and notifications.
+    const deleted = await tx.delete(users).where(eq(users.id, userId)).returning({ id: users.id });
+    if (deleted.length !== 1) throw NotFound("Usuario no encontrado");
+    return { ok: true as const, id: userId };
+  });
 }
 
-export async function assignUserToApp(userId: string, app: AppKey) {
+export async function assignUserToApp(userId: string, app: AppKey, requesterId: string) {
   const db = getDb();
-  const rows = await db.select().from(users).where(eq(users.id, userId)).limit(1);
-  const u = rows[0];
-  if (!u) throw NotFound("Usuario no encontrado");
-
-  const apps = await getUserApps(userId);
-  if (apps.includes(app)) throw Conflict("El usuario ya tiene acceso a esta aplicación");
-
-  await db.insert(userApps).values({ userId, appKey: app }).onConflictDoNothing();
+  return db.transaction(async (tx) => {
+    await lockAndAssertActor(tx, requesterId, app, ["ADMIN"]);
+    const rows = await tx.select({ id: users.id }).from(users).where(eq(users.id, userId)).limit(1);
+    if (!rows[0]) throw NotFound("Usuario no encontrado");
+    const inserted = await tx
+      .insert(userApps)
+      .values({ userId, appKey: app })
+      .onConflictDoNothing()
+      .returning({ userId: userApps.userId });
+    if (inserted.length !== 1) throw Conflict("El usuario ya tiene acceso a esta aplicación");
+    return { ok: true as const, userId, appKey: app };
+  });
 }
 
-export async function resendInvitationGlobal(userId: string) {
+export async function resendInvitationGlobal(userId: string, requesterId: string) {
   const db = getDb();
-  const rows = await db.select().from(users).where(eq(users.id, userId)).limit(1);
-  const u = rows[0];
-  if (!u) throw NotFound("Usuario no encontrado");
-  if (u.passwordSet) throw BadRequest("Este usuario ya estableció su contraseña");
-
-  const token = await buildSetPasswordToken(u.id);
-  await sendInvitation(u.email, u.name, token);
+  return db.transaction(async (tx) => {
+    await lockAndAssertGlobalAdmin(tx, requesterId);
+    const rows = await tx.select().from(users).where(eq(users.id, userId)).limit(1).for("update");
+    const u = rows[0];
+    if (!u) throw NotFound("Usuario no encontrado");
+    if (u.passwordSet) throw BadRequest("Este usuario ya estableció su contraseña");
+    const operationId = await queueInvitation(tx, u.id, u.email, u.name);
+    return { invitation: { status: "queued" as const, operationId } };
+  });
 }
 
 // ---------------------------------------------------------------------------
 // Per-app user management (subsystem routes)
 // ---------------------------------------------------------------------------
 
-export async function resendInvitation(userId: string, app: AppKey) {
+export async function resendInvitation(userId: string, app: AppKey, requesterId: string) {
   const db = getDb();
-  const rows = await db.select().from(users).where(eq(users.id, userId)).limit(1);
-  const u = rows[0];
-  if (!u) throw NotFound("Usuario no encontrado");
-  if (u.passwordSet) throw BadRequest("Este usuario ya estableció su contraseña");
-  const apps = await getUserApps(u.id);
-  if (!apps.includes(app)) throw BadRequest("El usuario no tiene acceso a esta aplicación");
-  const token = await buildSetPasswordToken(u.id);
-  await sendInvitation(u.email, u.name, token);
+  return db.transaction(async (tx) => {
+    await lockAndAssertActor(tx, requesterId, app, ["ADMIN"]);
+    const rows = await tx.select().from(users).where(eq(users.id, userId)).limit(1).for("update");
+    const u = rows[0];
+    if (!u) throw NotFound("Usuario no encontrado");
+    if (u.passwordSet) throw BadRequest("Este usuario ya estableció su contraseña");
+    const apps = await getUserAppsFrom(tx, u.id);
+    if (!apps.includes(app)) throw BadRequest("El usuario no tiene acceso a esta aplicación");
+    const operationId = await queueInvitation(tx, u.id, u.email, u.name);
+    return { invitation: { status: "queued" as const, operationId } };
+  });
 }
 
-export async function deleteManagedUser(userId: string, app: AppKey) {
+export async function deleteManagedUser(userId: string, app: AppKey, requesterId: string) {
   const db = getDb();
-  const rows = await db.select().from(users).where(eq(users.id, userId)).limit(1);
-  const u = rows[0];
-  if (!u) throw NotFound("User not found");
-  if (u.role !== "REPORTER" && u.role !== "VIEWER")
-    throw Forbidden("Cannot delete admin users");
+  return db.transaction(async (tx) => {
+    await lockAndAssertActor(tx, requesterId, app, ["ADMIN"]);
+    const rows = await tx.select().from(users).where(eq(users.id, userId)).limit(1).for("update");
+    const u = rows[0];
+    if (!u) throw NotFound("Usuario no encontrado");
+    if (u.role !== "REPORTER" && u.role !== "VIEWER")
+      throw Forbidden("No se puede quitar el acceso de un administrador");
 
-  const apps = await getUserApps(u.id);
-  if (!apps.includes(app)) throw BadRequest("El usuario no tiene acceso a esta aplicación");
+    const removed = await tx
+      .delete(userApps)
+      .where(and(eq(userApps.userId, u.id), eq(userApps.appKey, app)))
+      .returning({ userId: userApps.userId });
+    if (removed.length !== 1) throw BadRequest("El usuario no tiene acceso a esta aplicación");
 
-  await db
-    .delete(userApps)
-    .where(and(eq(userApps.userId, u.id), eq(userApps.appKey, app)));
-
-  const remaining = apps.filter((a) => a !== app);
-  if (remaining.length === 0) {
-    // FK cascades remove plan/item assignments and notifications.
-    await db.delete(users).where(eq(users.id, u.id));
-  }
+    const remaining = await getUserAppsFrom(tx, u.id);
+    if (remaining.length === 0) {
+      // FK cascades remove plan/item assignments and notifications.
+      const deleted = await tx.delete(users).where(eq(users.id, u.id)).returning({ id: users.id });
+      if (deleted.length !== 1) throw NotFound("Usuario no encontrado");
+    } else {
+      await revokeSubsystemState(tx, u.id, app);
+    }
+    return { ok: true as const, userId, appKey: app, accountDeleted: remaining.length === 0 };
+  });
 }
 
 export async function listManagedUsers(app?: AppKey) {

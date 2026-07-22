@@ -1,9 +1,12 @@
 import type { FastifyInstance } from "fastify";
+import { z } from "zod";
 import { authenticate, requireApp } from "../../auth/middleware.js";
 import {
   getNotificationsForUser,
   markNotificationAsRead,
 } from "../../modules/pma/notificationsModule.js";
+
+const idParams = z.object({ id: z.string().uuid() }).strict();
 
 export async function pmaNotificationsRoutes(app: FastifyInstance) {
   app.addHook("preHandler", authenticate);
@@ -15,7 +18,7 @@ export async function pmaNotificationsRoutes(app: FastifyInstance) {
   });
 
   app.post("/:id/read", async (req) => {
-    const { id } = req.params as { id: string };
+    const { id } = idParams.parse(req.params);
     const u = req.user!;
     await markNotificationAsRead(id, u.sub, u.adminId);
     return { ok: true };

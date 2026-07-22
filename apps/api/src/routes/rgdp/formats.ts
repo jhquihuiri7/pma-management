@@ -1,7 +1,10 @@
 import type { FastifyInstance } from "fastify";
-import { BadRequest } from "../../lib/errors.js";
+import { z } from "zod";
 import { authenticate, requireRole, requireApp } from "../../auth/middleware.js";
 import { uploadFormat, listFormats, deleteFormat } from "../../modules/rgdp/formatsModule.js";
+import { readFormatUpload } from "../../modules/shared/formatContract.js";
+
+const idParamsSchema = z.object({ id: z.string().uuid() }).strict();
 
 export async function rgdpFormatsRoutes(app: FastifyInstance) {
   app.addHook("preHandler", authenticate);
@@ -10,29 +13,18 @@ export async function rgdpFormatsRoutes(app: FastifyInstance) {
   app.get("/", async (req) => listFormats(req.user!.adminId));
 
   app.post("/", { preHandler: requireRole("ADMIN") }, async (req, reply) => {
-    const file = await req.file();
-    if (!file) throw BadRequest("file required");
-    const fields: Record<string, string> = {};
-    for (const [k, v] of Object.entries(file.fields)) {
-      const f: any = v;
-      if (f && typeof f === "object" && "value" in f) fields[k] = f.value as string;
-    }
-    if (!fields.functionalityLabel) throw BadRequest("functionalityLabel required");
-    const buf = await file.toBuffer();
-    reply.status(201);
-    return uploadFormat({
-      adminId: req.user!.adminId,
-      functionality: "descargar_anexos",
-      functionalityLabel: fields.functionalityLabel,
-      fileName: file.filename,
-      data: buf,
-      contentType: file.mimetype,
+    const upload = await readFormatUpload(req);
+    const row = await uploadFormat({
+      actorId: req.user!.sub,
+      ...upload,
     });
+    reply.status(201);
+    return row;
   });
 
   app.delete("/:id", { preHandler: requireRole("ADMIN") }, async (req) => {
-    const { id } = req.params as { id: string };
-    await deleteFormat(id, req.user!.adminId);
-    return { ok: true };
+    const { id } = idParamsSchema.parse(req.params);
+    const deleted = await deleteFormat(id, req.user!.sub);
+    return { ok: true, deleted };
   });
 }

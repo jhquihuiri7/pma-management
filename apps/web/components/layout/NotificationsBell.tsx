@@ -1,10 +1,9 @@
 "use client";
 
-import { apiFetch } from "@/lib/api-client";
-
-
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { api, apiErrorMessage, requireOkReceipt } from "@/lib/api-client";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
+import { toast } from "sonner";
 import { useAuth } from "@/lib/auth-context";
 import { Bell } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
@@ -31,6 +30,7 @@ function toDateLabel(value: string): string {
 }
 
 function buildNotificationHref(notification: AppNotification): string {
+  if (!notification.planId) return "/pma/dashboard";
   const params = new URLSearchParams();
   if (notification.planItemId) params.set("itemId", notification.planItemId);
   if (notification.evidenceId) params.set("evidenceId", notification.evidenceId);
@@ -45,6 +45,10 @@ export default function NotificationsBell() {
   const adminId = session?.adminId;
 
   const [notifications, setNotifications] = useState<AppNotification[]>([]);
+  const [pendingReadIds, setPendingReadIds] = useState<Set<string>>(new Set());
+  const pendingReadRef = useRef(new Set<string>());
+  const fetchInFlightRef = useRef(false);
+  const fetchErrorShownRef = useRef(false);
 
   const unreadCount = useMemo(
     () => notifications.filter((notification) => !notification.readAt).length,
@@ -52,11 +56,28 @@ export default function NotificationsBell() {
   );
 
   const fetchNotifications = useCallback(async () => {
-    const res = await apiFetch("/pma/api/notifications?limit=30", { cache: "no-store" });
-    if (!res.ok) return;
-    const data = (await res.json()) as AppNotification[];
-    if (Array.isArray(data)) {
-      setNotifications(data);
+    if (fetchInFlightRef.current) return;
+    fetchInFlightRef.current = true;
+    try {
+      const data = await api.get<AppNotification[]>("/pma/api/notifications?limit=30", {
+        cache: "no-store",
+      });
+      if (Array.isArray(data)) {
+        setNotifications((current) => data.map((incoming) => {
+          const existing = current.find((notification) => notification.id === incoming.id);
+          return existing?.readAt && !incoming.readAt
+            ? { ...incoming, readAt: existing.readAt }
+            : incoming;
+        }));
+      }
+      fetchErrorShownRef.current = false;
+    } catch (error) {
+      if (!fetchErrorShownRef.current) {
+        fetchErrorShownRef.current = true;
+        toast.error(apiErrorMessage(error, "No se pudieron actualizar las notificaciones"));
+      }
+    } finally {
+      fetchInFlightRef.current = false;
     }
   }, []);
 
@@ -90,22 +111,30 @@ export default function NotificationsBell() {
   }, [fetchNotifications, userId, adminId]);
 
   const handleNotificationClick = async (notification: AppNotification) => {
-    const now = new Date().toISOString();
-    if (!notification.readAt) {
-      setNotifications((prev) =>
-        prev.map((item) =>
-          item.id === notification.id ? { ...item, readAt: now } : item
-        )
-      );
-
-      await apiFetch("/pma/api/notifications/read", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ id: notification.id }),
-      });
+    if (notification.readAt) {
+      router.push(buildNotificationHref(notification));
+      return;
     }
 
-    router.push(buildNotificationHref(notification));
+    if (pendingReadRef.current.has(notification.id)) return;
+    pendingReadRef.current.add(notification.id);
+    setPendingReadIds(new Set(pendingReadRef.current));
+    try {
+      requireOkReceipt(
+        await api.post<unknown>(`/pma/api/notifications/${notification.id}/read`),
+        "El servidor no confirmó la lectura de la notificación"
+      );
+      const now = new Date().toISOString();
+      setNotifications((prev) =>
+        prev.map((item) => item.id === notification.id ? { ...item, readAt: now } : item)
+      );
+      router.push(buildNotificationHref(notification));
+    } catch (error) {
+      toast.error(apiErrorMessage(error, "No se pudo marcar la notificación como leída"));
+    } finally {
+      pendingReadRef.current.delete(notification.id);
+      setPendingReadIds(new Set(pendingReadRef.current));
+    }
   };
 
   if (!session) return null;
@@ -142,6 +171,7 @@ export default function NotificationsBell() {
             <DropdownMenuItem
               key={notification.id}
               onClick={() => void handleNotificationClick(notification)}
+              disabled={pendingReadIds.has(notification.id)}
               className="flex flex-col items-start gap-1 py-2"
             >
               <div className="flex w-full items-start justify-between gap-2">

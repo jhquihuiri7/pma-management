@@ -1,6 +1,6 @@
 "use client"
 
-import { useState } from "react"
+import { useRef, useState } from "react"
 import Link from "next/link"
 import { useRouter, useSearchParams } from "next/navigation"
 import { Eye, EyeOff, Loader2 } from "lucide-react"
@@ -8,6 +8,7 @@ import { toast } from "sonner"
 
 import { ApiError } from "@/lib/api-client"
 import { useAuth } from "@/lib/auth-context"
+import { safeInternalRedirect } from "@/lib/safe-internal-redirect"
 import { cn } from "@/lib/utils"
 import { Button } from "@/components/ui/button"
 import {
@@ -30,17 +31,19 @@ export function LoginForm({
   const [showPassword, setShowPassword] = useState(false)
   const [error, setError] = useState("")
   const [loading, setLoading] = useState(false)
+  const submittingRef = useRef(false)
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault()
-    if (loading) return
+    if (submittingRef.current) return
 
+    submittingRef.current = true
     setError("")
     setLoading(true)
     try {
       const user = await login(email, password)
-      const next = params.get("next")
-      if (next && next.startsWith("/")) {
+      const next = safeInternalRedirect(params.get("next"), window.location.origin)
+      if (next) {
         router.push(next)
       } else if (user.apps.length === 1) {
         router.push(`/${user.apps[0]}/dashboard`)
@@ -49,7 +52,10 @@ export function LoginForm({
       }
     } catch (err) {
       if (err instanceof ApiError && err.status === 401) {
-        const message = "La contraseña es incorrecta"
+        const message = err.message.toLowerCase().includes("password not set")
+          ? "Tu contraseña aún no está configurada. Revisa tu correo de invitación."
+          : "Correo o contraseña incorrectos"
+        setError(message)
         toast.error(message)
         return
       }
@@ -57,6 +63,7 @@ export function LoginForm({
       const message = err instanceof ApiError ? err.message : "Error al iniciar sesión"
       setError(message)
     } finally {
+      submittingRef.current = false
       setLoading(false)
     }
   }

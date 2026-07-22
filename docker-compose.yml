@@ -1,3 +1,9 @@
+x-api-image: &api-image
+  image: pma-management/api:prod
+  build:
+    context: .
+    dockerfile: apps/api/Dockerfile
+
 services:
   postgres:
     image: postgres:16-alpine
@@ -5,9 +11,25 @@ services:
     environment:
       POSTGRES_DB: ${DB_NAME:-pma_db}
       POSTGRES_USER: ${DB_USER:-postgres}
-      POSTGRES_PASSWORD: ${DB_PASSWORD:-postgres}
-    ports:
-      - "5432:5432"
+      POSTGRES_PASSWORD: ${DB_PASSWORD:?DB_PASSWORD is required}
+    # Diagnostic logging for lock contention / slow writes (e.g. geo map
+    # creation timing out). All settings are runtime GUCs — no data migration,
+    # a plain container recreate applies them. Tune log_min_duration_statement
+    # up (or these off) once the timeout root cause is understood.
+    command:
+      - "postgres"
+      - "-c"
+      - "log_lock_waits=on"          # log any session that waits > deadlock_timeout for a lock
+      - "-c"
+      - "deadlock_timeout=1s"         # also the threshold that arms log_lock_waits
+      - "-c"
+      - "log_min_duration_statement=1000"  # log every statement slower than 1s
+      - "-c"
+      - "log_line_prefix=%m [%p] user=%u db=%d app=%a "  # timestamp, pid, user, db, app
+      - "-c"
+      - "log_min_messages=info"
+    expose:
+      - "5432"
     volumes:
       - postgres_data:/var/lib/postgresql/data
     healthcheck:
@@ -16,34 +38,48 @@ services:
       timeout: 5s
       retries: 5
 
+  migrate:
+    <<: *api-image
+    container_name: pma-migrate
+    command: ["node", "dist/apps/api/src/db/run-migrations.js"]
+    environment:
+      NODE_ENV: production
+      DATABASE_URL: postgresql://${DB_USER:-postgres}:${DB_PASSWORD:?DB_PASSWORD is required}@postgres:5432/${DB_NAME:-pma_db}
+      JWT_ACCESS_SECRET: ${JWT_ACCESS_SECRET:?JWT_ACCESS_SECRET is required}
+      JWT_REFRESH_SECRET: ${JWT_REFRESH_SECRET:?JWT_REFRESH_SECRET is required}
+    depends_on:
+      postgres:
+        condition: service_healthy
+    restart: "no"
+
   api:
-    image: pma-management/api:prod
-    build:
-      context: .
-      dockerfile: apps/api/Dockerfile
+    <<: *api-image
     container_name: pma-api
     environment:
       NODE_ENV: production
-      DATABASE_URL: postgresql://${DB_USER:-postgres}:${DB_PASSWORD:-postgres}@postgres:5432/${DB_NAME:-pma_db}
+      DATABASE_URL: postgresql://${DB_USER:-postgres}:${DB_PASSWORD:?DB_PASSWORD is required}@postgres:5432/${DB_NAME:-pma_db}
       PORT: 3001
+      TRUST_PROXY_HOPS: ${TRUST_PROXY_HOPS:-1}
       FRONTEND_ORIGIN: ${FRONTEND_ORIGIN:-https://sigtar.gobiernogalapagos.gob.ec}
       JWT_ACCESS_SECRET: ${JWT_ACCESS_SECRET:?JWT_ACCESS_SECRET is required}
       JWT_REFRESH_SECRET: ${JWT_REFRESH_SECRET:?JWT_REFRESH_SECRET is required}
       STORAGE_ROOT: /data/storage
       STORAGE_PUBLIC_BASE_URL: ${STORAGE_PUBLIC_BASE_URL:-https://sigtar.gobiernogalapagos.gob.ec/storage}
       COOKIE_SECURE: ${COOKIE_SECURE:-true}
-      SMTP_HOST: ${SMTP_HOST:-}
+      SMTP_HOST: ${SMTP_HOST:?SMTP_HOST is required}
       SMTP_PORT: ${SMTP_PORT:-587}
       SMTP_USER: ${SMTP_USER:-}
       SMTP_PASS: ${SMTP_PASS:-}
-      SMTP_FROM: ${SMTP_FROM:-}
-    ports:
-      - "3001:3001"
+      SMTP_FROM: ${SMTP_FROM:?SMTP_FROM is required}
+    expose:
+      - "3001"
     volumes:
       - /mnt/synology_smb/sistema-ambiental:/data/storage
     depends_on:
       postgres:
         condition: service_healthy
+      migrate:
+        condition: service_completed_successfully
     restart: unless-stopped
     healthcheck:
       test: ["CMD-SHELL", "wget -qO- http://127.0.0.1:3001/health || exit 1"]
@@ -62,8 +98,8 @@ services:
       NODE_ENV: production
       PORT: 3000
       API_BASE_URL: http://api:3001
-    ports:
-      - "8000:3000"
+    expose:
+      - "3000"
     depends_on:
       api:
         condition: service_healthy
@@ -97,18 +133,25 @@ services:
     container_name: pma-worker
     environment:
       NODE_ENV: production
-      DATABASE_URL: postgresql://${DB_USER:-postgres}:${DB_PASSWORD:-postgres}@postgres:5432/${DB_NAME:-pma_db}
+      DATABASE_URL: postgresql://${DB_USER:-postgres}:${DB_PASSWORD:?DB_PASSWORD is required}@postgres:5432/${DB_NAME:-pma_db}
       STORAGE_ROOT: /data/storage
       JWT_ACCESS_SECRET: ${JWT_ACCESS_SECRET:?JWT_ACCESS_SECRET is required}
       JWT_REFRESH_SECRET: ${JWT_REFRESH_SECRET:?JWT_REFRESH_SECRET is required}
       GDAL_CACHEMAX: ${GDAL_CACHEMAX:-1024}
       WORKER_CONCURRENCY: ${WORKER_CONCURRENCY:-1}
       RASTER_KEEP_ORIGINAL: ${RASTER_KEEP_ORIGINAL:-true}
+      SMTP_HOST: ${SMTP_HOST:?SMTP_HOST is required}
+      SMTP_PORT: ${SMTP_PORT:-587}
+      SMTP_USER: ${SMTP_USER:-}
+      SMTP_PASS: ${SMTP_PASS:-}
+      SMTP_FROM: ${SMTP_FROM:?SMTP_FROM is required}
     volumes:
       - /mnt/synology_smb/sistema-ambiental:/data/storage
     depends_on:
       postgres:
         condition: service_healthy
+      migrate:
+        condition: service_completed_successfully
     restart: unless-stopped
 
   # Internal COG tile server. Deliberately has NO published port: only the API

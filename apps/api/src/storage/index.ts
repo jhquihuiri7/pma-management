@@ -1,3 +1,7 @@
+import { createHash } from "node:crypto";
+import { env } from "../lib/env.js";
+import { SynologySmbStorage } from "./synology-smb.js";
+
 export interface StorageProvider {
   /** Write a file at the given storage-relative path. Creates parent dirs. */
   upload(args: { path: string; data: Buffer | Uint8Array; contentType?: string }): Promise<void>;
@@ -7,7 +11,11 @@ export interface StorageProvider {
    * in memory. For large uploads (orthophotos of several GB). Creates parent
    * dirs and returns the number of bytes written.
    */
-  uploadStream(path: string, readable: NodeJS.ReadableStream): Promise<number>;
+  uploadStream(
+    path: string,
+    readable: NodeJS.ReadableStream,
+    options?: { maxBytes?: number },
+  ): Promise<number>;
 
   /** Read a file from the storage-relative path. */
   download(path: string): Promise<Buffer>;
@@ -23,6 +31,9 @@ export interface StorageProvider {
 
   /** Stream a file. */
   stream(path: string): Promise<NodeJS.ReadableStream>;
+
+  /** Preflight metadata without loading file contents into memory. */
+  stat(path: string): Promise<{ size: number; modifiedAt: Date }>;
 
   /** Get a public URL for the file (proxied through the API). */
   getUrl(path: string): string;
@@ -42,8 +53,15 @@ export interface StorageProvider {
   list(path: string): Promise<Array<{ name: string; isDirectory: boolean; size: number }>>;
 }
 
-import { SynologySmbStorage } from "./synology-smb.js";
-import { env } from "../lib/env.js";
+/** Raised while streaming, before an oversized object can be fully written. */
+export class StorageUploadTooLargeError extends Error {
+  readonly code = "STORAGE_UPLOAD_TOO_LARGE";
+
+  constructor(readonly maxBytes: number) {
+    super(`Storage upload exceeds the ${maxBytes}-byte limit`);
+    this.name = "StorageUploadTooLargeError";
+  }
+}
 
 let _provider: StorageProvider | null = null;
 
@@ -55,11 +73,10 @@ export function getStorage(): StorageProvider {
 }
 
 export function buildEvidencePath(args: {
-  adminId: string;
   subsystem: "pma" | "rgdp";
   planId: string;
+  evidenceId: string;
   planName?: string;
-  subsystemName?: string;
   planItemId?: string;
   planItemName?: string;
   periodFolder?: string;
@@ -70,13 +87,13 @@ export function buildEvidencePath(args: {
   const file = safeFileName(args.fileName);
 
   if (!args.planItemId && !args.planItemName) {
-    return [app, plan, file].join("/");
+    return [app, plan, "_evidences", safePathSegment(args.evidenceId, "evidence"), file].join("/");
   }
 
   const item = safePathSegment(args.planItemName, args.planItemId ?? "Item");
   const parts = [app, plan, item];
   if (args.periodFolder) parts.push(safePathSegment(args.periodFolder, args.periodFolder));
-  parts.push(file);
+  parts.push("_evidences", safePathSegment(args.evidenceId, "evidence"), file);
   return parts.join("/");
 }
 
@@ -143,18 +160,132 @@ export function buildGeoRasterLogPath(mapId: string, rasterLayerId: string): str
 }
 
 export function buildFormatPath(args: {
-  adminId: string;
   subsystem: "pma" | "rgdp";
+  formatId: string;
   fileName: string;
 }): string {
-  return `${args.adminId}/${args.subsystem}/_formats/${args.fileName}`;
+  return `${args.subsystem.toUpperCase()}/_formats/${safePathSegment(args.formatId, "format")}/${safeFileName(args.fileName)}`;
 }
 
+/**
+ * Persist a file and its database record as one observable operation.
+ *
+ * A filesystem and PostgreSQL cannot share a transaction. The file therefore
+ * uses an object-specific path, is verified after upload, and is removed (with
+ * a second verification) if the database write rejects. A failed compensation
+ * is surfaced as an AggregateError instead of being silently reported as a
+ * successful upload.
+ */
+export async function persistFileAndRecord<T>(args: {
+  path: string;
+  data: Buffer | Uint8Array;
+  contentType?: string;
+  persist: () => Promise<T>;
+  storage?: StorageProvider;
+}): Promise<T> {
+  const storage = args.storage ?? getStorage();
+  let uploadAttempted = false;
+
+  try {
+    if (await storage.exists(args.path)) {
+      throw new Error(`Refusing to overwrite an existing storage object: ${args.path}`);
+    }
+    uploadAttempted = true;
+    await storage.upload({ path: args.path, data: args.data, contentType: args.contentType });
+    const stored = await storage.stat(args.path);
+    if (stored.size !== args.data.byteLength) {
+      throw new Error(
+        `Storage size mismatch for ${args.path}: expected ${args.data.byteLength}, received ${stored.size}`
+      );
+    }
+    return await args.persist();
+  } catch (error) {
+    if (!uploadAttempted) throw error;
+
+    try {
+      if (await storage.exists(args.path)) {
+        await storage.delete(args.path);
+      }
+      if (await storage.exists(args.path)) {
+        throw new Error(`Storage compensation did not remove file: ${args.path}`);
+      }
+    } catch (compensationError) {
+      throw new AggregateError(
+        [asError(error), asError(compensationError)],
+        `File persistence failed and compensation could not be verified: ${args.path}`
+      );
+    }
+    throw error;
+  }
+}
+
+const MAX_STORAGE_COMPONENT_BYTES = 255;
+const STORAGE_COMPONENT_HASH_HEX_LENGTH = 12;
+
 function safePathSegment(value: string | null | undefined, fallback: string): string {
-  const normalized = (value ?? fallback).trim().replace(/[\\/]/g, "-");
-  return normalized.length > 0 ? normalized : fallback;
+  const normalized = normalizeStorageComponent(value ?? fallback);
+  const normalizedFallback = normalizeStorageComponent(fallback);
+  const candidate = isUsableStorageComponent(normalized)
+    ? normalized
+    : isUsableStorageComponent(normalizedFallback)
+      ? normalizedFallback
+      : "segmento";
+  return fitStorageComponent(candidate);
 }
 
 function safeFileName(fileName: string): string {
-  return fileName.trim().replace(/[\\/]/g, "-") || "archivo";
+  const normalized = normalizeStorageComponent(fileName);
+  const candidate = isUsableStorageComponent(normalized) ? normalized : "archivo";
+  if (Buffer.byteLength(candidate, "utf8") <= MAX_STORAGE_COMPONENT_BYTES) return candidate;
+
+  // Keep conventional extensions recognizable while placing the stable hash
+  // next to the truncated basename. Restricting this to short ASCII suffixes
+  // avoids letting a user-controlled, multi-byte "extension" consume the byte
+  // budget needed for a collision-resistant name.
+  const extension = candidate.match(/\.[a-z0-9]{1,20}$/i)?.[0] ?? "";
+  const basename = extension ? candidate.slice(0, -extension.length) : candidate;
+  return fitStorageComponent(basename, extension, candidate);
+}
+
+function normalizeStorageComponent(value: string): string {
+  return value.trim().replace(/[\\/\u0000-\u001f\u007f]/g, "-");
+}
+
+function isUsableStorageComponent(value: string): boolean {
+  return value.length > 0 && value !== "." && value !== "..";
+}
+
+/**
+ * Fit a single filesystem/SMB path component into the portable 255-byte limit.
+ * Truncation iterates Unicode code points, so it never emits a split surrogate
+ * or partial UTF-8 sequence. A digest of the complete normalized value keeps
+ * long names deterministic and distinguishes inputs sharing the same prefix.
+ */
+function fitStorageComponent(value: string, extension = "", hashInput = value): string {
+  if (!extension && Buffer.byteLength(value, "utf8") <= MAX_STORAGE_COMPONENT_BYTES) return value;
+
+  const digest = createHash("sha256")
+    .update(hashInput, "utf8")
+    .digest("hex")
+    .slice(0, STORAGE_COMPONENT_HASH_HEX_LENGTH);
+  const suffix = `-${digest}${extension}`;
+  const prefixBudget = MAX_STORAGE_COMPONENT_BYTES - Buffer.byteLength(suffix, "utf8");
+  const prefix = truncateUtf8(value, Math.max(0, prefixBudget));
+  return `${prefix}${suffix}`;
+}
+
+function truncateUtf8(value: string, maxBytes: number): string {
+  let bytes = 0;
+  let result = "";
+  for (const character of value) {
+    const characterBytes = Buffer.byteLength(character, "utf8");
+    if (bytes + characterBytes > maxBytes) break;
+    result += character;
+    bytes += characterBytes;
+  }
+  return result;
+}
+
+function asError(value: unknown): Error {
+  return value instanceof Error ? value : new Error(String(value));
 }

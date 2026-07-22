@@ -1,7 +1,7 @@
 ﻿"use client";
 
-import { apiFetch } from "@/lib/api-client";
-import { useEffect, useMemo, useState } from "react";
+import { apiErrorFromResponse, apiErrorMessage, apiFetch } from "@/lib/api-client";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { useAuth } from "@/lib/auth-context";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -172,6 +172,8 @@ export default function PlansPage() {
   const [editOpen, setEditOpen] = useState(false);
   const [editingPlan, setEditingPlan] = useState<Plan | null>(null);
   const [loading, setLoading] = useState(false);
+  const mutationInFlightRef = useRef(false);
+  const plansLoadGenerationRef = useRef(0);
   const [form, setForm] = useState<ProjectFormState>(INITIAL_FORM);
   const [editForm, setEditForm] = useState({
     title: "",
@@ -198,8 +200,18 @@ export default function PlansPage() {
   }, [form.location.province, form.location.canton]);
 
   async function loadPlans() {
-    const res = await apiFetch("/rgdp/api/plans");
-    if (res.ok) setPlans(await res.json());
+    const generation = ++plansLoadGenerationRef.current;
+    try {
+      const res = await apiFetch("/rgdp/api/plans");
+      if (!res.ok) throw await apiErrorFromResponse(res, "No se pudieron cargar los proyectos");
+      const data = (await res.json()) as unknown;
+      if (!Array.isArray(data)) throw new Error("El servidor devolvió una lista de proyectos inválida");
+      if (generation === plansLoadGenerationRef.current) setPlans(data as Plan[]);
+    } catch (error) {
+      if (generation === plansLoadGenerationRef.current) {
+        toast.error(apiErrorMessage(error, "No se pudieron cargar los proyectos"));
+      }
+    }
   }
 
   useEffect(() => {
@@ -318,25 +330,34 @@ export default function PlansPage() {
       toast.error(validationError);
       return;
     }
+    if (mutationInFlightRef.current) return;
 
+    mutationInFlightRef.current = true;
     setLoading(true);
-
-    const res = await apiFetch("/rgdp/api/plans", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(form),
-    });
-
-    setLoading(false);
-
-    if (res.ok) {
+    try {
+      const res = await apiFetch("/rgdp/api/plans", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(form),
+      });
+      if (!res.ok) throw await apiErrorFromResponse(res, "Error al crear proyecto");
+      const saved = (await res.json()) as Plan;
+      if (
+        !saved.id ||
+        saved.title !== form.title.trim() ||
+        saved.report_per !== form.report_per
+      ) {
+        throw new Error("El servidor devolvió una confirmación de proyecto inválida");
+      }
       toast.success("Proyecto creado correctamente");
       setForm(INITIAL_FORM);
       setOpen(false);
-      loadPlans();
-    } else {
-      const data = await res.json();
-      toast.error(data.error || "Error al crear proyecto");
+      await loadPlans();
+    } catch (error) {
+      toast.error(apiErrorMessage(error, "Error al crear proyecto"));
+    } finally {
+      mutationInFlightRef.current = false;
+      setLoading(false);
     }
   }
 
@@ -356,24 +377,33 @@ export default function PlansPage() {
   async function handleEdit(e: React.FormEvent) {
     e.preventDefault();
     if (!editingPlan) return;
+    if (mutationInFlightRef.current) return;
+    mutationInFlightRef.current = true;
     setLoading(true);
-
-    const res = await apiFetch(`/rgdp/api/plans/${editingPlan.id}`, {
-      method: "PUT",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ ...editingPlan, ...editForm }),
-    });
-
-    setLoading(false);
-
-    if (res.ok) {
+    try {
+      const res = await apiFetch(`/rgdp/api/plans/${editingPlan.id}`, {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(editForm),
+      });
+      if (!res.ok) throw await apiErrorFromResponse(res, "Error al actualizar proyecto");
+      const saved = (await res.json()) as Plan;
+      if (
+        saved.id !== editingPlan.id ||
+        saved.title !== editForm.title.trim() ||
+        saved.report_per !== editForm.report_per
+      ) {
+        throw new Error("El servidor devolvió una confirmación de proyecto inválida");
+      }
       toast.success("Proyecto actualizado correctamente");
       setEditOpen(false);
       setEditingPlan(null);
-      loadPlans();
-    } else {
-      const data = await res.json();
-      toast.error(data.error || "Error al actualizar proyecto");
+      await loadPlans();
+    } catch (error) {
+      toast.error(apiErrorMessage(error, "Error al actualizar proyecto"));
+    } finally {
+      mutationInFlightRef.current = false;
+      setLoading(false);
     }
   }
 
@@ -783,7 +813,9 @@ export default function PlansPage() {
                       <Button
                         className="bg-black text-white hover:bg-slate-800"
                         size="sm"
-                        onClick={() => window.open(plan.visualization_url, "_blank")}
+                        onClick={() => {
+                          if (plan.visualization_url) window.open(plan.visualization_url, "_blank");
+                        }}
                       >
                         <Map className="w-4 h-4 mr-1" />
                         Visualizar

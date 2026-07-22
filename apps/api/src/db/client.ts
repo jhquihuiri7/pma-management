@@ -29,5 +29,12 @@ export function getDb() {
   return _db;
 }
 
+export async function closeDb(): Promise<void> {
+  const current = pool;
+  pool = null;
+  _db = null;
+  await current?.end();
+}
+
 export type Db = ReturnType<typeof getDb>;
 export { schema };

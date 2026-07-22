@@ -1,4 +1,5 @@
 import type { FastifyInstance } from "fastify";
+import { z } from "zod";
 import { authenticate, requireRole, requireApp } from "../../auth/middleware.js";
 import {
   assignUserToApp,
@@ -6,6 +7,8 @@ import {
   resendInvitation,
   listManagedUsers,
 } from "../../modules/shared/usersModule.js";
+
+const idParamsSchema = z.object({ id: z.string().uuid() }).strict();
 
 export async function rgdpUsersRoutes(app: FastifyInstance) {
   app.addHook("preHandler", authenticate);
@@ -17,21 +20,19 @@ export async function rgdpUsersRoutes(app: FastifyInstance) {
   });
 
   app.post("/:id/assign", async (req, reply) => {
-    const { id } = req.params as { id: string };
-    await assignUserToApp(id, "rgdp");
+    const { id } = idParamsSchema.parse(req.params);
+    const result = await assignUserToApp(id, "rgdp", req.user!.sub);
     reply.status(201);
-    return { ok: true };
+    return result;
   });
 
   app.post("/:id/resend-invitation", async (req) => {
-    const { id } = req.params as { id: string };
-    await resendInvitation(id, "rgdp");
-    return { ok: true };
+    const { id } = idParamsSchema.parse(req.params);
+    return resendInvitation(id, "rgdp", req.user!.sub);
   });
 
   app.delete("/:id", async (req) => {
-    const { id } = req.params as { id: string };
-    await deleteManagedUser(id, "rgdp");
-    return { ok: true };
+    const { id } = idParamsSchema.parse(req.params);
+    return deleteManagedUser(id, "rgdp", req.user!.sub);
   });
 }

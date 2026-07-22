@@ -9,11 +9,14 @@ export interface MailMessage {
   subject: string;
   html: string;
   text?: string;
+  /** Stable RFC Message-ID used by downstream providers/clients to dedupe retries. */
+  messageId?: string;
   attachments?: MailAttachment[];
 }
 
 export interface MailProvider {
   send(msg: MailMessage): Promise<void>;
+  close?(): Promise<void> | void;
 }
 
 import { SmtpMail } from "./smtp.js";
@@ -25,4 +28,10 @@ export function getMail(): MailProvider {
     _provider = new SmtpMail();
   }
   return _provider;
+}
+
+export async function closeMail(): Promise<void> {
+  const provider = _provider;
+  _provider = null;
+  await provider?.close?.();
 }

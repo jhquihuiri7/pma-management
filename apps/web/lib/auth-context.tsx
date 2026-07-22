@@ -3,20 +3,16 @@
 /**
  * AuthProvider + useAuth — the replacement for `next-auth/react`'s useSession.
  *
- * This is NOT wired into the live app yet. NextAuth + Firestore is still the
- * source of truth in production. After the Phase 7 cut, swap the root layout
- * from `<SessionProvider>` (NextAuth) to `<AuthProvider>` (this file) and
- * update components from `useSession()` to `useAuth()`.
- *
  * Flow:
  *  - On mount, calls GET /auth/me to discover the current user from cookies.
  *  - login()/logout() proxy through `auth-client.ts` (which talks to apps/api).
  *  - The api-client transparently refreshes access tokens on 401.
  */
 
-import { createContext, useContext, useEffect, useState, useCallback, type ReactNode } from "react";
+import { createContext, useContext, useEffect, useRef, useState, useCallback, type ReactNode } from "react";
 import { useRouter } from "next/navigation";
-import { auth as authApi, ApiError } from "./api-client";
+import { toast } from "sonner";
+import { auth as authApi, ApiError, apiErrorMessage } from "./api-client";
 
 export type AuthUser = {
   id: string;
@@ -31,7 +27,8 @@ interface AuthState {
   user: AuthUser | null;
   status: "loading" | "authenticated" | "unauthenticated";
   login(email: string, password: string): Promise<AuthUser>;
-  logout(): Promise<void>;
+  logout(): Promise<boolean>;
+  logoutPending: boolean;
   refresh(): Promise<void>;
 }
 
@@ -40,6 +37,8 @@ const AuthContext = createContext<AuthState | null>(null);
 export function AuthProvider({ children }: { children: ReactNode }) {
   const [user, setUser] = useState<AuthUser | null>(null);
   const [status, setStatus] = useState<AuthState["status"]>("loading");
+  const [logoutPending, setLogoutPending] = useState(false);
+  const logoutPendingRef = useRef(false);
   const router = useRouter();
 
   const refresh = useCallback(async () => {
@@ -66,6 +65,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         setUser(null);
         setStatus("unauthenticated");
       } else {
+        toast.error(apiErrorMessage(err, "No se pudo verificar la sesión"));
         setStatus("unauthenticated");
       }
     }
@@ -91,14 +91,26 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   }, []);
 
   const logout = useCallback(async () => {
-    try { await authApi.logout(); } catch { /* ignore */ }
-    setUser(null);
-    setStatus("unauthenticated");
-    router.push("/login");
+    if (logoutPendingRef.current) return false;
+    logoutPendingRef.current = true;
+    setLogoutPending(true);
+    try {
+      await authApi.logout();
+      setUser(null);
+      setStatus("unauthenticated");
+      router.push("/login");
+      return true;
+    } catch (error) {
+      toast.error(apiErrorMessage(error, "No se pudo cerrar la sesión"));
+      return false;
+    } finally {
+      logoutPendingRef.current = false;
+      setLogoutPending(false);
+    }
   }, [router]);
 
   return (
-    <AuthContext.Provider value={{ user, status, login, logout, refresh }}>
+    <AuthContext.Provider value={{ user, status, login, logout, logoutPending, refresh }}>
       {children}
     </AuthContext.Provider>
   );

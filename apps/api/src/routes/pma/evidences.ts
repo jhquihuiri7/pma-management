@@ -6,34 +6,69 @@ import {
   createEvidence,
   getEvidencesByPlan,
   getEvidencesByReporter,
+  getEvidencesForUser,
   getEvidenceById,
   updateEvidenceValidation,
   deleteEvidence,
+  canUserAccessEvidence,
+  canUserUploadEvidence,
 } from "../../modules/pma/evidencesModule.js";
 import { canUserAccessPlan } from "../../modules/pma/plansModule.js";
 
 const validationSchema = z.object({
   status: z.enum(["valid", "invalid", "pending"]),
-  comment: z.string().optional(),
+  comment: z.string().max(10_000).optional(),
+}).strict().superRefine((body, context) => {
+  if (body.status === "invalid" && !body.comment?.trim()) {
+    context.addIssue({ code: z.ZodIssueCode.custom, path: ["comment"], message: "El motivo de rechazo es obligatorio" });
+  }
 });
 
 const legacyValidationSchema = z.object({
   validationStatus: z.enum(["valid", "invalid", "pending"]),
-  validationComment: z.string().optional(),
+  validationComment: z.string().max(10_000).optional(),
+}).strict().superRefine((body, context) => {
+  if (body.validationStatus === "invalid" && !body.validationComment?.trim()) {
+    context.addIssue({ code: z.ZodIssueCode.custom, path: ["validationComment"], message: "El motivo de rechazo es obligatorio" });
+  }
 });
 
 const queryListSchema = z.object({
   planId: z.string().uuid().optional(),
-  mine: z.coerce.boolean().optional(),
-});
+  mine: z.preprocess(
+    (value) => value === undefined ? undefined : value === true || value === "true" || value === "1",
+    z.boolean().optional()
+  ),
+}).strict();
 
 const evidenceIdQuerySchema = z.object({
   id: z.string().uuid(),
-});
+}).strict();
 
 const deleteQuerySchema = z.object({
   id: z.string().uuid(),
-});
+}).strict();
+
+const evidenceParamsSchema = z.object({ id: z.string().uuid() }).strict();
+
+const optionalMultipartUuid = z.preprocess(
+  (value) => value === "" ? undefined : value,
+  z.string().uuid().optional()
+);
+
+const uploadFieldsSchema = z.object({
+  planId: z.string().uuid(),
+  planItemId: optionalMultipartUuid,
+  description: z.string().max(10_000).default(""),
+  activityMonth: z.preprocess(
+    (value) => value === "" ? undefined : value,
+    z.string().regex(/^\d{4}-(0[1-9]|1[0-2])$/).optional()
+  ),
+}).strict();
+
+// The UI advertises a 10 MB evidence limit. Applying it here keeps the
+// contract honest and bounds the memory used by `toBuffer()` under concurrency.
+const EVIDENCE_MAX_BYTES = 10 * 1024 * 1024;
 
 export async function pmaEvidencesRoutes(app: FastifyInstance) {
   app.addHook("preHandler", authenticate);
@@ -43,22 +78,25 @@ export async function pmaEvidencesRoutes(app: FastifyInstance) {
     const q = queryListSchema.parse(req.query);
     if (q.planId) {
       if (!(await canUserAccessPlan(q.planId, req.user!))) throw Forbidden("No tienes acceso a este plan");
-      return getEvidencesByPlan(q.planId);
+      const evidences = await getEvidencesByPlan(q.planId);
+      const allowed = await Promise.all(evidences.map((evidence) => canUserAccessEvidence(evidence, req.user!)));
+      return evidences.filter((_, index) => allowed[index]);
     }
     if (q.mine) return getEvidencesByReporter(req.user!.sub);
-    return [];
+    return getEvidencesForUser(req.user!);
   });
 
-  app.post("/", uploadPmaEvidence);
+  app.post("/", { preHandler: requireRole("ADMIN", "REPORTER", "VIEWER") }, uploadPmaEvidence);
 
-  // Any role (ADMIN/VIEWER/REPORTER) may delete an evidence on a plan they can access.
-  app.delete("/", async (req) => {
+  // Deletion is scoped by canUserAccessEvidence: ADMINs delete any evidence,
+  // REPORTERs their own uploads, and VIEWERs evidence within their assigned plans.
+  app.delete("/", { preHandler: requireRole("ADMIN", "REPORTER", "VIEWER") }, async (req) => {
     const { id } = deleteQuerySchema.parse(req.query);
     const u = req.user!;
     const evidence = await getEvidenceById(id);
     if (!evidence) throw NotFound("Evidence not found");
-    if (!(await canUserAccessPlan(evidence.planId, u))) throw Forbidden("No tienes acceso a este plan");
-    await deleteEvidence(id, u.adminId);
+    if (!(await canUserAccessEvidence(evidence, u, "delete"))) throw Forbidden("No tienes acceso a esta evidencia");
+    await deleteEvidence(id, u.sub);
     return { ok: true };
   });
 
@@ -68,54 +106,74 @@ export async function pmaEvidencesRoutes(app: FastifyInstance) {
     const u = req.user!;
     const evidence = await getEvidenceById(id);
     if (!evidence) throw NotFound("Evidence not found");
-    if (!(await canUserAccessPlan(evidence.planId, u))) throw Forbidden("No tienes acceso a este plan");
+    if (!(await canUserAccessEvidence(evidence, u, "validate"))) throw Forbidden("No tienes acceso a esta evidencia");
     return updateEvidenceValidation(id, body.validationStatus, u.adminId, u.sub, body.validationComment);
   });
 
   app.put("/:id/validation", { preHandler: requireRole("ADMIN", "VIEWER") }, async (req) => {
-    const { id } = req.params as { id: string };
+    const { id } = evidenceParamsSchema.parse(req.params);
     const body = validationSchema.parse(req.body);
     const u = req.user!;
     const evidence = await getEvidenceById(id);
     if (!evidence) throw NotFound("Evidence not found");
     // ADMINs pass through; non-admins (e.g. VIEWER) must be assigned to the plan.
-    if (!(await canUserAccessPlan(evidence.planId, u))) throw Forbidden("No tienes acceso a este plan");
+    if (!(await canUserAccessEvidence(evidence, u, "validate"))) throw Forbidden("No tienes acceso a esta evidencia");
     return updateEvidenceValidation(id, body.status, u.adminId, u.sub, body.comment);
   });
 
-  // Any role (ADMIN/VIEWER/REPORTER) may delete an evidence on a plan they can access.
-  app.delete("/:id", async (req) => {
-    const { id } = req.params as { id: string };
+  app.delete("/:id", { preHandler: requireRole("ADMIN", "REPORTER", "VIEWER") }, async (req) => {
+    const { id } = evidenceParamsSchema.parse(req.params);
     const u = req.user!;
     const evidence = await getEvidenceById(id);
     if (!evidence) throw NotFound("Evidence not found");
-    if (!(await canUserAccessPlan(evidence.planId, u))) throw Forbidden("No tienes acceso a este plan");
-    await deleteEvidence(id, u.adminId);
+    if (!(await canUserAccessEvidence(evidence, u, "delete"))) throw Forbidden("No tienes acceso a esta evidencia");
+    await deleteEvidence(id, u.sub);
     return { ok: true };
   });
 }
 
 export async function uploadPmaEvidence(req: FastifyRequest, reply: FastifyReply) {
   const u = req.user!;
-  const data = await req.file();
+  // Defense in depth for future aliases that reuse this exported handler.
+  // Reject before parsing multipart so disallowed callers cannot consume the
+  // upload memory budget.
+  if (u.role !== "ADMIN" && u.role !== "REPORTER" && u.role !== "VIEWER") {
+    throw Forbidden("No tienes permiso para subir evidencias");
+  }
+  const data = await req.file({
+    limits: {
+      fileSize: EVIDENCE_MAX_BYTES,
+      files: 1,
+      fields: 4,
+      parts: 5,
+      fieldSize: 20_000,
+    },
+  });
   if (!data) throw BadRequest("file required (multipart/form-data)");
   const buf = await data.toBuffer();
+  if (buf.byteLength === 0) throw BadRequest("El archivo de evidencia está vacío");
   const fields: Record<string, string> = {};
   for (const [k, v] of Object.entries(data.fields)) {
-    const f: any = v;
-    if (f && typeof f === "object" && "value" in f) fields[k] = f.value as string;
+    if (Array.isArray(v)) throw BadRequest(`El campo multipart ${k} está duplicado`);
+    const f = v as { type?: string; value?: unknown; valueTruncated?: boolean } | undefined;
+    if (!f || f.type !== "field") continue;
+    if (f.valueTruncated) throw BadRequest(`El campo multipart ${k} excede el tamaño permitido`);
+    if (typeof f.value !== "string") throw BadRequest(`El campo multipart ${k} debe ser texto`);
+    fields[k] = f.value;
   }
-  if (!fields.planId) throw BadRequest("planId required");
-  // Anyone (ADMIN/REPORTER/VIEWER) may upload, but only to a plan they can access.
-  if (!(await canUserAccessPlan(fields.planId, u))) throw Forbidden("No tienes acceso a este plan");
+  const parsed = uploadFieldsSchema.parse(fields);
+  z.string().trim().min(1).max(255).parse(data.filename);
+  if (!(await canUserUploadEvidence(parsed.planId, parsed.planItemId, u))) {
+    throw Forbidden("No tienes acceso al plan o ítem solicitado");
+  }
   const ev = await createEvidence(u.adminId, {
-    planId: fields.planId,
-    planItemId: fields.planItemId || undefined,
+    planId: parsed.planId,
+    planItemId: parsed.planItemId,
     uploadedBy: u.sub,
     uploaderName: u.name,
     fileName: data.filename,
-    description: fields.description ?? "",
-    activityMonth: fields.activityMonth || undefined,
+    description: parsed.description,
+    activityMonth: parsed.activityMonth,
     data: buf,
     contentType: data.mimetype,
   });

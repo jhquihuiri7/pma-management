@@ -3,6 +3,7 @@ import { getDb } from "../db/client.js";
 import { users, userApps } from "../db/schema/shared.js";
 import { hashPassword } from "../auth/password.js";
 import { eq } from "drizzle-orm";
+import { newPasswordValidationError } from "../auth/passwordPolicy.js";
 
 async function seedAdminFromEnv() {
   const email = process.env.ADMIN_EMAIL;
@@ -17,8 +18,9 @@ async function seedAdminFromEnv() {
     process.exit(1);
   }
 
-  if (password.length < 8) {
-    console.error("❌ La contraseña debe tener al menos 8 caracteres");
+  const passwordError = newPasswordValidationError(password);
+  if (passwordError) {
+    console.error(`❌ ${passwordError}`);
     process.exit(1);
   }
 

@@ -1,9 +1,8 @@
 "use client";
 
-import { apiFetch } from "@/lib/api-client";
-
-
-import { useEffect, useState } from "react";
+import { api, apiErrorMessage, requirePersistedEntity } from "@/lib/api-client";
+import { useConfirmedMutation } from "@/lib/use-confirmed-mutation";
+import { useEffect, useRef, useState } from "react";
 import { useAuth } from "@/lib/auth-context";
 import Link from "next/link";
 import { Button } from "@/components/ui/button";
@@ -32,40 +31,60 @@ export default function PlansPage() {
   const [open, setOpen] = useState(false);
   const [editOpen, setEditOpen] = useState(false);
   const [editingPlan, setEditingPlan] = useState<Plan | null>(null);
-  const [loading, setLoading] = useState(false);
   const [form, setForm] = useState({ title: "", description: "", tipo: "", fase: "", enfoque: "", report_per: "6 meses", start_date: "", visualization_url: "" });
   const [editForm, setEditForm] = useState({ title: "", description: "", tipo: "", fase: "", enfoque: "", report_per: "6 meses", start_date: "", visualization_url: "" });
+  const plansLoadGenerationRef = useRef(0);
 
   async function loadPlans() {
-    const res = await apiFetch("/pma/api/plans");
-    if (res.ok) setPlans(await res.json());
+    const generation = ++plansLoadGenerationRef.current;
+    try {
+      const loaded = await api.get<Plan[]>("/pma/api/plans");
+      if (generation === plansLoadGenerationRef.current) setPlans(loaded);
+    } catch (error) {
+      if (generation === plansLoadGenerationRef.current) {
+        toast.error(apiErrorMessage(error, "No se pudieron cargar los planes"));
+      }
+    }
   }
 
   useEffect(() => {
-    loadPlans();
+    void loadPlans();
   }, []);
+
+  const createMutation = useConfirmedMutation<typeof form, Plan>({
+    mutation: async (payload, signal) => requirePersistedEntity<Plan>(
+      await api.post<unknown>("/pma/api/plans", payload, { signal }),
+      "El servidor no confirmó la creación del plan"
+    ),
+    successMessage: "Plan creado correctamente",
+    errorMessage: "Error al crear el plan",
+    onConfirmed: (created) => {
+      plansLoadGenerationRef.current += 1;
+      setPlans((current) => [created, ...current]);
+      setForm({ title: "", description: "", tipo: "", fase: "", enfoque: "", report_per: "6 meses", start_date: "", visualization_url: "" });
+      setOpen(false);
+    },
+  });
+
+  const editMutation = useConfirmedMutation<{ id: string; payload: typeof editForm }, Plan>({
+    mutation: async ({ id, payload }, signal) => requirePersistedEntity<Plan>(
+      await api.put<unknown>(`/pma/api/plans/${id}`, payload, { signal }),
+      "El servidor no confirmó la actualización del plan",
+      id
+    ),
+    successMessage: "Plan actualizado correctamente",
+    errorMessage: "Error al actualizar el plan",
+    onConfirmed: (updated) => {
+      plansLoadGenerationRef.current += 1;
+      setPlans((current) => current.map((plan) => plan.id === updated.id ? updated : plan));
+      setEditOpen(false);
+      setEditingPlan(null);
+    },
+  });
 
   async function handleCreate(e: React.FormEvent) {
     e.preventDefault();
-    setLoading(true);
-
-    const res = await apiFetch("/pma/api/plans", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(form),
-    });
-
-    setLoading(false);
-
-    if (res.ok) {
-      toast.success("Plan created successfully");
-      setForm({ title: "", description: "", tipo: "", fase: "", enfoque: "", report_per: "6 meses", start_date: "", visualization_url: "" });
-      setOpen(false);
-      loadPlans();
-    } else {
-      const data = await res.json();
-      toast.error(data.error || "Failed to create plan");
-    }
+    await createMutation.mutate(form);
   }
 
   function openEdit(plan: Plan) {
@@ -86,25 +105,7 @@ export default function PlansPage() {
   async function handleEdit(e: React.FormEvent) {
     e.preventDefault();
     if (!editingPlan) return;
-    setLoading(true);
-
-    const res = await apiFetch(`/pma/api/plans/${editingPlan.id}`, {
-      method: "PUT",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(editForm),
-    });
-
-    setLoading(false);
-
-    if (res.ok) {
-      toast.success("Plan actualizado correctamente");
-      setEditOpen(false);
-      setEditingPlan(null);
-      loadPlans();
-    } else {
-      const data = await res.json();
-      toast.error(data.error || "Error al actualizar el plan");
-    }
+    await editMutation.mutate({ id: editingPlan.id, payload: editForm });
   }
 
   return (
@@ -232,8 +233,8 @@ export default function PlansPage() {
                     }
                   />
                 </div>
-                <Button type="submit" className="w-full" disabled={loading}>
-                  {loading ? "Creando..." : "Crear Plan"}
+                <Button type="submit" className="w-full" disabled={createMutation.isPending}>
+                  {createMutation.isPending ? "Creando..." : "Crear Plan"}
                 </Button>
               </form>
             </DialogContent>
@@ -316,7 +317,9 @@ export default function PlansPage() {
                       <Button
                         className="bg-black text-white hover:bg-slate-800"
                         size="sm"
-                        onClick={() => window.open(plan.visualization_url, "_blank")}
+                        onClick={() => {
+                          if (plan.visualization_url) window.open(plan.visualization_url, "_blank");
+                        }}
                       >
                         <Map className="w-4 h-4 mr-1" />
                         Visualizar
@@ -451,8 +454,8 @@ export default function PlansPage() {
                 }
               />
             </div>
-            <Button type="submit" className="w-full" disabled={loading}>
-              {loading ? "Guardando..." : "Guardar cambios"}
+            <Button type="submit" className="w-full" disabled={editMutation.isPending}>
+              {editMutation.isPending ? "Guardando..." : "Guardar cambios"}
             </Button>
           </form>
         </DialogContent>

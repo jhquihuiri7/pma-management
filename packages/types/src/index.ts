@@ -7,10 +7,11 @@ export interface User {
   email: string;
   passwordSet?: boolean;
   role: UserRole;
-  adminId: string;
+  /** Present in authenticated-session payloads; omitted by management lists. */
+  adminId?: string;
   apps: AppKey[];
-  unit?: string;
-  position?: string;
+  unit?: string | null;
+  position?: string | null;
   createdAt: string;
 }
 
@@ -28,41 +29,43 @@ export type PlanEnfoque = typeof PLAN_ENFOQUE_VALUES[number];
 
 export interface Plan {
   id: string;
-  adminId: string;
+  adminId: string | null;
+  createdBy?: string | null;
   title: string;
   description: string;
-  tipo?: PlanTipo;
-  fase?: PlanFase;
-  enfoque?: PlanEnfoque;
+  tipo?: PlanTipo | null;
+  fase?: PlanFase | null;
+  enfoque?: PlanEnfoque | null;
   report_per: PlanReporte;
-  start_date?: string;
-  visualization_url?: string;
+  start_date?: string | null;
+  visualization_url?: string | null;
+  storagePath?: string | null;
   driveFolderId?: string;
   location?: {
     province: string;
     canton: string;
     parish: string;
     reference?: string;
-  };
+  } | null;
   ciiu?: {
     principal: { code: string; description: string };
     complementary1?: { code: string; description: string };
     complementary2?: { code: string; description: string };
-  };
-  zoneType?: "Urbana" | "Rural" | "Maritima" | "Fluvial";
-  coordinateFormat?: string;
+  } | null;
+  zoneType?: "Urbana" | "Rural" | "Maritima" | "Fluvial" | null;
+  coordinateFormat?: string | null;
   geographicArea?: {
     fileName?: string;
     pointsCount: number;
     areaM2: number;
     areaHa: number;
-  };
+  } | null;
   implantationArea?: {
     fileName?: string;
     pointsCount: number;
     areaM2: number;
     areaHa: number;
-  };
+  } | null;
   createdAt: string;
   updatedAt: string;
 }
@@ -80,7 +83,7 @@ export interface Evidence {
   id: string;
   planId: string;
   planItemId?: string;
-  uploadedBy: string;
+  uploadedBy: string | null;
   uploaderName: string;
   fileName: string;
   driveFileId: string;
@@ -117,14 +120,14 @@ export type NotificationType =
 export interface AppNotification {
   id: string;
   userId: string;
-  adminId: string;
+  adminId?: string;
   type: NotificationType;
   title: string;
   message: string;
-  planId: string;
-  planItemId?: string;
-  evidenceId?: string;
-  metadata?: Record<string, string>;
+  planId: string | null;
+  planItemId?: string | null;
+  evidenceId?: string | null;
+  metadata?: Record<string, unknown> | null;
   readAt?: string | null;
   createdAt: string;
   expiresAt: string;
@@ -149,7 +152,7 @@ export interface PlanItem {
   generationOrigin?: string;
   selfManagement?: boolean;
   subplan: string;
-  direccion?: string;
+  direccion?: string | null;
   environmental_activity: string;
   identified_environmental_impact: string;
   proposed_measure: string;
@@ -159,7 +162,7 @@ export interface PlanItem {
   budget: number;
   report_per: PlanReporte;
   assignedUsers: ItemAssignment[];
-  observation?: string;
+  observation?: string | null;
   driveFolderId?: string;
   createdAt: string;
 }
@@ -184,15 +187,46 @@ export interface MonthlyGeneration {
   updatedAt: string;
 }
 
+export interface RgdtWasteCatalogEntry {
+  codigo: string;
+  descripcion: string;
+  crtib: string;
+}
+
+/** Canonical request used by RGDP for one catalog-backed waste item. */
+export interface RgdpWastePlanItemInput {
+  wasteCode: string;
+  wasteName: string;
+  wasteDescription?: string;
+  crtib: string;
+  annualGenerationKg: number;
+  generationOrigin: string;
+  selfManagement: boolean;
+  observation?: string;
+}
+
+export interface BulkCreateFailure {
+  index: number;
+  message: string;
+}
+
+export interface BulkCreateResult<T> {
+  created: number;
+  failed: BulkCreateFailure[];
+  items: T[];
+}
+
 export type FormatFunctionality = "descargar_anexos";
 
 export interface Format {
   id: string;
   adminId: string;
+  createdBy?: string | null;
   functionality: FormatFunctionality;
   functionalityLabel: string;
   driveFileId: string;
   driveUrl: string;
+  storagePath?: string;
   fileName: string;
   formatsFolderId: string;
   uploadedAt: string;

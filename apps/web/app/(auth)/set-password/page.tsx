@@ -1,6 +1,6 @@
 "use client";
 
-import { Suspense, useState } from "react";
+import { Suspense, useRef, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -8,6 +8,10 @@ import { Label } from "@/components/ui/label";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { CheckCircle2, Loader2 } from "lucide-react";
 import { auth, ApiError } from "@/lib/api-client";
+import {
+  BCRYPT_MAX_PASSWORD_BYTES,
+  passwordValidationError,
+} from "@/lib/password-policy";
 
 function SetPasswordContent() {
   const router = useRouter();
@@ -19,22 +23,26 @@ function SetPasswordContent() {
   const [error, setError] = useState("");
   const [submitting, setSubmitting] = useState(false);
   const [success, setSuccess] = useState(false);
+  const submittingRef = useRef(false);
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
+    if (submittingRef.current) return;
     setError("");
     if (password !== confirmPassword) {
       setError("Las contraseñas no coinciden");
       return;
     }
-    if (password.length < 8) {
-      setError("La contraseña debe tener al menos 8 caracteres");
+    const validationError = passwordValidationError(password);
+    if (validationError) {
+      setError(validationError);
       return;
     }
     if (!token) {
       setError("Enlace inválido");
       return;
     }
+    submittingRef.current = true;
     setSubmitting(true);
     try {
       await auth.setPassword(token, password);
@@ -42,6 +50,7 @@ function SetPasswordContent() {
     } catch (err) {
       setError(err instanceof ApiError ? err.message : "Error al establecer la contraseña");
     } finally {
+      submittingRef.current = false;
       setSubmitting(false);
     }
   }
@@ -76,6 +85,7 @@ function SetPasswordContent() {
                   value={password}
                   onChange={(e) => setPassword(e.target.value)}
                   minLength={8}
+                  maxLength={BCRYPT_MAX_PASSWORD_BYTES}
                   required
                 />
               </div>
@@ -88,6 +98,7 @@ function SetPasswordContent() {
                   value={confirmPassword}
                   onChange={(e) => setConfirmPassword(e.target.value)}
                   minLength={8}
+                  maxLength={BCRYPT_MAX_PASSWORD_BYTES}
                   required
                 />
               </div>

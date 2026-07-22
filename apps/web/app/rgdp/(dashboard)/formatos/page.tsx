@@ -1,6 +1,6 @@
 "use client";
 
-import { apiFetch } from "@/lib/api-client";
+import { api, ApiError, apiErrorMessage, requirePersistedAsset } from "@/lib/api-client";
 
 
 import { useEffect, useRef, useState } from "react";
@@ -16,6 +16,7 @@ import {
 import { Button } from "@/components/ui/button";
 import { Separator } from "@/components/ui/separator";
 import { Format, FormatFunctionality } from "@/types";
+import { useAuth } from "@/lib/auth-context";
 
 interface FunctionalityConfig {
   key: FormatFunctionality;
@@ -33,10 +34,13 @@ const FUNCTIONALITIES: FunctionalityConfig[] = [
 ];
 
 export default function FormatosPage() {
+  const { user } = useAuth();
+  const isAdmin = user?.role === "ADMIN";
   const [formats, setFormats] = useState<Format[]>([]);
   const [loading, setLoading] = useState(true);
   const [uploading, setUploading] = useState<FormatFunctionality | null>(null);
   const [deleting, setDeleting] = useState<string | null>(null);
+  const mutationPendingRef = useRef(false);
   const fileInputRefs = useRef<Record<string, HTMLInputElement | null>>({});
 
   useEffect(() => {
@@ -46,12 +50,9 @@ export default function FormatosPage() {
   async function fetchFormats() {
     setLoading(true);
     try {
-      const res = await apiFetch("/rgdp/api/formats");
-      if (!res.ok) throw new Error("Error al cargar formatos");
-      const data: Format[] = await res.json();
-      setFormats(data);
-    } catch {
-      toast.error("No se pudieron cargar los formatos");
+      setFormats(await api.get<Format[]>("/rgdp/api/formats"));
+    } catch (error) {
+      toast.error(apiErrorMessage(error, "No se pudieron cargar los formatos"));
     } finally {
       setLoading(false);
     }
@@ -61,49 +62,61 @@ export default function FormatosPage() {
     return formats.find((f) => f.functionality === key);
   }
 
+  const mutationPending = uploading !== null || deleting !== null;
+
   async function handleUpload(functionality: FormatFunctionality, file: File) {
+    if (!isAdmin || mutationPendingRef.current) return;
+    mutationPendingRef.current = true;
     setUploading(functionality);
     try {
       const formData = new FormData();
       formData.append("file", file);
       formData.append("functionality", functionality);
 
-      const res = await apiFetch("/rgdp/api/formats", {
-        method: "POST",
-        body: formData,
-      });
-
-      if (!res.ok) {
-        const err = await res.json();
-        throw new Error(err.error || "Error al subir el formato");
+      const saved = requirePersistedAsset<Format>(
+        await api.upload<unknown>("/rgdp/api/formats", formData, { timeoutMs: 60_000 }),
+        "El servidor no confirmó el formato guardado"
+      );
+      if (saved.functionality !== functionality || saved.fileName !== file.name) {
+        throw new ApiError(200, "El servidor confirmó datos distintos para el formato", saved, "invalid_response");
       }
-
+      setFormats((current) => [saved, ...current.filter((format) => format.functionality !== functionality)]);
       toast.success("Formato subido correctamente");
-      await fetchFormats();
-    } catch (err: unknown) {
-      toast.error((err as Error).message || "Error al subir el formato");
-    } finally {
-      setUploading(null);
       const input = fileInputRefs.current[functionality];
       if (input) input.value = "";
+    } catch (err: unknown) {
+      toast.error(apiErrorMessage(err, "Error al subir el formato"));
+    } finally {
+      mutationPendingRef.current = false;
+      setUploading(null);
     }
   }
 
   async function handleDelete(format: Format) {
+    if (!isAdmin || mutationPendingRef.current) return;
+    mutationPendingRef.current = true;
     setDeleting(format.id);
     try {
-      const res = await apiFetch(`/rgdp/api/formats/${format.id}`, {
-        method: "DELETE",
-      });
-      if (!res.ok) {
-        const err = await res.json();
-        throw new Error(err.error || "Error al eliminar el formato");
+      const receipt = await api.delete<unknown>(`/rgdp/api/formats/${format.id}`);
+      if (
+        !receipt ||
+        typeof receipt !== "object" ||
+        (receipt as { ok?: unknown }).ok !== true ||
+        (receipt as { deleted?: { id?: unknown } }).deleted?.id !== format.id
+      ) {
+        throw new ApiError(
+          200,
+          "El servidor no confirmó la eliminación del formato",
+          receipt,
+          "invalid_response"
+        );
       }
       toast.success("Formato eliminado");
       setFormats((prev) => prev.filter((f) => f.id !== format.id));
     } catch (err: unknown) {
-      toast.error((err as Error).message || "Error al eliminar el formato");
+      toast.error(apiErrorMessage(err, "Error al eliminar el formato"));
     } finally {
+      mutationPendingRef.current = false;
       setDeleting(null);
     }
   }
@@ -114,9 +127,8 @@ export default function FormatosPage() {
         <h1 className="text-2xl font-bold text-slate-900">Formatos</h1>
         <p className="text-sm text-muted-foreground mt-1">
           Gestiona los formatos Word que se usan en las funcionalidades de la
-          plataforma. Los archivos se guardan en la carpeta{" "}
-          <span className="font-medium text-slate-700">formatos</span> de tu
-          Google Drive.
+          plataforma. Los archivos se guardan en el almacenamiento configurado
+          para el subsistema.
         </p>
       </div>
 
@@ -185,17 +197,18 @@ export default function FormatosPage() {
                             <ExternalLink className="w-3.5 h-3.5" />
                           </Button>
                         </a>
-                        <Button
+                        {isAdmin && <Button
                           variant="ghost"
                           size="sm"
                           className="h-8 w-8 p-0 text-red-500 hover:text-red-700 hover:bg-red-50"
-                          disabled={deleting === currentFormat.id}
+                          disabled={mutationPending}
                           onClick={() => handleDelete(currentFormat)}
                         >
                           <Trash2 className="w-3.5 h-3.5" />
-                        </Button>
-                        <input
+                        </Button>}
+                        {isAdmin && <input
                           type="file"
+                          disabled={mutationPending}
                           accept=".docx,.doc,application/vnd.openxmlformats-officedocument.wordprocessingml.document,application/msword"
                           className="hidden"
                           ref={(el) => { fileInputRefs.current[func.key] = el; }}
@@ -203,17 +216,17 @@ export default function FormatosPage() {
                             const f = e.target.files?.[0];
                             if (f) handleUpload(func.key, f);
                           }}
-                        />
-                        <Button
+                        />}
+                        {isAdmin && <Button
                           variant="outline"
                           size="sm"
                           className="h-8 text-xs ml-1"
-                          disabled={isUploading}
+                          disabled={mutationPending}
                           onClick={() => fileInputRefs.current[func.key]?.click()}
                         >
                           <Upload className="w-3 h-3 mr-1" />
                           {isUploading ? "Subiendo..." : "Reemplazar"}
-                        </Button>
+                        </Button>}
                       </div>
                     </div>
                   ) : (
@@ -228,8 +241,9 @@ export default function FormatosPage() {
                           página.
                         </p>
                       </div>
-                      <input
+                      {isAdmin && <input
                         type="file"
+                        disabled={mutationPending}
                         accept=".docx,.doc,application/vnd.openxmlformats-officedocument.wordprocessingml.document,application/msword"
                         className="hidden"
                         ref={(el) => { fileInputRefs.current[func.key] = el; }}
@@ -237,16 +251,16 @@ export default function FormatosPage() {
                           const f = e.target.files?.[0];
                           if (f) handleUpload(func.key, f);
                         }}
-                      />
-                      <Button
+                      />}
+                      {isAdmin && <Button
                         size="sm"
                         className="h-8 text-xs flex-shrink-0"
-                        disabled={isUploading}
+                        disabled={mutationPending}
                         onClick={() => fileInputRefs.current[func.key]?.click()}
                       >
                         <Upload className="w-3 h-3 mr-1" />
                         {isUploading ? "Subiendo..." : "Cargar formato"}
-                      </Button>
+                      </Button>}
                     </div>
                   )}
                 </div>

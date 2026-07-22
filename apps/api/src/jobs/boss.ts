@@ -16,6 +16,9 @@ export type RasterJob = { mapId: string; rasterLayerId: string };
 // running. Give jobs 4 h and one retry for transient failures.
 const RASTER_QUEUE_OPTIONS = {
   name: RASTER_QUEUE,
+  // At most one created/retrying/active job per raster layer. Completed or
+  // failed jobs no longer block an explicit retry.
+  policy: "stately",
   expireInSeconds: 4 * 60 * 60,
   retryLimit: 1,
   retryDelay: 60,
@@ -55,6 +58,7 @@ export async function enqueueRasterProcessing(job: RasterJob): Promise<string | 
   // Per-job options mirror the queue defaults so expiration/retry apply even if
   // an older queue definition is still around.
   return boss.send(RASTER_QUEUE, job, {
+    singletonKey: job.rasterLayerId,
     expireInSeconds: RASTER_QUEUE_OPTIONS.expireInSeconds,
     retryLimit: RASTER_QUEUE_OPTIONS.retryLimit,
     retryDelay: RASTER_QUEUE_OPTIONS.retryDelay,

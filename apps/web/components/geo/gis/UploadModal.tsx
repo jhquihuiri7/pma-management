@@ -7,7 +7,8 @@ import * as shp from "shpjs";
 import JSZip from "jszip";
 import type { Feature, FeatureCollection, Geometry, GeoJsonProperties } from "geojson";
 import { createRasterRemote, type RasterLayerManifest } from "./persistence";
-import type { AddLayerInput, GisGeometry } from "./types";
+import type { AddLayerInput, AddLayerResult, GisGeometry } from "./types";
+import { apiErrorMessage } from "@/lib/api-client";
 
 const RASTER_RE = /\.(tiff?)$/i;
 const RASTER_SIDECAR_RE = /\.(tfw|wld|prj|ovr|cpg|tab|xml)$/i;
@@ -85,7 +86,7 @@ function humanSize(bytes: number): string {
 
 export default function UploadModal({ onClose, onAdd, mapId, onRasterUploaded }: {
   onClose: () => void;
-  onAdd: (ds: AddLayerInput) => void | Promise<void>;
+  onAdd: (ds: AddLayerInput) => AddLayerResult | Promise<AddLayerResult>;
   mapId?: string;
   onRasterUploaded?: (m: RasterLayerManifest) => void;
 }) {
@@ -93,6 +94,14 @@ export default function UploadModal({ onClose, onAdd, mapId, onRasterUploaded }:
   const [uploadPct, setUploadPct] = useState<number | null>(null);
   const [dragOver, setDragOver] = useState(false);
   const inputRef = useRef<HTMLInputElement>(null);
+  const rasterAbortRef = useRef<AbortController | null>(null);
+  const processingRef = useRef(false);
+
+  function closeModal() {
+    if (parsing) return;
+    rasterAbortRef.current?.abort();
+    onClose();
+  }
 
   // Stream a .tif (+ optional sidecars) or a .zip holding an orthophoto to the
   // NAS for server-side COG processing.
@@ -101,15 +110,29 @@ export default function UploadModal({ onClose, onAdd, mapId, onRasterUploaded }:
       toast.error("Guarda el mapa antes de subir ortofotos.");
       return;
     }
+    if (rasterAbortRef.current) return;
+    const controller = new AbortController();
+    rasterAbortRef.current = controller;
     setUploadPct(0);
     try {
-      const manifest = await createRasterRemote(mapId, { name, files, onProgress: setUploadPct });
+      const manifest = await createRasterRemote(mapId, {
+        name,
+        files,
+        onProgress: setUploadPct,
+        signal: controller.signal,
+      });
       onRasterUploaded(manifest);
-      toast.success("Ortofoto subida; procesando en segundo plano…");
+      toast.success(manifest.status === "processing"
+        ? "Ortofoto guardada; procesamiento iniciado"
+        : "Ortofoto guardada y en cola de procesamiento");
       onClose();
     } catch (err) {
-      toast.error(err instanceof Error ? err.message : "No se pudo subir la ortofoto.");
+      if (!controller.signal.aborted) {
+        toast.error(apiErrorMessage(err, "No se pudo subir la ortofoto"));
+      }
       setUploadPct(null);
+    } finally {
+      if (rasterAbortRef.current === controller) rasterAbortRef.current = null;
     }
   }
 
@@ -117,25 +140,34 @@ export default function UploadModal({ onClose, onAdd, mapId, onRasterUploaded }:
   // contains a .tif — goes to the raster upload (streamed to the NAS, processed
   // server-side); any other .zip/.shp is a shapefile handled in the browser.
   async function handleFiles(fileList: FileList | File[]) {
+    if (processingRef.current) return;
+    processingRef.current = true;
     const files = Array.from(fileList);
-    if (files.length === 0) return;
-
-    const main = files.find((f) => RASTER_RE.test(f.name));
-    if (main) {
-      const sidecars = files.filter((f) => f !== main && RASTER_SIDECAR_RE.test(f.name));
-      await uploadRaster(main.name.replace(RASTER_RE, ""), [main, ...sidecars]);
+    if (files.length === 0) {
+      processingRef.current = false;
       return;
     }
 
-    // A single .zip might be an orthophoto archive (.tif inside) rather than a
-    // shapefile — peek inside to decide.
-    const zip = files.length === 1 && /\.zip$/i.test(files[0].name) ? files[0] : null;
-    if (zip && (await isRasterZip(zip))) {
-      await uploadRaster(zip.name.replace(/\.zip$/i, ""), [zip]);
-      return;
-    }
+    try {
+      const main = files.find((f) => RASTER_RE.test(f.name));
+      if (main) {
+        const sidecars = files.filter((f) => f !== main && RASTER_SIDECAR_RE.test(f.name));
+        await uploadRaster(main.name.replace(RASTER_RE, ""), [main, ...sidecars]);
+        return;
+      }
 
-    await handleFile(files[0]);
+      // A single .zip might be an orthophoto archive (.tif inside) rather than a
+      // shapefile — peek inside to decide.
+      const zip = files.length === 1 && /\.zip$/i.test(files[0].name) ? files[0] : null;
+      if (zip && (await isRasterZip(zip))) {
+        await uploadRaster(zip.name.replace(/\.zip$/i, ""), [zip]);
+        return;
+      }
+
+      await handleFile(files[0]);
+    } finally {
+      processingRef.current = false;
+    }
   }
 
   async function handleFile(file: File) {
@@ -145,6 +177,8 @@ export default function UploadModal({ onClose, onAdd, mapId, onRasterUploaded }:
       return;
     }
     setParsing(file.name);
+    let persistedAdded = 0;
+    let temporaryAdded = 0;
     try {
       const buffer = await file.arrayBuffer();
       let collections: ParsedCollection[] = [];
@@ -167,11 +201,10 @@ export default function UploadModal({ onClose, onAdd, mapId, onRasterUploaded }:
       }
 
       const sourceFormat = /\.zip$/i.test(file.name) ? "shapefile" : file.name.replace(/.*\./, "").toLowerCase();
-      let added = 0;
       for (const { name, fc } of collections) {
         const features = fc.features || [];
         if (features.length === 0) continue;
-        await onAdd({
+        const result = await onAdd({
           name,
           filename: file.name,
           geometry: geometryOf(features),
@@ -181,32 +214,45 @@ export default function UploadModal({ onClose, onAdd, mapId, onRasterUploaded }:
           sourceFile: file,
           sourceFormat,
         });
-        added++;
+        if (result.persisted) persistedAdded++;
+        else temporaryAdded++;
       }
 
+      const added = persistedAdded + temporaryAdded;
       if (added === 0) {
         toast.error("No se encontraron geometrías en el archivo.");
         setParsing(null);
         return;
       }
-      toast.success(added === 1 ? "Capa cargada correctamente" : `${added} capas cargadas`);
+      if (persistedAdded > 0) {
+        toast.success(persistedAdded === 1
+          ? "Capa guardada correctamente"
+          : `${persistedAdded} capas guardadas correctamente`);
+      }
+      if (temporaryAdded > 0) {
+        toast.warning(temporaryAdded === 1
+          ? "Se agregó una capa temporal; no está guardada"
+          : `${temporaryAdded} capas son temporales y no están guardadas`);
+      }
       onClose();
     } catch (err) {
-      console.error(err);
-      toast.error("No se pudo leer el shapefile. Verifica que el .zip contenga .shp, .shx, .dbf y .prj como mínimo.");
+      if (persistedAdded > 0) {
+        toast.warning(`${persistedAdded} capas quedaron guardadas antes del fallo`);
+      }
+      toast.error(apiErrorMessage(err, "No se pudo leer o guardar el shapefile"));
       setParsing(null);
     }
   }
 
   return (
-    <div className="modal-backdrop" onClick={onClose}>
+    <div className="modal-backdrop" onClick={closeModal}>
       <div className="modal" onClick={(e) => e.stopPropagation()}>
         <div className="modal-head">
           <div>
             <div className="h-title">Agregar capa</div>
             <div className="h-sub">Sube un shapefile (.zip con .shp + .shx + .dbf + .prj como mínimo) o una ortofoto (.tif/.tiff o .zip que la contenga)</div>
           </div>
-          <button className="icon-btn" onClick={onClose}><X size={14} /></button>
+          <button className="icon-btn" onClick={closeModal} disabled={!!parsing}><X size={14} /></button>
         </div>
         <div className="modal-body">
           {parsing ? (
@@ -260,7 +306,7 @@ export default function UploadModal({ onClose, onAdd, mapId, onRasterUploaded }:
           )}
         </div>
         <div className="modal-foot">
-          <button className="btn subtle" onClick={onClose}>Cerrar</button>
+          <button className="btn subtle" onClick={closeModal}>Cerrar</button>
         </div>
       </div>
     </div>

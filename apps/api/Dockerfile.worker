@@ -19,6 +19,7 @@ RUN npm ci --workspace=@pma/api
 FROM base AS builder
 WORKDIR /app
 RUN npm run build --workspace=@pma/api
+RUN npm prune --omit=dev --omit=optional --workspace=@pma/api
 
 FROM node:20-bookworm-slim AS runner
 RUN apt-get update \
@@ -30,6 +31,8 @@ ENV NODE_ENV=production
 
 COPY --from=builder /app/apps/api/dist ./dist
 COPY --from=builder /app/node_modules ./node_modules
+# Preserve workspace-local dependencies beside dist/apps/api/src/worker.js.
+COPY --from=builder /app/apps/api/node_modules ./dist/apps/api/node_modules
 COPY --from=builder /app/packages ./packages
 
 CMD ["node", "dist/apps/api/src/worker.js"]

@@ -187,9 +187,8 @@ docker compose up -d
 | Servicio    | URL                        |
 |-------------|----------------------------|
 | Nginx HTTPS | https://sigtar.gobiernogalapagos.gob.ec |
-| Web local   | http://localhost:8000      |
-| API         | http://localhost:3001      |
-| PostgreSQL  | localhost:5432             |
+| Web/API     | Sólo mediante Nginx HTTPS  |
+| PostgreSQL  | Sólo red interna de Docker |
 
 `./deploy.sh up` ejecuta el mismo compose de producción y levanta Nginx junto
 con web, api, postgres, worker y titiler. Si el Nginx del host sigue usando los

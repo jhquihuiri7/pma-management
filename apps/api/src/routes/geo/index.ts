@@ -12,24 +12,72 @@ import {
 import { open } from "node:fs/promises";
 import {
   listRasterLayers, createRasterLayer, updateRasterLayer, deleteRasterLayer, getProcessedCogPath,
-  resetRasterForRetry,
+  resetRasterForRetry, markRasterError, compensateRasterLayerCreation,
 } from "../../modules/geo/rasterLayersModule.js";
 import { enqueueRasterProcessing } from "../../jobs/boss.js";
-import { getStorage, buildGeoRasterOriginalPath, buildGeoRasterDir } from "../../storage/index.js";
+import {
+  getStorage,
+  buildGeoRasterOriginalPath,
+  buildGeoRasterDir,
+  StorageUploadTooLargeError,
+} from "../../storage/index.js";
 import { BadRequest, NotFound, HttpError } from "../../lib/errors.js";
 import { env } from "../../lib/env.js";
+import { beginDurableStorageIntent } from "../../modules/shared/durableFilePersistence.js";
+import { lockAndAssertGeoEditor } from "../../modules/geo/authorization.js";
 
 const createSchema = z.object({
-  title: z.string().min(1),
-  description: z.string().optional(),
-  categoryId: z.string().min(1),
-  thematic: z.string().optional(),
-  layers: z.array(z.unknown()).optional(),
-  center: z.tuple([z.number(), z.number()]).optional(),
+  title: z.string().trim().min(1).max(200),
+  description: z.string().max(5_000).optional(),
+  categoryId: z.string().trim().min(1).max(100),
+  thematic: z.string().max(200).optional(),
+  layers: z.array(z.unknown()).max(1_000).optional(),
+  center: z.tuple([
+    z.number().finite().min(-90).max(90),
+    z.number().finite().min(-180).max(180),
+  ]).optional(),
   zoom: z.number().int().min(0).max(22).optional(),
-  tags: z.array(z.string()).optional(),
+  tags: z.array(z.string().trim().min(1).max(100)).max(100).optional(),
+}).strict();
+const updateSchema = createSchema.partial().refine(
+  (body) => Object.keys(body).length > 0,
+  "Debes enviar al menos un campo",
+);
+
+const mapParamsSchema = z.object({ id: z.string().uuid() }).strict();
+const layerParamsSchema = z.object({ id: z.string().uuid(), layerId: z.string().uuid() }).strict();
+const tileParamsSchema = layerParamsSchema.extend({
+  z: z.string().regex(/^\d{1,2}$/),
+  x: z.string().regex(/^\d+$/),
+  // Leaflet appends ".png" to the URL template used by the web client.
+  y: z.string().regex(/^\d+(?:\.png)?$/),
 });
-const updateSchema = createSchema.partial();
+
+const VECTOR_MAX_FILE_BYTES = 50 * 1024 * 1024;
+const VECTOR_MAX_TOTAL_BYTES = 75 * 1024 * 1024;
+const RASTER_MAX_SIDECAR_BYTES = 100 * 1024 * 1024;
+
+const bboxSchema = z.tuple([
+  z.number().finite(), z.number().finite(), z.number().finite(), z.number().finite(),
+]).refine(([minX, minY, maxX, maxY]) => minX <= maxX && minY <= maxY, "Invalid bbox order");
+
+const vectorFieldsSchema = z.object({
+  name: z.string().trim().min(1).max(200),
+  geometryType: z.enum(["Point", "LineString", "Polygon"]),
+  crs: z.string().trim().regex(/^EPSG:\d{3,6}$/i).default("EPSG:4326"),
+  sourceFormat: z.string().trim().regex(/^[a-z0-9_-]{1,32}$/i).default("geojson"),
+  style: z.record(z.unknown()),
+  visible: z.boolean(),
+  zIndex: z.number().int().min(-10_000).max(10_000),
+  bbox: bboxSchema.nullable(),
+}).strict();
+
+const rasterFieldsSchema = z.object({
+  name: z.string().trim().min(1).max(200).optional(),
+  visible: z.boolean().default(true),
+  zIndex: z.number().int().min(-10_000).max(10_000).default(0),
+  opacity: z.number().finite().min(0).max(1).default(1),
+}).strict();
 
 // Reads are public so the Geoportal can be browsed without a session (see
 // middleware in apps/web). For writes we distinguish two levels:
@@ -46,51 +94,51 @@ export async function geoRoutes(app: FastifyInstance) {
   app.get("/maps", async () => listMaps());
 
   app.get("/maps/:id", async (req) => {
-    const { id } = req.params as { id: string };
+    const { id } = mapParamsSchema.parse(req.params);
     return getMapById(id);
   });
 
   app.post("/maps", { preHandler: geoEditor }, async (req, reply) => {
     const body = createSchema.parse(req.body);
     reply.status(201);
-    return createMap(req.user!.adminId, req.user!.sub, body);
+    return createMap(req.user!.sub, body);
   });
 
   app.put("/maps/:id", { preHandler: geoEditor }, async (req) => {
-    const { id } = req.params as { id: string };
+    const { id } = mapParamsSchema.parse(req.params);
     const body = updateSchema.parse(req.body);
-    return updateMap(id, req.user!.adminId, body);
+    return updateMap(id, req.user!.sub, body);
   });
 
   app.patch("/maps/:id", { preHandler: geoEditor }, async (req) => {
-    const { id } = req.params as { id: string };
+    const { id } = mapParamsSchema.parse(req.params);
     const body = updateSchema.parse(req.body);
-    return updateMap(id, req.user!.adminId, body);
+    return updateMap(id, req.user!.sub, body);
   });
 
   app.delete("/maps/:id", { preHandler: adminOnly }, async (req) => {
-    const { id } = req.params as { id: string };
-    await deleteMap(id, req.user!.adminId);
+    const { id } = mapParamsSchema.parse(req.params);
+    await deleteMap(id, req.user!.sub);
     return { ok: true };
   });
 
   // Save the remembered viewport. Any logged-in geo user (incl. VIEWER) may call
   // this; public visitors do not persist viewport (the web app skips the call).
   app.patch("/maps/:id/viewport", { preHandler: [authenticate, requireApp("geo")] }, async (req) => {
-    const { id } = req.params as { id: string };
+    const { id } = mapParamsSchema.parse(req.params);
     const body = viewportSchema.parse(req.body);
-    return updateMapViewport(id, body.center, body.zoom);
+    return updateMapViewport(id, req.user!.sub, body.center, body.zoom);
   });
 
   // ── Layers (GIS visualizer) ──────────────────────────────────────────────
   app.get("/maps/:id/layers", async (req) => {
-    const { id } = req.params as { id: string };
+    const { id } = mapParamsSchema.parse(req.params);
     return listLayers(id);
   });
 
   // Stream a layer's normalized GeoJSON from the NAS.
   app.get("/maps/:id/layers/:layerId/data", async (req, reply) => {
-    const { id, layerId } = req.params as { id: string; layerId: string };
+    const { id, layerId } = layerParamsSchema.parse(req.params);
     const path = await getLayerDataPath(id, layerId);
     const storage = getStorage();
     if (!(await storage.exists(path))) throw NotFound("Layer data not found");
@@ -105,69 +153,118 @@ export async function geoRoutes(app: FastifyInstance) {
   // Create a layer. Multipart: file "data" (GeoJSON, required),
   // file "source" (original .zip/.shp, optional), plus text fields.
   app.post("/maps/:id/layers", { preHandler: geoEditor }, async (req, reply) => {
-    const { id } = req.params as { id: string };
+    const { id } = mapParamsSchema.parse(req.params);
     let data: Buffer | null = null;
     let source: { data: Buffer; ext: string } | null = null;
     const fields: Record<string, string> = {};
+    const allowedFields = new Set(["name", "geometryType", "crs", "featureCount", "bbox", "sourceFormat", "style", "visible", "zIndex"]);
 
-    for await (const part of req.parts()) {
+    let uploadedBytes = 0;
+    for await (const part of req.parts({
+      limits: {
+        fileSize: VECTOR_MAX_FILE_BYTES,
+        files: 2,
+        fields: allowedFields.size,
+        parts: allowedFields.size + 2,
+        fieldSize: 100_000,
+      },
+    })) {
       if (part.type === "file") {
+        if (part.fieldname !== "data" && part.fieldname !== "source") {
+          throw BadRequest(`Campo de archivo no permitido: ${part.fieldname}`);
+        }
+        if (part.fieldname === "data" && data) {
+          throw BadRequest('Solo se permite un archivo "data".');
+        }
+        if (part.fieldname === "source" && source) {
+          throw BadRequest('Solo se permite un archivo "source".');
+        }
+        const sourceExt = extname(part.filename || "").slice(1).toLowerCase();
+        if (part.fieldname === "source" && !["zip", "shp"].includes(sourceExt)) {
+          throw BadRequest('El archivo "source" debe ser .zip o .shp.');
+        }
         const buf = await part.toBuffer();
-        if (part.fieldname === "data") data = buf;
-        else if (part.fieldname === "source") {
-          source = { data: buf, ext: extname(part.filename || "").replace(".", "") || "bin" };
+        uploadedBytes += buf.byteLength;
+        if (uploadedBytes > VECTOR_MAX_TOTAL_BYTES) {
+          throw new HttpError(413, "Los archivos de la capa superan el límite total de 75 MB.");
+        }
+        if (part.fieldname === "data") {
+          data = buf;
+        } else {
+          source = { data: buf, ext: sourceExt };
         }
       } else {
+        if (part.fieldnameTruncated || part.valueTruncated) {
+          throw BadRequest(`El campo multipart ${part.fieldname} supera el límite permitido.`);
+        }
+        if (!allowedFields.has(part.fieldname)) throw BadRequest(`Campo no permitido: ${part.fieldname}`);
+        if (fields[part.fieldname] !== undefined) throw BadRequest(`Campo duplicado: ${part.fieldname}`);
         fields[part.fieldname] = String(part.value);
       }
     }
 
     if (!data) throw BadRequest('file "data" (GeoJSON) is required');
-    if (!fields.name || !fields.geometryType) throw BadRequest("name and geometryType are required");
-
-    const parseJson = <T,>(v: string | undefined, fallback: T): T => {
-      if (!v) return fallback;
-      try { return JSON.parse(v) as T; } catch { return fallback; }
-    };
-
-    const sourceFormat = fields.sourceFormat || (source ? "shapefile" : "geojson");
-    if (sourceFormat === "sample") {
-      throw BadRequest("Las capas de muestra ya no están permitidas.");
-    }
-
-    const layer = await createLayer(id, req.user!.sub, {
+    if (data.byteLength === 0) throw BadRequest('El archivo "data" está vacío.');
+    const parsedFields = vectorFieldsSchema.parse({
       name: fields.name,
       geometryType: fields.geometryType,
       crs: fields.crs || "EPSG:4326",
-      featureCount: fields.featureCount ? parseInt(fields.featureCount, 10) : 0,
-      bbox: parseJson<number[] | null>(fields.bbox, null),
-      sourceFormat,
+      sourceFormat: fields.sourceFormat || (source ? "shapefile" : "geojson"),
+      style: parseJsonField(fields.style, "style", {}),
+      visible: parseBooleanField(fields.visible, "visible", true),
+      zIndex: parseNumberField(fields.zIndex, "zIndex", 0),
+      bbox: parseJsonField(fields.bbox, "bbox", null),
+    });
+    if (parsedFields.sourceFormat === "sample") {
+      throw BadRequest("Las capas de muestra ya no están permitidas.");
+    }
+    if (parsedFields.crs.toUpperCase() !== "EPSG:4326") {
+      throw BadRequest("El GeoJSON normalizado debe estar en EPSG:4326.");
+    }
+    const geojson = parseFeatureCollection(data, parsedFields.geometryType);
+    if (fields.featureCount !== undefined) {
+      const declaredFeatureCount = parseNumberField(fields.featureCount, "featureCount", 0);
+      if (!Number.isInteger(declaredFeatureCount) || declaredFeatureCount !== geojson.featureCount) {
+        throw BadRequest("featureCount no coincide con las entidades recibidas.");
+      }
+    }
+    if (parsedFields.bbox && !sameBbox(parsedFields.bbox, geojson.bbox)) {
+      throw BadRequest("El bbox declarado no coincide con las geometrías recibidas.");
+    }
+
+    const layer = await createLayer(id, req.user!.sub, {
+      name: parsedFields.name,
+      geometryType: parsedFields.geometryType,
+      crs: parsedFields.crs.toUpperCase(),
+      featureCount: geojson.featureCount,
+      bbox: geojson.bbox,
+      sourceFormat: parsedFields.sourceFormat,
       data,
       source,
-      style: parseJson<unknown>(fields.style, {}),
-      visible: fields.visible ? fields.visible === "true" : true,
-      zIndex: fields.zIndex ? parseInt(fields.zIndex, 10) : 0,
+      style: parsedFields.style,
+      visible: parsedFields.visible,
+      zIndex: parsedFields.zIndex,
     });
     reply.status(201);
-    return layer;
+    return { ...layer, persisted: true };
   });
 
   app.patch("/maps/:id/layers/:layerId", { preHandler: geoEditor }, async (req) => {
-    const { id, layerId } = req.params as { id: string; layerId: string };
+    const { id, layerId } = layerParamsSchema.parse(req.params);
     const body = updateLayerSchema.parse(req.body);
-    return updateLayer(id, layerId, body);
+    return updateLayer(id, layerId, req.user!.sub, body);
   });
 
   app.delete("/maps/:id/layers/:layerId", { preHandler: adminOnly }, async (req) => {
-    const { id, layerId } = req.params as { id: string; layerId: string };
-    await deleteLayer(id, layerId);
+    const { id, layerId } = layerParamsSchema.parse(req.params);
+    await deleteLayer(id, layerId, req.user!.sub);
     return { ok: true };
   });
 
   // ── Raster layers (orthophotos) ──────────────────────────────────────────
   // Public read (geoportal is browsable without a session); mutations are ADMIN.
   app.get("/maps/:id/raster-layers", async (req) => {
-    const { id } = req.params as { id: string };
+    const { id } = mapParamsSchema.parse(req.params);
     return listRasterLayers(id);
   });
 
@@ -176,11 +273,10 @@ export async function geoRoutes(app: FastifyInstance) {
   // never sees TiTiler or the NAS path. `:y` absorbs the ".png" suffix (parseInt
   // strips it), so no fragile route-suffix matching is needed.
   app.get("/maps/:id/raster-layers/:layerId/tiles/:z/:x/:y", async (req, reply) => {
-    const { id, layerId, z, x, y } = req.params as {
-      id: string; layerId: string; z: string; x: string; y: string;
-    };
-    const Z = parseInt(z, 10), X = parseInt(x, 10), Y = parseInt(y, 10);
-    if (![Z, X, Y].every((n) => Number.isInteger(n))) throw BadRequest("Invalid tile coordinates");
+    const { id, layerId, z: zRaw, x, y } = tileParamsSchema.parse(req.params);
+    const Z = parseInt(zRaw, 10), X = parseInt(x, 10), Y = parseInt(y, 10);
+    const tileLimit = 2 ** Z;
+    if (Z > 22 || X >= tileLimit || Y >= tileLimit) throw BadRequest("Invalid tile coordinates");
 
     const cogPath = await getProcessedCogPath(id, layerId);
     const fileUrl = `${env.TITILER_DATA_ROOT.replace(/\/+$/, "")}/${cogPath.replace(/^\/+/, "")}`;
@@ -190,8 +286,11 @@ export async function geoRoutes(app: FastifyInstance) {
 
     let resp: globalThis.Response;
     try {
-      resp = await fetch(titilerUrl);
-    } catch {
+      resp = await fetch(titilerUrl, { signal: AbortSignal.timeout(10_000) });
+    } catch (err) {
+      if (err instanceof Error && err.name === "TimeoutError") {
+        throw new HttpError(504, "Tile service timed out");
+      }
       throw new HttpError(502, "Tile service unavailable");
     }
     // Tiles outside the raster's coverage are a normal 404 — pass through so
@@ -216,12 +315,24 @@ export async function geoRoutes(app: FastifyInstance) {
   // memory — and a worker (Phase 4/5) turns it into a COG (reading inside the zip
   // via GDAL's /vsizip/ when needed).
   app.post("/maps/:id/raster-layers", { preHandler: geoEditor }, async (req, reply) => {
-    const { id } = req.params as { id: string };
+    const { id } = mapParamsSchema.parse(req.params);
     // Validate the map exists before streaming gigabytes to the NAS.
     await getMapById(id);
 
     const storage = getStorage();
     const rasterLayerId = randomUUID();
+    const rasterDirectory = buildGeoRasterDir(id, rasterLayerId);
+    // A raster consists of a main file plus optional sidecars and is streamed,
+    // so reserve its UUID-owned directory before receiving any bytes. The
+    // worker can recover it after a process crash instead of leaving an
+    // untracked NAS directory.
+    const rasterIntent = await beginDurableStorageIntent({
+      path: rasterDirectory,
+      reason: `geo:raster:${rasterLayerId}`,
+      isDirectory: true,
+      availableAfterMs: 24 * 60 * 60_000,
+      storage,
+    });
     const fields: Record<string, string> = {};
     const auxFiles: string[] = [];
     let mainFilename: string | null = null;
@@ -230,13 +341,35 @@ export async function geoRoutes(app: FastifyInstance) {
     let truncated = false;
     let extraMain = false;
     let rejected: string | null = null;
+    let duplicateFile: string | null = null;
+    let sidecarBytes = 0;
+    const uploadedPaths = new Set<string>();
+    const rasterAllowedFields = new Set(["name", "visible", "zIndex", "opacity"]);
 
-    const cleanup = () => storage.deleteDir(buildGeoRasterDir(id, rasterLayerId)).catch(() => {});
+    const cleanup = () => rasterIntent.compensate();
 
     try {
-      for await (const part of req.parts({ limits: { fileSize: env.RASTER_MAX_UPLOAD_BYTES } })) {
+      for await (const part of req.parts({
+        limits: {
+          fileSize: env.RASTER_MAX_UPLOAD_BYTES,
+          files: 21,
+          fields: rasterAllowedFields.size,
+          parts: 21 + rasterAllowedFields.size,
+          fieldSize: 10_000,
+        },
+      })) {
         if (part.type !== "file") {
+          if (part.fieldnameTruncated || part.valueTruncated) {
+            throw BadRequest(`El campo multipart ${part.fieldname} supera el límite permitido.`);
+          }
+          if (!rasterAllowedFields.has(part.fieldname)) throw BadRequest(`Campo no permitido: ${part.fieldname}`);
+          if (fields[part.fieldname] !== undefined) throw BadRequest(`Campo duplicado: ${part.fieldname}`);
           fields[part.fieldname] = String(part.value);
+          continue;
+        }
+        if (part.fieldname !== "file") {
+          rejected = part.filename || part.fieldname;
+          await drain(part.file);
           continue;
         }
         const kind = classifyRasterFile(part.filename || "");
@@ -249,35 +382,57 @@ export async function geoRoutes(app: FastifyInstance) {
           if (mainFilename) { extraMain = true; await drain(part.file); continue; }
           mainFilename = part.filename!;
           mainPath = buildGeoRasterOriginalPath(id, rasterLayerId, mainFilename);
-          mainSize = await storage.uploadStream(mainPath, part.file);
+          if (uploadedPaths.has(mainPath)) { duplicateFile = part.filename!; await drain(part.file); continue; }
+          uploadedPaths.add(mainPath);
+          mainSize = await storage.uploadStream(mainPath, part.file, { maxBytes: env.RASTER_MAX_UPLOAD_BYTES });
         } else {
+          if (auxFiles.length >= 20) {
+            throw new HttpError(413, "Solo se permiten 20 archivos auxiliares por capa ráster.");
+          }
           const sidecarPath = buildGeoRasterOriginalPath(id, rasterLayerId, part.filename!);
-          await storage.uploadStream(sidecarPath, part.file);
+          if (uploadedPaths.has(sidecarPath)) { duplicateFile = part.filename!; await drain(part.file); continue; }
+          uploadedPaths.add(sidecarPath);
+          const remainingSidecarBytes = RASTER_MAX_SIDECAR_BYTES - sidecarBytes;
+          sidecarBytes += await storage.uploadStream(sidecarPath, part.file, {
+            maxBytes: remainingSidecarBytes,
+          });
           auxFiles.push(part.filename!);
+          if (sidecarBytes > RASTER_MAX_SIDECAR_BYTES) {
+            throw new HttpError(413, "Los archivos auxiliares superan el límite permitido.");
+          }
         }
         if ((part.file as unknown as { truncated?: boolean }).truncated) truncated = true;
       }
     } catch (err) {
       // Includes @fastify/multipart's RequestFileTooLargeError (>limit).
-      await cleanup();
-      throw err;
+      await throwAfterCleanup(
+        cleanup,
+        err instanceof StorageUploadTooLargeError
+          ? new HttpError(413, "Los archivos de la capa superan el límite permitido.")
+          : err,
+      );
     }
 
     if (truncated) {
-      await cleanup();
-      throw new HttpError(413, `El archivo supera el límite de ${env.RASTER_MAX_UPLOAD_BYTES} bytes.`);
+      await throwAfterCleanup(cleanup, new HttpError(413, `El archivo supera el límite de ${env.RASTER_MAX_UPLOAD_BYTES} bytes.`));
     }
     if (rejected) {
-      await cleanup();
-      throw BadRequest(`Extensión no permitida: ${rejected}. Solo .tif/.tiff o un .zip que lo contenga (+ sidecars .tfw/.wld/.prj/.ovr/.cpg/.xml).`);
+      await throwAfterCleanup(cleanup, BadRequest(`Extensión no permitida: ${rejected}. Solo .tif/.tiff o un .zip que lo contenga (+ sidecars .tfw/.wld/.prj/.ovr/.cpg/.xml).`));
     }
     if (extraMain) {
-      await cleanup();
-      throw BadRequest("Solo se permite un archivo .tif/.tiff o .zip por capa ráster.");
+      await throwAfterCleanup(cleanup, BadRequest("Solo se permite un archivo .tif/.tiff o .zip por capa ráster."));
+    }
+    if (duplicateFile) {
+      await throwAfterCleanup(cleanup, BadRequest(`Archivo duplicado: ${duplicateFile}.`));
+    }
+    if (auxFiles.length > 20 || sidecarBytes > RASTER_MAX_SIDECAR_BYTES) {
+      await throwAfterCleanup(cleanup, new HttpError(413, "Los archivos auxiliares superan el límite permitido."));
     }
     if (!mainPath || !mainFilename) {
-      await cleanup();
-      throw BadRequest('Falta el archivo .tif/.tiff o .zip (campo "file").');
+      return await throwAfterCleanup(cleanup, BadRequest('Falta el archivo .tif/.tiff o .zip (campo "file").'));
+    }
+    if (mainSize === 0) {
+      await throwAfterCleanup(cleanup, BadRequest("El archivo ráster está vacío."));
     }
 
     // MIME hardening: the extension can lie, so confirm the magic bytes match the
@@ -287,88 +442,214 @@ export async function geoRoutes(app: FastifyInstance) {
     const absMain = getStorage().resolve(mainPath);
     const validBytes = isZip ? await isZipFile(absMain) : await isTiffFile(absMain);
     if (!validBytes) {
-      await cleanup();
-      throw BadRequest(isZip ? "El archivo no es un ZIP válido (.zip)." : "El archivo no es un TIFF válido (.tif/.tiff).");
+      await throwAfterCleanup(cleanup, BadRequest(isZip ? "El archivo no es un ZIP válido (.zip)." : "El archivo no es un TIFF válido (.tif/.tiff)."));
     }
 
     const fileType = isZip ? "zip" : (/\.(tiff?)$/i.exec(mainFilename)?.[1] ?? "tif").toLowerCase();
-    const name = (fields.name || "").trim() || mainFilename.replace(/\.(tiff?|zip)$/i, "");
+    const parsedFields = await parseRasterFieldsOrCleanup(fields, mainFilename, cleanup);
 
+    let layer: Awaited<ReturnType<typeof createRasterLayer>> | null = null;
     try {
-      const layer = await createRasterLayer(id, req.user!.sub, {
-        id: rasterLayerId,
-        name,
-        originalFilename: mainFilename,
-        originalPath: mainPath,
-        sizeBytes: mainSize,
-        fileType,
-        auxFiles: auxFiles.length ? auxFiles : null,
-        visible: fields.visible ? fields.visible === "true" : true,
-        zIndex: fields.zIndex ? parseInt(fields.zIndex, 10) : 0,
-        opacity: fields.opacity ? Number(fields.opacity) : 1,
-      });
+      layer = await rasterIntent.finalize((tx) => createRasterLayer(id, req.user!.sub, {
+          id: rasterLayerId,
+          name: parsedFields.name ?? mainFilename,
+          originalFilename: mainFilename,
+          originalPath: mainPath,
+          sizeBytes: mainSize,
+          fileType,
+          auxFiles: auxFiles.length ? auxFiles : null,
+          visible: parsedFields.visible,
+          zIndex: parsedFields.zIndex,
+          opacity: parsedFields.opacity,
+        }, tx), {
+          // Lock order is authorization -> upload intent -> map/raster rows.
+          // Revocation during a multi-GB stream therefore rolls back the row
+          // and the caller compensates the entire UUID-owned directory.
+          beforeIntentLock: (tx) => lockAndAssertGeoEditor(tx, req.user!.sub).then(() => undefined),
+        });
 
-      // Enqueue COG processing. Best-effort: the upload already succeeded, so an
-      // enqueue failure must not fail the request — it leaves the layer at
-      // 'uploaded' to be retried later (Phase 8) rather than losing the file.
-      try {
-        await enqueueRasterProcessing({ mapId: id, rasterLayerId: layer.id });
-      } catch (err) {
-        req.log.error({ err }, "failed to enqueue raster processing");
-      }
+      // A 201 means both the catalog row and a durable pg-boss job exist. If the
+      // queue cannot confirm an id, compensate row + storage and return failure.
+      const operationId = await enqueueRasterProcessing({ mapId: id, rasterLayerId: layer.id });
+      if (!operationId) throw new HttpError(503, "No se pudo confirmar la cola de procesamiento.");
 
       reply.status(201);
-      return layer;
+      return { ...layer, persisted: true, operationId };
     } catch (err) {
-      // Roll back the NAS files if the DB insert fails (no orphan upload).
-      await cleanup();
-      throw err;
+      if (layer) {
+        try {
+          await compensateRasterLayerCreation(id, rasterLayerId);
+        } catch (cleanupError) {
+          throw new AggregateError([err, cleanupError], "Raster persistence and cleanup both failed");
+        }
+      } else {
+        await throwAfterCleanup(cleanup, err);
+      }
+      if (err instanceof HttpError) throw err;
+      req.log.error({ err }, "failed to enqueue raster processing");
+      throw new HttpError(503, "No se pudo confirmar la cola de procesamiento.");
     }
   });
 
   app.patch("/maps/:id/raster-layers/:layerId", { preHandler: geoEditor }, async (req) => {
-    const { id, layerId } = req.params as { id: string; layerId: string };
+    const { id, layerId } = layerParamsSchema.parse(req.params);
     const body = updateRasterSchema.parse(req.body);
-    return updateRasterLayer(id, layerId, body);
+    return updateRasterLayer(id, layerId, req.user!.sub, body);
   });
 
   app.delete("/maps/:id/raster-layers/:layerId", { preHandler: adminOnly }, async (req) => {
-    const { id, layerId } = req.params as { id: string; layerId: string };
-    await deleteRasterLayer(id, layerId);
+    const { id, layerId } = layerParamsSchema.parse(req.params);
+    await deleteRasterLayer(id, layerId, req.user!.sub);
     return { ok: true };
   });
 
-  // Re-process a failed/stuck raster layer.
+  // Re-process a failed raster layer. The module atomically admits one retry.
   app.post("/maps/:id/raster-layers/:layerId/retry", { preHandler: geoEditor }, async (req) => {
-    const { id, layerId } = req.params as { id: string; layerId: string };
-    const layer = await resetRasterForRetry(id, layerId);
+    const { id, layerId } = layerParamsSchema.parse(req.params);
+    const layer = await resetRasterForRetry(id, layerId, req.user!.sub);
     try {
-      await enqueueRasterProcessing({ mapId: id, rasterLayerId: layerId });
+      const operationId = await enqueueRasterProcessing({ mapId: id, rasterLayerId: layerId });
+      if (!operationId) throw new Error("pg-boss did not return a job id");
+      return { ...layer, persisted: true, operationId };
     } catch (err) {
       req.log.error({ err }, "failed to re-enqueue raster processing");
+      await markRasterError(id, layerId, "No se pudo encolar el reprocesamiento.");
+      throw new HttpError(503, "No se pudo confirmar la cola de reprocesamiento.");
     }
-    return layer;
   });
 }
 
 const viewportSchema = z.object({
-  center: z.tuple([z.number(), z.number()]),
+  center: z.tuple([
+    z.number().finite().min(-90).max(90),
+    z.number().finite().min(-180).max(180),
+  ]),
   zoom: z.number().int().min(0).max(22),
-});
+}).strict();
 
 const updateLayerSchema = z.object({
-  name: z.string().min(1).optional(),
-  style: z.unknown().optional(),
+  name: z.string().trim().min(1).max(200).optional(),
+  style: z.record(z.unknown()).optional(),
   visible: z.boolean().optional(),
-  zIndex: z.number().int().optional(),
-});
+  zIndex: z.number().int().min(-10_000).max(10_000).optional(),
+}).strict().refine((body) => Object.keys(body).length > 0, "Debes enviar al menos un campo");
 
 const updateRasterSchema = z.object({
-  name: z.string().min(1).optional(),
+  name: z.string().trim().min(1).max(200).optional(),
   opacity: z.number().min(0).max(1).optional(),
   visible: z.boolean().optional(),
-  zIndex: z.number().int().optional(),
-});
+  zIndex: z.number().int().min(-10_000).max(10_000).optional(),
+}).strict().refine((body) => Object.keys(body).length > 0, "Debes enviar al menos un campo");
+
+function parseJsonField<T>(value: string | undefined, field: string, fallback: T): unknown {
+  if (value === undefined) return fallback;
+  try {
+    return JSON.parse(value) as unknown;
+  } catch {
+    throw BadRequest(`El campo ${field} no contiene JSON válido.`);
+  }
+}
+
+function parseBooleanField(value: string | undefined, field: string, fallback: boolean): boolean {
+  if (value === undefined) return fallback;
+  if (value === "true" || value === "1") return true;
+  if (value === "false" || value === "0") return false;
+  throw BadRequest(`El campo ${field} debe ser true o false.`);
+}
+
+function parseNumberField(value: string | undefined, field: string, fallback: number): number {
+  if (value === undefined) return fallback;
+  if (value.trim() === "") throw BadRequest(`El campo ${field} debe ser numérico.`);
+  const parsed = Number(value);
+  if (!Number.isFinite(parsed)) throw BadRequest(`El campo ${field} debe ser numérico.`);
+  return parsed;
+}
+
+async function parseRasterFieldsOrCleanup(
+  fields: Record<string, string>,
+  mainFilename: string,
+  cleanup: () => Promise<void>,
+): Promise<z.infer<typeof rasterFieldsSchema>> {
+  try {
+    return rasterFieldsSchema.parse({
+      name: fields.name?.trim() || mainFilename.replace(/\.(tiff?|zip)$/i, ""),
+      visible: parseBooleanField(fields.visible, "visible", true),
+      zIndex: parseNumberField(fields.zIndex, "zIndex", 0),
+      opacity: parseNumberField(fields.opacity, "opacity", 1),
+    });
+  } catch (error) {
+    return throwAfterCleanup(cleanup, error);
+  }
+}
+
+function parseFeatureCollection(data: Buffer, declaredType: "Point" | "LineString" | "Polygon") {
+  if (data.byteLength > VECTOR_MAX_FILE_BYTES) {
+    throw new HttpError(413, "El GeoJSON normalizado supera el límite de 50 MB.");
+  }
+
+  let parsed: unknown;
+  try {
+    parsed = JSON.parse(data.toString("utf8")) as unknown;
+  } catch {
+    throw BadRequest("El archivo data no contiene JSON válido.");
+  }
+  if (!isRecord(parsed) || parsed.type !== "FeatureCollection" || !Array.isArray(parsed.features)) {
+    throw BadRequest("data debe ser un GeoJSON FeatureCollection.");
+  }
+  if (parsed.features.length === 0) throw BadRequest("El GeoJSON no contiene geometrías.");
+  if (parsed.features.length > 500_000) throw new HttpError(413, "El GeoJSON contiene demasiadas entidades.");
+
+  const bbox: [number, number, number, number] = [Infinity, Infinity, -Infinity, -Infinity];
+  let coordinateCount = 0;
+  const allowed = new Set([declaredType, `Multi${declaredType}`]);
+
+  const visit = (value: unknown, depth: number): void => {
+    if (depth > 16 || !Array.isArray(value)) throw BadRequest("Coordenadas GeoJSON inválidas.");
+    if (value.length >= 2 && typeof value[0] === "number" && typeof value[1] === "number") {
+      const x = value[0], y = value[1];
+      if (!Number.isFinite(x) || !Number.isFinite(y)) throw BadRequest("El GeoJSON contiene coordenadas no finitas.");
+      bbox[0] = Math.min(bbox[0], x);
+      bbox[1] = Math.min(bbox[1], y);
+      bbox[2] = Math.max(bbox[2], x);
+      bbox[3] = Math.max(bbox[3], y);
+      coordinateCount += 1;
+      return;
+    }
+    if (value.length === 0) throw BadRequest("El GeoJSON contiene coordenadas vacías.");
+    for (const child of value) visit(child, depth + 1);
+  };
+
+  for (const feature of parsed.features) {
+    if (!isRecord(feature) || feature.type !== "Feature" || !isRecord(feature.geometry)) {
+      throw BadRequest("El GeoJSON contiene una entidad inválida o sin geometría.");
+    }
+    const geometryType = feature.geometry.type;
+    if (typeof geometryType !== "string" || !allowed.has(geometryType)) {
+      throw BadRequest(`La geometría ${String(geometryType)} no coincide con ${declaredType}.`);
+    }
+    visit(feature.geometry.coordinates, 0);
+  }
+  if (coordinateCount === 0) throw BadRequest("El GeoJSON no contiene coordenadas.");
+
+  return { featureCount: parsed.features.length, bbox };
+}
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === "object" && value !== null && !Array.isArray(value);
+}
+
+function sameBbox(a: readonly number[], b: readonly number[]): boolean {
+  return a.length === 4 && b.length === 4 && a.every((value, index) => Math.abs(value - b[index]) < 1e-8);
+}
+
+async function throwAfterCleanup(cleanup: () => Promise<void>, error: unknown): Promise<never> {
+  try {
+    await cleanup();
+  } catch (cleanupError) {
+    throw new AggregateError([error, cleanupError], "Persistence failed and cleanup could not be confirmed");
+  }
+  throw error;
+}
 
 // Classify an uploaded raster part by extension. `.aux.xml` ends in `.xml` and
 // `.tif.ovr` in `.ovr`, so both are covered by the sidecar suffixes below.
@@ -402,8 +683,9 @@ async function isZipFile(absPath: string): Promise<boolean> {
     const { bytesRead } = await fh.read(buf, 0, 4, 0);
     if (bytesRead < 4) return false;
     return buf[0] === 0x50 && buf[1] === 0x4b && (buf[2] === 0x03 || buf[2] === 0x05) && (buf[3] === 0x04 || buf[3] === 0x06);
-  } catch {
-    return false;
+  } catch (err) {
+    if ((err as NodeJS.ErrnoException)?.code === "ENOENT") return false;
+    throw err;
   } finally {
     await fh?.close();
   }
@@ -420,8 +702,9 @@ async function isTiffFile(absPath: string): Promise<boolean> {
     const littleEndian = buf[0] === 0x49 && buf[1] === 0x49 && (buf[2] === 0x2a || buf[2] === 0x2b) && buf[3] === 0x00;
     const bigEndian = buf[0] === 0x4d && buf[1] === 0x4d && buf[2] === 0x00 && (buf[3] === 0x2a || buf[3] === 0x2b);
     return littleEndian || bigEndian;
-  } catch {
-    return false;
+  } catch (err) {
+    if ((err as NodeJS.ErrnoException)?.code === "ENOENT") return false;
+    throw err;
   } finally {
     await fh?.close();
   }

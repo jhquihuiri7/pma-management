@@ -9,10 +9,19 @@ import { rgdpNotificationsRoutes } from "./notifications.js";
 import { rgdpFormatsRoutes } from "./formats.js";
 import { rgdpUsersRoutes } from "./users.js";
 import { rgdpDownloadRoutes } from "./download.js";
-import { authenticate, requireApp } from "../../auth/middleware.js";
+import { authenticate, requireApp, requireRole } from "../../auth/middleware.js";
+import { HttpError } from "../../lib/errors.js";
+import { loadRgdtWasteCatalog } from "../../modules/rgdp/wasteCatalogModule.js";
 
 export async function rgdpRoutes(app: FastifyInstance) {
-  app.post("/upload", { preHandler: [authenticate, requireApp("rgdp")] }, uploadRgdpEvidence);
+  app.post("/upload", {
+    preHandler: [authenticate, requireApp("rgdp"), requireRole("ADMIN", "REPORTER")],
+  }, uploadRgdpEvidence);
+  app.get("/waste-catalog", { preHandler: [authenticate, requireApp("rgdp")] }, async () => {
+    const entries = await loadRgdtWasteCatalog();
+    if (entries.length === 0) throw new HttpError(503, "El catálogo RGDT no está disponible");
+    return entries;
+  });
   await app.register(rgdpPlansRoutes, { prefix: "/plans" });
   await app.register(rgdpPlanItemsRoutes, { prefix: "/plans/:planId/items" });
   await app.register(rgdpPeriodComplianceRoutes, { prefix: "/plans/:planId/period-compliance" });

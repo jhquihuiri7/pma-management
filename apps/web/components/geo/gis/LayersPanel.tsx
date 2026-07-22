@@ -9,25 +9,28 @@ import type { GisLayer, LayerStyle, RasterLayer, RasterStatus } from "./types";
 
 const RASTER_STATUS: Record<RasterStatus, { text: string; color: string }> = {
   uploaded: { text: "En cola", color: "#6e5a2c" },
+  queued: { text: "En cola", color: "#6e5a2c" },
   processing: { text: "Procesando…", color: "#2c5481" },
   processed: { text: "Listo", color: "#3f7c5f" },
+  deleting: { text: "Eliminando…", color: "#64748b" },
   error: { text: "Error", color: "#9d4636" },
 };
 
 // One orthophoto row: status badge, opacity (when ready), retry (on error).
-function RasterItem({ layer, readOnly, canDelete, onChange, onRemove, onRetry }: {
-  layer: RasterLayer; readOnly?: boolean; canDelete?: boolean;
+function RasterItem({ layer, readOnly, canDelete, busy = false, onChange, onRemove, onRetry }: {
+  layer: RasterLayer; readOnly?: boolean; canDelete?: boolean; busy?: boolean;
   onChange: (l: RasterLayer) => void; onRemove: () => void; onRetry: () => void;
 }) {
   const st = RASTER_STATUS[layer.status];
   const ready = layer.status === "processed";
+  const deleting = layer.status === "deleting" || busy;
   return (
     <div className={"layer-item" + (ready && layer.visible ? " active" : "")}>
       <div className={"layer-row layer-row-stacked" + (!readOnly ? " has-actions" : "")}>
         <div className="drag raster-kind" data-tip="Ortofoto">▦</div>
         <div
           className={"layer-vis" + (layer.visible && ready ? " on" : "")}
-          onClick={() => { if (ready) onChange({ ...layer, visible: !layer.visible }); }}
+          onClick={() => { if (ready && !deleting) onChange({ ...layer, visible: !layer.visible }); }}
           data-tip={ready ? (layer.visible ? "Ocultar" : "Mostrar") : "Disponible al terminar el procesamiento"}
           style={{ opacity: ready ? 1 : 0.4, cursor: ready ? "pointer" : "default" }}
         >
@@ -45,10 +48,10 @@ function RasterItem({ layer, readOnly, canDelete, onChange, onRemove, onRetry }:
         {!readOnly && (
           <div className="layer-actions" onClick={(e) => e.stopPropagation()}>
             {layer.status === "error" && (
-              <button className="icon-btn" data-tip="Reintentar" onClick={onRetry}><RotateCcw size={13} /></button>
+              <button className="icon-btn" data-tip="Reintentar" disabled={deleting} onClick={onRetry}><RotateCcw size={13} /></button>
             )}
             {canDelete && (
-              <button className="icon-btn" data-tip="Eliminar" onClick={onRemove}><Trash2 size={13} /></button>
+              <button className="icon-btn" data-tip="Eliminar" disabled={deleting} onClick={onRemove}><Trash2 size={13} /></button>
             )}
           </div>
         )}
@@ -67,6 +70,7 @@ function RasterItem({ layer, readOnly, canDelete, onChange, onRemove, onRetry }:
             <div className="slider-row">
               <input
                 type="range" min="0" max="100" value={Math.round(layer.opacity * 100)}
+                disabled={deleting}
                 onChange={(e) => onChange({ ...layer, opacity: parseInt(e.target.value) / 100 })}
               />
               <div className="slider-val">{Math.round(layer.opacity * 100)}%</div>
@@ -215,8 +219,8 @@ function StyleEditor({ layer, onChange }: { layer: GisLayer; onChange: (l: GisLa
   );
 }
 
-function LayerItem({ layer, active, isFirst, isLast, readOnly, canDelete, onClick, onChange, onRemove, onMove }: {
-  layer: GisLayer; active: boolean; isFirst: boolean; isLast: boolean; readOnly?: boolean; canDelete?: boolean;
+function LayerItem({ layer, active, isFirst, isLast, readOnly, canDelete, busy = false, onClick, onChange, onRemove, onMove }: {
+  layer: GisLayer; active: boolean; isFirst: boolean; isLast: boolean; readOnly?: boolean; canDelete?: boolean; busy?: boolean;
   onClick: () => void; onChange: (l: GisLayer) => void; onRemove: () => void; onMove: (d: number) => void;
 }) {
   const [expanded, setExpanded] = useState(active);
@@ -226,14 +230,14 @@ function LayerItem({ layer, active, isFirst, isLast, readOnly, canDelete, onClic
   }, [active]);
 
   return (
-    <div className={"layer-item" + (active ? " active" : "")}>
-      <div className={"layer-row layer-row-stacked" + (!readOnly ? " has-actions" : "")} onClick={onClick}>
+    <div className={"layer-item" + (active ? " active" : "")} aria-busy={busy} style={{ opacity: busy ? 0.65 : 1 }}>
+      <div className={"layer-row layer-row-stacked" + (!readOnly ? " has-actions" : "")} onClick={() => { if (!busy) onClick(); }}>
         {readOnly ? (
           <div className="drag layer-slot" aria-hidden="true" />
         ) : (
           <div className="drag" data-tip="Reordenar" onClick={(e) => e.stopPropagation()}>⋮⋮</div>
         )}
-        <div className={"layer-vis" + (layer.visible ? " on" : "")} onClick={(e) => { e.stopPropagation(); onChange({ ...layer, visible: !layer.visible }); }} data-tip={layer.visible ? "Ocultar" : "Mostrar"}>
+        <div className={"layer-vis" + (layer.visible ? " on" : "")} onClick={(e) => { e.stopPropagation(); if (!busy) onChange({ ...layer, visible: !layer.visible }); }} data-tip={busy ? "Operación en curso" : layer.visible ? "Ocultar" : "Mostrar"}>
           {layer.visible ? <Eye size={13} /> : <EyeOff size={13} />}
         </div>
         <div className="layer-info">
@@ -248,19 +252,19 @@ function LayerItem({ layer, active, isFirst, isLast, readOnly, canDelete, onClic
         </div>
         {!readOnly && (
           <div className="layer-actions" onClick={(e) => e.stopPropagation()}>
-            <button className="icon-btn" data-tip="Subir" disabled={isFirst} onClick={() => onMove(-1)} style={{ opacity: isFirst ? 0.4 : 1 }}>▲</button>
-            <button className="icon-btn" data-tip="Bajar" disabled={isLast} onClick={() => onMove(1)} style={{ opacity: isLast ? 0.4 : 1 }}>▼</button>
+            <button className="icon-btn" data-tip="Subir" disabled={busy || isFirst} onClick={() => onMove(-1)} style={{ opacity: busy || isFirst ? 0.4 : 1 }}>▲</button>
+            <button className="icon-btn" data-tip="Bajar" disabled={busy || isLast} onClick={() => onMove(1)} style={{ opacity: busy || isLast ? 0.4 : 1 }}>▼</button>
             {canDelete && (
-              <button className="icon-btn" data-tip="Eliminar" onClick={onRemove}><Trash2 size={13} /></button>
+              <button className="icon-btn" data-tip="Eliminar" disabled={busy} onClick={onRemove}><Trash2 size={13} /></button>
             )}
-            <button className="icon-btn" data-tip={expanded ? "Cerrar" : "Estilos"} onClick={() => setExpanded(!expanded)}>
+            <button className="icon-btn" data-tip={expanded ? "Cerrar" : "Estilos"} disabled={busy} onClick={() => setExpanded(!expanded)}>
               <ChevronRight size={13} style={{ transform: expanded ? "rotate(90deg)" : "none", transition: "transform 0.15s" }} />
             </button>
           </div>
         )}
       </div>
 
-      {!readOnly && expanded && (
+      {!readOnly && !busy && expanded && (
         <div className="layer-expand">
           <StyleEditor layer={layer} onChange={onChange} />
         </div>
@@ -271,7 +275,7 @@ function LayerItem({ layer, active, isFirst, isLast, readOnly, canDelete, onClic
 
 export default function LayersPanel({
   layers, activeId, onActive, onChange, onRemove, onMove, onOpenUpload, readOnly, canDelete,
-  rasterLayers = [], onRasterChange, onRasterRemove, onRasterRetry,
+  rasterLayers = [], onRasterChange, onRasterRemove, onRasterRetry, busyLayerIds, busyRasterIds,
 }: {
   layers: GisLayer[];
   activeId: string | null;
@@ -287,6 +291,8 @@ export default function LayersPanel({
   onRasterChange?: (l: RasterLayer) => void;
   onRasterRemove?: (id: string) => void;
   onRasterRetry?: (id: string) => void;
+  busyLayerIds?: ReadonlySet<string>;
+  busyRasterIds?: ReadonlySet<string>;
 }) {
   const total = layers.length + rasterLayers.length;
   return (
@@ -322,6 +328,7 @@ export default function LayersPanel({
             isLast={idx === layers.length - 1}
             readOnly={readOnly}
             canDelete={canDelete}
+            busy={busyLayerIds?.has(layer.id)}
             onClick={() => onActive(layer.id)}
             onChange={onChange}
             onRemove={() => onRemove(layer.id)}
@@ -341,6 +348,7 @@ export default function LayersPanel({
               layer={r}
               readOnly={readOnly}
               canDelete={canDelete}
+              busy={busyRasterIds?.has(r.id)}
               onChange={(l) => onRasterChange?.(l)}
               onRemove={() => onRasterRemove?.(r.id)}
               onRetry={() => onRasterRetry?.(r.id)}

@@ -1,7 +1,8 @@
 import { promises as fs, createReadStream, createWriteStream } from "node:fs";
+import { Transform } from "node:stream";
 import { pipeline } from "node:stream/promises";
 import { join, dirname, normalize, resolve, sep } from "node:path";
-import type { StorageProvider } from "./index.js";
+import { StorageUploadTooLargeError, type StorageProvider } from "./index.js";
 
 /**
  * Filesystem-backed storage. In production this points at an SMB mount of the
@@ -36,12 +37,34 @@ export class SynologySmbStorage implements StorageProvider {
     await fs.writeFile(abs, data);
   }
 
-  async uploadStream(path: string, readable: NodeJS.ReadableStream): Promise<number> {
+  async uploadStream(
+    path: string,
+    readable: NodeJS.ReadableStream,
+    options?: { maxBytes?: number },
+  ): Promise<number> {
     const abs = this.absolute(path);
     await fs.mkdir(dirname(abs), { recursive: true });
     // pipeline cleans up (destroys streams) on error, so a failed/aborted upload
     // never leaks file descriptors. The partial file is removed by the caller.
-    await pipeline(readable, createWriteStream(abs));
+    if (options?.maxBytes !== undefined) {
+      if (!Number.isSafeInteger(options.maxBytes) || options.maxBytes < 0) {
+        throw new TypeError("maxBytes must be a non-negative safe integer");
+      }
+      let bytes = 0;
+      const limiter = new Transform({
+        transform(chunk: Buffer | string, _encoding, callback) {
+          bytes += Buffer.isBuffer(chunk) ? chunk.byteLength : Buffer.byteLength(chunk);
+          if (bytes > options.maxBytes!) {
+            callback(new StorageUploadTooLargeError(options.maxBytes!));
+            return;
+          }
+          callback(null, chunk);
+        },
+      });
+      await pipeline(readable, limiter, createWriteStream(abs));
+    } else {
+      await pipeline(readable, createWriteStream(abs));
+    }
     const st = await fs.stat(abs);
     return st.size;
   }
@@ -70,8 +93,9 @@ export class SynologySmbStorage implements StorageProvider {
     try {
       await fs.access(this.absolute(path));
       return true;
-    } catch {
-      return false;
+    } catch (err: any) {
+      if (err?.code === "ENOENT" || err?.code === "ENOTDIR") return false;
+      throw err;
     }
   }
 
@@ -79,9 +103,16 @@ export class SynologySmbStorage implements StorageProvider {
     return createReadStream(this.absolute(path));
   }
 
+  async stat(path: string): Promise<{ size: number; modifiedAt: Date }> {
+    const result = await fs.stat(this.absolute(path));
+    if (!result.isFile()) throw Object.assign(new Error(`Storage path is not a file: ${path}`), { code: "EISDIR" });
+    return { size: result.size, modifiedAt: result.mtime };
+  }
+
   getUrl(path: string): string {
     const clean = path.replace(/^[/\\]+/, "");
-    return `${this.publicBaseUrl.replace(/\/+$/, "")}/${clean}`;
+    const encoded = clean.split(/[\\/]+/).map((segment) => encodeURIComponent(segment)).join("/");
+    return `${this.publicBaseUrl.replace(/\/+$/, "")}/${encoded}`;
   }
 
   resolve(path: string): string {

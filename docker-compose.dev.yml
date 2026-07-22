@@ -1,3 +1,10 @@
+x-api-dev-image: &api-dev-image
+  image: pma-management/api:dev
+  build:
+    context: .
+    dockerfile: apps/api/Dockerfile
+    target: base
+
 services:
   postgres:
     image: postgres:16-alpine
@@ -16,12 +23,22 @@ services:
       timeout: 5s
       retries: 5
 
+  migrate:
+    <<: *api-dev-image
+    container_name: pma-migrate
+    command: npm run db:migrate --workspace=@pma/api
+    environment:
+      NODE_ENV: development
+      DATABASE_URL: postgresql://${DB_USER:-postgres}:${DB_PASSWORD:-postgres}@postgres:5432/${DB_NAME:-pma_db}
+    volumes:
+      - ./apps/api:/app/apps/api
+    depends_on:
+      postgres:
+        condition: service_healthy
+    restart: "no"
+
   api:
-    image: pma-management/api:dev
-    build:
-      context: .
-      dockerfile: apps/api/Dockerfile
-      target: base
+    <<: *api-dev-image
     container_name: pma-api
     command: npm run dev --workspace=@pma/api
     environment:
@@ -31,6 +48,7 @@ services:
       COOKIE_SECURE: "false"
       FRONTEND_ORIGIN: http://localhost:3000
       STORAGE_ROOT: /data/storage
+      STORAGE_PUBLIC_BASE_URL: http://localhost:3001/storage
       TITILER_DATA_ROOT: /data/storage
     ports:
       - "3001:3001"
@@ -40,6 +58,8 @@ services:
     depends_on:
       postgres:
         condition: service_healthy
+      migrate:
+        condition: service_completed_successfully
     restart: unless-stopped
 
   web:
@@ -86,6 +106,8 @@ services:
     depends_on:
       postgres:
         condition: service_healthy
+      migrate:
+        condition: service_completed_successfully
     restart: unless-stopped
 
   # Internal COG tile server (dev). No published port; reads the NAS storage the

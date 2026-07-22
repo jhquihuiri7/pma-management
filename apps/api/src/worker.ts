@@ -1,8 +1,77 @@
 import "dotenv/config";
 import { env } from "./lib/env.js";
-import { getBoss, stopBoss, RASTER_QUEUE, type RasterJob } from "./jobs/boss.js";
-import { markRasterProcessing, markRasterError } from "./modules/geo/rasterLayersModule.js";
+import {
+  enqueueRasterProcessing,
+  getBoss,
+  stopBoss,
+  RASTER_QUEUE,
+  type RasterJob,
+} from "./jobs/boss.js";
+import {
+  listQueuedRasterJobs,
+  markRasterProcessing,
+  markRasterError,
+} from "./modules/geo/rasterLayersModule.js";
 import { processRaster } from "./jobs/processRaster.js";
+import {
+  cleanupStorageDirectoryDurably,
+  processPendingStorageCleanup,
+} from "./modules/shared/storageCleanup.js";
+import { buildGeoRasterDir } from "./storage/index.js";
+import { processPendingMail } from "./modules/shared/mailOutbox.js";
+import { closeMail } from "./mail/index.js";
+import { closeDb } from "./db/client.js";
+
+const STORAGE_CLEANUP_INTERVAL_MS = 30_000;
+const MAIL_OUTBOX_INTERVAL_MS = 15_000;
+const RASTER_RECONCILE_INTERVAL_MS = 60_000;
+let cleanupTimer: NodeJS.Timeout | undefined;
+let mailTimer: NodeJS.Timeout | undefined;
+let rasterReconcileTimer: NodeJS.Timeout | undefined;
+let cleanupPromise: Promise<void> | null = null;
+let mailPromise: Promise<void> | null = null;
+let rasterReconcilePromise: Promise<void> | null = null;
+let shuttingDown = false;
+
+async function drainStorageCleanup(): Promise<void> {
+  if (cleanupPromise) return cleanupPromise;
+  cleanupPromise = (async () => {
+    const result = await processPendingStorageCleanup();
+    if (result.processed > 0 || result.failed > 0) {
+      console.log(`[worker] storage cleanup: ${result.processed} processed, ${result.failed} failed`);
+    }
+  })().finally(() => { cleanupPromise = null; });
+  return cleanupPromise;
+}
+
+async function drainMailOutbox(): Promise<void> {
+  if (mailPromise) return mailPromise;
+  mailPromise = (async () => {
+    const result = await processPendingMail();
+    if (result.sent > 0 || result.failed > 0 || result.expired > 0) {
+      console.log(`[worker] mail outbox: ${result.sent} sent, ${result.failed} failed, ${result.expired} expired`);
+    }
+  })().finally(() => { mailPromise = null; });
+  return mailPromise;
+}
+
+async function reconcileQueuedRasters(): Promise<void> {
+  if (rasterReconcilePromise) return rasterReconcilePromise;
+  rasterReconcilePromise = (async () => {
+    const jobs = await listQueuedRasterJobs();
+    let recovered = 0;
+    for (const job of jobs) {
+      // The queue's stately singleton key makes this idempotent when the
+      // original enqueue succeeded but its HTTP acknowledgement was lost.
+      const operationId = await enqueueRasterProcessing(job);
+      if (operationId) recovered += 1;
+    }
+    if (recovered > 0) {
+      console.log(`[worker] recovered ${recovered} interrupted raster enqueue(s)`);
+    }
+  })().finally(() => { rasterReconcilePromise = null; });
+  return rasterReconcilePromise;
+}
 
 /**
  * Standalone worker process that consumes raster-processing jobs. Runs in its
@@ -13,9 +82,20 @@ import { processRaster } from "./jobs/processRaster.js";
  */
 async function processJob(job: RasterJob): Promise<void> {
   const { mapId, rasterLayerId } = job;
-  const exists = await markRasterProcessing(rasterLayerId);
-  if (!exists) {
-    console.warn(`[worker] raster ${rasterLayerId} no longer exists — skipping`);
+  const claim = await markRasterProcessing(mapId, rasterLayerId);
+  if (claim === "missing") {
+    // A deleted row is not enough to prove storage is clean: an in-flight GDAL
+    // process may have recreated the directory after the delete outbox ran.
+    // Persist this second cleanup intent before attempting the verified delete.
+    const outcome = await cleanupStorageDirectoryDurably(
+      buildGeoRasterDir(mapId, rasterLayerId),
+      `geo:raster-missing-before-processing:${rasterLayerId}`,
+    );
+    console.warn(`[worker] raster ${rasterLayerId} no longer exists — directory cleanup ${outcome}`);
+    return;
+  }
+  if (claim === "unavailable") {
+    console.warn(`[worker] raster ${rasterLayerId} is already finalized — skipping stale job`);
     return;
   }
   console.log(`[worker] processing raster ${rasterLayerId} (map ${mapId})`);
@@ -37,19 +117,49 @@ async function main() {
         } catch (err) {
           const msg = err instanceof Error ? err.message : String(err);
           console.error(`[worker] job ${job.id} failed:`, msg);
-          await markRasterError(job.data.rasterLayerId, msg).catch(() => {});
+          try {
+            await markRasterError(job.data.mapId, job.data.rasterLayerId, msg);
+          } catch (markError) {
+            console.error(`[worker] could not persist error state for raster ${job.data.rasterLayerId}:`, markError);
+          }
           throw err; // let pg-boss record the failure for this job
         }
       }
     }
   );
 
+  await drainStorageCleanup().catch((err) => console.error("[worker] initial storage cleanup failed:", err));
+  cleanupTimer = setInterval(() => {
+    void drainStorageCleanup().catch((err) => console.error("[worker] storage cleanup failed:", err));
+  }, STORAGE_CLEANUP_INTERVAL_MS);
+  cleanupTimer.unref();
+  await drainMailOutbox().catch((err) => console.error("[worker] initial mail delivery failed:", err));
+  mailTimer = setInterval(() => {
+    void drainMailOutbox().catch((err) => console.error("[worker] mail delivery failed:", err));
+  }, MAIL_OUTBOX_INTERVAL_MS);
+  mailTimer.unref();
+  await reconcileQueuedRasters().catch((err) => console.error("[worker] initial raster reconciliation failed:", err));
+  rasterReconcileTimer = setInterval(() => {
+    void reconcileQueuedRasters().catch((err) => console.error("[worker] raster reconciliation failed:", err));
+  }, RASTER_RECONCILE_INTERVAL_MS);
+  rasterReconcileTimer.unref();
+
   console.log(`[worker] listening on "${RASTER_QUEUE}" (batchSize=${env.WORKER_CONCURRENCY})`);
 }
 
 async function shutdown(signal: string) {
+  if (shuttingDown) return;
+  shuttingDown = true;
   console.log(`[worker] ${signal} received — stopping…`);
-  await stopBoss().catch(() => {});
+  if (cleanupTimer) clearInterval(cleanupTimer);
+  if (mailTimer) clearInterval(mailTimer);
+  if (rasterReconcileTimer) clearInterval(rasterReconcileTimer);
+  await stopBoss().catch((error) => console.error("[worker] failed to stop pg-boss:", error));
+  await Promise.allSettled(
+    [cleanupPromise, mailPromise, rasterReconcilePromise].filter(Boolean) as Promise<void>[]
+  );
+  await closeMail().catch((error) => console.error("[worker] failed to close SMTP:", error));
+  await closeDb().catch((error) => console.error("[worker] failed to close database pool:", error));
   process.exit(0);
 }
 process.on("SIGINT", () => void shutdown("SIGINT"));

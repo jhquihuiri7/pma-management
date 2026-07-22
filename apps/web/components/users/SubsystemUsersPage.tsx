@@ -1,7 +1,7 @@
 "use client";
 
-import { apiFetch } from "@/lib/api-client";
-import { useEffect, useState } from "react";
+import { api, apiErrorMessage, assertQueuedInvitationReceipt, requireOkReceipt } from "@/lib/api-client";
+import { useEffect, useRef, useState } from "react";
 import Link from "next/link";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -33,63 +33,99 @@ export default function SubsystemUsersPage({ appLabel, apiPrefix }: Props) {
   const [assigned, setAssigned] = useState<User[]>([]);
   const [allUsers, setAllUsers] = useState<User[]>([]);
   const [assignOpen, setAssignOpen] = useState(false);
-  const [assigning, setAssigning] = useState<string | null>(null);
+  const [loadingUsers, setLoadingUsers] = useState(false);
+  const [pendingAction, setPendingAction] = useState<string | null>(null);
+  const pendingRef = useRef(false);
 
-  async function loadAssigned() {
-    const res = await apiFetch(`${apiPrefix}/api/users`);
-    if (res.ok) setAssigned(await res.json());
+  async function loadAssigned(showError = true): Promise<boolean> {
+    try {
+      setAssigned(await api.get<User[]>(`${apiPrefix}/api/users`));
+      return true;
+    } catch (error) {
+      if (showError) toast.error(apiErrorMessage(error, "No se pudieron cargar los usuarios"));
+      return false;
+    }
   }
 
-  async function loadAllUsers() {
-    const res = await apiFetch("/api/users");
-    if (res.ok) setAllUsers(await res.json());
+  async function loadAllUsers(): Promise<boolean> {
+    try {
+      setAllUsers(await api.get<User[]>("/api/users"));
+      return true;
+    } catch (error) {
+      toast.error(apiErrorMessage(error, "No se pudieron cargar los usuarios disponibles"));
+      return false;
+    }
   }
 
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  useEffect(() => { loadAssigned(); }, [apiPrefix]);
+  useEffect(() => { void loadAssigned(); }, [apiPrefix]);
 
   async function openAssignDialog() {
-    await loadAllUsers();
-    setAssignOpen(true);
+    if (loadingUsers) return;
+    setLoadingUsers(true);
+    const loaded = await loadAllUsers();
+    setLoadingUsers(false);
+    if (loaded) setAssignOpen(true);
+  }
+
+  async function runLocked(key: string, operation: () => Promise<void>) {
+    if (pendingRef.current) return;
+    pendingRef.current = true;
+    setPendingAction(key);
+    try {
+      await operation();
+    } finally {
+      pendingRef.current = false;
+      setPendingAction(null);
+    }
   }
 
   async function handleAssign(userId: string) {
-    setAssigning(userId);
-    const res = await apiFetch(`${apiPrefix}/api/users/${userId}/assign`, {
-      method: "POST",
+    await runLocked(`assign:${userId}`, async () => {
+      try {
+        requireOkReceipt(
+          await api.post<unknown>(`${apiPrefix}/api/users/${userId}/assign`),
+          "El servidor no confirmó la asignación"
+        );
+        const assignedUser = allUsers.find((user) => user.id === userId);
+        if (assignedUser) {
+          setAssigned((current) => current.some((user) => user.id === userId)
+            ? current
+            : [...current, assignedUser]);
+        }
+        toast.success("Usuario asignado a " + appLabel);
+      } catch (error) {
+        toast.error(apiErrorMessage(error, "Error al asignar usuario"));
+      }
     });
-    setAssigning(null);
-    if (res.ok) {
-      toast.success("Usuario asignado a " + appLabel);
-      loadAssigned();
-      loadAllUsers();
-    } else {
-      const data = await res.json();
-      toast.error(data.message || "Error al asignar usuario");
-    }
   }
 
   async function handleUnassign(userId: string, name: string) {
     if (!confirm(`¿Quitar a ${name} del subsistema ${appLabel}?`)) return;
-    const res = await apiFetch(`${apiPrefix}/api/users/${userId}`, { method: "DELETE" });
-    if (res.ok) {
-      toast.success(`${name} fue quitado de ${appLabel}`);
-      loadAssigned();
-    } else {
-      toast.error("Error al quitar usuario");
-    }
+    await runLocked(`unassign:${userId}`, async () => {
+      try {
+        requireOkReceipt(
+          await api.delete<unknown>(`${apiPrefix}/api/users/${userId}`),
+          "El servidor no confirmó la desasignación"
+        );
+        setAssigned((current) => current.filter((user) => user.id !== userId));
+        toast.success(`${name} fue quitado de ${appLabel}`);
+      } catch (error) {
+        toast.error(apiErrorMessage(error, "Error al quitar usuario"));
+      }
+    });
   }
 
   async function handleResend(userId: string, email: string) {
-    const res = await apiFetch(`${apiPrefix}/api/users/${userId}/resend-invitation`, {
-      method: "POST",
+    await runLocked(`resend:${userId}`, async () => {
+      try {
+        const receipt = await api.post<unknown>(`${apiPrefix}/api/users/${userId}/resend-invitation`);
+        assertQueuedInvitationReceipt(receipt);
+        toast.success(`Invitación encolada para ${email}`);
+      } catch (error) {
+        toast.error(apiErrorMessage(error, "Error al encolar la invitación"));
+      }
     });
-    if (res.ok) {
-      toast.success(`Invitación reenviada a ${email}`);
-    } else {
-      const data = await res.json();
-      toast.error(data.message || "Error al reenviar invitación");
-    }
   }
 
   const assignedIds = new Set(assigned.map((u) => u.id));
@@ -131,11 +167,13 @@ export default function SubsystemUsersPage({ appLabel, apiPrefix }: Props) {
                 <div className="flex items-center gap-1">
                   {user.passwordSet === false && (
                     <Button variant="ghost" size="sm" title="Reenviar invitación"
+                      disabled={pendingAction !== null}
                       onClick={() => handleResend(user.id, user.email)}>
                       <Send className="w-4 h-4 text-blue-500" />
                     </Button>
                   )}
                   <Button variant="ghost" size="sm" title="Quitar de este subsistema"
+                    disabled={pendingAction !== null}
                     onClick={() => handleUnassign(user.id, user.name)}>
                     <Trash2 className="w-4 h-4 text-red-500" />
                   </Button>
@@ -158,7 +196,7 @@ export default function SubsystemUsersPage({ appLabel, apiPrefix }: Props) {
           </p>
         </div>
         <div className="flex items-center gap-2">
-          <Button onClick={openAssignDialog}>
+          <Button onClick={openAssignDialog} disabled={loadingUsers || pendingAction !== null}>
             <UserPlus className="w-4 h-4 mr-2" />
             Asignar Usuario
           </Button>
@@ -235,9 +273,9 @@ export default function SubsystemUsersPage({ appLabel, apiPrefix }: Props) {
                       )}
                     </div>
                   </div>
-                  <Button size="sm" disabled={assigning === user.id}
+                  <Button size="sm" disabled={pendingAction !== null}
                     onClick={() => handleAssign(user.id)}>
-                    {assigning === user.id ? "Asignando..." : "Asignar"}
+                    {pendingAction === `assign:${user.id}` ? "Asignando..." : "Asignar"}
                   </Button>
                 </div>
               ))}

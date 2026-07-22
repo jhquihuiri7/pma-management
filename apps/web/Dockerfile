@@ -22,8 +22,10 @@ ENV API_BASE_URL=${API_BASE_URL}
 
 RUN npm run build --workspace=@pma/web
 
-FROM base AS runner
+FROM node:20-alpine AS runner
 WORKDIR /app
+
+RUN apk add --no-cache libc6-compat
 
 ENV NODE_ENV=production
 ENV NEXT_TELEMETRY_DISABLED=1

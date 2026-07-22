@@ -1,8 +1,15 @@
 "use client";
 
-import { api, ApiError } from "@/lib/api-client";
+import {
+  api,
+  ApiError,
+  apiErrorMessage,
+  assertQueuedInvitationReceipt,
+  requireOkReceipt,
+  requirePersistedEntity,
+} from "@/lib/api-client";
 import { useAuth } from "@/lib/auth-context";
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -59,13 +66,27 @@ export default function AdminUsersPage() {
     position: "",
     role: "REPORTER" as "ADMIN" | "REPORTER" | "VIEWER",
   });
+  const [pendingAction, setPendingAction] = useState<string | null>(null);
+  const pendingActionRef = useRef(false);
+
+  async function withActionLock(key: string, operation: () => Promise<void>) {
+    if (pendingActionRef.current) return;
+    pendingActionRef.current = true;
+    setPendingAction(key);
+    try {
+      await operation();
+    } finally {
+      pendingActionRef.current = false;
+      setPendingAction(null);
+    }
+  }
 
   async function loadUsers() {
     try {
       const data = await api.get<User[]>("/api/users");
       setUsers(data);
-    } catch {
-      // errors shown inline; don't toast on initial load
+    } catch (error) {
+      toast.error(apiErrorMessage(error, "No se pudieron cargar los usuarios"));
     }
   }
 
@@ -80,84 +101,117 @@ export default function AdminUsersPage() {
 
   async function handleCreate(e: React.FormEvent) {
     e.preventDefault();
-    setLoading(true);
-    try {
-      await api.post("/api/users", {
-        name: form.name,
-        email: form.email,
-        role: form.role,
-        unit: form.unit || undefined,
-        position: form.position || undefined,
-        apps: form.role === "ADMIN" ? [] : form.apps,
-      });
-      toast.success(`Usuario creado. Se envió un correo de invitación a ${form.email}.`);
-      setForm(emptyForm);
-      setCreateOpen(false);
-      loadUsers();
-    } catch (err) {
-      toast.error(err instanceof ApiError ? err.message : "Error al crear usuario");
-    } finally {
-      setLoading(false);
-    }
+    await withActionLock("create", async () => {
+      setLoading(true);
+      try {
+        const response = await api.post<unknown>("/api/users", {
+          name: form.name,
+          email: form.email,
+          role: form.role,
+          unit: form.unit || undefined,
+          position: form.position || undefined,
+          apps: form.role === "ADMIN" ? [] : form.apps,
+        });
+        const saved = requirePersistedEntity<{ id: string; invitation: unknown }>(
+          response,
+          "El servidor no confirmó la creación del usuario"
+        );
+        if (!("invitation" in saved)) {
+          throw new ApiError(200, "El servidor no informó el estado de la invitación", response, "invalid_response");
+        }
+        assertQueuedInvitationReceipt(saved);
+        toast.success(`Usuario creado; invitación encolada para ${form.email}.`);
+        setForm(emptyForm);
+        setCreateOpen(false);
+        await loadUsers();
+      } catch (err) {
+        toast.error(err instanceof ApiError ? err.message : "Error al crear usuario");
+      } finally {
+        setLoading(false);
+      }
+    });
   }
 
   async function handleEdit(e: React.FormEvent) {
     e.preventDefault();
     if (!editUser) return;
-    setLoading(true);
-    try {
-      await api.put(`/api/users/${editUser.id}`, {
-        name: editForm.name || undefined,
-        unit: editForm.unit || null,
-        position: editForm.position || null,
-        role: editForm.role,
-      });
-      toast.success("Usuario actualizado");
-      setEditUser(null);
-      loadUsers();
-    } catch (err) {
-      toast.error(err instanceof ApiError ? err.message : "Error al actualizar usuario");
-    } finally {
-      setLoading(false);
-    }
+    await withActionLock(`edit:${editUser.id}`, async () => {
+      setLoading(true);
+      try {
+        requireOkReceipt(
+          await api.put<unknown>(`/api/users/${editUser.id}`, {
+            name: editForm.name || undefined,
+            unit: editForm.unit || null,
+            position: editForm.position || null,
+            role: editForm.role,
+          }),
+          "El servidor no confirmó la actualización del usuario"
+        );
+        toast.success("Usuario actualizado");
+        setEditUser(null);
+        await loadUsers();
+      } catch (err) {
+        toast.error(err instanceof ApiError ? err.message : "Error al actualizar usuario");
+      } finally {
+        setLoading(false);
+      }
+    });
   }
 
   async function handleDelete(userId: string, name: string) {
     if (!confirm(`¿Eliminar permanentemente a ${name}? Esto lo quitará de todos los subsistemas.`)) return;
-    try {
-      await api.delete(`/api/users/${userId}`);
-      toast.success("Usuario eliminado");
-      loadUsers();
-    } catch (err) {
-      toast.error(err instanceof ApiError ? err.message : "Error al eliminar usuario");
-    }
+    await withActionLock(`delete:${userId}`, async () => {
+      try {
+        requireOkReceipt(
+          await api.delete<unknown>(`/api/users/${userId}`),
+          "El servidor no confirmó la eliminación del usuario"
+        );
+        toast.success("Usuario eliminado");
+        setUsers((current) => current.filter((user) => user.id !== userId));
+      } catch (err) {
+        toast.error(err instanceof ApiError ? err.message : "Error al eliminar usuario");
+      }
+    });
   }
 
   async function handleResend(userId: string, email: string) {
-    try {
-      await api.post(`/api/users/${userId}/resend-invitation`);
-      toast.success(`Invitación reenviada a ${email}`);
-    } catch (err) {
-      toast.error(err instanceof ApiError ? err.message : "Error al reenviar invitación");
-    }
+    await withActionLock(`resend:${userId}`, async () => {
+      try {
+        const receipt = await api.post<unknown>(`/api/users/${userId}/resend-invitation`);
+        assertQueuedInvitationReceipt(receipt);
+        toast.success(`Invitación encolada para ${email}`);
+      } catch (err) {
+        toast.error(err instanceof ApiError ? err.message : "Error al encolar la invitación");
+      }
+    });
   }
 
   async function handleAssignApp(userId: string, appKey: AppKey) {
-    try {
-      await api.post(`/api/users/${userId}/apps`, { appKey });
-      loadUsers();
-    } catch (err) {
-      toast.error(err instanceof ApiError ? err.message : "Error al asignar aplicación");
-    }
+    await withActionLock(`assign:${userId}:${appKey}`, async () => {
+      try {
+        requireOkReceipt(
+          await api.post<unknown>(`/api/users/${userId}/apps`, { appKey }),
+          "El servidor no confirmó la asignación de la aplicación"
+        );
+        await loadUsers();
+      } catch (err) {
+        toast.error(err instanceof ApiError ? err.message : "Error al asignar aplicación");
+      }
+    });
   }
 
   async function handleUnassignApp(userId: string, appKey: AppKey) {
-    try {
-      await api.delete(`/api/users/${userId}/apps/${appKey}`);
-      loadUsers();
-    } catch (err) {
-      toast.error(err instanceof ApiError ? err.message : "Error al quitar aplicación");
-    }
+    await withActionLock(`unassign:${userId}:${appKey}`, async () => {
+      try {
+        requireOkReceipt(
+          await api.delete<unknown>(`/api/users/${userId}/apps/${appKey}`),
+          "El servidor no confirmó la desasignación de la aplicación"
+        );
+        await loadUsers();
+      } catch (err) {
+        toast.error(err instanceof ApiError ? err.message : "Error al quitar aplicación");
+      }
+    });
   }
 
   function openEdit(user: User) {
@@ -196,8 +250,9 @@ export default function AdminUsersPage() {
           <Badge
             key={a}
             variant="secondary"
-            className="text-xs flex items-center gap-1 cursor-pointer hover:bg-red-100 hover:text-red-700 group"
-            onClick={() => handleUnassignApp(user.id, a)}
+            className={`text-xs flex items-center gap-1 group ${pendingAction ? "pointer-events-none opacity-50" : "cursor-pointer hover:bg-red-100 hover:text-red-700"}`}
+            aria-disabled={pendingAction !== null}
+            onClick={() => { if (!pendingAction) void handleUnassignApp(user.id, a); }}
             title={`Quitar de ${APP_LABELS[a]}`}
           >
             {APP_LABELS[a]}
@@ -208,8 +263,9 @@ export default function AdminUsersPage() {
           <Badge
             key={a}
             variant="outline"
-            className="text-xs cursor-pointer hover:bg-slate-100 text-slate-400 border-dashed"
-            onClick={() => handleAssignApp(user.id, a)}
+            className={`text-xs text-slate-400 border-dashed ${pendingAction ? "pointer-events-none opacity-50" : "cursor-pointer hover:bg-slate-100"}`}
+            aria-disabled={pendingAction !== null}
+            onClick={() => { if (!pendingAction) void handleAssignApp(user.id, a); }}
             title={`Asignar a ${APP_LABELS[a]}`}
           >
             + {APP_LABELS[a]}
@@ -253,16 +309,19 @@ export default function AdminUsersPage() {
                 <div className="flex items-center gap-1">
                   {user.passwordSet === false && (
                     <Button variant="ghost" size="sm" title="Reenviar invitación"
+                      disabled={pendingAction !== null}
                       onClick={() => handleResend(user.id, user.email)}>
                       <Send className="w-4 h-4 text-blue-500" />
                     </Button>
                   )}
                   <Button variant="ghost" size="sm" title="Editar usuario"
+                    disabled={pendingAction !== null}
                     onClick={() => openEdit(user)}>
                     <Pencil className="w-4 h-4 text-slate-500" />
                   </Button>
                   {user.id !== session?.id && (
                     <Button variant="ghost" size="sm" title="Eliminar usuario"
+                      disabled={pendingAction !== null}
                       onClick={() => handleDelete(user.id, user.name)}>
                       <Trash2 className="w-4 h-4 text-red-500" />
                     </Button>
@@ -359,7 +418,7 @@ export default function AdminUsersPage() {
                 </div>
               )}
 
-              <Button type="submit" className="w-full" disabled={loading}>
+              <Button type="submit" className="w-full" disabled={loading || pendingAction !== null}>
                 {loading ? "Creando..." : "Crear Usuario"}
               </Button>
             </form>
@@ -455,7 +514,7 @@ export default function AdminUsersPage() {
                   onChange={(e) => setEditForm({ ...editForm, position: e.target.value })} />
               </div>
             </div>
-            <Button type="submit" className="w-full" disabled={loading}>
+            <Button type="submit" className="w-full" disabled={loading || pendingAction !== null}>
               {loading ? "Guardando..." : "Guardar Cambios"}
             </Button>
           </form>

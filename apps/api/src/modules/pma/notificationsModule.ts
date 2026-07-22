@@ -1,6 +1,7 @@
-import { and, eq, desc, lt } from "drizzle-orm";
+import { and, eq, desc, isNull, lt } from "drizzle-orm";
 import { getDb } from "../../db/client.js";
-import { pmaNotifications } from "../../db/schema/pma.js";
+import { users, userApps } from "../../db/schema/shared.js";
+import { pmaNotifications, pmaPlanAssignments } from "../../db/schema/pma.js";
 import { Forbidden, NotFound } from "../../lib/errors.js";
 
 const RETENTION_DAYS = 30;
@@ -17,38 +18,130 @@ export type NotificationInput = {
   metadata?: Record<string, string>;
 };
 
-export async function createNotifications(inputs: NotificationInput[]) {
-  if (inputs.length === 0) return [];
-  const db = getDb();
+type DbTransaction = Parameters<Parameters<ReturnType<typeof getDb>["transaction"]>[0]>[0];
+
+function dedupeNotifications(inputs: NotificationInput[]) {
+  const seen = new Set<string>();
+  return inputs.filter((input) => {
+    const key = [
+      input.userId,
+      input.type,
+      input.planId,
+      input.planItemId ?? "",
+      input.evidenceId ?? "",
+    ].join(":");
+    if (seen.has(key)) return false;
+    seen.add(key);
+    return true;
+  });
+}
+
+export async function createNotifications(inputs: NotificationInput[], tx?: DbTransaction) {
+  const uniqueInputs = dedupeNotifications(inputs);
+  if (uniqueInputs.length === 0) return [];
+  const db = tx ?? getDb();
   const now = new Date();
   const expires = new Date(now.getTime() + RETENTION_DAYS * DAY_MS);
-  return db
-    .insert(pmaNotifications)
-    .values(
-      inputs.map((i) => ({
-        userId: i.userId,
-        type: i.type,
-        title: i.title,
-        message: i.message,
-        planId: i.planId,
-        planItemId: i.planItemId ?? null,
-        evidenceId: i.evidenceId ?? null,
-        metadata: i.metadata ?? null,
+  const confirmed = [];
+
+  for (const input of uniqueInputs) {
+    const values = {
+      userId: input.userId,
+      type: input.type,
+      title: input.title,
+      message: input.message,
+      planId: input.planId,
+      planItemId: input.planItemId ?? null,
+      evidenceId: input.evidenceId ?? null,
+      metadata: input.metadata ?? null,
+      expiresAt: expires,
+    };
+    const [inserted] = await db
+      .insert(pmaNotifications)
+      .values(values)
+      .onConflictDoNothing()
+      .returning();
+    if (inserted) {
+      confirmed.push(inserted);
+      continue;
+    }
+
+    if (!input.evidenceId || input.type === "generation_threshold_reached") {
+      throw new Error("PMA notification insert was not confirmed");
+    }
+    const [refreshed] = await db
+      .update(pmaNotifications)
+      .set({
+        title: input.title,
+        message: input.message,
+        planId: input.planId,
+        planItemId: input.planItemId ?? null,
+        metadata: input.metadata ?? null,
+        readAt: null,
+        createdAt: now,
         expiresAt: expires,
-      }))
+      })
+      .where(and(
+        eq(pmaNotifications.userId, input.userId),
+        eq(pmaNotifications.type, input.type),
+        eq(pmaNotifications.evidenceId, input.evidenceId)
+      ))
+      .returning();
+    if (!refreshed) throw new Error("PMA notification upsert was not confirmed");
+    confirmed.push(refreshed);
+  }
+
+  if (confirmed.length !== uniqueInputs.length) {
+    throw new Error(`Expected ${uniqueInputs.length} PMA notifications, confirmed ${confirmed.length}`);
+  }
+  return confirmed;
+}
+
+export async function getEvidenceSubmittedRecipientIds(
+  tx: DbTransaction,
+  planId: string,
+  uploaderId: string
+) {
+  const explicitViewers = await tx
+    .select({ userId: users.id })
+    .from(pmaPlanAssignments)
+    .innerJoin(users, eq(users.id, pmaPlanAssignments.userId))
+    .innerJoin(
+      userApps,
+      and(eq(userApps.userId, users.id), eq(userApps.appKey, "pma"))
     )
-    .returning();
+    .where(and(
+      eq(pmaPlanAssignments.planId, planId),
+      eq(pmaPlanAssignments.explicitAccess, true),
+      eq(users.role, "VIEWER")
+    ));
+  const admins = await tx
+    .select({ userId: users.id })
+    .from(users)
+    .where(eq(users.role, "ADMIN"));
+
+  return [...new Set([...explicitViewers, ...admins].map((row) => row.userId))]
+    .filter((userId) => userId !== uploaderId);
+}
+
+export async function getEvidenceResultRecipientIds(
+  tx: DbTransaction,
+  uploaderId: string | null,
+  validatorId: string
+) {
+  if (!uploaderId || uploaderId === validatorId) return [];
+  const [uploader] = await tx
+    .select({ userId: users.id })
+    .from(users)
+    .where(eq(users.id, uploaderId))
+    .limit(1);
+  return uploader ? [uploader.userId] : [];
 }
 
 export async function getNotificationsForUser(userId: string, _adminId?: string, limit = 30) {
   const db = getDb();
   const now = new Date();
-  // Best-effort cleanup of expired notifications; safe to ignore failure.
-  try {
-    await db.delete(pmaNotifications).where(lt(pmaNotifications.expiresAt, now));
-  } catch {
-    // ignore
-  }
+  await db.delete(pmaNotifications).where(lt(pmaNotifications.expiresAt, now));
   return db
     .select()
     .from(pmaNotifications)
@@ -59,14 +152,22 @@ export async function getNotificationsForUser(userId: string, _adminId?: string,
 
 export async function markNotificationAsRead(notificationId: string, userId: string, _adminId?: string) {
   const db = getDb();
-  const rows = await db
-    .select()
+  const [updated] = await db
+    .update(pmaNotifications)
+    .set({ readAt: new Date() })
+    .where(and(
+      eq(pmaNotifications.id, notificationId),
+      eq(pmaNotifications.userId, userId),
+      isNull(pmaNotifications.readAt)
+    ))
+    .returning({ id: pmaNotifications.id });
+  if (updated) return;
+
+  const [notification] = await db
+    .select({ userId: pmaNotifications.userId })
     .from(pmaNotifications)
     .where(eq(pmaNotifications.id, notificationId))
     .limit(1);
-  const n = rows[0];
-  if (!n) throw NotFound("Notification not found");
-  if (n.userId !== userId) throw Forbidden();
-  if (n.readAt) return;
-  await db.update(pmaNotifications).set({ readAt: new Date() }).where(eq(pmaNotifications.id, notificationId));
+  if (!notification) throw NotFound("Notification not found");
+  if (notification.userId !== userId) throw Forbidden();
 }

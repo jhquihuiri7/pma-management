@@ -11,11 +11,12 @@ import {
 
 const entrySchema = z.object({
   planItemId: z.string().uuid(),
-  periodKey: z.string().min(1),
+  periodKey: z.string().trim().min(1).max(100),
   status: z.enum(["C", "NC+", "NC-", "N/A"]),
-});
+}).strict();
 
-const bulkSchema = z.object({ entries: z.array(entrySchema).min(1) });
+const bulkSchema = z.object({ entries: z.array(entrySchema).min(1).max(5_000) }).strict();
+const planParamsSchema = z.object({ planId: z.string().uuid() }).strict();
 
 async function assertPlanAccess(
   planId: string,
@@ -32,29 +33,23 @@ export async function pmaPeriodComplianceRoutes(app: FastifyInstance) {
   app.addHook("preHandler", requireApp("pma"));
 
   app.get("/", async (req) => {
-    const { planId } = req.params as { planId: string };
+    const { planId } = planParamsSchema.parse(req.params);
     if (!(await canUserAccessPlan(planId, req.user!))) throw Forbidden("No tienes acceso a este plan");
-    return getCompliance(planId);
+    return getCompliance(planId, req.user!.role === "REPORTER" ? req.user!.sub : undefined);
   });
 
   app.put("/", { preHandler: requireRole("ADMIN", "VIEWER") }, async (req) => {
-    const { planId } = req.params as { planId: string };
+    const { planId } = planParamsSchema.parse(req.params);
     await assertPlanAccess(planId, req.user!);
     const body = bulkSchema.parse(req.body);
-    await bulkSetCompliance(body.entries);
-    return { ok: true };
+    const updated = await bulkSetCompliance(planId, body.entries, req.user!.sub);
+    return { ok: true, updated };
   });
 
   app.post("/", { preHandler: requireRole("ADMIN", "VIEWER") }, async (req) => {
-    const { planId } = req.params as { planId: string };
+    const { planId } = planParamsSchema.parse(req.params);
     await assertPlanAccess(planId, req.user!);
     const body = entrySchema.parse(req.body);
-    await setCompliance(body.planItemId, body.periodKey, body.status);
-    return {
-      id: `${body.planItemId}:${body.periodKey}`,
-      planId,
-      ...body,
-      updatedAt: new Date().toISOString(),
-    };
+    return setCompliance(planId, body.planItemId, body.periodKey, body.status, req.user!.sub);
   });
 }

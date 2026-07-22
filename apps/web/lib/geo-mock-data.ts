@@ -2,6 +2,23 @@ import type { GeoCategory, GeoMap, GeoLayer } from "@/types/geo";
 
 export const GEO_CATEGORIES: GeoCategory[] = [
   {
+    id: "informacion-base",
+    name: "Información Base",
+    description: "Cartografía base y capas de referencia que sustentan el análisis del territorio.",
+    thematics: [
+      "Límites administrativos",
+      "Cartografía base",
+      "Red hídrica",
+      "Red vial",
+      "Modelo digital de elevación",
+    ],
+    iconName: "Database",
+    bgClass: "bg-slate-50",
+    textClass: "text-slate-700",
+    borderClass: "border-slate-200 hover:border-slate-400",
+    accentClass: "bg-slate-100",
+  },
+  {
     id: "fisico-ambiental",
     name: "Físico Ambiental",
     description: "Recurso natural que sostiene y condiciona las diversas actividades de la población.",

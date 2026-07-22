@@ -1,6 +1,7 @@
 node_modules
 npm-debug.log
 .next
+.next.docker-bak
 .git
 .gitignore
 README.md

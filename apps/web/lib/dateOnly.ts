@@ -13,7 +13,13 @@ export function parseDateOnly(value?: string | null): Date | null {
     const monthIndex = Number(m[2]) - 1; // 0-based
     const day = Number(m[3]);
     const d = new Date(year, monthIndex, day);
-    return Number.isNaN(d.getTime()) ? null : d;
+    if (
+      Number.isNaN(d.getTime()) ||
+      d.getFullYear() !== year ||
+      d.getMonth() !== monthIndex ||
+      d.getDate() !== day
+    ) return null;
+    return d;
   }
 
   const d = new Date(value);
@@ -29,4 +35,3 @@ export function formatDateOnly(
   if (!d) return "";
   return d.toLocaleDateString(locales, options);
 }
-

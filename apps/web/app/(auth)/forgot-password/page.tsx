@@ -1,13 +1,13 @@
 "use client";
 
-import { useState } from "react";
+import { useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { CheckCircle2, Loader2 } from "lucide-react";
-import { auth } from "@/lib/api-client";
+import { auth, apiErrorMessage } from "@/lib/api-client";
 
 export default function ForgotPasswordPage() {
   const router = useRouter();
@@ -15,18 +15,22 @@ export default function ForgotPasswordPage() {
   const [submitting, setSubmitting] = useState(false);
   const [sent, setSent] = useState(false);
   const [error, setError] = useState("");
+  const submittingRef = useRef(false);
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
+    if (submittingRef.current) return;
+    submittingRef.current = true;
     setError("");
     setSubmitting(true);
 
     try {
       await auth.forgot(email);
       setSent(true);
-    } catch {
-      setError("Ocurrió un error. Inténtalo de nuevo.");
+    } catch (requestError) {
+      setError(apiErrorMessage(requestError, "Ocurrió un error. Inténtalo de nuevo."));
     } finally {
+      submittingRef.current = false;
       setSubmitting(false);
     }
   }
@@ -42,9 +46,9 @@ export default function ForgotPasswordPage() {
           {sent ? (
             <div className="flex flex-col items-center gap-3 py-8 text-center">
               <CheckCircle2 className="w-12 h-12 text-green-500" />
-              <h2 className="text-lg font-semibold text-slate-800">Correo enviado</h2>
+              <h2 className="text-lg font-semibold text-slate-800">Solicitud recibida</h2>
               <p className="text-sm text-muted-foreground">
-                Si existe una cuenta con ese correo, recibirás un enlace para restablecer tu contraseña en los próximos minutos. El enlace expira en <strong>24 horas</strong>.
+                Si existe una cuenta con ese correo, el enlace para restablecer tu contraseña será enviado en los próximos minutos. El enlace expira en <strong>24 horas</strong>.
               </p>
               <Button className="mt-2 w-full" variant="outline" onClick={() => router.push("/login")}>
                 Volver al inicio de sesión
@@ -53,7 +57,7 @@ export default function ForgotPasswordPage() {
           ) : (
             <div>
               <p className="text-sm text-muted-foreground mb-6">
-                Ingresa tu correo y te enviaremos un enlace para restablecer tu contraseña.
+                Ingresa tu correo. Si existe una cuenta asociada, enviaremos un enlace de recuperación.
               </p>
               <form onSubmit={handleSubmit} className="space-y-4">
                 <div className="space-y-2">

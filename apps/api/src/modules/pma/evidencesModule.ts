@@ -1,8 +1,25 @@
-import { eq, desc, asc } from "drizzle-orm";
+import { randomUUID } from "node:crypto";
+import { and, desc, eq, exists, or } from "drizzle-orm";
 import { getDb } from "../../db/client.js";
-import { pmaEvidences, pmaPlanItems, pmaPlans } from "../../db/schema/pma.js";
-import { BadRequest, NotFound } from "../../lib/errors.js";
+import {
+  pmaEvidences,
+  pmaItemAssignments,
+  pmaPlanAssignments,
+  pmaPlanItems,
+  pmaPlans,
+} from "../../db/schema/pma.js";
+import { BadRequest, Forbidden, NotFound } from "../../lib/errors.js";
 import { getStorage, buildEvidencePath } from "../../storage/index.js";
+import { assertPmaActivityMonth } from "../../lib/activityMonth.js";
+import type { AccessTokenClaims } from "../../auth/jwt.js";
+import { enqueueStorageCleanupPaths } from "../shared/storageCleanup.js";
+import {
+  createNotifications,
+  getEvidenceResultRecipientIds,
+  getEvidenceSubmittedRecipientIds,
+} from "./notificationsModule.js";
+import { persistDurableFileAndRecord } from "../shared/durableFilePersistence.js";
+import { lockAndAssertActor } from "../shared/transactionalActor.js";
 
 export type EvidenceCreateInput = {
   planId: string;
@@ -41,7 +58,7 @@ function toApi(row: EvidenceRow) {
   };
 }
 
-export async function createEvidence(adminId: string, input: EvidenceCreateInput) {
+export async function createEvidence(_adminId: string, input: EvidenceCreateInput) {
   const db = getDb();
   const plan = await db
     .select()
@@ -52,7 +69,6 @@ export async function createEvidence(adminId: string, input: EvidenceCreateInput
   const planRow = plan[0];
 
   let planItem: typeof pmaPlanItems.$inferSelect | null = null;
-  let subsystemName = "Sin proceso";
 
   if (input.planItemId) {
     const itemRows = await db
@@ -63,28 +79,24 @@ export async function createEvidence(adminId: string, input: EvidenceCreateInput
     planItem = itemRows[0] ?? null;
     if (!planItem) throw NotFound("Plan item not found");
     if (planItem.planId !== input.planId) throw BadRequest("Plan item does not belong to plan");
-    subsystemName = planItem.subplan || subsystemName;
 
-    // Only allow uploads within ranges that have already started.
-    if (input.activityMonth && isFutureRange(input.activityMonth, planRow.startDate, planRow.createdAt, planItem.periodicity)) {
-      throw BadRequest("No se puede subir evidencia en un periodo que aún no ha iniciado");
-    }
+    if (!input.activityMonth) throw BadRequest("activityMonth is required for item evidence");
+    assertPmaActivityMonth({
+      activityMonth: input.activityMonth,
+      startDate: planRow.startDate,
+      createdAt: planRow.createdAt,
+      periodicity: planItem.periodicity,
+    });
   } else {
-    const firstItemRows = await db
-      .select()
-      .from(pmaPlanItems)
-      .where(eq(pmaPlanItems.planId, input.planId))
-      .orderBy(asc(pmaPlanItems.createdAt))
-      .limit(1);
-    subsystemName = firstItemRows[0]?.subplan || subsystemName;
+    if (input.activityMonth) throw BadRequest("activityMonth requires planItemId");
   }
 
+  const evidenceId = randomUUID();
   const storagePath = buildEvidencePath({
-    adminId,
     subsystem: "pma",
     planId: input.planId,
+    evidenceId,
     planName: planRow.title,
-    subsystemName,
     planItemId: input.planItemId,
     planItemName: planItem?.item,
     periodFolder: planItem && input.activityMonth
@@ -93,23 +105,95 @@ export async function createEvidence(adminId: string, input: EvidenceCreateInput
     fileName: input.fileName,
   });
 
-  await getStorage().upload({ path: storagePath, data: input.data, contentType: input.contentType });
+  const row = await persistDurableFileAndRecord({
+    path: storagePath,
+    data: input.data,
+    contentType: input.contentType,
+    db,
+    reason: `pma:evidence:${evidenceId}`,
+    persist: async (tx) => {
+      const actor = await lockAndAssertActor(
+        tx,
+        input.uploadedBy,
+        "pma",
+        ["ADMIN", "REPORTER", "VIEWER"],
+      );
 
-  const [row] = await db
-    .insert(pmaEvidences)
-    .values({
-      planId: input.planId,
-      planItemId: input.planItemId ?? null,
-      uploadedBy: input.uploadedBy,
-      uploaderName: input.uploaderName,
-      fileName: input.fileName,
-      storagePath,
-      storageUrl: getStorage().getUrl(storagePath),
-      description: input.description ?? "",
-      validationStatus: "pending",
-      activityMonth: input.activityMonth ?? null,
-    })
-    .returning();
+      const [freshPlan] = await tx
+        .select()
+        .from(pmaPlans)
+        .where(eq(pmaPlans.id, input.planId))
+        .limit(1)
+        .for("update");
+      if (!freshPlan) throw NotFound("Plan not found");
+      let freshItem: typeof pmaPlanItems.$inferSelect | null = null;
+      if (input.planItemId) {
+        const [lockedItem] = await tx
+          .select()
+          .from(pmaPlanItems)
+          .where(and(eq(pmaPlanItems.id, input.planItemId), eq(pmaPlanItems.planId, input.planId)))
+          .limit(1)
+          .for("update");
+        if (!lockedItem) throw NotFound("Plan item not found");
+        freshItem = lockedItem;
+        if (!input.activityMonth) throw BadRequest("activityMonth is required for item evidence");
+        assertPmaActivityMonth({
+          activityMonth: input.activityMonth,
+          startDate: freshPlan.startDate,
+          createdAt: freshPlan.createdAt,
+          periodicity: freshItem.periodicity,
+        });
+      }
+      if (!(await canUserUploadEvidence(
+        input.planId,
+        input.planItemId,
+        { sub: actor.id, role: actor.role },
+        tx,
+      ))) throw Forbidden("El acceso al plan o ítem fue revocado durante la subida");
+
+      const [created] = await tx
+        .insert(pmaEvidences)
+        .values({
+          id: evidenceId,
+          planId: input.planId,
+          planItemId: input.planItemId ?? null,
+          uploadedBy: input.uploadedBy,
+          uploaderName: actor.name,
+          fileName: input.fileName,
+          storagePath,
+          storageUrl: getStorage().getUrl(storagePath),
+          description: input.description ?? "",
+          validationStatus: "pending",
+          activityMonth: input.activityMonth ?? null,
+        })
+        .returning();
+      if (!created) throw new Error("Evidence insert returned no row");
+
+      const recipientIds = await getEvidenceSubmittedRecipientIds(
+        tx,
+        input.planId,
+        input.uploadedBy
+      );
+      await createNotifications(
+        recipientIds.map((userId) => ({
+          userId,
+          type: "evidence_submitted" as const,
+          title: "Nueva evidencia pendiente",
+          message: `${actor.name} subió la evidencia «${input.fileName}».`,
+          planId: input.planId,
+          planItemId: input.planItemId,
+          evidenceId,
+          metadata: {
+            fileName: input.fileName,
+            uploaderName: actor.name,
+            validationStatus: "pending",
+          },
+        })),
+        tx
+      );
+      return created;
+    },
+  });
   return toApi(row);
 }
 
@@ -137,34 +221,9 @@ const PERIODICITY_INTERVAL: Record<string, number> = {
 };
 
 export function getPeriodicityInterval(periodicity: string | undefined): number {
-  return PERIODICITY_INTERVAL[periodicity ?? ""] ?? 1;
-}
-
-/**
- * True when the range that `activityMonth` belongs to has not started yet
- * (its first month is after the current month). Used to reject uploads to
- * periods that are still in the future.
- */
-function isFutureRange(
-  activityMonth: string,
-  startDate: string | null,
-  createdAt: Date,
-  periodicity: string
-): boolean {
-  const [year, month] = activityMonth.split("-").map(Number);
-  if (!year || !month || month < 1 || month > 12) return false;
-  const interval = PERIODICITY_INTERVAL[periodicity] ?? 1;
-  const planStart = startDate ? new Date(`${startDate}T00:00:00`) : createdAt;
-  const origin = new Date(planStart.getFullYear(), planStart.getMonth(), 1);
-  const target = new Date(year, month - 1, 1);
-  const diff =
-    (target.getFullYear() - origin.getFullYear()) * 12 + (target.getMonth() - origin.getMonth());
-  if (diff < 0) return false; // before the plan start; not a future range
-  const rangeIndex = Math.floor(diff / interval);
-  const rangeStart = new Date(origin.getFullYear(), origin.getMonth() + rangeIndex * interval, 1);
-  const now = new Date();
-  const todayMonth = new Date(now.getFullYear(), now.getMonth(), 1);
-  return rangeStart > todayMonth;
+  const interval = PERIODICITY_INTERVAL[periodicity ?? ""];
+  if (interval === undefined) throw BadRequest(`Periodicidad no soportada: ${periodicity ?? "vacía"}`);
+  return interval;
 }
 
 function getBlockSize(reportPer: string | undefined): number {
@@ -217,51 +276,248 @@ export async function getEvidencesByReporter(userId: string) {
   return rows.map(toApi);
 }
 
+export async function getEvidencesForUser(
+  user: Pick<AccessTokenClaims, "sub" | "role">
+) {
+  const db = getDb();
+  if (user.role === "ADMIN") {
+    const rows = await db.select().from(pmaEvidences).orderBy(desc(pmaEvidences.createdAt));
+    return rows.map(toApi);
+  }
+  if (user.role === "REPORTER") return getEvidencesByReporter(user.sub);
+
+  const explicitPlanAccess = db
+    .select({ planId: pmaPlanAssignments.planId })
+    .from(pmaPlanAssignments)
+    .where(and(
+      eq(pmaPlanAssignments.userId, user.sub),
+      eq(pmaPlanAssignments.planId, pmaEvidences.planId),
+      eq(pmaPlanAssignments.explicitAccess, true)
+    ));
+  const exactItemAccess = db
+    .select({ planItemId: pmaItemAssignments.planItemId })
+    .from(pmaItemAssignments)
+    .innerJoin(pmaPlanItems, eq(pmaItemAssignments.planItemId, pmaPlanItems.id))
+    .where(and(
+      eq(pmaItemAssignments.userId, user.sub),
+      eq(pmaItemAssignments.planItemId, pmaEvidences.planItemId),
+      eq(pmaPlanItems.planId, pmaEvidences.planId)
+    ));
+  const rows = await db
+    .select()
+    .from(pmaEvidences)
+    .where(or(exists(explicitPlanAccess), exists(exactItemAccess)))
+    .orderBy(desc(pmaEvidences.createdAt));
+  return rows.map(toApi);
+}
+
 export async function getEvidenceById(id: string) {
   const db = getDb();
   const rows = await db.select().from(pmaEvidences).where(eq(pmaEvidences.id, id)).limit(1);
   return rows[0] ? toApi(rows[0]) : null;
 }
 
+export async function getEvidenceByStoragePath(storagePath: string) {
+  const rows = await getDb()
+    .select()
+    .from(pmaEvidences)
+    .where(eq(pmaEvidences.storagePath, storagePath))
+    .limit(1);
+  return rows[0] ? toApi(rows[0]) : null;
+}
+
+export type EvidenceAccessAction = "read" | "validate" | "delete";
+
+export async function canUserAccessEvidence(
+  evidence: { planId: string; planItemId?: string | null; uploadedBy?: string | null },
+  user: Pick<AccessTokenClaims, "sub" | "role">,
+  action: EvidenceAccessAction = "read",
+  db: any = getDb(),
+): Promise<boolean> {
+  if (user.role === "ADMIN") return true;
+  if (user.role === "REPORTER") {
+    // Item access lets a reporter work on that item, but never exposes files
+    // uploaded by somebody else.
+    return action !== "validate" && evidence.uploadedBy === user.sub;
+  }
+
+  const planRows = await db
+    .select({ planId: pmaPlanAssignments.planId })
+    .from(pmaPlanAssignments)
+    .where(and(
+      eq(pmaPlanAssignments.planId, evidence.planId),
+      eq(pmaPlanAssignments.userId, user.sub),
+      eq(pmaPlanAssignments.explicitAccess, true)
+    ))
+    .limit(1);
+  if (planRows.length > 0) return true;
+  if (!evidence.planItemId) return false;
+
+  const itemRows = await db
+    .select({ planItemId: pmaItemAssignments.planItemId })
+    .from(pmaItemAssignments)
+    .innerJoin(pmaPlanItems, eq(pmaItemAssignments.planItemId, pmaPlanItems.id))
+    .where(and(
+      eq(pmaItemAssignments.userId, user.sub),
+      eq(pmaItemAssignments.planItemId, evidence.planItemId),
+      eq(pmaPlanItems.planId, evidence.planId)
+    ))
+    .limit(1);
+  return itemRows.length > 0;
+}
+
+export async function canUserUploadEvidence(
+  planId: string,
+  planItemId: string | undefined,
+  user: Pick<AccessTokenClaims, "sub" | "role">,
+  db: any = getDb(),
+): Promise<boolean> {
+  if (user.role === "ADMIN") return true;
+
+  // VIEWERs manage their assigned plans and may upload evidence there, scoped
+  // to an explicit plan grant or an item they are assigned to.
+  if (user.role === "VIEWER") {
+    const planGrant = await db
+      .select({ planId: pmaPlanAssignments.planId })
+      .from(pmaPlanAssignments)
+      .where(and(
+        eq(pmaPlanAssignments.planId, planId),
+        eq(pmaPlanAssignments.userId, user.sub),
+        eq(pmaPlanAssignments.explicitAccess, true)
+      ))
+      .limit(1);
+    if (planGrant.length > 0) return true;
+    if (!planItemId) return false;
+    const viewerItem = await db
+      .select({ planItemId: pmaItemAssignments.planItemId })
+      .from(pmaItemAssignments)
+      .innerJoin(pmaPlanItems, eq(pmaItemAssignments.planItemId, pmaPlanItems.id))
+      .where(and(
+        eq(pmaItemAssignments.userId, user.sub),
+        eq(pmaItemAssignments.planItemId, planItemId),
+        eq(pmaPlanItems.planId, planId)
+      ))
+      .limit(1);
+    return viewerItem.length > 0;
+  }
+
+  if (user.role !== "REPORTER") return false;
+  if (!planItemId) return false;
+
+  const exactItem = await db
+    .select({ planItemId: pmaItemAssignments.planItemId })
+    .from(pmaItemAssignments)
+    .innerJoin(pmaPlanItems, eq(pmaItemAssignments.planItemId, pmaPlanItems.id))
+    .where(and(
+      eq(pmaItemAssignments.userId, user.sub),
+      eq(pmaItemAssignments.planItemId, planItemId),
+      eq(pmaPlanItems.planId, planId)
+    ))
+    .limit(1);
+  return exactItem.length > 0;
+}
+
 export async function updateEvidenceValidation(
   evidenceId: string,
   status: "valid" | "invalid" | "pending",
-  adminId: string,
+  _adminId: string,
   validatedBy: string,
   validationComment?: string
 ) {
+  if (status === "invalid" && !validationComment?.trim()) {
+    throw BadRequest("El motivo de rechazo es obligatorio");
+  }
   const db = getDb();
-  const evidence = await getEvidenceById(evidenceId);
-  if (!evidence) throw NotFound("Evidence not found");
-  const plan = await db.select().from(pmaPlans).where(eq(pmaPlans.id, evidence.planId)).limit(1);
-  if (plan.length === 0) throw NotFound("Plan not found");
-
-  const previousStatus = evidence.validationStatus;
-  const [row] = await db
-    .update(pmaEvidences)
-    .set({
-      validationStatus: status,
-      validatedAt: new Date(),
+  return db.transaction(async (tx) => {
+    const actor = await lockAndAssertActor(
+      tx,
       validatedBy,
-      validationComment: status === "invalid" ? (validationComment ?? "").trim() : "",
-    })
-    .where(eq(pmaEvidences.id, evidenceId))
-    .returning();
-  return { evidence: toApi(row), previousStatus };
+      "pma",
+      ["ADMIN", "VIEWER"],
+    );
+    const [evidence] = await tx
+      .select()
+      .from(pmaEvidences)
+      .where(eq(pmaEvidences.id, evidenceId))
+      .limit(1)
+      .for("update");
+    if (!evidence) throw NotFound("Evidence not found");
+    if (!(await canUserAccessEvidence(
+      evidence,
+      { sub: actor.id, role: actor.role },
+      "validate",
+      tx,
+    ))) {
+      throw Forbidden("El acceso a la evidencia fue revocado durante la validación");
+    }
+
+    const previousStatus = evidence.validationStatus;
+    const [row] = await tx
+      .update(pmaEvidences)
+      .set({
+        validationStatus: status,
+        validatedAt: status === "pending" ? null : new Date(),
+        validatedBy: status === "pending" ? null : validatedBy,
+        validationComment: status === "invalid" ? validationComment!.trim() : null,
+      })
+      .where(eq(pmaEvidences.id, evidenceId))
+      .returning();
+    if (!row) throw new Error("Evidence validation update returned no row");
+
+    if (status !== previousStatus && status !== "pending") {
+      const recipientIds = await getEvidenceResultRecipientIds(tx, evidence.uploadedBy, validatedBy);
+      const approved = status === "valid";
+      await createNotifications(
+        recipientIds.map((userId) => ({
+          userId,
+          type: approved ? "evidence_approved" as const : "evidence_rejected" as const,
+          title: approved ? "Evidencia aprobada" : "Evidencia rechazada",
+          message: `Tu evidencia «${evidence.fileName}» fue ${approved ? "aprobada" : "rechazada"}.`,
+          planId: evidence.planId,
+          planItemId: evidence.planItemId ?? undefined,
+          evidenceId,
+          metadata: {
+            fileName: evidence.fileName,
+            validationStatus: status,
+          },
+        })),
+        tx
+      );
+    }
+
+    return { evidence: toApi(row), previousStatus };
+  });
 }
 
-export async function deleteEvidence(evidenceId: string, adminId: string) {
+export async function deleteEvidence(evidenceId: string, actorId: string) {
   const db = getDb();
-  const evidence = await getEvidenceById(evidenceId);
-  if (!evidence) throw NotFound("Evidence not found");
-  const plan = await db.select().from(pmaPlans).where(eq(pmaPlans.id, evidence.planId)).limit(1);
-  if (plan.length === 0) throw NotFound("Plan not found");
-
-  // Remove the file first; if the DB delete fails we won't leave an orphan file.
-  try {
-    await getStorage().delete(evidence.storagePath);
-  } catch {
-    // ignore storage errors; record is still valid to remove
-  }
-  await db.delete(pmaEvidences).where(eq(pmaEvidences.id, evidenceId));
+  await db.transaction(async (tx) => {
+    const actor = await lockAndAssertActor(
+      tx,
+      actorId,
+      "pma",
+      ["ADMIN", "REPORTER", "VIEWER"],
+    );
+    const [evidence] = await tx
+      .select()
+      .from(pmaEvidences)
+      .where(eq(pmaEvidences.id, evidenceId))
+      .limit(1)
+      .for("update");
+    if (!evidence) throw NotFound("Evidence not found");
+    if (!(await canUserAccessEvidence(
+      evidence,
+      { sub: actor.id, role: actor.role },
+      "delete",
+      tx,
+    ))) {
+      throw Forbidden("El acceso a la evidencia fue revocado durante la eliminación");
+    }
+    const deleted = await tx
+      .delete(pmaEvidences)
+      .where(eq(pmaEvidences.id, evidenceId))
+      .returning({ id: pmaEvidences.id });
+    if (deleted.length !== 1) throw NotFound("Evidence not found");
+    await enqueueStorageCleanupPaths(tx, [evidence.storagePath], `pma:evidence:${evidenceId}`);
+  });
 }

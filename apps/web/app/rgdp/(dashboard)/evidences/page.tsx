@@ -1,9 +1,7 @@
 "use client";
 
-import { apiFetch } from "@/lib/api-client";
-
-
-import { useEffect, useState } from "react";
+import { api, ApiError, apiErrorMessage } from "@/lib/api-client";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { useAuth } from "@/lib/auth-context";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -22,28 +20,60 @@ import { Evidence } from "@/types";
 export default function EvidencesPage() {
   const { user: session} = useAuth();
   const isAdmin = session?.role === "ADMIN";
+  const isReporter = session?.role === "REPORTER";
   const [evidences, setEvidences] = useState<Evidence[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [loadError, setLoadError] = useState<string | null>(null);
+  const [deletingId, setDeletingId] = useState<string | null>(null);
+  const deletingRef = useRef(false);
 
-  async function loadEvidences() {
-    const res = await apiFetch("/rgdp/api/evidences");
-    if (res.ok) {
-      const data = await res.json();
-      if (Array.isArray(data)) setEvidences(data);
+  const loadEvidences = useCallback(async (mine: boolean) => {
+    setLoading(true);
+    try {
+      const data = await api.get<Evidence[]>(`/rgdp/api/evidences${mine ? "?mine=true" : ""}`);
+      if (!Array.isArray(data)) throw new TypeError("Respuesta de evidencias inválida");
+      setEvidences(data);
+      setLoadError(null);
+    } catch (error) {
+      const message = apiErrorMessage(error, "No se pudieron cargar las evidencias");
+      setLoadError(message);
+      toast.error(message);
+    } finally {
+      setLoading(false);
     }
-  }
+  }, []);
 
   useEffect(() => {
-    loadEvidences();
-  }, []);
+    if (session) void loadEvidences(isReporter);
+  }, [session, isReporter, loadEvidences]);
 
   async function handleDelete(id: string) {
     if (!confirm("¿Eliminar esta evidencia?")) return;
-    const res = await apiFetch(`/rgdp/api/evidences?id=${id}`, { method: "DELETE" });
-    if (res.ok) {
+    if (deletingRef.current) return;
+    deletingRef.current = true;
+    setDeletingId(id);
+    try {
+      const receipt = await api.delete<unknown>(`/rgdp/api/evidences/${id}`);
+      if (
+        !receipt ||
+        typeof receipt !== "object" ||
+        (receipt as { ok?: unknown }).ok !== true ||
+        (receipt as { deleted?: { id?: unknown } }).deleted?.id !== id
+      ) {
+        throw new ApiError(
+          200,
+          "El servidor no confirmó la eliminación de la evidencia",
+          receipt,
+          "invalid_response"
+        );
+      }
+      setEvidences((current) => current.filter((evidence) => evidence.id !== id));
       toast.success("Evidencia eliminada");
-      loadEvidences();
-    } else {
-      toast.error("Error al eliminar");
+    } catch (error) {
+      toast.error(apiErrorMessage(error, "Error al eliminar la evidencia"));
+    } finally {
+      deletingRef.current = false;
+      setDeletingId(null);
     }
   }
 
@@ -51,14 +81,25 @@ export default function EvidencesPage() {
     <div>
       <div className="mb-6">
         <h1 className="text-2xl font-bold">
-          {isAdmin ? "Todas las Evidencias" : "Mis Evidencias"}
+          {isAdmin ? "Todas las Evidencias" : isReporter ? "Mis Evidencias" : "Evidencias de mis proyectos"}
         </h1>
         <p className="text-muted-foreground">
           {isAdmin
             ? "Ver todos los archivos de evidencia subidos"
-            : "Archivos de evidencia que has subido"}
+            : isReporter
+              ? "Archivos de evidencia que has subido"
+              : "Archivos de evidencia de los proyectos que tienes asignados"}
         </p>
       </div>
+
+      {loadError && (
+        <div className="mb-4 rounded-md border border-red-200 bg-red-50 p-3 text-sm text-red-700" role="alert">
+          <p>{loadError}</p>
+          <Button variant="link" className="h-auto p-0 text-red-700" onClick={() => void loadEvidences(isReporter)}>
+            Reintentar
+          </Button>
+        </div>
+      )}
 
       <Card>
         <CardHeader>
@@ -67,11 +108,13 @@ export default function EvidencesPage() {
           </CardTitle>
         </CardHeader>
         <CardContent>
-          {evidences.length === 0 ? (
+          {loading ? (
+            <p className="text-sm text-muted-foreground text-center py-8">Cargando evidencias...</p>
+          ) : evidences.length === 0 && !loadError ? (
             <p className="text-sm text-muted-foreground text-center py-8">
               Sin archivos de evidencia aún.
             </p>
-          ) : (
+          ) : evidences.length > 0 ? (
             <Table>
               <TableHeader>
                 <TableRow>
@@ -108,6 +151,8 @@ export default function EvidencesPage() {
                           <Button
                             variant="ghost"
                             size="sm"
+                            disabled={deletingId !== null}
+                            aria-busy={deletingId === ev.id}
                             onClick={() => handleDelete(ev.id)}
                           >
                             <Trash2 className="w-4 h-4 text-red-500" />
@@ -119,7 +164,7 @@ export default function EvidencesPage() {
                 ))}
               </TableBody>
             </Table>
-          )}
+          ) : null}
         </CardContent>
       </Card>
     </div>

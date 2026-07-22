@@ -37,7 +37,13 @@ export interface GisLayer {
   persisted?: boolean;
 }
 
-export type RasterStatus = "uploaded" | "processing" | "processed" | "error";
+export type RasterStatus =
+  | "uploaded" // compatibility with rows created before the durable queue flow
+  | "queued"
+  | "processing"
+  | "processed"
+  | "deleting"
+  | "error";
 
 /**
  * A raster (orthophoto) layer. Kept separate from GisLayer (vectors) because the
@@ -93,6 +99,11 @@ export interface AddLayerInput {
   /** Original uploaded file (.zip/.shp), kept for provenance. */
   sourceFile?: File | null;
   sourceFormat?: string;
+}
+
+export interface AddLayerResult {
+  persisted: boolean;
+  id: string;
 }
 
 export type { Feature, FeatureCollection, Geometry };

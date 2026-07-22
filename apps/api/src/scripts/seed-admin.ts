@@ -4,6 +4,7 @@ import { users, userApps } from "../db/schema/shared.js";
 import { hashPassword } from "../auth/password.js";
 import { eq } from "drizzle-orm";
 import * as readline from "readline";
+import { newPasswordValidationError } from "../auth/passwordPolicy.js";
 
 const rl = readline.createInterface({
   input: process.stdin,
@@ -32,8 +33,9 @@ async function seedAdmin() {
     process.exit(1);
   }
 
-  if (password.length < 8) {
-    console.error("❌ La contraseña debe tener al menos 8 caracteres");
+  const passwordError = newPasswordValidationError(password);
+  if (passwordError) {
+    console.error(`❌ ${passwordError}`);
     process.exit(1);
   }
 

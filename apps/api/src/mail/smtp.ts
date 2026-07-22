@@ -27,6 +27,9 @@ export class SmtpMail implements MailProvider {
         auth: env.SMTP_USER && env.SMTP_PASS
           ? { user: env.SMTP_USER, pass: env.SMTP_PASS }
           : undefined,
+        connectionTimeout: 15_000,
+        greetingTimeout: 15_000,
+        socketTimeout: 30_000,
       });
     }
     return this.transporter;
@@ -43,11 +46,17 @@ export class SmtpMail implements MailProvider {
       subject: msg.subject,
       html: msg.html,
       text: msg.text,
+      messageId: msg.messageId,
       attachments: msg.attachments?.map((a) => ({
         filename: a.filename,
         content: a.content,
         contentType: a.contentType,
       })),
     });
+  }
+
+  close(): void {
+    this.transporter?.close();
+    this.transporter = null;
   }
 }

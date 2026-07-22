@@ -1,7 +1,7 @@
 ﻿"use client";
 
-import { apiFetch } from "@/lib/api-client";
-import { useEffect, useState, useCallback, useMemo } from "react";
+import { apiErrorFromResponse, apiErrorMessage, apiFetch } from "@/lib/api-client";
+import { useEffect, useState, useCallback, useMemo, useRef } from "react";
 import { useAuth } from "@/lib/auth-context";
 import { useParams, useSearchParams } from "next/navigation";
 import { Button } from "@/components/ui/button";
@@ -26,21 +26,29 @@ import {
 } from "@/components/ui/dialog";
 import { Upload, ExternalLink, Trash2, Plus, Users, CheckCircle2, AlertTriangle, XCircle, Pencil, Download, FileSpreadsheet, OctagonAlert } from "lucide-react";
 import { toast } from "sonner";
-import { Plan, Evidence, User, PlanItem, ItemAssignmentCategory, EvidenceValidationStatus, MonthlyGeneration } from "@/types";
+import type {
+  BulkCreateResult,
+  Evidence,
+  EvidenceValidationStatus,
+  ItemAssignmentCategory,
+  MonthlyGeneration,
+  Plan,
+  PlanItem,
+  RgdpWastePlanItemInput,
+  RgdtWasteCatalogEntry,
+  User,
+} from "@/types";
 import {
   DropdownMenu,
   DropdownMenuContent,
   DropdownMenuItem,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
-import { parseExcelFile, ParsedItemRow } from "@/lib/excelImport";
-import { parseDateOnly } from "@/lib/dateOnly";
-
-interface RgdtCatalogEntry {
-  codigo: string;
-  descripcion: string;
-  crtib: string;
-}
+import {
+  parseRgdpWasteExcel,
+  type ParsedRgdpWasteRow,
+} from "@/lib/rgdpWasteExcelImport";
+import { getBusinessMonth, getPlanStartDate } from "@/lib/planPeriods";
 
 const EMPTY_ITEM_FORM = {
   wasteCode: "",
@@ -75,58 +83,103 @@ export default function PlanDetailPage() {
 
   const [plan, setPlan] = useState<Plan | null>(null);
   const [evidences, setEvidences] = useState<Evidence[]>([]);
+  const [validatingEvidenceIds, setValidatingEvidenceIds] = useState<Set<string>>(new Set());
+  const validatingEvidenceIdsRef = useRef(new Set<string>());
+  const [deletingEvidenceIds, setDeletingEvidenceIds] = useState<Set<string>>(new Set());
+  const deletingEvidenceIdsRef = useRef(new Set<string>());
   const [allReporters, setAllReporters] = useState<User[]>([]);
   const [allViewers, setAllViewers] = useState<User[]>([]);
   const [assignedViewerIds, setAssignedViewerIds] = useState<string[]>([]);
   const [assignViewerOpen, setAssignViewerOpen] = useState(false);
+  const [pendingViewerIds, setPendingViewerIds] = useState<Set<string>>(new Set());
+  const pendingViewerIdsRef = useRef(new Set<string>());
   const [planItems, setPlanItems] = useState<PlanItem[]>([]);
   const [addItemOpen, setAddItemOpen] = useState(false);
   const [itemForm, setItemForm] = useState(EMPTY_ITEM_FORM);
   const [savingItem, setSavingItem] = useState(false);
+  const savingItemRef = useRef(false);
   const [selectedDireccion, setSelectedDireccion] = useState<string>("");
   const [direccionPendingAssign, setDireccionPendingAssign] = useState<{ reporter: User; category: ItemAssignmentCategory } | null>(null);
   const [savingDireccionAssign, setSavingDireccionAssign] = useState(false);
+  const savingDireccionAssignRef = useRef(false);
   const [obsItem, setObsItem] = useState<PlanItem | null>(null);
   const [obsText, setObsText] = useState("");
   const [savingObs, setSavingObs] = useState(false);
+  const savingObsRef = useRef(false);
   const [editingItem, setEditingItem] = useState<PlanItem | null>(null);
   const [calUpload, setCalUpload] = useState<{ item: PlanItem; month: Date } | null>(null);
   const [uploadingCal, setUploadingCal] = useState(false);
+  const uploadingCalRef = useRef(false);
   const [selectedReportPeriods, setSelectedReportPeriods] = useState<Record<string, string>>({});
   const [downloadingPeriod, setDownloadingPeriod] = useState<string | null>(null);
   const [bulkOpen, setBulkOpen] = useState(false);
-  const [bulkRows, setBulkRows] = useState<ParsedItemRow[]>([]);
+  const [bulkRows, setBulkRows] = useState<ParsedRgdpWasteRow[]>([]);
   const [bulkFileName, setBulkFileName] = useState<string>("");
   const [bulkParseError, setBulkParseError] = useState<string>("");
   const [bulkUploading, setBulkUploading] = useState(false);
+  const bulkUploadingRef = useRef(false);
   const [approvedWarningRows, setApprovedWarningRows] = useState<Set<number>>(new Set());
   const [monthlyGenerationRecords, setMonthlyGenerationRecords] = useState<MonthlyGeneration[]>([]);
+  const [savingGenerationKeys, setSavingGenerationKeys] = useState<Set<string>>(new Set());
+  const savingGenerationKeysRef = useRef(new Set<string>());
   const [highlightEvidenceId, setHighlightEvidenceId] = useState<string | null>(null);
   const [deletePlanOpen, setDeletePlanOpen] = useState(false);
   const [deletingPlan, setDeletingPlan] = useState(false);
-  const [catalogEntries, setCatalogEntries] = useState<RgdtCatalogEntry[]>([]);
+  const deletingPlanRef = useRef(false);
+  const [deletingItemIds, setDeletingItemIds] = useState<Set<string>>(new Set());
+  const deletingItemIdsRef = useRef(new Set<string>());
+  const [catalogEntries, setCatalogEntries] = useState<RgdtWasteCatalogEntry[]>([]);
   const [draftGenerationInputs, setDraftGenerationInputs] = useState<Record<string, string>>({});
+  const [loadError, setLoadError] = useState<string | null>(null);
 
   const loadPlan = useCallback(async () => {
-    const res = await apiFetch(`/rgdp/api/plans/${id}`);
-    if (res.ok) {
-      const data = await res.json();
+    setLoadError(null);
+    try {
+      const res = await apiFetch(`/rgdp/api/plans/${id}`);
+      if (!res.ok) throw await apiErrorFromResponse(res, "No se pudo cargar el proyecto");
+      const data = (await res.json()) as {
+        plan?: Plan;
+        evidences?: Evidence[];
+        assignedUsers?: string[];
+      };
+      if (!data.plan || !Array.isArray(data.evidences)) {
+        throw new Error("El servidor devolvió un proyecto inválido");
+      }
       setPlan(data.plan);
       setEvidences(data.evidences);
+      setLoadError(null);
       if (Array.isArray(data.assignedUsers)) {
         setAssignedViewerIds(data.assignedUsers);
       }
+    } catch (error) {
+      const message = apiErrorMessage(error, "No se pudo cargar el proyecto");
+      setLoadError(message);
+      toast.error(message);
     }
   }, [id]);
 
   const loadItems = useCallback(async () => {
-    const res = await apiFetch(`/rgdp/api/plans/${id}/items`);
-    if (res.ok) setPlanItems(await res.json());
+    try {
+      const res = await apiFetch(`/rgdp/api/plans/${id}/items`);
+      if (!res.ok) throw await apiErrorFromResponse(res, "No se pudieron cargar los Items");
+      const data = (await res.json()) as unknown;
+      if (!Array.isArray(data)) throw new Error("El servidor devolvió Items inválidos");
+      setPlanItems(data as PlanItem[]);
+    } catch (error) {
+      toast.error(apiErrorMessage(error, "No se pudieron cargar los Items"));
+    }
   }, [id]);
 
   const loadMonthlyGeneration = useCallback(async () => {
-    const res = await apiFetch(`/rgdp/api/plans/${id}/monthly-generation`);
-    if (res.ok) setMonthlyGenerationRecords(await res.json());
+    try {
+      const res = await apiFetch(`/rgdp/api/plans/${id}/monthly-generation`);
+      if (!res.ok) throw await apiErrorFromResponse(res, "No se pudo cargar la generación mensual");
+      const data = (await res.json()) as unknown;
+      if (!Array.isArray(data)) throw new Error("El servidor devolvió generaciones mensuales inválidas");
+      setMonthlyGenerationRecords(data as MonthlyGeneration[]);
+    } catch (error) {
+      toast.error(apiErrorMessage(error, "No se pudo cargar la generación mensual"));
+    }
   }, [id]);
 
   useEffect(() => {
@@ -136,33 +189,50 @@ export default function PlanDetailPage() {
   }, [loadPlan, loadItems, loadMonthlyGeneration]);
 
   useEffect(() => {
-    if (isAdmin) {
-      apiFetch("/rgdp/api/users")
-        .then((r) => r.json())
-        .then((data) => {
-          if (Array.isArray(data)) {
-            setAllReporters(data.filter((u: User) => u.role === "REPORTER"));
-            setAllViewers(data.filter((u: User) => u.role === "VIEWER"));
-          }
-        });
-    }
+    if (!isAdmin) return;
+    let active = true;
+    void (async () => {
+      try {
+        const response = await apiFetch("/rgdp/api/users");
+        if (!response.ok) throw await apiErrorFromResponse(response, "No se pudieron cargar los usuarios RGDP");
+        const data = (await response.json()) as unknown;
+        if (!Array.isArray(data)) throw new Error("El servidor devolvió usuarios inválidos");
+        if (!active) return;
+        setAllReporters((data as User[]).filter((user) => user.role === "REPORTER"));
+        setAllViewers((data as User[]).filter((user) => user.role === "VIEWER"));
+      } catch (error) {
+        if (active) toast.error(apiErrorMessage(error, "No se pudieron cargar los usuarios RGDP"));
+      }
+    })();
+    return () => {
+      active = false;
+    };
   }, [isAdmin]);
 
   useEffect(() => {
     if (!isAdmin) return;
-    apiFetch("/rgdp/api/waste-catalog")
-      .then((r) => r.json())
-      .then((data) => {
-        if (Array.isArray(data)) {
-          setCatalogEntries(data);
-        } else {
-          setCatalogEntries([]);
+    let active = true;
+    void (async () => {
+      try {
+        const response = await apiFetch("/rgdp/api/waste-catalog");
+        if (!response.ok) {
+          throw await apiErrorFromResponse(
+            response,
+            "No se pudo cargar el catálogo de residuos RGDT"
+          );
         }
-      })
-      .catch(() => {
+        const data = (await response.json()) as unknown;
+        if (!Array.isArray(data)) throw new Error("El catálogo RGDT tiene un formato inválido");
+        if (active) setCatalogEntries(data as RgdtWasteCatalogEntry[]);
+      } catch (error) {
+        if (!active) return;
         setCatalogEntries([]);
-        toast.error("No se pudo cargar el catálogo de residuos RGDT");
-      });
+        toast.error(apiErrorMessage(error, "No se pudo cargar el catálogo de residuos RGDT"));
+      }
+    })();
+    return () => {
+      active = false;
+    };
   }, [isAdmin]);
 
   useEffect(() => {
@@ -189,47 +259,93 @@ export default function PlanDetailPage() {
   }, [deepLinkEvidenceId, evidences]);
 
   async function handleDeletePlan() {
+    if (deletingPlanRef.current) return;
+    deletingPlanRef.current = true;
     setDeletingPlan(true);
     try {
       const res = await apiFetch(`/rgdp/api/plans/${id}`, { method: "DELETE" });
-      if (res.ok) {
-        toast.success("Proyecto eliminado correctamente");
-        window.location.assign("/rgdp/plans");
-      } else {
-        const data = await res.json();
-        toast.error(data.error || "Error al eliminar el proyecto");
+      if (!res.ok) throw await apiErrorFromResponse(res, "Error al eliminar el proyecto");
+      const result = (await res.json()) as { ok?: boolean; deleted?: { id?: string } };
+      if (result.ok !== true || result.deleted?.id !== id) {
+        throw new Error("El servidor no confirmó la eliminación del proyecto");
       }
-    } finally {
-      setDeletingPlan(false);
+      toast.success("Proyecto eliminado correctamente");
       setDeletePlanOpen(false);
+      window.location.assign("/rgdp/plans");
+    } catch (error) {
+      toast.error(apiErrorMessage(error, "Error al eliminar el proyecto"));
+    } finally {
+      deletingPlanRef.current = false;
+      setDeletingPlan(false);
     }
   }
 
   async function handleAssignViewer(viewerId: string) {
-    const res = await apiFetch(`/rgdp/api/plans/${id}/assign`, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ userId: viewerId }),
-    });
-    if (res.ok) {
+    if (pendingViewerIdsRef.current.has(viewerId)) return;
+    pendingViewerIdsRef.current.add(viewerId);
+    setPendingViewerIds((prev) => new Set(prev).add(viewerId));
+    try {
+      const res = await apiFetch(`/rgdp/api/plans/${id}/assign`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ userId: viewerId }),
+      });
+      if (!res.ok) throw await apiErrorFromResponse(res, "Error al asignar visualizador");
+      const result = (await res.json()) as {
+        ok?: boolean;
+        assignment?: { planId?: string; userId?: string; explicitAccess?: boolean };
+      };
+      if (
+        result.ok !== true ||
+        result.assignment?.planId !== id ||
+        result.assignment.userId !== viewerId ||
+        result.assignment.explicitAccess !== true
+      ) throw new Error("El servidor no confirmó la asignación");
       setAssignedViewerIds((prev) => [...prev, viewerId]);
       toast.success("Visualizador asignado al proyecto");
-    } else {
-      toast.error("Error al asignar visualizador");
+    } catch (error) {
+      toast.error(apiErrorMessage(error, "Error al asignar visualizador"));
+    } finally {
+      pendingViewerIdsRef.current.delete(viewerId);
+      setPendingViewerIds((prev) => {
+        const next = new Set(prev);
+        next.delete(viewerId);
+        return next;
+      });
     }
   }
 
   async function handleUnassignViewer(viewerId: string) {
-    const res = await apiFetch(`/rgdp/api/plans/${id}/assign`, {
-      method: "DELETE",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ userId: viewerId }),
-    });
-    if (res.ok) {
+    if (pendingViewerIdsRef.current.has(viewerId)) return;
+    pendingViewerIdsRef.current.add(viewerId);
+    setPendingViewerIds((prev) => new Set(prev).add(viewerId));
+    try {
+      const res = await apiFetch(`/rgdp/api/plans/${id}/assign`, {
+        method: "DELETE",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ userId: viewerId }),
+      });
+      if (!res.ok) throw await apiErrorFromResponse(res, "Error al desasignar visualizador");
+      const result = (await res.json()) as {
+        ok?: boolean;
+        assignment?: { planId?: string; userId?: string };
+      };
+      if (
+        result.ok !== true ||
+        result.assignment?.planId !== id ||
+        result.assignment.userId !== viewerId
+      ) throw new Error("El servidor no confirmó la desasignación");
       setAssignedViewerIds((prev) => prev.filter((vid) => vid !== viewerId));
       toast.success("Visualizador desasignado del proyecto");
-    } else {
-      toast.error("Error al desasignar visualizador");
+    } catch (error) {
+      toast.error(apiErrorMessage(error, "Error al desasignar visualizador"));
+    } finally {
+      pendingViewerIdsRef.current.delete(viewerId);
+      setPendingViewerIds((prev) => {
+        const next = new Set(prev);
+        next.delete(viewerId);
+        return next;
+      });
     }
   }
 
@@ -238,48 +354,74 @@ export default function PlanDetailPage() {
     status: EvidenceValidationStatus,
     validationComment?: string
   ) {
-    const res = await apiFetch(`/rgdp/api/evidences/${evidenceId}/validation`, {
-      method: "PUT",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        status,
-        ...(status === "invalid"
-          ? { comment: validationComment?.trim() ?? "" }
-          : {}),
-      }),
-    });
-
-    if (res.ok) {
+    if (validatingEvidenceIdsRef.current.has(evidenceId)) return;
+    validatingEvidenceIdsRef.current.add(evidenceId);
+    setValidatingEvidenceIds((previous) => new Set(previous).add(evidenceId));
+    const expectedComment = validationComment?.trim() ?? "";
+    try {
+      const res = await apiFetch(`/rgdp/api/evidences/${evidenceId}/validation`, {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          status,
+          ...(status === "invalid" ? { comment: expectedComment } : {}),
+        }),
+      });
+      if (!res.ok) {
+        throw await apiErrorFromResponse(res, "Error al actualizar validación");
+      }
+      const result = (await res.json()) as { evidence?: Evidence };
+      const saved = result.evidence;
+      if (
+        !saved ||
+        saved.id !== evidenceId ||
+        saved.planId !== id ||
+        saved.validationStatus !== status ||
+        (status === "invalid" && saved.validationComment?.trim() !== expectedComment)
+      ) {
+        throw new Error("El servidor no confirmó la validación de la evidencia");
+      }
       setEvidences((prev) =>
-        prev.map((ev) =>
-          ev.id === evidenceId
-            ? {
-                ...ev,
-                validationStatus: status,
-                validationComment:
-                  status === "invalid" ? validationComment?.trim() ?? "" : "",
-              }
-            : ev
-        )
+        prev.map((evidence) => (evidence.id === evidenceId ? saved : evidence))
       );
       toast.success("Validación actualizada");
-    } else {
-      const data = await res.json().catch(() => ({}));
-      toast.error(data.error || "Error al actualizar validación");
+    } catch (error) {
+      toast.error(apiErrorMessage(error, "Error al actualizar validación"));
+    } finally {
+      validatingEvidenceIdsRef.current.delete(evidenceId);
+      setValidatingEvidenceIds((previous) => {
+        const next = new Set(previous);
+        next.delete(evidenceId);
+        return next;
+      });
     }
   }
 
   async function handleDeleteEvidence(evidenceId: string) {
     if (!confirm("¿Eliminar esta evidencia?")) return;
-    const res = await apiFetch(`/rgdp/api/evidences?id=${evidenceId}`, {
-      method: "DELETE",
-    });
-
-    if (res.ok) {
+    if (deletingEvidenceIdsRef.current.has(evidenceId)) return;
+    deletingEvidenceIdsRef.current.add(evidenceId);
+    setDeletingEvidenceIds((previous) => new Set(previous).add(evidenceId));
+    try {
+      const res = await apiFetch(`/rgdp/api/evidences/${evidenceId}`, {
+        method: "DELETE",
+      });
+      if (!res.ok) throw await apiErrorFromResponse(res, "Error al eliminar evidencia");
+      const result = (await res.json()) as { ok?: boolean; deleted?: { id?: string } };
+      if (result.ok !== true || result.deleted?.id !== evidenceId) {
+        throw new Error("El servidor no confirmó la eliminación de la evidencia");
+      }
+      setEvidences((previous) => previous.filter((evidence) => evidence.id !== evidenceId));
       toast.success("Evidencia eliminada");
-      loadPlan();
-    } else {
-      toast.error("Error al eliminar");
+    } catch (error) {
+      toast.error(apiErrorMessage(error, "Error al eliminar evidencia"));
+    } finally {
+      deletingEvidenceIdsRef.current.delete(evidenceId);
+      setDeletingEvidenceIds((previous) => {
+        const next = new Set(previous);
+        next.delete(evidenceId);
+        return next;
+      });
     }
   }
 
@@ -302,7 +444,7 @@ export default function PlanDetailPage() {
     [catalogEntries]
   );
 
-  function applyCatalogEntry(entry: RgdtCatalogEntry) {
+  function applyCatalogEntry(entry: RgdtWasteCatalogEntry) {
     setItemForm((prev) => ({
       ...prev,
       wasteCode: entry.codigo,
@@ -336,6 +478,7 @@ export default function PlanDetailPage() {
 
   async function handleAddItem(e: React.FormEvent) {
     e.preventDefault();
+    if (savingItemRef.current) return;
     const annualGenerationKg = Number(itemForm.annualGenerationKg);
     if (!Number.isFinite(annualGenerationKg) || annualGenerationKg < 0) {
       toast.error("Generación anual (kg) debe ser un número válido");
@@ -362,6 +505,7 @@ export default function PlanDetailPage() {
       selfManagement: itemForm.selfManagement,
     };
 
+    savingItemRef.current = true;
     setSavingItem(true);
     try {
       if (editingItem) {
@@ -370,16 +514,16 @@ export default function PlanDetailPage() {
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify(payload),
         });
-        if (res.ok) {
-          toast.success("Item actualizado correctamente");
-          setEditingItem(null);
-          setItemForm(EMPTY_ITEM_FORM);
-          setAddItemOpen(false);
-          await loadItems();
-        } else {
-          const data = await res.json();
-          toast.error(data.error || "Error al actualizar item");
+        if (!res.ok) throw await apiErrorFromResponse(res, "Error al actualizar item");
+        const saved = (await res.json()) as PlanItem;
+        if (saved.id !== editingItem.id || saved.planId !== id) {
+          throw new Error("El servidor devolvió una confirmación de Item inválida");
         }
+        toast.success("Item actualizado correctamente");
+        setEditingItem(null);
+        setItemForm(EMPTY_ITEM_FORM);
+        setAddItemOpen(false);
+        await loadItems();
         return;
       }
 
@@ -389,18 +533,19 @@ export default function PlanDetailPage() {
         body: JSON.stringify(payload),
       });
 
-      if (res.ok) {
-        toast.success("Item agregado correctamente");
-        setItemForm(EMPTY_ITEM_FORM);
-        setAddItemOpen(false);
-        await loadItems();
-      } else {
-        const data = await res.json();
-        toast.error(data.error || "Error al agregar item");
+      if (!res.ok) throw await apiErrorFromResponse(res, "Error al agregar item");
+      const saved = (await res.json()) as PlanItem;
+      if (!saved.id || saved.planId !== id) {
+        throw new Error("El servidor devolvió una confirmación de Item inválida");
       }
-    } catch {
-      toast.error("Error al guardar el item");
+      toast.success("Item agregado correctamente");
+      setItemForm(EMPTY_ITEM_FORM);
+      setAddItemOpen(false);
+      await loadItems();
+    } catch (error) {
+      toast.error(apiErrorMessage(error, "Error al guardar el item"));
     } finally {
+      savingItemRef.current = false;
       setSavingItem(false);
     }
   }
@@ -413,8 +558,22 @@ export default function PlanDetailPage() {
     setBulkFileName(file.name);
     setBulkParseError("");
     setBulkRows([]);
+    setApprovedWarningRows(new Set());
 
-    const result = await parseExcelFile(file);
+    if (catalogEntries.length === 0) {
+      setBulkParseError("El catálogo RGDT no está disponible; no se puede validar la carga masiva");
+      setBulkOpen(true);
+      return;
+    }
+
+    let result: Awaited<ReturnType<typeof parseRgdpWasteExcel>>;
+    try {
+      result = await parseRgdpWasteExcel(file);
+    } catch (error) {
+      setBulkParseError(apiErrorMessage(error, "No se pudo leer el archivo Excel"));
+      setBulkOpen(true);
+      return;
+    }
     if (result.fatalError) {
       setBulkParseError(result.fatalError);
       setBulkOpen(true);
@@ -433,37 +592,57 @@ export default function PlanDetailPage() {
       return;
     }
 
-    setBulkRows(result.rows);
+    const validatedRows = result.rows.map((row) => {
+      const match = findExactCatalogMatch(row);
+      if (!match) {
+        return {
+          ...row,
+          errors: [
+            ...row.errors,
+            "Código, Nombre y CRTIB no coinciden con el catálogo RGDT",
+          ],
+        };
+      }
+      return {
+        ...row,
+        wasteCode: match.codigo,
+        wasteName: match.descripcion,
+        crtib: match.crtib,
+      };
+    });
+    setBulkRows(validatedRows);
     setBulkOpen(true);
   }
 
   async function handleBulkSubmit() {
+    if (bulkUploadingRef.current) return;
     const hasErrors = bulkRows.some((r) => r.errors.length > 0);
     if (hasErrors) {
       toast.error("Corrige las filas con error antes de cargar");
       return;
     }
 
-    const existingItems = new Set(planItems.map((p) => p.item.trim().toLowerCase()));
+    const existingCodes = new Set(
+      planItems
+        .map((item) => normalizeCatalogValue(item.wasteCode ?? ""))
+        .filter(Boolean)
+    );
 
-    const toSend = bulkRows
+    const toSend: RgdpWastePlanItemInput[] = bulkRows
       .filter((r) => {
         if (r.errors.length > 0) return false;
-        const isDuplicate = !!r.item && existingItems.has(r.item.trim().toLowerCase());
+        const isDuplicate = existingCodes.has(normalizeCatalogValue(r.wasteCode));
         const hasWarn = r.warnings.length > 0 || isDuplicate;
         return hasWarn ? approvedWarningRows.has(r.rowNumber) : true;
       })
       .map((r) => ({
-        item: r.item,
-        subplan: r.subplan,
-        direccion: r.direccion,
-        environmental_activity: r.environmental_activity,
-        identified_environmental_impact: r.identified_environmental_impact,
-        proposed_measure: r.proposed_measure,
-        indicator: r.indicator,
-        verification_method: r.verification_method,
-        periodicity: r.periodicity,
-        budget: r.budget,
+        wasteCode: r.wasteCode,
+        wasteName: r.wasteName,
+        wasteDescription: r.wasteDescription,
+        crtib: r.crtib,
+        annualGenerationKg: r.annualGenerationKg,
+        generationOrigin: r.generationOrigin,
+        selfManagement: r.selfManagement,
         observation: r.observation,
       }));
 
@@ -472,6 +651,7 @@ export default function PlanDetailPage() {
       return;
     }
 
+    bulkUploadingRef.current = true;
     setBulkUploading(true);
     try {
       const res = await apiFetch(`/rgdp/api/plans/${id}/items/bulk`, {
@@ -479,29 +659,44 @@ export default function PlanDetailPage() {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ items: toSend }),
       });
-      if (res.ok) {
-        const data = await res.json();
-        toast.success(`${data.created} Items cargados correctamente`);
-        if (data.failed?.length > 0) {
-          toast.warning(`${data.failed.length} Items fallaron al crear`);
-        }
-        setBulkOpen(false);
-        setBulkRows([]);
-        setBulkFileName("");
-        await loadItems();
-      } else {
-        const data = await res.json();
-        toast.error(data.error || "Error al cargar Items");
+      if (!res.ok) throw await apiErrorFromResponse(res, "Error al cargar Items");
+
+      const data = (await res.json()) as BulkCreateResult<PlanItem>;
+      if (
+        !Number.isInteger(data.created) ||
+        data.created < 0 ||
+        !Array.isArray(data.items) ||
+        !Array.isArray(data.failed) ||
+        data.items.length !== data.created ||
+        data.items.some((item) => !item?.id || item.planId !== id)
+      ) {
+        throw new Error("El servidor devolvió una confirmación de carga inválida");
       }
-    } catch {
-      toast.error("Error al cargar Items");
+      if (data.created > 0) {
+        toast.success(`${data.created} Items cargados correctamente`);
+      }
+      if (data.failed.length > 0) {
+        toast.warning(`${data.failed.length} Items fallaron al crear`);
+      }
+      if (data.created === 0) {
+        toast.error("El servidor no confirmó la creación de ningún Item");
+        return;
+      }
+      setBulkOpen(false);
+      setBulkRows([]);
+      setBulkFileName("");
+      await loadItems();
+    } catch (error) {
+      toast.error(apiErrorMessage(error, "Error al cargar Items"));
     } finally {
+      bulkUploadingRef.current = false;
       setBulkUploading(false);
     }
   }
 
   async function handleAssignToDireccion(userId: string, category: ItemAssignmentCategory) {
-    if (!selectedDireccion) return;
+    if (!selectedDireccion || savingDireccionAssignRef.current) return;
+    savingDireccionAssignRef.current = true;
     setSavingDireccionAssign(true);
     try {
       const res = await apiFetch(`/rgdp/api/plans/${id}/items/assign-direccion`, {
@@ -509,20 +704,32 @@ export default function PlanDetailPage() {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ direccion: selectedDireccion, userId, category }),
       });
-      if (res.ok) {
-        toast.success("Reportero asignado a la dirección");
-        setDireccionPendingAssign(null);
-        await loadItems();
-      } else {
-        toast.error("Error al asignar");
-      }
+      if (!res.ok) throw await apiErrorFromResponse(res, "Error al asignar reportero");
+      const result = (await res.json()) as {
+        ok?: boolean;
+        assignment?: { planId?: string; userId?: string; assignments?: unknown[] };
+      };
+      if (
+        result.ok !== true ||
+        result.assignment?.planId !== id ||
+        result.assignment.userId !== userId ||
+        !Array.isArray(result.assignment.assignments) ||
+        result.assignment.assignments.length === 0
+      ) throw new Error("El servidor no confirmó la asignación");
+      toast.success("Reportero asignado a la dirección");
+      setDireccionPendingAssign(null);
+      await loadItems();
+    } catch (error) {
+      toast.error(apiErrorMessage(error, "Error al asignar reportero"));
     } finally {
+      savingDireccionAssignRef.current = false;
       setSavingDireccionAssign(false);
     }
   }
 
   async function handleUnassignFromDireccion(userId: string) {
-    if (!selectedDireccion) return;
+    if (!selectedDireccion || savingDireccionAssignRef.current) return;
+    savingDireccionAssignRef.current = true;
     setSavingDireccionAssign(true);
     try {
       const res = await apiFetch(`/rgdp/api/plans/${id}/items/assign-direccion`, {
@@ -530,39 +737,68 @@ export default function PlanDetailPage() {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ direccion: selectedDireccion, userId }),
       });
-      if (res.ok) {
-        toast.success("Reportero desasignado de la dirección");
-        await loadItems();
-      } else {
-        toast.error("Error al desasignar");
-      }
+      if (!res.ok) throw await apiErrorFromResponse(res, "Error al desasignar reportero");
+      const result = (await res.json()) as {
+        ok?: boolean;
+        assignment?: { planId?: string; userId?: string; unassignedItemIds?: unknown[] };
+      };
+      if (
+        result.ok !== true ||
+        result.assignment?.planId !== id ||
+        result.assignment.userId !== userId ||
+        !Array.isArray(result.assignment.unassignedItemIds) ||
+        result.assignment.unassignedItemIds.length === 0
+      ) throw new Error("El servidor no confirmó la desasignación");
+      toast.success("Reportero desasignado de la dirección");
+      await loadItems();
+    } catch (error) {
+      toast.error(apiErrorMessage(error, "Error al desasignar reportero"));
     } finally {
+      savingDireccionAssignRef.current = false;
       setSavingDireccionAssign(false);
     }
   }
 
   async function handleCalUploadSubmit(e: React.FormEvent<HTMLFormElement>) {
     e.preventDefault();
-    if (!calUpload) return;
+    if (!calUpload || uploadingCalRef.current) return;
+    const form = e.currentTarget;
+    const pendingUpload = calUpload;
+    uploadingCalRef.current = true;
     setUploadingCal(true);
 
-    const monthKey = `${calUpload.month.getFullYear()}-${String(calUpload.month.getMonth() + 1).padStart(2, "0")}`;
-    const formData = new FormData(e.currentTarget);
+    const monthKey = `${pendingUpload.month.getFullYear()}-${String(pendingUpload.month.getMonth() + 1).padStart(2, "0")}`;
+    const formData = new FormData(form);
     formData.set("planId", id);
-    formData.set("planItemId", calUpload.item.id);
+    formData.set("planItemId", pendingUpload.item.id);
     formData.set("activityMonth", monthKey);
 
-    const res = await apiFetch("/rgdp/api/upload", { method: "POST", body: formData });
-    setUploadingCal(false);
-
-    if (res.ok) {
-      toast.success("Evidencia subida correctamente");
-      (e.target as HTMLFormElement).reset();
+    try {
+      const res = await apiFetch("/rgdp/api/upload", { method: "POST", body: formData });
+      if (!res.ok) throw await apiErrorFromResponse(res, "Error al subir evidencia");
+      const saved = (await res.json()) as Evidence;
+      if (
+        !saved?.id ||
+        saved.planId !== id ||
+        saved.planItemId !== pendingUpload.item.id ||
+        saved.activityMonth !== monthKey ||
+        !saved.driveFileId ||
+        !saved.driveUrl
+      ) {
+        throw new Error("El servidor no confirmó la persistencia de la evidencia");
+      }
+      setEvidences((previous) => [
+        saved,
+        ...previous.filter((evidence) => evidence.id !== saved.id),
+      ]);
+      form.reset();
       setCalUpload(null);
-      loadPlan();
-    } else {
-      const data = await res.json();
-      toast.error(data.error || "Error al subir");
+      toast.success("Evidencia subida correctamente");
+    } catch (error) {
+      toast.error(apiErrorMessage(error, "Error al subir evidencia"));
+    } finally {
+      uploadingCalRef.current = false;
+      setUploadingCal(false);
     }
   }
 
@@ -577,9 +813,7 @@ export default function PlanDetailPage() {
       });
       const res = await apiFetch(`/rgdp/api/download/item-period?${params}`);
       if (!res.ok) {
-        const data = await res.json().catch(() => ({}));
-        toast.error(data.error || "No hay archivos para descargar");
-        return;
+        throw await apiErrorFromResponse(res, "No hay archivos para descargar");
       }
       const blob = await res.blob();
       const url = URL.createObjectURL(blob);
@@ -590,8 +824,8 @@ export default function PlanDetailPage() {
       a.click();
       document.body.removeChild(a);
       URL.revokeObjectURL(url);
-    } catch {
-      toast.error("Error al descargar");
+    } catch (error) {
+      toast.error(apiErrorMessage(error, "Error al descargar"));
     } finally {
       setDownloadingPeriod(null);
     }
@@ -599,36 +833,61 @@ export default function PlanDetailPage() {
 
   async function handleDeleteItem(itemId: string) {
     if (!confirm("¿Eliminar este Item?")) return;
-
-    const res = await apiFetch(`/rgdp/api/plans/${id}/items/${itemId}`, {
-      method: "DELETE",
-    });
-
-    if (res.ok) {
+    if (deletingItemIdsRef.current.has(itemId)) return;
+    deletingItemIdsRef.current.add(itemId);
+    setDeletingItemIds((prev) => new Set(prev).add(itemId));
+    try {
+      const res = await apiFetch(`/rgdp/api/plans/${id}/items/${itemId}`, {
+        method: "DELETE",
+      });
+      if (!res.ok) throw await apiErrorFromResponse(res, "Error al eliminar Item");
+      const result = (await res.json()) as { ok?: boolean; deleted?: { id?: string } };
+      if (result.ok !== true || result.deleted?.id !== itemId) {
+        throw new Error("El servidor no confirmó la eliminación del Item");
+      }
       toast.success("Item eliminado");
-      loadItems();
-    } else {
-      toast.error("Error al eliminar Item");
+      await loadItems();
+    } catch (error) {
+      toast.error(apiErrorMessage(error, "Error al eliminar Item"));
+    } finally {
+      deletingItemIdsRef.current.delete(itemId);
+      setDeletingItemIds((prev) => {
+        const next = new Set(prev);
+        next.delete(itemId);
+        return next;
+      });
     }
   }
 
   async function handleSaveObservation() {
-    if (!obsItem) return;
+    if (!obsItem || savingObsRef.current) return;
+    savingObsRef.current = true;
     setSavingObs(true);
-    const res = await apiFetch(`/rgdp/api/plans/${id}/items/${obsItem.id}`, {
-      method: "PATCH",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ observation: obsText }),
-    });
-    setSavingObs(false);
-    if (res.ok) {
+    try {
+      const res = await apiFetch(`/rgdp/api/plans/${id}/items/${obsItem.id}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ observation: obsText }),
+      });
+      if (!res.ok) throw await apiErrorFromResponse(res, "Error al guardar observación");
+      const updated = (await res.json()) as PlanItem;
+      if (updated.id !== obsItem.id || updated.planId !== id) {
+        throw new Error("El servidor devolvió una confirmación de observación inválida");
+      }
       setPlanItems((prev) =>
-        prev.map((pi) => (pi.id === obsItem.id ? { ...pi, observation: obsText } : pi))
+        prev.map((pi) =>
+          pi.id === obsItem.id
+            ? { ...pi, ...updated, assignedUsers: pi.assignedUsers }
+            : pi
+        )
       );
       toast.success("Observación guardada");
       setObsItem(null);
-    } else {
-      toast.error("Error al guardar observación");
+    } catch (error) {
+      toast.error(apiErrorMessage(error, "Error al guardar observación"));
+    } finally {
+      savingObsRef.current = false;
+      setSavingObs(false);
     }
   }
 
@@ -637,13 +896,33 @@ export default function PlanDetailPage() {
     periodKey: string,
     generationKg: number
   ): Promise<boolean> {
-    const res = await apiFetch(`/rgdp/api/plans/${id}/monthly-generation`, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ planItemId, periodKey, generationKg }),
-    });
-    if (res.ok) {
+    const generationKey = `${planItemId}::${periodKey}`;
+    if (savingGenerationKeysRef.current.has(generationKey)) return false;
+    savingGenerationKeysRef.current.add(generationKey);
+    setSavingGenerationKeys((prev) => new Set(prev).add(generationKey));
+    try {
+      const res = await apiFetch(`/rgdp/api/plans/${id}/monthly-generation`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ planItemId, periodKey, generationKg }),
+      });
+      if (!res.ok) {
+        throw await apiErrorFromResponse(res, "Error al guardar generación mensual");
+      }
       const updated = (await res.json()) as MonthlyGeneration;
+      const expectedGenerationKg = Math.round(generationKg * 1_000) / 1_000;
+      if (
+        updated.id !== `${planItemId}:${periodKey}` ||
+        updated.planId !== id ||
+        updated.planItemId !== planItemId ||
+        updated.periodKey !== periodKey ||
+        !Number.isFinite(updated.generationKg) ||
+        Math.abs(updated.generationKg - expectedGenerationKg) > 1e-9 ||
+        typeof updated.updatedAt !== "string" ||
+        !Number.isFinite(Date.parse(updated.updatedAt))
+      ) {
+        throw new Error("El servidor devolvió una confirmación mensual inválida");
+      }
       setMonthlyGenerationRecords((prev) => {
         const exists = prev.some(
           (r) => r.planItemId === planItemId && r.periodKey === periodKey
@@ -651,17 +930,23 @@ export default function PlanDetailPage() {
         if (exists) {
           return prev.map((r) =>
             r.planItemId === planItemId && r.periodKey === periodKey
-              ? { ...r, generationKg }
+              ? updated
               : r
           );
         }
         return [...prev, updated];
       });
       return true;
-    } else {
-      const data = await res.json().catch(() => ({}));
-      toast.error(data.error || "Error al guardar generación mensual");
+    } catch (error) {
+      toast.error(apiErrorMessage(error, "Error al guardar generación mensual"));
       return false;
+    } finally {
+      savingGenerationKeysRef.current.delete(generationKey);
+      setSavingGenerationKeys((prev) => {
+        const next = new Set(prev);
+        next.delete(generationKey);
+        return next;
+      });
     }
   }
 
@@ -672,7 +957,12 @@ export default function PlanDetailPage() {
   }
 
   if (!plan) {
-    return <div className="text-muted-foreground">Cargando...</div>;
+    return loadError ? (
+      <div className="space-y-3" role="alert">
+        <p className="text-sm text-red-600">{loadError}</p>
+        <Button variant="outline" onClick={() => void loadPlan()}>Reintentar</Button>
+      </div>
+    ) : <div className="text-muted-foreground">Cargando...</div>;
   }
 
 
@@ -774,6 +1064,7 @@ export default function PlanDetailPage() {
                       <Button
                         variant="ghost"
                         size="sm"
+                        disabled={pendingViewerIds.has(vid)}
                         onClick={() => handleUnassignViewer(vid)}
                       >
                         <Trash2 className="w-4 h-4 text-red-500" />
@@ -1194,8 +1485,9 @@ export default function PlanDetailPage() {
                         )}
                       </TableCell>
                       <TableCell
-                        className="max-w-[160px] cursor-pointer"
+                        className={`max-w-[160px] ${isViewer ? "" : "cursor-pointer"}`}
                         onClick={() => {
+                          if (isViewer) return;
                           setObsItem(pi);
                           setObsText(pi.observation ?? "");
                         }}
@@ -1244,6 +1536,7 @@ export default function PlanDetailPage() {
                             <Button
                               variant="ghost"
                               size="sm"
+                              disabled={deletingItemIds.has(pi.id)}
                               onClick={() => handleDeleteItem(pi.id)}
                             >
                               <Trash2 className="w-4 h-4 text-red-500" />
@@ -1282,8 +1575,10 @@ export default function PlanDetailPage() {
         const monthlyGenerationMap = new Map(
           monthlyGenerationRecords.map((r) => [`${r.planItemId}::${r.periodKey}`, r.generationKg])
         );
+        const currentGenerationYear = getBusinessMonth().getFullYear();
         const itemGenerationTotals = monthlyGenerationRecords.reduce<Record<string, number>>(
           (acc, record) => {
+            if (!record.periodKey.startsWith(`${currentGenerationYear}-`)) return acc;
             acc[record.planItemId] = (acc[record.planItemId] ?? 0) + (record.generationKg ?? 0);
             return acc;
           },
@@ -1329,12 +1624,11 @@ export default function PlanDetailPage() {
           "Única vez": "1x",
         };
 
-        const today = new Date();
-        const todayMonth = new Date(today.getFullYear(), today.getMonth(), 1);
+        const todayMonth = getBusinessMonth();
 
-        const planStart = parseDateOnly(p.start_date) ?? new Date(p.createdAt);
+        const planStart = getPlanStartDate(p);
         const rangeStart = new Date(planStart.getFullYear(), planStart.getMonth(), 1);
-        const rangeEnd = new Date(today.getFullYear(), today.getMonth() + 2, 1);
+        const rangeEnd = new Date(todayMonth.getFullYear(), todayMonth.getMonth() + 1, 1);
 
         const months: Date[] = [];
         const cur = new Date(rangeStart);
@@ -1344,7 +1638,7 @@ export default function PlanDetailPage() {
         }
 
         function isActive(pi: PlanItem, month: Date): boolean {
-          const s = parseDateOnly(p.start_date) ?? new Date(p.createdAt);
+          const s = getPlanStartDate(p);
           const sm = new Date(s.getFullYear(), s.getMonth(), 1);
           const mm = new Date(month.getFullYear(), month.getMonth(), 1);
           if (mm < sm) return false;
@@ -1439,7 +1733,7 @@ export default function PlanDetailPage() {
                         <td className="sticky left-0 z-10 border border-border px-3 py-1.5 font-medium truncate max-w-[200px] bg-inherit">
                           <div className="truncate">{pi.item}</div>
                           <div className="text-[10px] text-muted-foreground">
-                            {(itemGenerationTotals[pi.id] ?? 0).toLocaleString("en-US")} /{" "}
+                            {currentGenerationYear}: {(itemGenerationTotals[pi.id] ?? 0).toLocaleString("en-US")} /{" "}
                             {Number(pi.annualGenerationKg ?? 0).toLocaleString("en-US")} kg
                           </div>
                         </td>
@@ -1447,7 +1741,7 @@ export default function PlanDetailPage() {
                           if (vc.type === "month") {
                             const m = vc.date;
                             const active = isActive(pi, m);
-                            const planStartDate = parseDateOnly(p.start_date) ?? new Date(p.createdAt);
+                            const planStartDate = getPlanStartDate(p);
                             const isStart =
                               planStartDate.getFullYear() === m.getFullYear() &&
                               planStartDate.getMonth() === m.getMonth();
@@ -1516,7 +1810,7 @@ export default function PlanDetailPage() {
                               key={i}
                               className="border-2 border-border p-0.5"
                             >
-                              {isAdmin ? (
+                              {!isViewer ? (
                                 <Input
                                   type="number"
                                   min="0"
@@ -1524,6 +1818,7 @@ export default function PlanDetailPage() {
                                   className="h-7 text-[10px] px-1 text-right"
                                   value={generationInputValue}
                                   placeholder="0"
+                                  disabled={savingGenerationKeys.has(generationCellKey)}
                                   onChange={(e) => {
                                     const nextRaw = e.target.value;
                                     setDraftGenerationInputs((prev) => ({
@@ -1648,6 +1943,7 @@ export default function PlanDetailPage() {
                         <Button
                           variant="ghost"
                           size="sm"
+                          disabled={pendingViewerIds.has(vid)}
                           onClick={() => handleUnassignViewer(vid)}
                         >
                           <Trash2 className="w-4 h-4 text-red-500" />
@@ -1675,6 +1971,7 @@ export default function PlanDetailPage() {
                         <Button
                           variant="outline"
                           size="sm"
+                          disabled={pendingViewerIds.has(viewer.id)}
                           onClick={() => handleAssignViewer(viewer.id)}
                         >
                           <Plus className="w-4 h-4 mr-1" />
@@ -1703,7 +2000,12 @@ export default function PlanDetailPage() {
 
 
       {/* Calendar Upload Dialog */}
-      <Dialog open={!!calUpload} onOpenChange={(open) => { if (!open) setCalUpload(null); }}>
+      <Dialog
+        open={!!calUpload}
+        onOpenChange={(open) => {
+          if (!open && !uploadingCalRef.current) setCalUpload(null);
+        }}
+      >
         <DialogContent className="max-w-md">
           <DialogHeader>
             <DialogTitle>
@@ -1715,7 +2017,7 @@ export default function PlanDetailPage() {
               <p className="text-sm font-medium">{calUpload.item.item}</p>
               <p className="text-xs text-muted-foreground capitalize">
                 {calUpload.month.toLocaleString("es", { month: "long", year: "numeric" })}
-                {" Â· "}
+                {" · "}
                 {calUpload.item.periodicity}
               </p>
             </div>
@@ -1723,7 +2025,7 @@ export default function PlanDetailPage() {
           <form onSubmit={handleCalUploadSubmit} className="space-y-4">
             <div className="space-y-2">
               <Label htmlFor="cal-file">Archivo (máx 10MB)</Label>
-              <Input id="cal-file" name="file" type="file" required />
+              <Input id="cal-file" name="file" type="file" required disabled={uploadingCal} />
             </div>
             <div className="space-y-2">
               <Label htmlFor="cal-desc">Descripción</Label>
@@ -1732,10 +2034,16 @@ export default function PlanDetailPage() {
                 name="description"
                 placeholder="Breve descripción de la evidencia"
                 required
+                disabled={uploadingCal}
               />
             </div>
             <div className="flex gap-2 justify-end">
-              <Button type="button" variant="outline" onClick={() => setCalUpload(null)}>
+              <Button
+                type="button"
+                variant="outline"
+                disabled={uploadingCal}
+                onClick={() => setCalUpload(null)}
+              >
                 Cancelar
               </Button>
               <Button type="submit" disabled={uploadingCal}>
@@ -1810,7 +2118,10 @@ export default function PlanDetailPage() {
                     <TableCell>
                       {isAdmin ? (
                         <DropdownMenu>
-                          <DropdownMenuTrigger className="p-0 h-auto bg-transparent border-0 cursor-pointer inline-flex items-center justify-center rounded hover:opacity-75 transition-opacity">
+                          <DropdownMenuTrigger
+                            disabled={validatingEvidenceIds.has(ev.id)}
+                            className="p-0 h-auto bg-transparent border-0 cursor-pointer inline-flex items-center justify-center rounded hover:opacity-75 transition-opacity disabled:cursor-not-allowed disabled:opacity-50"
+                          >
                               {(ev.validationStatus ?? "pending") === "valid" && (
                                 <CheckCircle2 className="w-5 h-5 text-green-500" />
                               )}
@@ -1822,13 +2133,20 @@ export default function PlanDetailPage() {
                               )}
                           </DropdownMenuTrigger>
                           <DropdownMenuContent align="start">
-                            <DropdownMenuItem onClick={() => handleValidationChange(ev.id, "valid")}>
+                            <DropdownMenuItem
+                              disabled={validatingEvidenceIds.has(ev.id)}
+                              onClick={() => handleValidationChange(ev.id, "valid")}
+                            >
                               <CheckCircle2 className="w-4 h-4 text-green-500 mr-2" /> Válido
                             </DropdownMenuItem>
-                            <DropdownMenuItem onClick={() => handleValidationChange(ev.id, "pending")}>
+                            <DropdownMenuItem
+                              disabled={validatingEvidenceIds.has(ev.id)}
+                              onClick={() => handleValidationChange(ev.id, "pending")}
+                            >
                               <AlertTriangle className="w-4 h-4 text-yellow-500 mr-2" /> Pendiente
                             </DropdownMenuItem>
                             <DropdownMenuItem
+                              disabled={validatingEvidenceIds.has(ev.id)}
                               onClick={() => {
                                 const reason = window.prompt("Ingresa el motivo del rechazo");
                                 if (!reason || !reason.trim()) {
@@ -1889,6 +2207,7 @@ export default function PlanDetailPage() {
                           <Button
                             variant="ghost"
                             size="sm"
+                            disabled={deletingEvidenceIds.has(ev.id)}
                             onClick={() => handleDeleteEvidence(ev.id)}
                           >
                             <Trash2 className="w-4 h-4 text-red-500" />
@@ -1908,10 +2227,9 @@ export default function PlanDetailPage() {
       {visibleItems.length > 0 && (() => {
         const p = plan!;
         function getAvailablePeriods(): { key: string; label: string }[] {
-          const planStart = parseDateOnly(p.start_date) ?? new Date(p.createdAt);
+          const planStart = getPlanStartDate(p);
           const startMonth = new Date(planStart.getFullYear(), planStart.getMonth(), 1);
-          const today = new Date();
-          const todayMonth = new Date(today.getFullYear(), today.getMonth(), 1);
+          const todayMonth = getBusinessMonth();
 
           const periods: { key: string; label: string }[] = [];
           const cur = new Date(startMonth);
@@ -2032,11 +2350,13 @@ export default function PlanDetailPage() {
           ) : (
             (() => {
               const existing = new Set(
-                planItems.map((p) => p.item.trim().toLowerCase())
+                planItems
+                  .map((item) => normalizeCatalogValue(item.wasteCode ?? ""))
+                  .filter(Boolean)
               );
               const withDupes = bulkRows.map((r) => ({
                 row: r,
-                duplicate: !!r.item && existing.has(r.item.trim().toLowerCase()),
+                duplicate: existing.has(normalizeCatalogValue(r.wasteCode)),
               }));
               const validCount = withDupes.filter(
                 (x) => x.row.errors.length === 0 && x.row.warnings.length === 0 && !x.duplicate
@@ -2086,18 +2406,14 @@ export default function PlanDetailPage() {
                       <TableHeader>
                         <TableRow>
                           <TableHead className="w-12">#</TableHead>
-                          <TableHead>Item</TableHead>
-                          <TableHead>Subplan</TableHead>
-                          <TableHead>Dirección</TableHead>
-                          <TableHead>Actividad</TableHead>
-                          <TableHead>Impacto</TableHead>
-                          <TableHead>Medida</TableHead>
-                          <TableHead>Indicador</TableHead>
-                          <TableHead>Verificación</TableHead>
-                          <TableHead>Periodicidad</TableHead>
-                          <TableHead className="text-right">
-                            Presupuesto
-                          </TableHead>
+                          <TableHead>Código</TableHead>
+                          <TableHead>Nombre</TableHead>
+                          <TableHead>CRTIB</TableHead>
+                          <TableHead>Descripción adicional</TableHead>
+                          <TableHead className="text-right">Generación anual (kg)</TableHead>
+                          <TableHead>Origen</TableHead>
+                          <TableHead>Gestión propia</TableHead>
+                          <TableHead>Observación</TableHead>
                           <TableHead>Estado</TableHead>
                         </TableRow>
                       </TableHeader>
@@ -2119,51 +2435,49 @@ export default function PlanDetailPage() {
                               <TableCell className="font-mono text-xs text-muted-foreground">
                                 {row.rowNumber}
                               </TableCell>
-                              <TableCell className="max-w-[140px] truncate" title={row.item}>
-                                {row.item || (
+                              <TableCell className="max-w-[140px] truncate" title={row.wasteCode}>
+                                {row.wasteCode || (
                                   <span className="text-muted-foreground italic">
                                     vacío
                                   </span>
                                 )}
                               </TableCell>
-                              <TableCell className="max-w-[160px] truncate" title={row.subplan}>
-                                {row.subplan || (
+                              <TableCell className="max-w-[240px] truncate" title={row.wasteName}>
+                                {row.wasteName || (
                                   <span className="text-muted-foreground italic">
-                                    -
+                                    vacío
                                   </span>
                                 )}
                               </TableCell>
-                              <TableCell className="max-w-[160px] truncate" title={row.direccion}>
-                                {row.direccion || (
+                              <TableCell className="max-w-[120px] truncate" title={row.crtib}>
+                                {row.crtib || (
                                   <span className="text-muted-foreground italic">
-                                    -
+                                    vacío
                                   </span>
                                 )}
                               </TableCell>
-                              <TableCell className="max-w-[160px] truncate" title={row.environmental_activity}>
-                                {row.environmental_activity}
-                              </TableCell>
-                              <TableCell className="max-w-[160px] truncate" title={row.identified_environmental_impact}>
-                                {row.identified_environmental_impact}
-                              </TableCell>
-                              <TableCell className="max-w-[200px] truncate" title={row.proposed_measure}>
-                                {row.proposed_measure}
-                              </TableCell>
-                              <TableCell className="max-w-[160px] truncate" title={row.indicator}>
-                                {row.indicator}
-                              </TableCell>
-                              <TableCell className="max-w-[160px] truncate" title={row.verification_method}>
-                                {row.verification_method}
-                              </TableCell>
-                              <TableCell>
-                                {row.periodicity || (
+                              <TableCell className="max-w-[200px] truncate" title={row.wasteDescription}>
+                                {row.wasteDescription || (
                                   <span className="text-muted-foreground italic">
                                     -
                                   </span>
                                 )}
                               </TableCell>
                               <TableCell className="text-right font-mono text-xs">
-                                ${row.budget.toFixed(2)}
+                                {row.annualGenerationKg.toLocaleString("en-US")}
+                              </TableCell>
+                              <TableCell className="max-w-[180px] truncate" title={row.generationOrigin}>
+                                {row.generationOrigin || (
+                                  <span className="text-muted-foreground italic">vacío</span>
+                                )}
+                              </TableCell>
+                              <TableCell>
+                                {row.selfManagement ? "Sí" : "No"}
+                              </TableCell>
+                              <TableCell className="max-w-[180px] truncate" title={row.observation}>
+                                {row.observation || (
+                                  <span className="text-muted-foreground italic">-</span>
+                                )}
                               </TableCell>
                               <TableCell>
                                 <div className="flex flex-col gap-1">

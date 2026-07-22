@@ -22,10 +22,18 @@ export interface GdalInfo {
   bbox4326: [number, number, number, number] | null;
 }
 
+async function appendLog(logPath: string, message: string): Promise<void> {
+  try {
+    await appendFile(logPath, message);
+  } catch (error) {
+    console.warn(`[worker] could not append GDAL log ${logPath}:`, error);
+  }
+}
+
 /** List file entries (paths) inside a .zip with the `unzip` CLI (zipinfo -1). */
 function listZipEntries(absZip: string, logPath: string): Promise<string[]> {
   return new Promise((resolve, reject) => {
-    appendFile(logPath, `\n${new Date().toISOString()} $ unzip -Z1 ${absZip}\n`).catch(() => {});
+    void appendLog(logPath, `\n${new Date().toISOString()} $ unzip -Z1 ${absZip}\n`);
     const child = spawn("unzip", ["-Z1", absZip]);
     let stdout = "";
     let stderr = "";
@@ -33,7 +41,7 @@ function listZipEntries(absZip: string, logPath: string): Promise<string[]> {
     child.stderr.on("data", (d) => { stderr += d.toString(); });
     child.on("error", reject); // ENOENT => `unzip` not in the worker image
     child.on("close", (code) => {
-      if (stderr) appendFile(logPath, `[stderr] ${stderr}\n`).catch(() => {});
+      if (stderr) void appendLog(logPath, `[stderr] ${stderr}\n`);
       if (code === 0) resolve(stdout.split("\n").map((s) => s.trim()).filter(Boolean));
       else reject(new Error(`unzip exited with code ${code}: ${stderr.slice(0, 500)}`));
     });
@@ -70,7 +78,7 @@ export async function resolveGdalInput(
 }
 
 async function runGdal(bin: string, args: string[], logPath: string): Promise<string> {
-  await appendFile(logPath, `\n${new Date().toISOString()} $ ${bin} ${args.join(" ")}\n`).catch(() => {});
+  await appendLog(logPath, `\n${new Date().toISOString()} $ ${bin} ${args.join(" ")}\n`);
   return new Promise<string>((resolve, reject) => {
     const child = spawn(bin, args, {
       env: { ...process.env, GDAL_CACHEMAX: String(env.GDAL_CACHEMAX) },
@@ -91,7 +99,7 @@ async function runGdal(bin: string, args: string[], logPath: string): Promise<st
     });
     child.on("close", (code) => {
       clearTimeout(timer);
-      if (stderr) appendFile(logPath, `[stderr] ${stderr}\n`).catch(() => {});
+      if (stderr) void appendLog(logPath, `[stderr] ${stderr}\n`);
       if (code === 0) resolve(stdout);
       else reject(new Error(`${bin} exited with code ${code}: ${stderr.slice(0, 1000)}`));
     });

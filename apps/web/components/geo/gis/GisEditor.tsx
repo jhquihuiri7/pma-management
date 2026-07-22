@@ -9,6 +9,7 @@ import {
   MousePointer, MapPin,
 } from "lucide-react";
 import { toast } from "sonner";
+import { apiErrorMessage } from "@/lib/api-client";
 import LayersPanel from "./LayersPanel";
 import UploadModal from "./UploadModal";
 import GisMap from "./GisMap";
@@ -22,8 +23,13 @@ import {
   fetchRasterLayers, rasterTileUrl, updateRasterRemote, deleteRasterRemote, retryRasterRemote,
   type RasterLayerManifest,
 } from "./persistence";
-import type { AddLayerInput, GisGeometry, GisLayer, RasterLayer, IdentifyInfo, FocusFeature, LayerStyle } from "./types";
+import type { AddLayerInput, AddLayerResult, GisGeometry, GisLayer, RasterLayer, IdentifyInfo, FocusFeature, LayerStyle } from "./types";
 import "./gis.css";
+
+type DeferredWrite = {
+  timer: ReturnType<typeof setTimeout>;
+  run: () => Promise<void>;
+};
 
 function manifestToLayer(m: LayerManifest, geojson: FeatureCollection): GisLayer {
   return {
@@ -97,7 +103,9 @@ export default function GisEditor({ mapId, mapTitle, backHref, initialCenter, in
   canDelete?: boolean;
 }) {
   const [layers, setLayers] = useState<GisLayer[]>([]);
+  const layersRef = useRef<GisLayer[]>([]);
   const [rasterLayers, setRasterLayers] = useState<RasterLayer[]>([]);
+  const rasterLayersRef = useRef<RasterLayer[]>([]);
   const [activeLayerId, setActiveLayerId] = useState<string | null>(null);
   const [basemap, setBasemap] = useState("light");
   const [tool, setTool] = useState<"pan" | "identify" | "measure" | "inspect">("pan");
@@ -116,80 +124,214 @@ export default function GisEditor({ mapId, mapTitle, backHref, initialCenter, in
   const [searchQ, setSearchQ] = useState("");
   const [isFullscreen, setIsFullscreen] = useState(false);
   const [hydrated, setHydrated] = useState(false);
-  const [saveState, setSaveState] = useState<"idle" | "saving" | "saved" | "error">("idle");
-  const saveTimers = useRef<Record<string, ReturnType<typeof setTimeout>>>({});
-  const rasterSaveTimers = useRef<Record<string, ReturnType<typeof setTimeout>>>({});
+  const [saveState, setSaveState] = useState<"loading" | "saving" | "saved" | "error">("loading");
+  const [hydrationError, setHydrationError] = useState<string | null>(null);
+  const [deletingLayerIds, setDeletingLayerIds] = useState<Set<string>>(new Set());
+  const deletingLayerIdsRef = useRef(new Set<string>());
+  const [busyRasterIds, setBusyRasterIds] = useState<Set<string>>(new Set());
+  const rasterActionIdsRef = useRef(new Set<string>());
+  const rasterPollInFlightRef = useRef(false);
+  const rasterPollErrorShownRef = useRef(false);
+  const deferredWrites = useRef<Record<string, DeferredWrite>>({});
+  const latestWriteVersion = useRef<Record<string, number>>({});
+  const writeQueues = useRef<Record<string, Promise<void>>>({});
+  const pendingWriteCount = useRef(0);
+  const failedWriteKeys = useRef(new Set<string>());
+  const confirmedLayers = useRef(new Map<string, GisLayer>());
+  const confirmedRasters = useRef(new Map<string, RasterLayer>());
+  const mountedRef = useRef(true);
   // Auto-fit happens once (first layer of an empty map); a remembered viewport
   // or any user pan/zoom disables it so the view is never yanked around.
   const hasAutoFitted = useRef(false);
-  const viewportTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const canMutate = canEdit && hydrated && hydrationError === null;
+  useEffect(() => {
+    layersRef.current = layers;
+  }, [layers]);
+
+  useEffect(() => {
+    rasterLayersRef.current = rasterLayers;
+  }, [rasterLayers]);
+
+  const refreshSaveState = useCallback(() => {
+    if (!mountedRef.current) return;
+    if (pendingWriteCount.current > 0 || Object.keys(deferredWrites.current).length > 0) setSaveState("saving");
+    else if (failedWriteKeys.current.size > 0) setSaveState("error");
+    else setSaveState("saved");
+  }, []);
+
+  const runQueuedWrite = useCallback(async (
+    key: string,
+    operation: () => Promise<void>
+  ) => {
+    pendingWriteCount.current += 1;
+    refreshSaveState();
+    const previous = writeQueues.current[key] ?? Promise.resolve();
+    const queued = previous.catch(() => undefined).then(operation);
+    writeQueues.current[key] = queued;
+    try {
+      await queued;
+      failedWriteKeys.current.delete(key);
+    } catch (error) {
+      failedWriteKeys.current.add(key);
+      throw error;
+    } finally {
+      pendingWriteCount.current = Math.max(0, pendingWriteCount.current - 1);
+      if (writeQueues.current[key] === queued) delete writeQueues.current[key];
+      refreshSaveState();
+    }
+  }, [refreshSaveState]);
+
+  const scheduleDeferredWrite = useCallback((
+    key: string,
+    delayMs: number,
+    operation: (version: number) => Promise<void>,
+  ) => {
+    const previous = deferredWrites.current[key];
+    if (previous) clearTimeout(previous.timer);
+    const version = (latestWriteVersion.current[key] ?? 0) + 1;
+    latestWriteVersion.current[key] = version;
+    const run = () => operation(version);
+    // Critical metadata is started synchronously. React does not await effect
+    // cleanup during client-side navigation, so leaving it only in a debounce
+    // timer can discard the user's last edit before any request exists.
+    if (delayMs <= 0) {
+      if (previous) delete deferredWrites.current[key];
+      refreshSaveState();
+      void run().catch(() => undefined);
+      return;
+    }
+    const timer = setTimeout(() => {
+      if (deferredWrites.current[key]?.timer === timer) {
+        delete deferredWrites.current[key];
+      }
+      refreshSaveState();
+      void run().catch(() => undefined);
+    }, delayMs);
+    deferredWrites.current[key] = { timer, run };
+    refreshSaveState();
+  }, [refreshSaveState]);
+
+  const flushDeferredWrites = useCallback(async () => {
+    const scheduled = Object.entries(deferredWrites.current);
+    for (const [key, entry] of scheduled) {
+      clearTimeout(entry.timer);
+      if (deferredWrites.current[key] === entry) delete deferredWrites.current[key];
+    }
+    refreshSaveState();
+    const scheduledResults = await Promise.allSettled(scheduled.map(([, entry]) => entry.run()));
+    const queuedResults = await Promise.allSettled(Object.values(writeQueues.current));
+    const failure = [...scheduledResults, ...queuedResults].find((result) => result.status === "rejected");
+    if (failure?.status === "rejected") throw failure.reason;
+  }, [refreshSaveState]);
 
   const handleViewportChange = useCallback((center: [number, number], zoom: number) => {
     hasAutoFitted.current = true; // the view is now user/remembered-controlled
-    if (!mapId || !canEdit) return; // viewers don't persist viewport
-    if (viewportTimer.current) clearTimeout(viewportTimer.current);
-    viewportTimer.current = setTimeout(() => { saveViewport(mapId, center, zoom).catch(() => {}); }, 800);
-  }, [mapId, canEdit]);
+    if (!mapId || !canMutate) return; // public/read-only users don't persist viewport
+    scheduleDeferredWrite("viewport", 0, async () => {
+      try {
+        await runQueuedWrite("viewport", () => saveViewport(mapId, center, zoom));
+      } catch (error) {
+        toast.error(apiErrorMessage(error, "No se pudo guardar la vista del mapa"));
+        throw error;
+      }
+    });
+  }, [mapId, canMutate, runQueuedWrite, scheduleDeferredWrite]);
 
   // Load persisted layers for this map (so the editor doesn't start from zero).
   useEffect(() => {
     let cancelled = false;
     (async () => {
       if (!mapId) { setHydrated(true); return; }
+      setSaveState("loading");
       try {
         const manifests = await fetchLayers(mapId);
         manifests.sort((a, b) => (b.zIndex ?? 0) - (a.zIndex ?? 0)); // top of stack first
-        // Fetch every layer's GeoJSON in parallel, preserving stack order.
-        const settled = await Promise.all(
-          manifests.map(async (m) => {
-            try { return manifestToLayer(m, await fetchLayerData(mapId, m.id)); }
-            catch { return null; }
-          })
+        const built = await Promise.all(
+          manifests.map(async (m) => manifestToLayer(m, await fetchLayerData(mapId, m.id)))
         );
-        const built = settled.filter((l): l is GisLayer => l !== null);
-        if (!cancelled && built.length) {
+        if (!cancelled) {
+          layersRef.current = built;
+          confirmedLayers.current = new Map(built.map((layer) => [layer.id, layer]));
           setLayers(built);
-          setActiveLayerId(built[0].id);
-          // Map opened with layers → respect the remembered viewport, never auto-fit.
-          hasAutoFitted.current = true;
+          setActiveLayerId(built[0]?.id ?? null);
+          if (built.length) hasAutoFitted.current = true;
         }
-        // Raster (orthophoto) layers render independently, below the vectors.
-        try {
-          const rasters = await fetchRasterLayers(mapId);
-          if (!cancelled && rasters.length) {
-            setRasterLayers(rasters.map((m) => manifestToRaster(m, mapId)));
-            if (rasters.some((r) => r.status === "processed")) hasAutoFitted.current = true;
-          }
-        } catch { /* no rasters / offline */ }
-      } catch { /* offline / no API → behave like a fresh editor */ }
+        const rasters = await fetchRasterLayers(mapId);
+        if (!cancelled) {
+          const builtRasters = rasters.map((m) => manifestToRaster(m, mapId));
+          rasterLayersRef.current = builtRasters;
+          confirmedRasters.current = new Map(builtRasters.map((raster) => [raster.id, raster]));
+          setRasterLayers(builtRasters);
+          if (rasters.some((r) => r.status === "processed")) hasAutoFitted.current = true;
+          setHydrationError(null);
+          refreshSaveState();
+        }
+      } catch (error) {
+        if (!cancelled) {
+          const message = apiErrorMessage(error, "No se pudieron cargar las capas guardadas");
+          setHydrationError(message);
+          setSaveState("error");
+          toast.error(message);
+        }
+      }
       if (!cancelled) setHydrated(true);
     })();
     return () => { cancelled = true; };
-  }, [mapId]);
+  }, [mapId, refreshSaveState]);
 
   // Once loaded, if the map has no layers yet, prompt admins to add one.
   useEffect(() => {
-    if (!hydrated || !canEdit) return;
+    if (!canMutate) return;
     const t = setTimeout(() => { setLayers((cur) => { if (cur.length === 0) setShowUpload(true); return cur; }); }, 400);
     return () => clearTimeout(t);
-  }, [hydrated, canEdit]);
+  }, [canMutate]);
 
   // Debounced metadata save (style/visibility/name/order) for a persisted layer.
   const scheduleSave = useCallback((layer: GisLayer) => {
-    if (!mapId || !canEdit || !layer.persisted) return;
-    clearTimeout(saveTimers.current[layer.id]);
-    setSaveState("saving");
-    saveTimers.current[layer.id] = setTimeout(async () => {
+    if (!mapId || !canMutate || !layer.persisted) return;
+    const key = `vector:${layer.id}`;
+    scheduleDeferredWrite(key, 0, async (version) => {
       try {
-        await updateLayerRemote(mapId, layer.id, {
+        await runQueuedWrite(key, () => updateLayerRemote(mapId, layer.id, {
           name: layer.name, style: layer.style, visible: layer.visible, zIndex: layer.zIndex,
-        });
-        setSaveState("saved");
-      } catch {
-        setSaveState("error");
+        }));
+        confirmedLayers.current.set(layer.id, layer);
+      } catch (error) {
+        if (latestWriteVersion.current[key] === version) {
+          const confirmed = confirmedLayers.current.get(layer.id);
+          if (confirmed && mountedRef.current) {
+            setLayers((current) => {
+              const rolledBack = current.map((item) => item.id === layer.id ? confirmed : item);
+              layersRef.current = rolledBack;
+              return rolledBack;
+            });
+          }
+        }
+        toast.error(apiErrorMessage(error, `No se pudo guardar la capa ${layer.name}`));
+        throw error;
       }
-    }, 600);
-  }, [mapId, canEdit]);
+    });
+  }, [mapId, canMutate, runQueuedWrite, scheduleDeferredWrite]);
+
+  useEffect(() => {
+    mountedRef.current = true;
+    const warnBeforeUnload = (event: BeforeUnloadEvent) => {
+      if (pendingWriteCount.current === 0 && Object.keys(deferredWrites.current).length === 0) return;
+      event.preventDefault();
+      event.returnValue = "";
+    };
+    window.addEventListener("beforeunload", warnBeforeUnload);
+    return () => {
+      mountedRef.current = false;
+      window.removeEventListener("beforeunload", warnBeforeUnload);
+      // Requests for critical edits start synchronously, so a client-side route
+      // change cannot discard a still-unscheduled debounce. Let already-started
+      // queues finish and surface any exceptional failure to diagnostics.
+      void flushDeferredWrites().catch((error) => {
+        console.error("No se pudieron completar las escrituras GIS al desmontar", error);
+      });
+    };
+  }, [flushDeferredWrites]);
 
   useEffect(() => {
     if (!mapInstance) return;
@@ -213,11 +355,12 @@ export default function GisEditor({ mapId, mapTitle, backHref, initialCenter, in
 
   const activeLayer = layers.find((l) => l.id === activeLayerId);
 
-  const addLayer = async (ds: AddLayerInput) => {
-    const idx = layers.length;
-    const wasEmpty = layers.length === 0;
+  const addLayer = async (ds: AddLayerInput): Promise<AddLayerResult> => {
+    const currentLayers = layersRef.current;
+    const idx = currentLayers.length;
+    const wasEmpty = currentLayers.length === 0;
     const style = defaultStyleFor(ds.geometry, idx);
-    const zIndex = layers.reduce((m, l) => Math.max(m, l.zIndex ?? 0), -1) + 1;
+    const zIndex = currentLayers.reduce((m, l) => Math.max(m, l.zIndex ?? 0), -1) + 1;
     const featureCount = ds.geojson.features.length;
     const bbox = bboxOf(ds.geojson.features);
 
@@ -233,7 +376,9 @@ export default function GisEditor({ mapId, mapTitle, backHref, initialCenter, in
 
     // Persist to the server/NAS when we have a real map id.
     if (mapId) {
-      setSaveState("saving");
+      const createKey = "vector:create";
+      pendingWriteCount.current += 1;
+      refreshSaveState();
       try {
         const manifest = await createLayerRemote(mapId, {
           name: ds.name, geometry: ds.geometry, crs: ds.crs || "EPSG:4326",
@@ -243,14 +388,22 @@ export default function GisEditor({ mapId, mapTitle, backHref, initialCenter, in
           sourceFile: ds.sourceFile,
         });
         const layer = manifestToLayer(manifest, ds.geojson);
-        setLayers((prev) => [layer, ...prev]);
+        confirmedLayers.current.set(layer.id, layer);
+        setLayers((prev) => {
+          const next = [layer, ...prev];
+          layersRef.current = next;
+          return next;
+        });
         setActiveLayerId(layer.id);
-        setSaveState("saved");
+        failedWriteKeys.current.delete(createKey);
         maybeAutoFit();
-        return;
-      } catch {
-        toast.error("No se pudo guardar la capa; se agregó en modo temporal.");
-        setSaveState("error");
+        return { persisted: true, id: manifest.id };
+      } catch (error) {
+        failedWriteKeys.current.add(createKey);
+        throw error;
+      } finally {
+        pendingWriteCount.current = Math.max(0, pendingWriteCount.current - 1);
+        refreshSaveState();
       }
     }
 
@@ -261,22 +414,65 @@ export default function GisEditor({ mapId, mapTitle, backHref, initialCenter, in
       geojson: ds.geojson, size: ds.size, crs: ds.crs, visible: true, loadedAt: Date.now(),
       style, zIndex, persisted: false,
     };
-    setLayers((prev) => [layer, ...prev]);
+    setLayers((prev) => {
+      const next = [layer, ...prev];
+      layersRef.current = next;
+      return next;
+    });
     setActiveLayerId(id);
     maybeAutoFit();
+    return { persisted: false, id };
   };
 
   const updateLayer = (next: GisLayer) => {
-    setLayers((prev) => prev.map((l) => (l.id === next.id ? next : l)));
+    if (deletingLayerIdsRef.current.has(next.id)) return;
+    setLayers((prev) => {
+      const updated = prev.map((l) => (l.id === next.id ? next : l));
+      layersRef.current = updated;
+      return updated;
+    });
     scheduleSave(next);
   };
 
-  const removeLayer = (id: string) => {
+  const removeLayer = async (id: string) => {
     const layer = layers.find((l) => l.id === id);
-    setLayers((prev) => prev.filter((l) => l.id !== id));
-    if (activeLayerId === id) setActiveLayerId(null);
-    if (mapId && layer?.persisted) {
-      deleteLayerRemote(mapId, id).catch(() => toast.error("No se pudo eliminar la capa en el servidor."));
+    if (!layer || deletingLayerIdsRef.current.has(id)) return;
+    if (!mapId || !layer.persisted) {
+      setLayers((prev) => {
+        const next = prev.filter((l) => l.id !== id);
+        layersRef.current = next;
+        return next;
+      });
+      if (activeLayerId === id) setActiveLayerId(null);
+      return;
+    }
+
+    deletingLayerIdsRef.current.add(id);
+    setDeletingLayerIds(new Set(deletingLayerIdsRef.current));
+    try {
+      const key = `vector:${id}`;
+      const deferred = deferredWrites.current[key];
+      if (deferred) {
+        clearTimeout(deferred.timer);
+        delete deferredWrites.current[key];
+      }
+      latestWriteVersion.current[key] = (latestWriteVersion.current[key] ?? 0) + 1;
+      refreshSaveState();
+      await writeQueues.current[key]?.catch(() => undefined);
+      await deleteLayerRemote(mapId, id);
+      confirmedLayers.current.delete(id);
+      setLayers((prev) => {
+        const next = prev.filter((l) => l.id !== id);
+        layersRef.current = next;
+        return next;
+      });
+      if (activeLayerId === id) setActiveLayerId(null);
+      toast.success("Capa eliminada correctamente");
+    } catch (error) {
+      toast.error(apiErrorMessage(error, "No se pudo eliminar la capa en el servidor"));
+    } finally {
+      deletingLayerIdsRef.current.delete(id);
+      setDeletingLayerIds(new Set(deletingLayerIdsRef.current));
     }
   };
 
@@ -286,6 +482,10 @@ export default function GisEditor({ mapId, mapTitle, backHref, initialCenter, in
       if (idx < 0) return prev;
       const newIdx = idx + direction;
       if (newIdx < 0 || newIdx >= prev.length) return prev;
+      if (
+        deletingLayerIdsRef.current.has(prev[idx].id) ||
+        deletingLayerIdsRef.current.has(prev[newIdx].id)
+      ) return prev;
       const next = [...prev];
       // Swap positions and their z-index so the new stacking order persists.
       const a = { ...next[idx] }, b = { ...next[newIdx] };
@@ -293,6 +493,7 @@ export default function GisEditor({ mapId, mapTitle, backHref, initialCenter, in
       a.zIndex = bz; b.zIndex = az;
       next[idx] = b; next[newIdx] = a;
       if (mapId) { scheduleSave(a); scheduleSave(b); }
+      layersRef.current = next;
       return next;
     });
   };
@@ -300,48 +501,124 @@ export default function GisEditor({ mapId, mapTitle, backHref, initialCenter, in
   // ── Raster (orthophoto) layer handlers ───────────────────────────────────
   const handleRasterUploaded = (m: RasterLayerManifest) => {
     if (!mapId) return;
-    setRasterLayers((prev) => [manifestToRaster(m, mapId), ...prev.filter((r) => r.id !== m.id)]);
+    const raster = manifestToRaster(m, mapId);
+    confirmedRasters.current.set(raster.id, raster);
+    setRasterLayers((prev) => {
+      const next = [raster, ...prev.filter((r) => r.id !== m.id)];
+      rasterLayersRef.current = next;
+      return next;
+    });
   };
 
   const updateRaster = (next: RasterLayer) => {
-    setRasterLayers((prev) => prev.map((r) => (r.id === next.id ? next : r)));
-    if (!mapId || !canEdit) return;
-    clearTimeout(rasterSaveTimers.current[next.id]);
-    setSaveState("saving");
-    rasterSaveTimers.current[next.id] = setTimeout(async () => {
+    if (rasterActionIdsRef.current.has(next.id)) return;
+    setRasterLayers((prev) => {
+      const updated = prev.map((r) => (r.id === next.id ? next : r));
+      rasterLayersRef.current = updated;
+      return updated;
+    });
+    if (!mapId || !canMutate) return;
+    if (next.status === "deleting") return;
+    const key = `raster:${next.id}`;
+    scheduleDeferredWrite(key, 0, async (version) => {
       try {
-        await updateRasterRemote(mapId, next.id, {
+        await runQueuedWrite(key, () => updateRasterRemote(mapId, next.id, {
           name: next.name, opacity: next.opacity, visible: next.visible, zIndex: next.zIndex,
-        });
-        setSaveState("saved");
-      } catch {
-        setSaveState("error");
+        }));
+        confirmedRasters.current.set(next.id, next);
+      } catch (error) {
+        if (latestWriteVersion.current[key] === version) {
+          const confirmed = confirmedRasters.current.get(next.id);
+          if (confirmed && mountedRef.current) {
+            setRasterLayers((current) => {
+              const rolledBack = current.map((item) => item.id === next.id
+                ? { ...item, name: confirmed.name, opacity: confirmed.opacity, visible: confirmed.visible, zIndex: confirmed.zIndex }
+                : item);
+              rasterLayersRef.current = rolledBack;
+              return rolledBack;
+            });
+          }
+        }
+        toast.error(apiErrorMessage(error, `No se pudo guardar la ortofoto ${next.name}`));
+        throw error;
       }
-    }, 600);
+    });
   };
 
-  const removeRaster = (id: string) => {
-    setRasterLayers((prev) => prev.filter((r) => r.id !== id));
-    if (mapId) deleteRasterRemote(mapId, id).catch(() => toast.error("No se pudo eliminar la ortofoto en el servidor."));
+  const removeRaster = async (id: string) => {
+    if (!mapId || rasterActionIdsRef.current.has(id)) return;
+    const previous = rasterLayers.find((r) => r.id === id);
+    if (!previous || previous.status === "deleting") return;
+    rasterActionIdsRef.current.add(id);
+    setBusyRasterIds(new Set(rasterActionIdsRef.current));
+    setRasterLayers((current) => current.map((r) => r.id === id ? { ...r, status: "deleting" } : r));
+    try {
+      const key = `raster:${id}`;
+      const deferred = deferredWrites.current[key];
+      if (deferred) {
+        clearTimeout(deferred.timer);
+        delete deferredWrites.current[key];
+      }
+      latestWriteVersion.current[key] = (latestWriteVersion.current[key] ?? 0) + 1;
+      refreshSaveState();
+      await writeQueues.current[key]?.catch(() => undefined);
+      await deleteRasterRemote(mapId, id);
+      confirmedRasters.current.delete(id);
+      setRasterLayers((current) => {
+        const next = current.filter((r) => r.id !== id);
+        rasterLayersRef.current = next;
+        return next;
+      });
+      toast.success("Ortofoto eliminada correctamente");
+    } catch (error) {
+      setRasterLayers((current) => current.map((r) => r.id === id ? previous : r));
+      toast.error(apiErrorMessage(error, "No se pudo eliminar la ortofoto en el servidor"));
+    } finally {
+      rasterActionIdsRef.current.delete(id);
+      setBusyRasterIds(new Set(rasterActionIdsRef.current));
+    }
   };
 
-  const retryRaster = (id: string) => {
-    if (!mapId) return;
-    retryRasterRemote(mapId, id)
-      .then((m) => setRasterLayers((prev) => prev.map((r) => (r.id === id ? { ...r, status: m.status, errorMessage: m.errorMessage } : r))))
-      .catch(() => toast.error("No se pudo reintentar el procesamiento."));
+  const retryRaster = async (id: string) => {
+    if (!mapId || rasterActionIdsRef.current.has(id)) return;
+    rasterActionIdsRef.current.add(id);
+    setBusyRasterIds(new Set(rasterActionIdsRef.current));
+    try {
+      const manifest = await retryRasterRemote(mapId, id);
+      setRasterLayers((prev) => prev.map((r) => (
+        r.id === id ? { ...r, status: manifest.status, errorMessage: manifest.errorMessage } : r
+      )));
+      toast.success("Ortofoto confirmada en la cola de procesamiento");
+    } catch (error) {
+      toast.error(apiErrorMessage(error, "No se pudo reintentar el procesamiento"));
+    } finally {
+      rasterActionIdsRef.current.delete(id);
+      setBusyRasterIds(new Set(rasterActionIdsRef.current));
+    }
   };
 
   // Poll while any orthophoto is still uploading/processing, so the panel and
   // map update when the worker finishes (or fails). Stops once nothing pends.
-  const hasPendingRaster = rasterLayers.some((r) => r.status === "uploaded" || r.status === "processing");
+  const hasPendingRaster = rasterLayers.some((r) =>
+    r.status === "uploaded" || r.status === "queued" || r.status === "processing" || r.status === "deleting"
+  );
   useEffect(() => {
     if (!mapId || !hasPendingRaster) return;
     const t = setInterval(async () => {
+      if (rasterPollInFlightRef.current) return;
+      rasterPollInFlightRef.current = true;
       try {
         const manifests = await fetchRasterLayers(mapId);
         setRasterLayers((prev) => mergeRasters(prev, manifests, mapId));
-      } catch { /* transient — keep polling */ }
+        rasterPollErrorShownRef.current = false;
+      } catch (error) {
+        if (!rasterPollErrorShownRef.current) {
+          rasterPollErrorShownRef.current = true;
+          toast.error(apiErrorMessage(error, "No se pudo actualizar el estado de las ortofotos; se reintentará automáticamente"));
+        }
+      } finally {
+        rasterPollInFlightRef.current = false;
+      }
     }, 3000);
     return () => clearInterval(t);
   }, [mapId, hasPendingRaster]);
@@ -360,13 +637,24 @@ export default function GisEditor({ mapId, mapTitle, backHref, initialCenter, in
       ).slice(0, 8)
     : [];
 
+  const handleBackClick = async (event: React.MouseEvent<HTMLAnchorElement>) => {
+    if (!backHref) return;
+    event.preventDefault();
+    try {
+      await flushDeferredWrites();
+      window.location.assign(backHref);
+    } catch {
+      toast.error("No se puede salir mientras haya cambios que no pudieron guardarse.");
+    }
+  };
+
   return (
     <div className={"gis-shell app-shell" + (showLeft ? "" : " no-left") + (showRight ? "" : " no-right")}>
       {/* TOPBAR */}
       <div className="topbar">
         <div className="brand">
           {backHref && (
-            <a className="brand-back" href={backHref} data-tip="Volver al mapa">
+            <a className="brand-back" href={backHref} data-tip="Volver al mapa" onClick={(event) => void handleBackClick(event)}>
               <ArrowLeft size={14} /> Volver
             </a>
           )}
@@ -437,7 +725,7 @@ export default function GisEditor({ mapId, mapTitle, backHref, initialCenter, in
 
         <div className="tb-group">
           <button className="tb-btn" data-tip="Exportar mapa" onClick={() => toast.info("Exportación disponible próximamente.")}><Download size={14} /></button>
-          {canEdit && (
+          {canMutate && (
             <button className="tb-btn primary" onClick={() => setShowUpload(true)}><Upload size={14} /> Agregar capa</button>
           )}
         </div>
@@ -452,8 +740,10 @@ export default function GisEditor({ mapId, mapTitle, backHref, initialCenter, in
         onRemove={removeLayer}
         onMove={moveLayer}
         onOpenUpload={() => setShowUpload(true)}
-        readOnly={!canEdit}
+        readOnly={!canMutate}
         canDelete={canDelete}
+        busyLayerIds={deletingLayerIds}
+        busyRasterIds={busyRasterIds}
         rasterLayers={rasterLayers}
         onRasterChange={updateRaster}
         onRasterRemove={removeRaster}
@@ -477,6 +767,13 @@ export default function GisEditor({ mapId, mapTitle, backHref, initialCenter, in
           focusFeature={focusFeature}
           onMapReady={setMapInstance}
         />
+
+        {hydrationError && (
+          <div style={{ position: "absolute", top: 12, left: "50%", transform: "translateX(-50%)", zIndex: 80, maxWidth: 520, padding: "10px 12px", borderRadius: 8, background: "var(--background)", border: "1px solid #9d4636", boxShadow: "var(--shadow-md)", fontSize: 12 }} role="alert">
+            <span>{hydrationError}</span>{" "}
+            <button className="icon-btn" onClick={() => window.location.reload()} style={{ width: "auto", paddingInline: 8 }}>Reintentar</button>
+          </div>
+        )}
 
         <div className="map-floating map-tools">
           <div className="tool-card">
@@ -550,7 +847,7 @@ export default function GisEditor({ mapId, mapTitle, backHref, initialCenter, in
               {saveState === "saving" ? "Guardando…"
                 : saveState === "saved" ? "Guardado ✓"
                 : saveState === "error" ? "Error al guardar"
-                : "Guardado en NAS"}
+                : "Cargando estado…"}
             </span>
             <span className="sep">|</span>
           </>

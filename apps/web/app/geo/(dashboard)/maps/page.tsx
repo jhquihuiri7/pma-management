@@ -1,8 +1,6 @@
 "use client";
 
-import { apiFetch } from "@/lib/api-client";
-
-
+import { api, apiErrorMessage } from "@/lib/api-client";
 import { useEffect, useState } from "react";
 import { useAuth } from "@/lib/auth-context";
 import { Map, Search } from "lucide-react";
@@ -12,15 +10,17 @@ import type { GeoMap } from "@/types/geo";
 import AddMapDialog from "@/components/geo/AddMapDialog";
 import GeoMapCard from "@/components/geo/GeoMapCard";
 
+const ENABLE_GEO_MOCKS = process.env.NEXT_PUBLIC_ENABLE_GEO_MOCKS === "true";
+
 export default function MapsPage() {
   const { user: session} = useAuth();
-  // Any logged-in geo user (incl. VIEWER) can create/edit; only ADMIN can delete.
-  const canEdit = !!session;
+  const canEdit = session?.role === "ADMIN" || session?.apps.includes("geo") === true;
   const canDelete = session?.role === "ADMIN";
 
   const [maps, setMaps] = useState<GeoMap[]>([]);
   const [search, setSearch] = useState("");
   const [activeCategory, setActiveCategory] = useState<string | null>(null);
+  const [loadError, setLoadError] = useState<string | null>(null);
 
   useEffect(() => {
     loadMaps();
@@ -28,18 +28,13 @@ export default function MapsPage() {
 
   async function loadMaps() {
     try {
-      const res = await apiFetch("/geo/api/maps");
-      if (res.ok) {
-        const data = await res.json();
-        setMaps(data);
-      } else {
-        toast.error("Error loading maps");
-        setMaps(GEO_MAPS);
-      }
+      setMaps(await api.get<GeoMap[]>("/geo/api/maps"));
+      setLoadError(null);
     } catch (error) {
-      console.error(error);
-      toast.error("Error loading maps");
-      setMaps(GEO_MAPS);
+      const message = apiErrorMessage(error, "No se pudieron cargar los mapas");
+      toast.error(message);
+      setLoadError(message);
+      setMaps(ENABLE_GEO_MOCKS ? GEO_MAPS : []);
     }
   }
 
@@ -54,7 +49,7 @@ export default function MapsPage() {
     const q = search.toLowerCase();
     const matchSearch = q
       ? m.title.toLowerCase().includes(q) ||
-        m.description.toLowerCase().includes(q) ||
+        (m.description ?? "").toLowerCase().includes(q) ||
         m.thematic?.toLowerCase().includes(q) ||
         m.tags?.some((t) => t.toLowerCase().includes(q))
       : true;
@@ -73,6 +68,15 @@ export default function MapsPage() {
         </div>
         {canEdit && <AddMapDialog onAdd={handleAdd} />}
       </div>
+
+      {loadError && !ENABLE_GEO_MOCKS && (
+        <div className="mb-6 rounded-lg border border-red-200 bg-red-50 p-4 text-sm text-red-700">
+          <p>{loadError}</p>
+          <button type="button" className="mt-2 underline" onClick={() => void loadMaps()}>
+            Reintentar
+          </button>
+        </div>
+      )}
 
       {/* Filters */}
       <div className="flex flex-col sm:flex-row gap-3 mb-6">

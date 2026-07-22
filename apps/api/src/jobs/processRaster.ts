@@ -3,14 +3,30 @@ import { join, dirname } from "node:path";
 import { env } from "../lib/env.js";
 import {
   getStorage,
+  buildGeoRasterDir,
   buildGeoRasterCogPath,
   buildGeoRasterTmpDir,
   buildGeoRasterLogPath,
   buildGeoRasterOriginalDir,
 } from "../storage/index.js";
-import { getRasterRow, markRasterProcessed, markRasterError } from "../modules/geo/rasterLayersModule.js";
+import {
+  beginRasterProcessingStorageIntent,
+  getRasterRow,
+  markRasterProcessed,
+  markRasterError,
+} from "../modules/geo/rasterLayersModule.js";
 import { gdalInfo, buildCog, resolveGdalInput } from "./gdal.js";
 import type { RasterJob } from "./boss.js";
+import { cleanupStorageDirectoryDurably } from "../modules/shared/storageCleanup.js";
+
+async function cleanupDirectory(path: string, reason: string): Promise<void> {
+  const outcome = await cleanupStorageDirectoryDurably(path, reason);
+  if (outcome === "failed") {
+    console.warn(`[worker] directory cleanup failed (${reason}); durable retry remains queued`);
+  } else if (outcome === "queued") {
+    console.warn(`[worker] directory cleanup already owned or deferred (${reason})`);
+  }
+}
 
 /**
  * Full COG pipeline for one orthophoto:
@@ -27,7 +43,33 @@ export async function processRaster(job: RasterJob): Promise<void> {
 
   const row = await getRasterRow(rasterLayerId);
   if (!row) {
-    console.warn(`[worker] raster ${rasterLayerId} no longer exists — skipping`);
+    // Deletion can commit between the queue claim and this lookup. Register the
+    // whole UUID-owned directory before touching storage so a concurrent GDAL
+    // process or a crash cannot leave recreated artifacts untracked.
+    await cleanupDirectory(
+      buildGeoRasterDir(mapId, rasterLayerId),
+      `geo:raster-missing-after-claim:${rasterLayerId}`,
+    );
+    console.warn(`[worker] raster ${rasterLayerId} no longer exists — cleanup confirmed or queued`);
+    return;
+  }
+  if (row.mapId !== mapId) {
+    throw new Error(`Raster job map mismatch for ${rasterLayerId}`);
+  }
+
+  // No GDAL output is written until a path-keyed cleanup intent is durable.
+  // Successful metadata persistence finalizes it in the same DB transaction;
+  // a hard crash or concurrent delete leaves it for the outbox drain.
+  const processingIntent = await beginRasterProcessingStorageIntent(mapId, rasterLayerId);
+  if (processingIntent.status === "missing") {
+    await cleanupDirectory(
+      buildGeoRasterDir(mapId, rasterLayerId),
+      `geo:raster-missing-before-gdal:${rasterLayerId}`,
+    );
+    return;
+  }
+  if (processingIntent.status === "unavailable") {
+    console.warn(`[worker] raster ${rasterLayerId} is no longer claimable — skipping GDAL`);
     return;
   }
 
@@ -47,8 +89,8 @@ export async function processRaster(job: RasterJob): Promise<void> {
     //    (no/multiple rasters) marks the row 'error' without a pg-boss retry.
     const input = await resolveGdalInput(absInput, row.originalFilename, logPath);
     if (!input.ok) {
-      await markRasterError(rasterLayerId, input.message);
-      await storage.deleteDir(tmpRel).catch(() => {});
+      await markRasterError(mapId, rasterLayerId, input.message);
+      await cleanupDirectory(tmpRel, `geo:raster-invalid-zip:${rasterLayerId}`);
       return;
     }
 
@@ -56,10 +98,11 @@ export async function processRaster(job: RasterJob): Promise<void> {
     const info = await gdalInfo(input.path, logPath);
     if (!info.crsWkt) {
       await markRasterError(
+        mapId,
         rasterLayerId,
         "La ortofoto no tiene sistema de coordenadas (CRS). Sube un GeoTIFF georreferenciado o incluye los archivos .prj/.tfw.",
       );
-      await storage.deleteDir(tmpRel).catch(() => {});
+      await cleanupDirectory(tmpRel, `geo:raster-missing-crs:${rasterLayerId}`);
       return;
     }
 
@@ -70,28 +113,47 @@ export async function processRaster(job: RasterJob): Promise<void> {
     await fs.rename(absTmpCog, absCog);
 
     // 3) Persist metadata.
-    await markRasterProcessed(rasterLayerId, {
-      cogPath: cogRel,
-      srid: info.srid,
-      crs: info.srid ? `EPSG:${info.srid}` : null,
-      bbox: info.bbox4326 ?? null,
-      widthPx: info.width || null,
-      heightPx: info.height || null,
-      bandCount: info.bandCount || null,
-      hasAlpha: info.hasAlpha,
-      resolutionX: info.resolutionX,
-      resolutionY: info.resolutionY,
-    });
+    const committed = await markRasterProcessed(
+      rasterLayerId,
+      {
+        cogPath: cogRel,
+        srid: info.srid,
+        crs: info.srid ? `EPSG:${info.srid}` : null,
+        bbox: info.bbox4326 ?? null,
+        widthPx: info.width || null,
+        heightPx: info.height || null,
+        bandCount: info.bandCount || null,
+        hasAlpha: info.hasAlpha,
+        resolutionX: info.resolutionX,
+        resolutionY: info.resolutionY,
+      },
+      processingIntent.intentId,
+    );
+
+    // Deletion can race with a long GDAL process. The catalog transition is
+    // conditional on status=processing; when it loses that race, remove every
+    // artifact the worker may have recreated after the delete request.
+    if (!committed) {
+      await cleanupDirectory(
+        buildGeoRasterDir(mapId, rasterLayerId),
+        `geo:raster-deleted-during-processing:${rasterLayerId}`,
+      );
+      console.warn(`[worker] raster ${rasterLayerId} lost its catalog transition — output cleanup confirmed or queued`);
+      return;
+    }
 
     // 4) Cleanup. Optionally drop the original once the COG exists.
-    await storage.deleteDir(tmpRel).catch(() => {});
+    await cleanupDirectory(tmpRel, `geo:raster-tmp:${rasterLayerId}`);
     if (!env.RASTER_KEEP_ORIGINAL) {
-      await storage.deleteDir(buildGeoRasterOriginalDir(mapId, rasterLayerId)).catch(() => {});
+      await cleanupDirectory(
+        buildGeoRasterOriginalDir(mapId, rasterLayerId),
+        `geo:raster-original:${rasterLayerId}`,
+      );
     }
 
     console.log(`[worker] raster ${rasterLayerId} processed → ${cogRel}`);
   } catch (err) {
-    await storage.deleteDir(tmpRel).catch(() => {});
+    await cleanupDirectory(tmpRel, `geo:raster-error-tmp:${rasterLayerId}`);
     throw err; // worker.ts marks the row 'error' and lets pg-boss record the failure
   }
 }

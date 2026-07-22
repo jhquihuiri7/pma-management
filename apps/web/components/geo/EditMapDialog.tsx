@@ -1,11 +1,9 @@
 "use client";
 
-import { apiFetch } from "@/lib/api-client";
-
-
+import { api, requirePersistedEntity } from "@/lib/api-client";
+import { useConfirmedMutation } from "@/lib/use-confirmed-mutation";
 import { useState, useEffect } from "react";
 import { X } from "lucide-react";
-import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { GEO_CATEGORIES, getDefaultGeoThematic, getGeoThematics } from "@/lib/geo-mock-data";
 import type { GeoMap } from "@/types/geo";
@@ -22,7 +20,6 @@ const normalizeCategoryId = (categoryId: string) =>
     : GEO_CATEGORIES[0].id;
 
 export default function EditMapDialog({ map, onSave, onClose }: Props) {
-  const [loading, setLoading] = useState(false);
   const initialCategoryId = normalizeCategoryId(map.categoryId);
   const [form, setForm] = useState({
     title: map.title,
@@ -48,38 +45,35 @@ export default function EditMapDialog({ map, onSave, onClose }: Props) {
 
   const thematicOptions = getGeoThematics(form.categoryId);
 
+  const updateMap = useConfirmedMutation<{
+    title: string;
+    description: string;
+    categoryId: string;
+    thematic: string;
+    tags: string[];
+  }, GeoMap>({
+    mutation: async (payload, signal) => requirePersistedEntity<GeoMap>(
+      await api.put<unknown>(`/geo/maps/${map.id}`, payload, { signal }),
+      "El servidor no confirmó la actualización del mapa",
+      map.id
+    ),
+    successMessage: "Mapa actualizado correctamente",
+    errorMessage: "Error al actualizar el mapa",
+    onConfirmed: (updated) => {
+      onSave(updated);
+      onClose();
+    },
+  });
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    setLoading(true);
-
-    try {
-      const res = await apiFetch(`/geo/api/maps/${map.id}`, {
-        method: "PUT",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          title: form.title.trim(),
-          description: form.description.trim(),
-          categoryId: form.categoryId,
-          thematic: form.thematic,
-          tags: form.tags ? form.tags.split(",").map((t) => t.trim()).filter(Boolean) : [],
-        }),
-      });
-
-      if (res.ok) {
-        const updated = await res.json();
-        onSave(updated);
-        toast.success("Mapa actualizado correctamente");
-        onClose();
-      } else {
-        const data = await res.json();
-        toast.error(data.error || "Error al actualizar el mapa");
-      }
-    } catch (error) {
-      console.error(error);
-      toast.error("Error al actualizar el mapa");
-    } finally {
-      setLoading(false);
-    }
+    await updateMap.mutate({
+      title: form.title.trim(),
+      description: form.description.trim(),
+      categoryId: form.categoryId,
+      thematic: form.thematic,
+      tags: form.tags ? form.tags.split(",").map((t) => t.trim()).filter(Boolean) : [],
+    });
   };
 
   return (
@@ -87,7 +81,7 @@ export default function EditMapDialog({ map, onSave, onClose }: Props) {
       <div className="bg-white rounded-2xl shadow-2xl w-full max-w-lg mx-4 overflow-hidden">
         <div className="flex items-center justify-between px-6 py-4 border-b border-slate-200 bg-slate-50">
           <h2 className="text-base font-semibold text-slate-900">Editar mapa</h2>
-          <button onClick={onClose} className="text-slate-400 hover:text-slate-700">
+          <button onClick={() => { if (!updateMap.isPending) onClose(); }} disabled={updateMap.isPending} className="text-slate-400 hover:text-slate-700 disabled:opacity-50">
             <X className="w-5 h-5" />
           </button>
         </div>
@@ -171,11 +165,11 @@ export default function EditMapDialog({ map, onSave, onClose }: Props) {
           </div>
 
           <div className="flex gap-3 pt-2">
-            <Button type="button" variant="outline" className="flex-1" onClick={onClose} disabled={loading}>
+            <Button type="button" variant="outline" className="flex-1" onClick={onClose} disabled={updateMap.isPending}>
               Cancelar
             </Button>
-            <Button type="submit" className="flex-1 bg-teal-600 hover:bg-teal-700 text-white" disabled={loading}>
-              {loading ? "Guardando..." : "Guardar cambios"}
+            <Button type="submit" className="flex-1 bg-teal-600 hover:bg-teal-700 text-white" disabled={updateMap.isPending}>
+              {updateMap.isPending ? "Guardando..." : "Guardar cambios"}
             </Button>
           </div>
         </form>

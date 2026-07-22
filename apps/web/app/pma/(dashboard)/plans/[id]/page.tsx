@@ -1,7 +1,15 @@
 ﻿"use client";
 
-import { apiFetch } from "@/lib/api-client";
-import { useEffect, useState, useCallback } from "react";
+import {
+  api,
+  ApiError,
+  apiErrorMessage,
+  checkedApiFetch,
+  requireOkReceipt,
+  requirePersistedAsset,
+  requirePersistedEntity,
+} from "@/lib/api-client";
+import { useEffect, useState, useCallback, useRef } from "react";
 import { useAuth } from "@/lib/auth-context";
 import { useParams, useSearchParams, useRouter } from "next/navigation";
 import { Button } from "@/components/ui/button";
@@ -46,8 +54,13 @@ import {
 } from "@/components/ui/dropdown-menu";
 import { SUBPLAN_OPTIONS, PERIODICITY_OPTIONS, DIRECCION_OPTIONS } from "@/lib/planItemConstants";
 import { parseExcelFile, ParsedItemRow } from "@/lib/excelImport";
-import { parseDateOnly } from "@/lib/dateOnly";
-import { createPeriodHelpers, getItemRanges, type ItemRange } from "@/lib/planPeriods";
+import {
+  createPeriodHelpers,
+  getBusinessMonth,
+  getItemRanges,
+  getPlanStartDate,
+  type ItemRange,
+} from "@/lib/planPeriods";
 
 const EMPTY_ITEM_FORM = {
   item: "",
@@ -77,6 +90,16 @@ const EMPTY_FINDING_FORM = {
   propuestasSolucion: "",
 };
 
+function emptyManualEvidenceForm() {
+  const businessMonth = getBusinessMonth();
+  return {
+    itemId: "",
+    year: businessMonth.getFullYear(),
+    month: businessMonth.getMonth() + 1,
+    description: "",
+  };
+}
+
 export default function PlanDetailPage() {
   const { id } = useParams<{ id: string }>();
   const searchParams = useSearchParams();
@@ -84,10 +107,12 @@ export default function PlanDetailPage() {
   const router = useRouter();
   const isAdmin = session?.role === "ADMIN";
   const isViewer = session?.role === "VIEWER";
-  // VIEWERs can do everything an admin can on an assigned plan EXCEPT delete
-  // (plans, items, evidences, findings) and creating plans. Edit-capable actions
-  // use `canEdit`; destructive ones stay gated by `isAdmin`.
+  const isReporter = session?.role === "REPORTER";
+  // VIEWERs may edit and review an assigned plan, but uploads belong to
+  // ADMIN/REPORTER and destructive plan/item/finding actions remain ADMIN-only.
   const canEdit = isAdmin || isViewer;
+  const canUploadEvidence = isAdmin || isReporter || isViewer;
+  const canDeleteEvidence = isAdmin || isReporter || isViewer;
   const deepLinkEvidenceId = searchParams.get("evidenceId");
 
   const [plan, setPlan] = useState<Plan | null>(null);
@@ -129,35 +154,64 @@ export default function PlanDetailPage() {
   const [deletePlanOpen, setDeletePlanOpen] = useState(false);
   const [deletingPlan, setDeletingPlan] = useState(false);
   const [manualEvidenceOpen, setManualEvidenceOpen] = useState(false);
-  const [manualEvidenceForm, setManualEvidenceForm] = useState({
-    itemId: "",
-    year: new Date().getFullYear(),
-    month: new Date().getMonth() + 1,
-    description: "",
-  });
+  const [manualEvidenceForm, setManualEvidenceForm] = useState(emptyManualEvidenceForm);
   const [uploadingManualEvidence, setUploadingManualEvidence] = useState(false);
+  const [loadError, setLoadError] = useState<string | null>(null);
+  const [mutationPending, setMutationPending] = useState(false);
+  const mutationPendingRef = useRef(false);
+
+  const runMutation = useCallback(async <T,>(
+    operation: () => Promise<T>,
+    fallbackMessage: string
+  ): Promise<T | undefined> => {
+    if (mutationPendingRef.current) return undefined;
+    mutationPendingRef.current = true;
+    setMutationPending(true);
+    try {
+      return await operation();
+    } catch (error) {
+      toast.error(apiErrorMessage(error, fallbackMessage));
+      return undefined;
+    } finally {
+      mutationPendingRef.current = false;
+      setMutationPending(false);
+    }
+  }, []);
 
   const loadPlan = useCallback(async () => {
-    const res = await apiFetch(`/pma/api/plans/${id}`);
-    if (res.ok) {
-      const data = await res.json();
+    try {
+      const data = await api.get<{
+        plan: Plan;
+        evidences: Evidence[];
+        findings?: Finding[];
+        assignedUsers?: string[];
+      }>(`/pma/plans/${id}`);
       setPlan(data.plan);
       setEvidences(data.evidences);
       setFindings(Array.isArray(data.findings) ? data.findings : []);
       if (Array.isArray(data.assignedUsers)) {
         setAssignedViewerIds(data.assignedUsers);
       }
+      setLoadError(null);
+    } catch (error) {
+      setLoadError(apiErrorMessage(error, "No se pudo cargar el plan"));
     }
   }, [id]);
 
   const loadItems = useCallback(async () => {
-    const res = await apiFetch(`/pma/api/plans/${id}/items`);
-    if (res.ok) setPlanItems(await res.json());
+    try {
+      setPlanItems(await api.get<PlanItem[]>(`/pma/plans/${id}/items`));
+    } catch (error) {
+      toast.error(apiErrorMessage(error, "No se pudieron cargar los items"));
+    }
   }, [id]);
 
   const loadCompliance = useCallback(async () => {
-    const res = await apiFetch(`/pma/api/plans/${id}/period-compliance`);
-    if (res.ok) setComplianceRecords(await res.json());
+    try {
+      setComplianceRecords(await api.get<PeriodCompliance[]>(`/pma/plans/${id}/period-compliance`));
+    } catch (error) {
+      toast.error(apiErrorMessage(error, "No se pudo cargar el cumplimiento"));
+    }
   }, [id]);
 
   useEffect(() => {
@@ -168,14 +222,14 @@ export default function PlanDetailPage() {
 
   useEffect(() => {
     if (canEdit) {
-      apiFetch("/pma/api/users")
-        .then((r) => r.json())
+      api.get<User[]>("/pma/users")
         .then((data) => {
           if (Array.isArray(data)) {
             setAllReporters(data.filter((u: User) => u.role === "REPORTER"));
             setAllViewers(data.filter((u: User) => u.role === "VIEWER"));
           }
-        });
+        })
+        .catch((error) => toast.error(apiErrorMessage(error, "No se pudieron cargar los usuarios")));
     }
   }, [canEdit]);
 
@@ -204,47 +258,38 @@ export default function PlanDetailPage() {
 
   async function handleDeletePlan() {
     setDeletingPlan(true);
-    try {
-      const res = await apiFetch(`/pma/api/plans/${id}`, { method: "DELETE" });
-      if (res.ok) {
-        toast.success("Plan eliminado correctamente");
-        router.push("/pma/plans");
-      } else {
-        const data = await res.json();
-        toast.error(data.error || "Error al eliminar el plan");
-      }
-    } finally {
-      setDeletingPlan(false);
+    await runMutation(async () => {
+      requireOkReceipt(
+        await api.delete<unknown>(`/pma/api/plans/${id}`),
+        "El servidor no confirmó la eliminación del plan"
+      );
+      toast.success("Plan eliminado correctamente");
       setDeletePlanOpen(false);
-    }
+      router.push("/pma/plans");
+    }, "Error al eliminar el plan");
+    setDeletingPlan(false);
   }
 
   async function handleAssignViewer(viewerId: string) {
-    const res = await apiFetch(`/pma/api/plans/${id}/assign`, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ userId: viewerId }),
-    });
-    if (res.ok) {
-      setAssignedViewerIds((prev) => [...prev, viewerId]);
+    await runMutation(async () => {
+      requireOkReceipt(
+        await api.post<unknown>(`/pma/api/plans/${id}/assign`, { userId: viewerId }),
+        "El servidor no confirmó la asignación"
+      );
+      setAssignedViewerIds((prev) => prev.includes(viewerId) ? prev : [...prev, viewerId]);
       toast.success("Visualizador asignado al plan");
-    } else {
-      toast.error("Error al asignar visualizador");
-    }
+    }, "Error al asignar visualizador");
   }
 
   async function handleUnassignViewer(viewerId: string) {
-    const res = await apiFetch(`/pma/api/plans/${id}/assign`, {
-      method: "DELETE",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ userId: viewerId }),
-    });
-    if (res.ok) {
+    await runMutation(async () => {
+      requireOkReceipt(
+        await api.delete<unknown>(`/pma/api/plans/${id}/assign`, { body: { userId: viewerId } }),
+        "El servidor no confirmó la desasignación"
+      );
       setAssignedViewerIds((prev) => prev.filter((vid) => vid !== viewerId));
       toast.success("Visualizador desasignado del plan");
-    } else {
-      toast.error("Error al desasignar visualizador");
-    }
+    }, "Error al desasignar visualizador");
   }
 
   async function handleValidationChange(
@@ -252,49 +297,46 @@ export default function PlanDetailPage() {
     status: EvidenceValidationStatus,
     validationComment?: string
   ) {
-    const res = await apiFetch(`/pma/api/evidences/${evidenceId}/validation`, {
-      method: "PUT",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        status,
-        ...(status === "invalid"
-          ? { comment: validationComment?.trim() ?? "" }
-          : {}),
-      }),
-    });
-
-    if (res.ok) {
+    await runMutation(async () => {
+      const normalizedComment = validationComment?.trim() ?? "";
+      const result = await api.put<{ evidence?: unknown }>(
+        `/pma/api/evidences/${evidenceId}/validation`,
+        {
+          status,
+          ...(status === "invalid"
+            ? { comment: normalizedComment }
+            : {}),
+        }
+      );
+      const updated = requirePersistedEntity<Evidence>(
+        result?.evidence,
+        "El servidor no confirmó la validación",
+        evidenceId
+      );
+      if (
+        updated.planId !== id ||
+        updated.validationStatus !== status ||
+        (status === "invalid" && updated.validationComment?.trim() !== normalizedComment)
+      ) {
+        throw new ApiError(200, "El servidor confirmó un estado de validación distinto", updated, "invalid_response");
+      }
       setEvidences((prev) =>
-        prev.map((ev) =>
-          ev.id === evidenceId
-            ? {
-                ...ev,
-                validationStatus: status,
-                validationComment:
-                  status === "invalid" ? validationComment?.trim() ?? "" : "",
-              }
-            : ev
-        )
+        prev.map((evidence) => evidence.id === evidenceId ? updated : evidence)
       );
       toast.success("Validación actualizada");
-    } else {
-      const data = await res.json().catch(() => ({}));
-      toast.error(data.error || "Error al actualizar validación");
-    }
+    }, "Error al actualizar validación");
   }
 
   async function handleDeleteEvidence(evidenceId: string) {
     if (!confirm("¿Eliminar esta evidencia?")) return;
-    const res = await apiFetch(`/pma/api/evidences?id=${evidenceId}`, {
-      method: "DELETE",
-    });
-
-    if (res.ok) {
+    await runMutation(async () => {
+      requireOkReceipt(
+        await api.delete<unknown>(`/pma/api/evidences?id=${evidenceId}`),
+        "El servidor no confirmó la eliminación de la evidencia"
+      );
+      setEvidences((current) => current.filter((evidence) => evidence.id !== evidenceId));
       toast.success("Evidencia eliminada");
-      loadPlan();
-    } else {
-      toast.error("Error al eliminar");
-    }
+    }, "Error al eliminar la evidencia");
   }
 
   function resetFindingForm() {
@@ -344,112 +386,92 @@ export default function PlanDetailPage() {
     }
 
     setSavingFinding(true);
-    try {
+    await runMutation(async () => {
       if (editingFinding) {
         const params = new URLSearchParams({ planId: plan.id });
-        const res = await apiFetch(`/pma/api/findings/${editingFinding.id}?${params.toString()}`, {
-          method: "PUT",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify(payload),
-        });
-
-        if (!res.ok) {
-          const data = await res.json().catch(() => ({}));
-          toast.error(data.error || "Error al actualizar hallazgo");
-          return;
-        }
+        const saved = requirePersistedEntity<Finding>(
+          await api.put<unknown>(`/pma/api/findings/${editingFinding.id}?${params.toString()}`, payload),
+          "El servidor no confirmó la actualización del hallazgo",
+          editingFinding.id
+        );
 
         setFindings((prev) =>
-          prev.map((finding) =>
-            finding.id === editingFinding.id ? { ...finding, ...payload } : finding
-          )
+          prev.map((finding) => finding.id === editingFinding.id ? saved : finding)
         );
         toast.success("Hallazgo actualizado");
       } else {
-        const res = await apiFetch("/pma/api/findings", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify(payload),
-        });
-        if (!res.ok) {
-          const data = await res.json().catch(() => ({}));
-          toast.error(data.error || "Error al crear hallazgo");
-          return;
+        const created = requirePersistedEntity<Finding>(
+          await api.post<unknown>("/pma/api/findings", payload),
+          "El servidor no confirmó la creación del hallazgo"
+        );
+        if (created.planId !== plan.id) {
+          throw new ApiError(200, "El servidor confirmó el hallazgo para otro plan", created, "invalid_response");
         }
-
-        const created = (await res.json()) as Finding;
         setFindings((prev) => [created, ...prev]);
         toast.success("Hallazgo creado");
       }
 
       setFindingDialogOpen(false);
       resetFindingForm();
-    } finally {
-      setSavingFinding(false);
-    }
+    }, editingFinding ? "Error al actualizar hallazgo" : "Error al crear hallazgo");
+    setSavingFinding(false);
   }
 
   async function handleDeleteFinding(findingId: string) {
     if (!plan) return;
     if (!confirm("¿Eliminar este hallazgo?")) return;
 
-    const params = new URLSearchParams({ planId: plan.id });
-    const res = await apiFetch(`/pma/api/findings/${findingId}?${params.toString()}`, {
-      method: "DELETE",
-    });
-
-    if (res.ok) {
+    await runMutation(async () => {
+      const params = new URLSearchParams({ planId: plan.id });
+      requireOkReceipt(
+        await api.delete<unknown>(`/pma/api/findings/${findingId}?${params.toString()}`),
+        "El servidor no confirmó la eliminación del hallazgo"
+      );
       setFindings((prev) => prev.filter((finding) => finding.id !== findingId));
       toast.success("Hallazgo eliminado");
-    } else {
-      const data = await res.json().catch(() => ({}));
-      toast.error(data.error || "Error al eliminar hallazgo");
-    }
+    }, "Error al eliminar hallazgo");
   }
 
   async function handleAddItem(e: React.FormEvent) {
     e.preventDefault();
     setSavingItem(true);
-    try {
+    await runMutation(async () => {
       if (editingItem) {
-        const res = await apiFetch(`/pma/api/plans/${id}/items/${editingItem.id}`, {
-          method: "PATCH",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ ...itemForm, budget: Number(itemForm.budget) }),
-        });
-        if (res.ok) {
-          toast.success("Item actualizado correctamente");
-          setEditingItem(null);
-          setItemForm(EMPTY_ITEM_FORM);
-          setAddItemOpen(false);
-          await loadItems();
-        } else {
-          const data = await res.json();
-          toast.error(data.error || "Error al actualizar item");
+        const saved = requirePersistedEntity<PlanItem>(
+          await api.patch<unknown>(`/pma/api/plans/${id}/items/${editingItem.id}`, {
+            ...itemForm,
+            budget: Number(itemForm.budget),
+          }),
+          "El servidor no confirmó la actualización del Item",
+          editingItem.id
+        );
+        if (saved.planId !== id) {
+          throw new ApiError(200, "El servidor confirmó el Item para otro plan", saved, "invalid_response");
         }
+        setPlanItems((current) => current.map((item) => item.id === saved.id ? saved : item));
+        toast.success("Item actualizado correctamente");
+        setEditingItem(null);
+        setItemForm(EMPTY_ITEM_FORM);
+        setAddItemOpen(false);
         return;
       }
 
-      const res = await apiFetch(`/pma/api/plans/${id}/items`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ ...itemForm, budget: Number(itemForm.budget) }),
-      });
-
-      if (res.ok) {
-        toast.success("Item agregado correctamente");
-        setItemForm(EMPTY_ITEM_FORM);
-        setAddItemOpen(false);
-        await loadItems();
-      } else {
-        const data = await res.json();
-        toast.error(data.error || "Error al agregar item");
+      const saved = requirePersistedEntity<PlanItem>(
+        await api.post<unknown>(`/pma/api/plans/${id}/items`, {
+          ...itemForm,
+          budget: Number(itemForm.budget),
+        }),
+        "El servidor no confirmó la creación del Item"
+      );
+      if (saved.planId !== id) {
+        throw new ApiError(200, "El servidor confirmó el Item para otro plan", saved, "invalid_response");
       }
-    } catch {
-      toast.error("Error al guardar el item");
-    } finally {
-      setSavingItem(false);
-    }
+      setPlanItems((current) => [saved, ...current]);
+      toast.success("Item agregado correctamente");
+      setItemForm(EMPTY_ITEM_FORM);
+      setAddItemOpen(false);
+    }, "Error al guardar el item");
+    setSavingItem(false);
   }
 
   async function handleBulkFileSelected(e: React.ChangeEvent<HTMLInputElement>) {
@@ -461,27 +483,34 @@ export default function PlanDetailPage() {
     setBulkParseError("");
     setBulkRows([]);
 
-    const result = await parseExcelFile(file);
-    if (result.fatalError) {
-      setBulkParseError(result.fatalError);
-      setBulkOpen(true);
-      return;
-    }
-    if (result.missingColumns.length > 0) {
-      setBulkParseError(
-        `Faltan columnas requeridas: ${result.missingColumns.join(", ")}`
-      );
-      setBulkOpen(true);
-      return;
-    }
-    if (result.rows.length === 0) {
-      setBulkParseError("No se encontraron filas de datos");
-      setBulkOpen(true);
-      return;
-    }
+    try {
+      const result = await parseExcelFile(file);
+      if (result.fatalError) {
+        setBulkParseError(result.fatalError);
+        setBulkOpen(true);
+        return;
+      }
+      if (result.missingColumns.length > 0) {
+        setBulkParseError(
+          `Faltan columnas requeridas: ${result.missingColumns.join(", ")}`
+        );
+        setBulkOpen(true);
+        return;
+      }
+      if (result.rows.length === 0) {
+        setBulkParseError("No se encontraron filas de datos");
+        setBulkOpen(true);
+        return;
+      }
 
-    setBulkRows(result.rows);
-    setBulkOpen(true);
+      setBulkRows(result.rows);
+      setBulkOpen(true);
+    } catch (error) {
+      const message = apiErrorMessage(error, "No se pudo leer el archivo Excel");
+      setBulkParseError(message);
+      setBulkOpen(true);
+      toast.error(message);
+    }
   }
 
   async function handleBulkSubmit() {
@@ -520,76 +549,108 @@ export default function PlanDetailPage() {
     }
 
     setBulkUploading(true);
-    try {
-      const res = await apiFetch(`/pma/api/plans/${id}/items/bulk`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ items: toSend }),
-      });
-      if (res.ok) {
-        const data = await res.json();
-        toast.success(`${data.created} Items cargados correctamente`);
-        if (data.failed?.length > 0) {
-          toast.warning(`${data.failed.length} Items fallaron al crear`);
-        }
+    await runMutation(async () => {
+      const data = await api.post<{ created: number; failed?: unknown[]; items?: PlanItem[] }>(
+        `/pma/api/plans/${id}/items/bulk`,
+        { items: toSend }
+      );
+      const created = Number(data.created) || 0;
+      const failedCount = Array.isArray(data.failed) ? data.failed.length : 0;
+      if (
+        !Number.isInteger(data.created) ||
+        data.created < 0 ||
+        !Array.isArray(data.items) ||
+        data.items.length !== data.created ||
+        data.items.some((item) => !item?.id || item.planId !== id)
+      ) {
+        throw new ApiError(200, "El servidor devolvió una confirmación de carga inválida", data, "invalid_response");
+      }
+      if (created <= 0) {
+        toast.error(failedCount > 0
+          ? `No se creó ningún Item; ${failedCount} filas fallaron`
+          : "El servidor no confirmó la creación de ningún Item");
+        return;
+      }
+
+      toast.success(`${created} Items cargados correctamente`);
+      setPlanItems((current) => [...data.items!, ...current]);
+      if (failedCount > 0) {
+        setBulkParseError(`${created} Items creados; ${failedCount} filas fallaron. Revisa y corrige las filas antes de reintentar.`);
+        toast.warning(`${failedCount} Items fallaron al crear`);
+      } else {
         setBulkOpen(false);
         setBulkRows([]);
         setBulkFileName("");
-        await loadItems();
-      } else {
-        const data = await res.json();
-        toast.error(data.error || "Error al cargar Items");
       }
-    } catch {
-      toast.error("Error al cargar Items");
-    } finally {
-      setBulkUploading(false);
-    }
+    }, "Error al cargar Items");
+    setBulkUploading(false);
   }
 
   async function handleAssignToDireccion(userId: string, category: ItemAssignmentCategory) {
     if (!selectedDireccion) return;
     setSavingDireccionAssign(true);
-    try {
-      const res = await apiFetch(`/pma/api/plans/${id}/items/assign-direccion`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ direccion: selectedDireccion, userId, category }),
-      });
-      if (res.ok) {
-        toast.success("Reportero asignado a la dirección");
-        setDireccionPendingAssign(null);
-        await loadItems();
-      } else {
-        toast.error("Error al asignar");
+    await runMutation(async () => {
+      const receipt = await api.post<{
+        ok?: unknown;
+        planId?: unknown;
+        direccion?: unknown;
+        userId?: unknown;
+        category?: unknown;
+        assignedItemIds?: unknown;
+      }>(`/pma/api/plans/${id}/items/assign-direccion`, {
+          direccion: selectedDireccion,
+          userId,
+          category,
+        });
+      requireOkReceipt(receipt, "El servidor no confirmó la asignación del reportero");
+      if (
+        receipt.planId !== id ||
+        receipt.direccion !== selectedDireccion ||
+        receipt.userId !== userId ||
+        receipt.category !== category ||
+        !Array.isArray(receipt.assignedItemIds) ||
+        receipt.assignedItemIds.length === 0
+      ) {
+        throw new ApiError(200, "El servidor devolvió una asignación incompleta", receipt, "invalid_response");
       }
-    } finally {
-      setSavingDireccionAssign(false);
-    }
+      toast.success("Reportero asignado a la dirección");
+      setDireccionPendingAssign(null);
+      await loadItems();
+    }, "Error al asignar el reportero");
+    setSavingDireccionAssign(false);
   }
 
   async function handleUnassignFromDireccion(userId: string) {
     if (!selectedDireccion) return;
     setSavingDireccionAssign(true);
-    try {
-      const res = await apiFetch(`/pma/api/plans/${id}/items/assign-direccion`, {
-        method: "DELETE",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ direccion: selectedDireccion, userId }),
-      });
-      if (res.ok) {
-        toast.success("Reportero desasignado de la dirección");
-        await loadItems();
-      } else {
-        toast.error("Error al desasignar");
+    await runMutation(async () => {
+      const receipt = await api.delete<{
+        ok?: unknown;
+        planId?: unknown;
+        direccion?: unknown;
+        userId?: unknown;
+        unassignedItemIds?: unknown;
+      }>(`/pma/api/plans/${id}/items/assign-direccion`, {
+          body: { direccion: selectedDireccion, userId },
+        });
+      requireOkReceipt(receipt, "El servidor no confirmó la desasignación del reportero");
+      if (
+        receipt.planId !== id ||
+        receipt.direccion !== selectedDireccion ||
+        receipt.userId !== userId ||
+        !Array.isArray(receipt.unassignedItemIds) ||
+        receipt.unassignedItemIds.length === 0
+      ) {
+        throw new ApiError(200, "El servidor devolvió una desasignación incompleta", receipt, "invalid_response");
       }
-    } finally {
-      setSavingDireccionAssign(false);
-    }
+      toast.success("Reportero desasignado de la dirección");
+      await loadItems();
+    }, "Error al desasignar el reportero");
+    setSavingDireccionAssign(false);
   }
 
   function openCalUpload(item: PlanItem, range: ItemRange) {
-    const now = new Date();
+    const now = getBusinessMonth();
     const todayKey = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}`;
     const months = range.selectableMonthKeys;
     // Default to the current month if it falls in the range, otherwise the deadline.
@@ -601,6 +662,10 @@ export default function PlanDetailPage() {
   async function handleCalUploadSubmit(e: React.FormEvent<HTMLFormElement>) {
     e.preventDefault();
     if (!calUpload) return;
+    if (!calUpload.range.selectableMonthKeys.includes(calUploadMonth)) {
+      toast.error("El mes seleccionado no pertenece al período habilitado");
+      return;
+    }
     setUploadingCal(true);
 
     const formData = new FormData(e.currentTarget);
@@ -608,18 +673,24 @@ export default function PlanDetailPage() {
     formData.set("planItemId", calUpload.item.id);
     formData.set("activityMonth", calUploadMonth);
 
-    const res = await apiFetch("/pma/api/upload", { method: "POST", body: formData });
-    setUploadingCal(false);
-
-    if (res.ok) {
+    await runMutation(async () => {
+      const uploaded = requirePersistedAsset<Evidence>(
+        await api.upload<unknown>("/pma/api/upload", formData, { timeoutMs: 60_000 }),
+        "El servidor no confirmó la evidencia guardada"
+      );
+      if (
+        uploaded.planId !== id ||
+        uploaded.planItemId !== calUpload.item.id ||
+        uploaded.activityMonth !== calUploadMonth
+      ) {
+        throw new ApiError(200, "El servidor confirmó la evidencia con un período distinto", uploaded, "invalid_response");
+      }
+      setEvidences((current) => [uploaded, ...current.filter((evidence) => evidence.id !== uploaded.id)]);
       toast.success("Evidencia subida correctamente");
       (e.target as HTMLFormElement).reset();
       setCalUpload(null);
-      loadPlan();
-    } else {
-      const data = await res.json();
-      toast.error(data.error || "Error al subir");
-    }
+    }, "Error al subir la evidencia");
+    setUploadingCal(false);
   }
 
   async function handleManualEvidenceSubmit(e: React.FormEvent<HTMLFormElement>) {
@@ -631,28 +702,38 @@ export default function PlanDetailPage() {
     setUploadingManualEvidence(true);
 
     const monthKey = `${manualEvidenceForm.year}-${String(manualEvidenceForm.month).padStart(2, "0")}`;
+    const selectedItem = planItems.find((item) => item.id === manualEvidenceForm.itemId);
+    const allowedMonths = selectedItem && plan
+      ? new Set(getItemRanges(plan, selectedItem.periodicity).flatMap((range) => range.selectableMonthKeys))
+      : new Set<string>();
+    if (!allowedMonths.has(monthKey)) {
+      setUploadingManualEvidence(false);
+      toast.error("El mes seleccionado está fuera del período habilitado para este Item");
+      return;
+    }
     const formData = new FormData(e.currentTarget);
     formData.set("planId", id);
     formData.set("planItemId", manualEvidenceForm.itemId);
     formData.set("activityMonth", monthKey);
 
-    const res = await apiFetch("/pma/api/upload", { method: "POST", body: formData });
-    setUploadingManualEvidence(false);
-
-    if (res.ok) {
+    await runMutation(async () => {
+      const uploaded = requirePersistedAsset<Evidence>(
+        await api.upload<unknown>("/pma/api/upload", formData, { timeoutMs: 60_000 }),
+        "El servidor no confirmó la evidencia guardada"
+      );
+      if (
+        uploaded.planId !== id ||
+        uploaded.planItemId !== manualEvidenceForm.itemId ||
+        uploaded.activityMonth !== monthKey
+      ) {
+        throw new ApiError(200, "El servidor confirmó la evidencia con un período distinto", uploaded, "invalid_response");
+      }
+      setEvidences((current) => [uploaded, ...current.filter((evidence) => evidence.id !== uploaded.id)]);
       toast.success("Evidencia agregada correctamente");
       setManualEvidenceOpen(false);
-      setManualEvidenceForm({
-        itemId: "",
-        year: new Date().getFullYear(),
-        month: new Date().getMonth() + 1,
-        description: "",
-      });
-      loadPlan();
-    } else {
-      const data = await res.json();
-      toast.error(data.error || "Error al agregar evidencia");
-    }
+      setManualEvidenceForm(emptyManualEvidenceForm());
+    }, "Error al agregar la evidencia");
+    setUploadingManualEvidence(false);
   }
 
   async function handleDownloadPeriod(pi: PlanItem, periodKey: string) {
@@ -664,12 +745,7 @@ export default function PlanDetailPage() {
         periodStart: periodKey,
         planId: id,
       });
-      const res = await apiFetch(`/pma/api/download/item-period?${params}`);
-      if (!res.ok) {
-        const data = await res.json().catch(() => ({}));
-        toast.error(data.error || "No hay archivos para descargar");
-        return;
-      }
+      const res = await checkedApiFetch(`/pma/api/download/item-period?${params}`, {}, "No hay archivos para descargar");
       const blob = await res.blob();
       const url = URL.createObjectURL(blob);
       const a = document.createElement("a");
@@ -679,8 +755,8 @@ export default function PlanDetailPage() {
       a.click();
       document.body.removeChild(a);
       URL.revokeObjectURL(url);
-    } catch {
-      toast.error("Error al descargar");
+    } catch (error) {
+      toast.error(apiErrorMessage(error, "Error al descargar"));
     } finally {
       setDownloadingPeriod(null);
     }
@@ -689,45 +765,53 @@ export default function PlanDetailPage() {
   async function handleDeleteItem(itemId: string) {
     if (!confirm("¿Eliminar este Item?")) return;
 
-    const res = await apiFetch(`/pma/api/plans/${id}/items/${itemId}`, {
-      method: "DELETE",
-    });
-
-    if (res.ok) {
+    await runMutation(async () => {
+      requireOkReceipt(
+        await api.delete<unknown>(`/pma/api/plans/${id}/items/${itemId}`),
+        "El servidor no confirmó la eliminación del Item"
+      );
+      setPlanItems((current) => current.filter((item) => item.id !== itemId));
       toast.success("Item eliminado");
-      loadItems();
-    } else {
-      toast.error("Error al eliminar Item");
-    }
+    }, "Error al eliminar Item");
   }
 
   async function handleSaveObservation() {
     if (!obsItem) return;
     setSavingObs(true);
-    const res = await apiFetch(`/pma/api/plans/${id}/items/${obsItem.id}`, {
-      method: "PATCH",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ observation: obsText }),
-    });
-    setSavingObs(false);
-    if (res.ok) {
-      setPlanItems((prev) =>
-        prev.map((pi) => (pi.id === obsItem.id ? { ...pi, observation: obsText } : pi))
+    await runMutation(async () => {
+      const receipt = await api.patch<{ ok?: unknown; id?: unknown }>(
+        `/pma/api/plans/${id}/items/${obsItem.id}/observation`,
+        { observation: obsText }
       );
+      requireOkReceipt(receipt, "El servidor no confirmó la observación");
+      if (receipt.id !== obsItem.id) {
+        throw new ApiError(200, "El servidor confirmó una observación para otro Item", receipt, "invalid_response");
+      }
+      setPlanItems((prev) => prev.map((item) =>
+        item.id === obsItem.id ? { ...item, observation: obsText } : item
+      ));
       toast.success("Observación guardada");
       setObsItem(null);
-    } else {
-      toast.error("Error al guardar observación");
-    }
+    }, "Error al guardar observación");
+    setSavingObs(false);
   }
 
   async function handleComplianceChange(planItemId: string, periodKey: string, status: PeriodComplianceStatus) {
-    const res = await apiFetch(`/pma/api/plans/${id}/period-compliance`, {
-      method: "PUT",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ entries: [{ planItemId, periodKey, status }] }),
-    });
-    if (res.ok) {
+    await runMutation(async () => {
+      const receipt = await api.put<{ ok?: unknown; updated?: unknown }>(
+        `/pma/api/plans/${id}/period-compliance`, {
+          entries: [{ planItemId, periodKey, status }],
+        }
+      );
+      requireOkReceipt(receipt, "El servidor no confirmó el estado de cumplimiento");
+      if (receipt.updated !== 1) {
+        throw new ApiError(
+          200,
+          "El servidor no confirmó la escritura del estado de cumplimiento",
+          receipt,
+          "invalid_response"
+        );
+      }
       const updated: PeriodCompliance = {
         id: `${planItemId}:${periodKey}`,
         planId: id,
@@ -749,9 +833,7 @@ export default function PlanDetailPage() {
         }
         return [...prev, updated];
       });
-    } else {
-      toast.error("Error al guardar cumplimiento");
-    }
+    }, "Error al guardar cumplimiento");
   }
 
   function autoResizeTextarea(e: React.ChangeEvent<HTMLTextAreaElement>) {
@@ -761,7 +843,12 @@ export default function PlanDetailPage() {
   }
 
   if (!plan) {
-    return <div className="text-muted-foreground">Cargando...</div>;
+    return loadError ? (
+      <div className="space-y-3">
+        <p className="text-sm text-red-600">{loadError}</p>
+        <Button variant="outline" onClick={() => void loadPlan()}>Reintentar</Button>
+      </div>
+    ) : <div className="text-muted-foreground">Cargando...</div>;
   }
 
 
@@ -777,6 +864,16 @@ export default function PlanDetailPage() {
         (ev) => !ev.planItemId || visibleItems.some((pi) => pi.id === ev.planItemId)
       );
   const visibleFindings = findings;
+  const manualEvidenceItem = visibleItems.find((item) => item.id === manualEvidenceForm.itemId);
+  const manualAllowedMonthKeys = manualEvidenceItem
+    ? getItemRanges(plan, manualEvidenceItem.periodicity).flatMap((range) => range.selectableMonthKeys)
+    : [];
+  const manualAllowedYears = Array.from(
+    new Set(manualAllowedMonthKeys.map((key) => Number(key.slice(0, 4))))
+  ).sort((a, b) => a - b);
+  const manualAllowedMonths = manualAllowedMonthKeys
+    .filter((key) => Number(key.slice(0, 4)) === manualEvidenceForm.year)
+    .map((key) => Number(key.slice(5, 7)));
 
   // Distinct "direcciones" present across this plan's items, used by the
   // "Asignar por dirección" card to assign a reporter to a whole group at once.
@@ -807,6 +904,9 @@ export default function PlanDetailPage() {
 
   return (
     <div className="space-y-6">
+      {mutationPending && (
+        <div className="fixed inset-0 z-[90] cursor-wait" aria-label="Operación en curso" />
+      )}
       {/* Plan Header */}
       <div>
         <div className="flex items-center justify-between mb-1">
@@ -1348,7 +1448,7 @@ export default function PlanDetailPage() {
                             >
                               <Pencil className="w-4 h-4 text-blue-500" />
                             </Button>
-                            {canEdit && (
+                            {(isAdmin || isViewer) && (
                               <Button
                                 variant="ghost"
                                 size="sm"
@@ -1400,12 +1500,11 @@ export default function PlanDetailPage() {
           valid:   { bg: "#dcfce7", color: "#166534", border: "#86efac", label: "✓“" },
         };
 
-        const today = new Date();
-        const todayMonth = new Date(today.getFullYear(), today.getMonth(), 1);
+        const todayMonth = getBusinessMonth();
 
-        const planStart = parseDateOnly(p.start_date) ?? new Date(p.createdAt);
+        const planStart = getPlanStartDate(p);
         const rangeStart = new Date(planStart.getFullYear(), planStart.getMonth(), 1);
-        const rangeEnd = new Date(today.getFullYear(), today.getMonth() + 2, 1);
+        const rangeEnd = new Date(todayMonth.getFullYear(), todayMonth.getMonth() + 2, 1);
 
         const months: Date[] = [];
         const cur = new Date(rangeStart);
@@ -1535,12 +1634,13 @@ export default function PlanDetailPage() {
                           evStatus === "valid"   ? `Válido · ${range.label}` :
                           evStatus === "invalid" ? `Rechazado · ${range.label}` :
                           evStatus === "pending" ? `Pendiente de aprobación · ${range.label}` :
-                          started ? `Subir evidencia · ${range.label}` :
+                          started && canUploadEvidence ? `Subir evidencia · ${range.label}` :
+                          started ? `Sin evidencia · ${range.label}` :
                           `Periodo futuro (aún no disponible) · ${range.label}`;
 
                         return (
                           <td key={cellKey} colSpan={colSpan} className="border border-border p-0.5">
-                            {started ? (
+                            {started && canUploadEvidence ? (
                               <button
                                 onClick={() => openCalUpload(pi, range)}
                                 className="w-full rounded flex items-center justify-center font-semibold leading-none transition-opacity hover:opacity-75 px-1"
@@ -1886,12 +1986,21 @@ export default function PlanDetailPage() {
                 id="manual-item"
                 className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
                 value={manualEvidenceForm.itemId}
-                onChange={(e) =>
+                onChange={(e) => {
+                  const itemId = e.target.value;
+                  const item = visibleItems.find((candidate) => candidate.id === itemId);
+                  const lastAllowed = item
+                    ? getItemRanges(plan, item.periodicity)
+                        .flatMap((range) => range.selectableMonthKeys)
+                        .at(-1)
+                    : undefined;
                   setManualEvidenceForm((prev) => ({
                     ...prev,
-                    itemId: e.target.value,
-                  }))
-                }
+                    itemId,
+                    year: lastAllowed ? Number(lastAllowed.slice(0, 4)) : prev.year,
+                    month: lastAllowed ? Number(lastAllowed.slice(5, 7)) : prev.month,
+                  }));
+                }}
                 required
               >
                 <option value="">Selecciona un item</option>
@@ -1918,7 +2027,7 @@ export default function PlanDetailPage() {
                   }
                   required
                 >
-                  {[1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12].map((m) => (
+                  {manualAllowedMonths.map((m) => (
                     <option key={m} value={m}>
                       {new Date(2000, m - 1).toLocaleString("es", { month: "short" })}
                     </option>
@@ -1932,29 +2041,24 @@ export default function PlanDetailPage() {
                   id="manual-year"
                   className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
                   value={manualEvidenceForm.year}
-                  onChange={(e) =>
+                  onChange={(e) => {
+                    const year = Number(e.target.value);
+                    const months = manualAllowedMonthKeys
+                      .filter((key) => Number(key.slice(0, 4)) === year)
+                      .map((key) => Number(key.slice(5, 7)));
                     setManualEvidenceForm((prev) => ({
                       ...prev,
-                      year: parseInt(e.target.value),
-                    }))
-                  }
+                      year,
+                      month: months.includes(prev.month) ? prev.month : (months[0] ?? prev.month),
+                    }));
+                  }}
                   required
                 >
-                  {(() => {
-                    const startYear = plan
-                      ? (parseDateOnly(plan.start_date) ?? new Date(plan.createdAt)).getFullYear()
-                      : new Date().getFullYear();
-                    const endYear = new Date().getFullYear();
-                    const years = [];
-                    for (let y = startYear; y <= endYear; y++) {
-                      years.push(y);
-                    }
-                    return years.map((y) => (
+                  {manualAllowedYears.map((y) => (
                       <option key={y} value={y}>
                         {y}
                       </option>
-                    ));
-                  })()}
+                  ))}
                 </select>
               </div>
             </div>
@@ -2242,7 +2346,7 @@ export default function PlanDetailPage() {
                           >
                             <Pencil className="w-4 h-4" />
                           </Button>
-                          {canEdit && (
+                          {(isAdmin || isViewer) && (
                             <Button
                               size="icon"
                               variant="ghost"
@@ -2270,7 +2374,7 @@ export default function PlanDetailPage() {
             <CardTitle className="text-base">
               Evidencias ({visibleEvidences.length})
             </CardTitle>
-            {visibleItems.length > 0 && (
+            {canUploadEvidence && visibleItems.length > 0 && (
               <Button
                 size="sm"
                 onClick={() => setManualEvidenceOpen(true)}
@@ -2390,13 +2494,15 @@ export default function PlanDetailPage() {
                             <ExternalLink className="w-4 h-4" />
                           </Button>
                         </a>
-                        <Button
-                          variant="ghost"
-                          size="sm"
-                          onClick={() => handleDeleteEvidence(ev.id)}
-                        >
-                          <Trash2 className="w-4 h-4 text-red-500" />
-                        </Button>
+                        {canDeleteEvidence && (
+                          <Button
+                            variant="ghost"
+                            size="sm"
+                            onClick={() => handleDeleteEvidence(ev.id)}
+                          >
+                            <Trash2 className="w-4 h-4 text-red-500" />
+                          </Button>
+                        )}
                       </div>
                     </TableCell>
                   </TableRow>

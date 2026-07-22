@@ -52,7 +52,7 @@ const ADMIN_ENTRY = {
 };
 
 export default function SelectAppPage() {
-  const { user, status, logout } = useAuth();
+  const { user, status, logout, logoutPending } = useAuth();
   const router = useRouter();
 
   useEffect(() => {
@@ -60,6 +60,18 @@ export default function SelectAppPage() {
       router.replace("/login");
     }
   }, [status, router]);
+
+  useEffect(() => {
+    if (status !== "authenticated" || !user) return;
+    const assignedApps = new Set(user.apps);
+    const subsystemEntries = user.role === "ADMIN"
+      ? [...SUBSYSTEM_APPS]
+      : SUBSYSTEM_APPS.filter((app) => assignedApps.has(app.key));
+    const entries = user.role === "ADMIN"
+      ? [...subsystemEntries, ADMIN_ENTRY]
+      : subsystemEntries;
+    if (entries.length === 1) router.replace(entries[0].href);
+  }, [router, status, user]);
 
   if (status === "loading" || !user) {
     return (
@@ -79,7 +91,6 @@ export default function SelectAppPage() {
     : availableApps;
 
   if (allEntries.length === 1) {
-    router.replace(allEntries[0].href);
     return null;
   }
 
@@ -127,10 +138,9 @@ export default function SelectAppPage() {
       )}
 
       <button
-        onClick={async () => {
-          await logout();
-          router.push("/login");
-        }}
+        onClick={() => logout()}
+        disabled={logoutPending}
+        aria-busy={logoutPending}
         className="flex items-center gap-1.5 text-xs text-muted-foreground hover:text-slate-700 transition-colors"
       >
         <LogOut className="w-3.5 h-3.5" />

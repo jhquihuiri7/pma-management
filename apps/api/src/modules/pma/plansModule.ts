@@ -6,7 +6,10 @@ import {
   pmaItemAssignments,
   pmaPlanItems,
 } from "../../db/schema/pma.js";
-import { NotFound } from "../../lib/errors.js";
+import { Forbidden, NotFound } from "../../lib/errors.js";
+import { assertAssignableUser } from "../shared/assignmentPolicy.js";
+import { enqueueEvidenceCleanupForPlan } from "../shared/storageCleanup.js";
+import { lockAndAssertActor } from "../shared/transactionalActor.js";
 
 export type PlanCreateInput = {
   title: string;
@@ -19,7 +22,13 @@ export type PlanCreateInput = {
   visualizationUrl?: string;
 };
 
-export type PlanUpdateInput = Partial<PlanCreateInput>;
+export type PlanUpdateInput = Partial<Omit<PlanCreateInput, "tipo" | "fase" | "enfoque" | "startDate" | "visualizationUrl">> & {
+  tipo?: PlanCreateInput["tipo"] | null;
+  fase?: PlanCreateInput["fase"] | null;
+  enfoque?: PlanCreateInput["enfoque"] | null;
+  startDate?: string | null;
+  visualizationUrl?: string | null;
+};
 
 type PlanRow = typeof pmaPlans.$inferSelect;
 
@@ -56,23 +65,27 @@ function toApi(row: PlanRow) {
   };
 }
 
-export async function createPlan(adminId: string, input: PlanCreateInput) {
+export async function createPlan(actorId: string, input: PlanCreateInput) {
   const db = getDb();
-  const [row] = await db
-    .insert(pmaPlans)
-    .values({
-      createdBy: adminId,
-      title: input.title,
-      description: input.description ?? "",
-      tipo: input.tipo,
-      fase: input.fase,
-      enfoque: input.enfoque,
-      reportPer: input.reportPer,
-      startDate: input.startDate ?? null,
-      visualizationUrl: input.visualizationUrl ?? null,
-    })
-    .returning();
-  return toApi(row);
+  return db.transaction(async (tx) => {
+    const actor = await lockAndAssertActor(tx, actorId, "pma", ["ADMIN"]);
+    const [row] = await tx
+      .insert(pmaPlans)
+      .values({
+        createdBy: actor.id,
+        title: input.title,
+        description: input.description ?? "",
+        tipo: input.tipo,
+        fase: input.fase,
+        enfoque: input.enfoque,
+        reportPer: input.reportPer,
+        startDate: input.startDate ?? null,
+        visualizationUrl: input.visualizationUrl ?? null,
+      })
+      .returning();
+    if (!row) throw new Error("Plan insert returned no row");
+    return toApi(row);
+  });
 }
 
 export async function getPlansByAdmin(_adminId?: string) {
@@ -88,61 +101,121 @@ export async function getPlanById(planId: string) {
   return rows[0] ? toApi(rows[0]) : null;
 }
 
-export async function updatePlan(planId: string, adminId: string, updates: PlanUpdateInput) {
+export async function updatePlan(planId: string, actorId: string, updates: PlanUpdateInput) {
   const db = getDb();
-  const plan = await getPlanById(planId);
-  if (!plan) throw NotFound("Plan not found");
   const cleaned = Object.fromEntries(Object.entries(updates).filter(([, v]) => v !== undefined));
-  const [row] = await db
-    .update(pmaPlans)
-    .set({ ...cleaned, updatedAt: new Date() })
-    .where(eq(pmaPlans.id, planId))
-    .returning();
-  return toApi(row);
+  return db.transaction(async (tx) => {
+    const actor = await lockAndAssertActor(tx, actorId, "pma", ["ADMIN", "VIEWER"]);
+    if (!(await canUserAccessPlan(planId, { sub: actor.id, role: actor.role }, tx))) {
+      throw Forbidden("No tienes acceso a este plan");
+    }
+    const [row] = await tx
+      .update(pmaPlans)
+      .set({ ...cleaned, updatedAt: new Date() })
+      .where(eq(pmaPlans.id, planId))
+      .returning();
+    if (!row) throw NotFound("Plan not found");
+    // Item schedules are evaluated against their stored report period. Keep
+    // them synchronized with the parent plan in the same commit.
+    if (updates.reportPer !== undefined) {
+      await tx
+        .update(pmaPlanItems)
+        .set({ reportPer: updates.reportPer, updatedAt: new Date() })
+        .where(eq(pmaPlanItems.planId, planId));
+    }
+    return toApi(row);
+  });
 }
 
-export async function deletePlan(planId: string, adminId: string) {
+export async function deletePlan(planId: string, actorId: string) {
   const db = getDb();
-  const plan = await getPlanById(planId);
-  if (!plan) throw NotFound("Plan not found");
-  // FKs are ON DELETE CASCADE; one statement removes items, evidences, assignments, etc.
-  await db.delete(pmaPlans).where(eq(pmaPlans.id, planId));
-  // Caller is responsible for removing storage_path tree after this returns.
+  await db.transaction(async (tx) => {
+    await lockAndAssertActor(tx, actorId, "pma", ["ADMIN"]);
+    const existing = await tx
+      .select({ id: pmaPlans.id })
+      .from(pmaPlans)
+      .where(eq(pmaPlans.id, planId))
+      .limit(1)
+      .for("update");
+    if (!existing[0]) throw NotFound("Plan not found");
+    await enqueueEvidenceCleanupForPlan(tx, "pma", planId);
+    const deleted = await tx.delete(pmaPlans).where(eq(pmaPlans.id, planId)).returning({ id: pmaPlans.id });
+    if (deleted.length !== 1) throw NotFound("Plan not found");
+  });
 }
 
-export async function assignUserToPlan(planId: string, userId: string, _adminId?: string) {
-  const plan = await getPlanById(planId);
-  if (!plan) throw NotFound("Plan not found");
+export async function assignUserToPlan(planId: string, userId: string, actorId: string) {
   const db = getDb();
-  await db
-    .insert(pmaPlanAssignments)
-    .values({ planId, userId })
-    .onConflictDoNothing();
+  await db.transaction(async (tx) => {
+    const actor = await lockAndAssertActor(tx, actorId, "pma", ["ADMIN", "VIEWER"]);
+    const [plan] = await tx.select({ id: pmaPlans.id }).from(pmaPlans).where(eq(pmaPlans.id, planId)).limit(1);
+    if (!plan) throw NotFound("Plan not found");
+    if (!(await canUserAccessPlan(planId, { sub: actor.id, role: actor.role }, tx))) {
+      throw Forbidden("No tienes acceso a este plan");
+    }
+    await assertAssignableUser(userId, "pma", ["VIEWER"], tx);
+    await tx
+      .insert(pmaPlanAssignments)
+      .values({ planId, userId, explicitAccess: true })
+      .onConflictDoUpdate({
+        target: [pmaPlanAssignments.planId, pmaPlanAssignments.userId],
+        set: { explicitAccess: true },
+      });
+  });
 }
 
-export async function unassignUserFromPlan(planId: string, userId: string, _adminId?: string) {
-  const plan = await getPlanById(planId);
-  if (!plan) throw NotFound("Plan not found");
+export async function unassignUserFromPlan(planId: string, userId: string, actorId: string) {
   const db = getDb();
-  await db
-    .delete(pmaPlanAssignments)
-    .where(and(eq(pmaPlanAssignments.planId, planId), eq(pmaPlanAssignments.userId, userId)));
+  await db.transaction(async (tx) => {
+    const actor = await lockAndAssertActor(tx, actorId, "pma", ["ADMIN", "VIEWER"]);
+    const [plan] = await tx
+      .select({ id: pmaPlans.id })
+      .from(pmaPlans)
+      .where(eq(pmaPlans.id, planId))
+      .limit(1);
+    if (!plan) throw NotFound("Plan not found");
+    if (!(await canUserAccessPlan(planId, { sub: actor.id, role: actor.role }, tx))) {
+      throw Forbidden("No tienes acceso a este plan");
+    }
+    const [assignment] = await tx
+      .select()
+      .from(pmaPlanAssignments)
+      .where(and(
+        eq(pmaPlanAssignments.planId, planId),
+        eq(pmaPlanAssignments.userId, userId),
+        eq(pmaPlanAssignments.explicitAccess, true),
+      ))
+      .limit(1)
+      .for("update");
+    if (!assignment) throw NotFound("La asignación explícita no existe");
+    const itemAssignment = await tx
+      .select({ id: pmaItemAssignments.planItemId })
+      .from(pmaItemAssignments)
+      .innerJoin(pmaPlanItems, eq(pmaItemAssignments.planItemId, pmaPlanItems.id))
+      .where(and(eq(pmaPlanItems.planId, planId), eq(pmaItemAssignments.userId, userId)))
+      .limit(1);
+    if (itemAssignment.length > 0) {
+      await tx
+        .update(pmaPlanAssignments)
+        .set({ explicitAccess: false })
+        .where(and(eq(pmaPlanAssignments.planId, planId), eq(pmaPlanAssignments.userId, userId)));
+    } else {
+      await tx
+        .delete(pmaPlanAssignments)
+        .where(and(eq(pmaPlanAssignments.planId, planId), eq(pmaPlanAssignments.userId, userId)));
+    }
+  });
 }
 
 export async function getPlansForReporter(userId: string) {
   const db = getDb();
-  const planLevel = await db
-    .select({ planId: pmaPlanAssignments.planId })
-    .from(pmaPlanAssignments)
-    .where(eq(pmaPlanAssignments.userId, userId));
-
   const itemLevel = await db
     .select({ planId: pmaPlanItems.planId })
     .from(pmaItemAssignments)
     .innerJoin(pmaPlanItems, eq(pmaItemAssignments.planItemId, pmaPlanItems.id))
     .where(eq(pmaItemAssignments.userId, userId));
 
-  const planIds = Array.from(new Set([...planLevel, ...itemLevel].map((r) => r.planId)));
+  const planIds = Array.from(new Set(itemLevel.map((r) => r.planId)));
   if (planIds.length === 0) return [];
   const rows = await db.select().from(pmaPlans).where(inArray(pmaPlans.id, planIds));
   return rows.map(toApi);
@@ -153,7 +226,7 @@ export async function getPlansForViewer(userId: string) {
   const planLevel = await db
     .select({ planId: pmaPlanAssignments.planId })
     .from(pmaPlanAssignments)
-    .where(eq(pmaPlanAssignments.userId, userId));
+    .where(and(eq(pmaPlanAssignments.userId, userId), eq(pmaPlanAssignments.explicitAccess, true)));
   const planIds = planLevel.map((r) => r.planId);
   if (planIds.length === 0) return [];
   const rows = await db.select().from(pmaPlans).where(inArray(pmaPlans.id, planIds));
@@ -165,16 +238,23 @@ export async function getAssignedUserIds(planId: string): Promise<string[]> {
   const rows = await db
     .select({ userId: pmaPlanAssignments.userId })
     .from(pmaPlanAssignments)
-    .where(eq(pmaPlanAssignments.planId, planId));
+    .where(and(eq(pmaPlanAssignments.planId, planId), eq(pmaPlanAssignments.explicitAccess, true)));
   return rows.map((r) => r.userId);
 }
 
-export async function isUserAssignedToPlan(userId: string, planId: string): Promise<boolean> {
-  const db = getDb();
+export async function isUserAssignedToPlan(
+  userId: string,
+  planId: string,
+  db: any = getDb(),
+): Promise<boolean> {
   const rows = await db
     .select({ planId: pmaPlanAssignments.planId })
     .from(pmaPlanAssignments)
-    .where(and(eq(pmaPlanAssignments.userId, userId), eq(pmaPlanAssignments.planId, planId)))
+    .where(and(
+      eq(pmaPlanAssignments.userId, userId),
+      eq(pmaPlanAssignments.planId, planId),
+      eq(pmaPlanAssignments.explicitAccess, true),
+    ))
     .limit(1);
   return rows.length > 0;
 }
@@ -188,11 +268,11 @@ export async function isUserAssignedToPlan(userId: string, planId: string): Prom
  */
 export async function canUserAccessPlan(
   planId: string,
-  user: { sub: string; role: "ADMIN" | "REPORTER" | "VIEWER" }
+  user: { sub: string; role: "ADMIN" | "REPORTER" | "VIEWER" },
+  db: any = getDb(),
 ): Promise<boolean> {
   if (user.role === "ADMIN") return true;
-  if (await isUserAssignedToPlan(user.sub, planId)) return true;
-  const db = getDb();
+  if (user.role === "VIEWER") return isUserAssignedToPlan(user.sub, planId, db);
   const itemRows = await db
     .select({ planItemId: pmaItemAssignments.planItemId })
     .from(pmaItemAssignments)

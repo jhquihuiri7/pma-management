@@ -1,6 +1,12 @@
 "use client";
 
-import { apiFetch } from "@/lib/api-client";
+import {
+  ApiError,
+  api,
+  errorMessageFromEnvelope,
+  requireOkReceipt,
+  requirePersistedEntity,
+} from "@/lib/api-client";
 import type { Feature, FeatureCollection } from "geojson";
 import type { GisGeometry, LayerStyle, RasterStatus } from "./types";
 
@@ -21,6 +27,7 @@ export interface LayerManifest {
   zIndex: number;
   createdAt: string;
   updatedAt: string;
+  persisted?: boolean;
 }
 
 export interface CreateLayerArgs {
@@ -40,15 +47,11 @@ export interface CreateLayerArgs {
 const base = (mapId: string) => `/geo/api/maps/${mapId}/layers`;
 
 export async function fetchLayers(mapId: string): Promise<LayerManifest[]> {
-  const res = await apiFetch(base(mapId));
-  if (!res.ok) throw new Error(`fetchLayers ${res.status}`);
-  return res.json();
+  return api.get<LayerManifest[]>(base(mapId));
 }
 
 export async function fetchLayerData(mapId: string, layerId: string): Promise<FeatureCollection> {
-  const res = await apiFetch(`${base(mapId)}/${layerId}/data`);
-  if (!res.ok) throw new Error(`fetchLayerData ${res.status}`);
-  return res.json();
+  return api.get<FeatureCollection>(`${base(mapId)}/${layerId}/data`);
 }
 
 export async function createLayerRemote(mapId: string, args: CreateLayerArgs): Promise<LayerManifest> {
@@ -69,9 +72,14 @@ export async function createLayerRemote(mapId: string, args: CreateLayerArgs): P
   form.append("visible", String(args.visible));
   form.append("zIndex", String(args.zIndex));
 
-  const res = await apiFetch(base(mapId), { method: "POST", body: form });
-  if (!res.ok) throw new Error(`createLayer ${res.status}`);
-  return res.json();
+  const manifest = requirePersistedEntity<LayerManifest>(
+    await api.upload<unknown>(base(mapId), form, { timeoutMs: 120_000 }),
+    "El servidor no confirmó la persistencia de la capa"
+  );
+  if (manifest.persisted !== true || !manifest.id) {
+    throw new ApiError(0, "El servidor no confirmó la persistencia de la capa", manifest, "invalid_response");
+  }
+  return manifest;
 }
 
 export async function updateLayerRemote(
@@ -79,17 +87,18 @@ export async function updateLayerRemote(
   layerId: string,
   patch: Partial<Pick<LayerManifest, "name" | "style" | "visible" | "zIndex">>
 ): Promise<void> {
-  const res = await apiFetch(`${base(mapId)}/${layerId}`, {
-    method: "PATCH",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify(patch),
-  });
-  if (!res.ok) throw new Error(`updateLayer ${res.status}`);
+  requirePersistedEntity<LayerManifest>(
+    await api.patch<unknown>(`${base(mapId)}/${layerId}`, patch),
+    "El servidor no confirmó los cambios de la capa",
+    layerId
+  );
 }
 
 export async function deleteLayerRemote(mapId: string, layerId: string): Promise<void> {
-  const res = await apiFetch(`${base(mapId)}/${layerId}`, { method: "DELETE" });
-  if (!res.ok) throw new Error(`deleteLayer ${res.status}`);
+  requireOkReceipt(
+    await api.delete<unknown>(`${base(mapId)}/${layerId}`),
+    "El servidor no confirmó la eliminación de la capa"
+  );
 }
 
 // ── Raster (orthophoto) layers ─────────────────────────────────────────────
@@ -120,14 +129,14 @@ export interface RasterLayerManifest {
   createdAt: string;
   updatedAt: string;
   processedAt: string | null;
+  persisted?: boolean;
+  operationId?: string;
 }
 
 const rasterBase = (mapId: string) => `/geo/api/maps/${mapId}/raster-layers`;
 
 export async function fetchRasterLayers(mapId: string): Promise<RasterLayerManifest[]> {
-  const res = await apiFetch(rasterBase(mapId));
-  if (!res.ok) throw new Error(`fetchRasterLayers ${res.status}`);
-  return res.json();
+  return api.get<RasterLayerManifest[]>(rasterBase(mapId));
 }
 
 export async function updateRasterRemote(
@@ -135,23 +144,34 @@ export async function updateRasterRemote(
   layerId: string,
   patch: Partial<Pick<RasterLayerManifest, "name" | "opacity" | "visible" | "zIndex">>,
 ): Promise<void> {
-  const res = await apiFetch(`${rasterBase(mapId)}/${layerId}`, {
-    method: "PATCH",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify(patch),
-  });
-  if (!res.ok) throw new Error(`updateRaster ${res.status}`);
+  requirePersistedEntity<RasterLayerManifest>(
+    await api.patch<unknown>(`${rasterBase(mapId)}/${layerId}`, patch),
+    "El servidor no confirmó los cambios de la ortofoto",
+    layerId
+  );
 }
 
 export async function deleteRasterRemote(mapId: string, layerId: string): Promise<void> {
-  const res = await apiFetch(`${rasterBase(mapId)}/${layerId}`, { method: "DELETE" });
-  if (!res.ok) throw new Error(`deleteRaster ${res.status}`);
+  requireOkReceipt(
+    await api.delete<unknown>(`${rasterBase(mapId)}/${layerId}`),
+    "El servidor no confirmó la eliminación de la ortofoto"
+  );
 }
 
 export async function retryRasterRemote(mapId: string, layerId: string): Promise<RasterLayerManifest> {
-  const res = await apiFetch(`${rasterBase(mapId)}/${layerId}/retry`, { method: "POST" });
-  if (!res.ok) throw new Error(`retryRaster ${res.status}`);
-  return res.json();
+  const manifest = requirePersistedEntity<RasterLayerManifest>(
+    await api.post<unknown>(`${rasterBase(mapId)}/${layerId}/retry`),
+    "El servidor no confirmó el reencolado",
+    layerId
+  );
+  if (
+    manifest.persisted !== true ||
+    !manifest.operationId ||
+    (manifest.status !== "queued" && manifest.status !== "processing")
+  ) {
+    throw new ApiError(0, "El servidor no confirmó el reencolado", manifest, "invalid_response");
+  }
+  return manifest;
 }
 
 export interface CreateRasterArgs {
@@ -159,6 +179,8 @@ export interface CreateRasterArgs {
   /** The .tif/.tiff plus any sidecars (.tfw/.prj/...). */
   files: File[];
   onProgress?: (pct: number) => void;
+  signal?: AbortSignal;
+  timeoutMs?: number;
 }
 
 /**
@@ -175,20 +197,47 @@ export function createRasterRemote(mapId: string, args: CreateRasterArgs): Promi
     const xhr = new XMLHttpRequest();
     xhr.open("POST", `${TILE_BASE}/geo/maps/${mapId}/raster-layers`);
     xhr.withCredentials = true;
+    xhr.timeout = args.timeoutMs ?? 15 * 60_000;
+    const abort = () => xhr.abort();
+    args.signal?.addEventListener("abort", abort, { once: true });
+    const cleanup = () => args.signal?.removeEventListener("abort", abort);
     xhr.upload.onprogress = (e) => {
       if (e.lengthComputable) args.onProgress?.(Math.round((e.loaded / e.total) * 100));
     };
     xhr.onload = () => {
       if (xhr.status >= 200 && xhr.status < 300) {
-        try { resolve(JSON.parse(xhr.responseText)); }
-        catch { reject(new Error("Respuesta inválida del servidor")); }
+        try {
+          const manifest = JSON.parse(xhr.responseText) as RasterLayerManifest;
+          if (
+            manifest.persisted !== true ||
+            !manifest.operationId ||
+            !manifest.id ||
+            (manifest.status !== "queued" && manifest.status !== "processing")
+          ) {
+            throw new ApiError(200, "El servidor no confirmó la persistencia y el encolado de la ortofoto", manifest, "invalid_response");
+          }
+          cleanup();
+          resolve(manifest);
+        } catch (error) {
+          cleanup();
+          reject(error instanceof Error ? error : new Error("Respuesta inválida del servidor"));
+        }
       } else {
-        let msg = `Error ${xhr.status}`;
-        try { msg = JSON.parse(xhr.responseText).message || msg; } catch { /* keep default */ }
-        reject(new Error(msg));
+        let details: unknown = xhr.responseText;
+        try { details = JSON.parse(xhr.responseText); } catch { /* keep text */ }
+        const msg = errorMessageFromEnvelope(details) || `Error ${xhr.status}`;
+        cleanup();
+        reject(new ApiError(xhr.status, msg, details, "http"));
       }
     };
-    xhr.onerror = () => reject(new Error("Error de red al subir la ortofoto"));
+    xhr.onerror = () => { cleanup(); reject(new ApiError(0, "Error de red al subir la ortofoto", undefined, "network")); };
+    xhr.ontimeout = () => { cleanup(); reject(new ApiError(0, "La subida de la ortofoto superó el tiempo de espera", undefined, "timeout")); };
+    xhr.onabort = () => { cleanup(); reject(new ApiError(0, "La subida de la ortofoto fue cancelada", undefined, "abort")); };
+    if (args.signal?.aborted) {
+      cleanup();
+      reject(new ApiError(0, "La subida de la ortofoto fue cancelada", undefined, "abort"));
+      return;
+    }
     xhr.send(form);
   });
 }
@@ -203,12 +252,11 @@ export function rasterTileUrl(mapId: string, layerId: string): string {
 
 /** Persist the current viewport (center [lat,lng] + zoom). Open to any geo user. */
 export async function saveViewport(mapId: string, center: [number, number], zoom: number): Promise<void> {
-  const res = await apiFetch(`/geo/api/maps/${mapId}/viewport`, {
-    method: "PATCH",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ center, zoom }),
-  });
-  if (!res.ok) throw new Error(`saveViewport ${res.status}`);
+  requirePersistedEntity<{ id: string }>(
+    await api.patch<unknown>(`/geo/api/maps/${mapId}/viewport`, { center, zoom }),
+    "El servidor no confirmó la vista del mapa",
+    mapId
+  );
 }
 
 // ── helpers ──────────────────────────────────────────────────────────────

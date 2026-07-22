@@ -7,10 +7,11 @@ import { getCompliance, bulkSetCompliance } from "../../modules/rgdp/periodCompl
 
 const entrySchema = z.object({
   planItemId: z.string().uuid(),
-  periodKey: z.string().min(1),
+  periodKey: z.string().regex(/^\d{4}-(0[1-9]|1[0-2])$/),
   status: z.enum(["C", "NC+", "NC-", "N/A"]),
-});
-const bulkSchema = z.object({ entries: z.array(entrySchema).min(1) });
+}).strict();
+const bulkSchema = z.object({ entries: z.array(entrySchema).min(1).max(5_000) }).strict();
+const planParamsSchema = z.object({ planId: z.string().uuid() }).strict();
 
 async function assertPlanOwnership(planId: string, adminId: string) {
   const plan = await getPlanById(planId);
@@ -22,16 +23,16 @@ export async function rgdpPeriodComplianceRoutes(app: FastifyInstance) {
   app.addHook("preHandler", requireApp("rgdp"));
 
   app.get("/", async (req) => {
-    const planId = (req.params as any).planId as string;
+    const { planId } = planParamsSchema.parse(req.params);
     if (!(await canUserAccessPlan(planId, req.user!))) throw Forbidden("No tienes acceso a este plan");
-    return getCompliance(planId);
+    return getCompliance(planId, req.user!.role === "REPORTER" ? req.user!.sub : undefined);
   });
 
   app.put("/", { preHandler: requireRole("ADMIN") }, async (req) => {
-    const { planId } = req.params as { planId: string };
+    const { planId } = planParamsSchema.parse(req.params);
     await assertPlanOwnership(planId, req.user!.adminId);
     const body = bulkSchema.parse(req.body);
-    await bulkSetCompliance(body.entries);
-    return { ok: true };
+    const updated = await bulkSetCompliance(planId, body.entries, req.user!.sub);
+    return { ok: true, updated };
   });
 }
