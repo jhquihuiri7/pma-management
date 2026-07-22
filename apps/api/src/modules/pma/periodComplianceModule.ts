@@ -122,19 +122,34 @@ async function assertPlanItems(
   return plan;
 }
 
-const MONTHS_ES = ["ene", "feb", "mar", "abr", "may", "jun", "jul", "ago", "sep", "oct", "nov", "dic"];
+// The period label MUST match byte-for-byte what the web UI builds with
+// `toLocaleString("es", { month: "short" })` (see apps/web/lib/planPeriods.ts
+// -> getPeriodLabel), because the resulting string is the `periodKey` the client
+// sends back. Notably CLDR renders September as "sept" (not "sep"), so we reuse
+// the same Intl mechanism instead of a hand-rolled table to stay in sync for
+// every month. timeZone "UTC" keeps it aligned with the UTC block dates below.
+const MONTH_LABEL_FMT = new Intl.DateTimeFormat("es", { month: "short", timeZone: "UTC" });
+function monthLabelEs(monthIndex: number): string {
+  return MONTH_LABEL_FMT.format(Date.UTC(2000, monthIndex, 1));
+}
 
-function assertPeriodKey(
+/**
+ * Every reporting-period label the plan has enabled so far, built exactly like
+ * the web UI so the client-supplied `periodKey` matches byte-for-byte. `now` is
+ * injectable for deterministic testing. Throws for unsupported report periods or
+ * plans that have not started yet.
+ */
+export function enabledPeriodKeys(
   plan: { reportPer: string; startDate: string | null; createdAt: Date },
-  periodKey: string,
-): void {
+  now: Date = new Date(),
+): Set<string> {
   const blockSize = plan.reportPer === "2 años" ? 24 : plan.reportPer === "1 año" ? 12 : plan.reportPer === "6 meses" ? 6 : 0;
   if (!blockSize) throw BadRequest(`Periodo de reporte no soportado: ${plan.reportPer}`);
   const start = plan.startDate ? /^([0-9]{4})-([0-9]{2})-[0-9]{2}$/.exec(plan.startDate) : null;
   const origin = start
     ? { year: Number(start[1]), month: Number(start[2]) }
     : businessMonth(plan.createdAt);
-  const current = businessMonth(new Date());
+  const current = businessMonth(now);
   const currentDiff = (current.year - origin.year) * 12 + current.month - origin.month;
   if (currentDiff < 0) throw BadRequest("El período del plan aún no ha iniciado");
 
@@ -142,13 +157,22 @@ function assertPeriodKey(
   for (let block = 0; block <= Math.floor(currentDiff / blockSize); block++) {
     const startDate = new Date(Date.UTC(origin.year, origin.month - 1 + block * blockSize, 1));
     const endDate = new Date(Date.UTC(origin.year, origin.month - 1 + (block + 1) * blockSize - 1, 1));
-    const startLabel = MONTHS_ES[startDate.getUTCMonth()];
-    const endLabel = MONTHS_ES[endDate.getUTCMonth()];
+    const startLabel = monthLabelEs(startDate.getUTCMonth());
+    const endLabel = monthLabelEs(endDate.getUTCMonth());
     valid.add(startDate.getUTCFullYear() === endDate.getUTCFullYear()
       ? `${startLabel}-${endLabel} ${endDate.getUTCFullYear()}`
       : `${startLabel} ${startDate.getUTCFullYear()}-${endLabel} ${endDate.getUTCFullYear()}`);
   }
-  if (!valid.has(periodKey)) throw BadRequest("periodKey no pertenece a un período habilitado del plan");
+  return valid;
+}
+
+function assertPeriodKey(
+  plan: { reportPer: string; startDate: string | null; createdAt: Date },
+  periodKey: string,
+): void {
+  if (!enabledPeriodKeys(plan).has(periodKey)) {
+    throw BadRequest("periodKey no pertenece a un período habilitado del plan");
+  }
 }
 
 function businessMonth(value: Date): { year: number; month: number } {
