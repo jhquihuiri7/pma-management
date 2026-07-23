@@ -112,6 +112,7 @@ test(
         uploadedBy: userId,
         uploaderName: "Evidence authorization test",
         fileName: "file.pdf",
+        evidenceType: "Otros",
         storagePath: evidencePath,
       });
       await deletePmaEvidence(evidenceId, userId);

@@ -15,13 +15,13 @@ import {
 } from "@/components/ui/table";
 import { ExternalLink, Trash2 } from "lucide-react";
 import { toast } from "sonner";
-import { Evidence } from "@/types";
+import { PmaEvidence } from "@/types";
 
 export default function EvidencesPage() {
   const { user: session} = useAuth();
   const isAdmin = session?.role === "ADMIN";
   const isReporter = session?.role === "REPORTER";
-  const [evidences, setEvidences] = useState<Evidence[]>([]);
+  const [evidences, setEvidences] = useState<PmaEvidence[]>([]);
   const [loading, setLoading] = useState(true);
   const [loadError, setLoadError] = useState<string | null>(null);
   const [deletingId, setDeletingId] = useState<string | null>(null);
@@ -30,7 +30,7 @@ export default function EvidencesPage() {
   const loadEvidences = useCallback(async (mine: boolean) => {
     setLoading(true);
     try {
-      const data = await api.get<Evidence[]>(`/pma/api/evidences${mine ? "?mine=true" : ""}`);
+      const data = await api.get<PmaEvidence[]>(`/pma/api/evidences${mine ? "?mine=true" : ""}`);
       if (!Array.isArray(data)) throw new TypeError("Respuesta de evidencias inválida");
       setEvidences(data);
       setLoadError(null);
@@ -109,6 +109,7 @@ export default function EvidencesPage() {
               <TableHeader>
                 <TableRow>
                   <TableHead>Nombre del Archivo</TableHead>
+                  <TableHead>Tipo</TableHead>
                   <TableHead>Subido por</TableHead>
                   <TableHead>Descripción</TableHead>
                   <TableHead>Fecha</TableHead>
@@ -119,6 +120,7 @@ export default function EvidencesPage() {
                 {evidences.map((ev) => (
                   <TableRow key={ev.id}>
                     <TableCell className="font-medium">{ev.fileName}</TableCell>
+                    <TableCell className="whitespace-nowrap text-sm">{ev.evidenceType}</TableCell>
                     <TableCell>{ev.uploaderName}</TableCell>
                     <TableCell className="max-w-[200px] truncate">
                       {ev.description || "-"}

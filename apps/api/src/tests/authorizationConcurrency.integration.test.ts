@@ -227,6 +227,7 @@ test(
           uploadedBy: ids.pmaUploader,
           uploaderName: "PMA uploader",
           fileName: "validation-race.pdf",
+          evidenceType: "Otros",
           storagePath: cleanupPaths[0],
         },
         {
@@ -236,6 +237,7 @@ test(
           uploadedBy: ids.pmaDeleteActor,
           uploaderName: "PMA delete actor",
           fileName: "delete-race.pdf",
+          evidenceType: "Otros",
           storagePath: cleanupPaths[1],
         },
       ]);

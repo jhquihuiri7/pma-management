@@ -175,6 +175,7 @@ test(
         uploadedBy: ids.pmaUploader,
         uploaderName: "PMA uploader",
         fileName: "pma-evidence.pdf",
+        evidenceType: "Informe",
         data: Buffer.from("pma evidence"),
         contentType: "application/pdf",
       });
@@ -195,6 +196,7 @@ test(
         uploadedBy: ids.adminB,
         uploaderName: "Implicit admin B",
         fileName: "pma-item-evidence.pdf",
+        evidenceType: "Otros",
         storagePath: `PMA/test/${ids.pmaItemEvidence}/file.pdf`,
       });
       await db.insert(rgdpEvidences).values({
@@ -361,6 +363,7 @@ test(
         uploadedBy: ids.pmaUploader,
         uploaderName: "PMA uploader",
         fileName: "atomic-validation-pma.pdf",
+        evidenceType: "Informe",
         data: Buffer.from("atomic pma validation"),
       });
       const atomicRgdpValidation = await createRgdpEvidence(ids.adminA, {
@@ -408,6 +411,7 @@ test(
           uploadedBy: ids.pmaUploader,
           uploaderName: "PMA uploader",
           fileName: "atomic-create-pma.pdf",
+          evidenceType: "Informe",
           data: Buffer.from("must roll back"),
         }),
         /forced evidence notification failure/

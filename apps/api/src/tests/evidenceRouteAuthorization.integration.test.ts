@@ -94,6 +94,7 @@ test(
         uploadedBy: otherReporterId,
         uploaderName: "Other reporter",
         fileName: "foreign-pma.pdf",
+        evidenceType: "Otros",
         storagePath: `PMA/test/${randomUUID()}/foreign-pma.pdf`,
         activityMonth: "2026-01",
       });

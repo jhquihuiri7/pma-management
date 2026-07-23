@@ -30,6 +30,14 @@ export const evidenceValidationStatusEnum = pgEnum("evidence_validation_status",
   "invalid",
 ]);
 
+export const evidenceTypeEnum = pgEnum("evidence_type", [
+  "Informe",
+  "Registro Fotográfico",
+  "Certificado",
+  "Acta",
+  "Otros",
+]);
+
 export const findingComponentEnum = pgEnum("finding_component", [
   "LEGAL",
   "OPERACIONAL",

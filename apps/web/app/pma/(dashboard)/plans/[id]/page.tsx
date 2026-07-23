@@ -36,11 +36,13 @@ import { Upload, ExternalLink, Trash2, Plus, Users, CheckCircle2, AlertTriangle,
 import { toast } from "sonner";
 import {
   Plan,
-  Evidence,
+  PmaEvidence,
   User,
   PlanItem,
   ItemAssignmentCategory,
   EvidenceValidationStatus,
+  EvidenceType,
+  EVIDENCE_TYPE_VALUES,
   PeriodCompliance,
   PeriodComplianceStatus,
   Finding,
@@ -97,6 +99,7 @@ function emptyManualEvidenceForm() {
     year: businessMonth.getFullYear(),
     month: businessMonth.getMonth() + 1,
     description: "",
+    evidenceType: "" as EvidenceType | "",
   };
 }
 
@@ -116,7 +119,7 @@ export default function PlanDetailPage() {
   const deepLinkEvidenceId = searchParams.get("evidenceId");
 
   const [plan, setPlan] = useState<Plan | null>(null);
-  const [evidences, setEvidences] = useState<Evidence[]>([]);
+  const [evidences, setEvidences] = useState<PmaEvidence[]>([]);
   const [findings, setFindings] = useState<Finding[]>([]);
   const [allReporters, setAllReporters] = useState<User[]>([]);
   const [allViewers, setAllViewers] = useState<User[]>([]);
@@ -136,6 +139,13 @@ export default function PlanDetailPage() {
   const [editingItem, setEditingItem] = useState<PlanItem | null>(null);
   const [calUpload, setCalUpload] = useState<{ item: PlanItem; range: ItemRange } | null>(null);
   const [calUploadMonth, setCalUploadMonth] = useState<string>("");
+  const [calUploadType, setCalUploadType] = useState<EvidenceType | "">("");
+  const [editEvidence, setEditEvidence] = useState<PmaEvidence | null>(null);
+  const [editEvidenceForm, setEditEvidenceForm] = useState({
+    description: "",
+    evidenceType: "" as EvidenceType | "",
+  });
+  const [savingEvidenceEdit, setSavingEvidenceEdit] = useState(false);
   const [uploadingCal, setUploadingCal] = useState(false);
   const [selectedReportPeriods, setSelectedReportPeriods] = useState<Record<string, string>>({});
   const [downloadingPeriod, setDownloadingPeriod] = useState<string | null>(null);
@@ -182,7 +192,7 @@ export default function PlanDetailPage() {
     try {
       const data = await api.get<{
         plan: Plan;
-        evidences: Evidence[];
+        evidences: PmaEvidence[];
         findings?: Finding[];
         assignedUsers?: string[];
       }>(`/pma/plans/${id}`);
@@ -308,7 +318,7 @@ export default function PlanDetailPage() {
             : {}),
         }
       );
-      const updated = requirePersistedEntity<Evidence>(
+      const updated = requirePersistedEntity<PmaEvidence>(
         result?.evidence,
         "El servidor no confirmó la validación",
         evidenceId
@@ -657,6 +667,7 @@ export default function PlanDetailPage() {
     const def = months.includes(todayKey) ? todayKey : months[months.length - 1];
     setCalUpload({ item, range });
     setCalUploadMonth(def ?? range.key);
+    setCalUploadType("");
   }
 
   async function handleCalUploadSubmit(e: React.FormEvent<HTMLFormElement>) {
@@ -666,24 +677,30 @@ export default function PlanDetailPage() {
       toast.error("El mes seleccionado no pertenece al período habilitado");
       return;
     }
+    if (!calUploadType) {
+      toast.error("Selecciona el tipo de evidencia");
+      return;
+    }
     setUploadingCal(true);
 
     const formData = new FormData(e.currentTarget);
     formData.set("planId", id);
     formData.set("planItemId", calUpload.item.id);
     formData.set("activityMonth", calUploadMonth);
+    formData.set("evidenceType", calUploadType);
 
     await runMutation(async () => {
-      const uploaded = requirePersistedAsset<Evidence>(
+      const uploaded = requirePersistedAsset<PmaEvidence>(
         await api.upload<unknown>("/pma/api/upload", formData, { timeoutMs: 60_000 }),
         "El servidor no confirmó la evidencia guardada"
       );
       if (
         uploaded.planId !== id ||
         uploaded.planItemId !== calUpload.item.id ||
-        uploaded.activityMonth !== calUploadMonth
+        uploaded.activityMonth !== calUploadMonth ||
+        uploaded.evidenceType !== calUploadType
       ) {
-        throw new ApiError(200, "El servidor confirmó la evidencia con un período distinto", uploaded, "invalid_response");
+        throw new ApiError(200, "El servidor confirmó la evidencia con un período o tipo distinto", uploaded, "invalid_response");
       }
       setEvidences((current) => [uploaded, ...current.filter((evidence) => evidence.id !== uploaded.id)]);
       toast.success("Evidencia subida correctamente");
@@ -697,6 +714,10 @@ export default function PlanDetailPage() {
     e.preventDefault();
     if (!manualEvidenceForm.itemId) {
       toast.error("Selecciona un item");
+      return;
+    }
+    if (!manualEvidenceForm.evidenceType) {
+      toast.error("Selecciona el tipo de evidencia");
       return;
     }
     setUploadingManualEvidence(true);
@@ -715,18 +736,20 @@ export default function PlanDetailPage() {
     formData.set("planId", id);
     formData.set("planItemId", manualEvidenceForm.itemId);
     formData.set("activityMonth", monthKey);
+    formData.set("evidenceType", manualEvidenceForm.evidenceType);
 
     await runMutation(async () => {
-      const uploaded = requirePersistedAsset<Evidence>(
+      const uploaded = requirePersistedAsset<PmaEvidence>(
         await api.upload<unknown>("/pma/api/upload", formData, { timeoutMs: 60_000 }),
         "El servidor no confirmó la evidencia guardada"
       );
       if (
         uploaded.planId !== id ||
         uploaded.planItemId !== manualEvidenceForm.itemId ||
-        uploaded.activityMonth !== monthKey
+        uploaded.activityMonth !== monthKey ||
+        uploaded.evidenceType !== manualEvidenceForm.evidenceType
       ) {
-        throw new ApiError(200, "El servidor confirmó la evidencia con un período distinto", uploaded, "invalid_response");
+        throw new ApiError(200, "El servidor confirmó la evidencia con un período o tipo distinto", uploaded, "invalid_response");
       }
       setEvidences((current) => [uploaded, ...current.filter((evidence) => evidence.id !== uploaded.id)]);
       toast.success("Evidencia agregada correctamente");
@@ -734,6 +757,47 @@ export default function PlanDetailPage() {
       setManualEvidenceForm(emptyManualEvidenceForm());
     }, "Error al agregar la evidencia");
     setUploadingManualEvidence(false);
+  }
+
+  function openEditEvidence(ev: PmaEvidence) {
+    setEditEvidence(ev);
+    setEditEvidenceForm({
+      description: ev.description ?? "",
+      evidenceType: ev.evidenceType,
+    });
+  }
+
+  async function handleEditEvidenceSubmit(e: React.FormEvent<HTMLFormElement>) {
+    e.preventDefault();
+    if (!editEvidence) return;
+    if (!editEvidenceForm.evidenceType) {
+      toast.error("Selecciona el tipo de evidencia");
+      return;
+    }
+    setSavingEvidenceEdit(true);
+
+    await runMutation(async () => {
+      const updated = requirePersistedEntity<PmaEvidence>(
+        await api.patch<unknown>(`/pma/api/evidences/${editEvidence.id}`, {
+          description: editEvidenceForm.description,
+          evidenceType: editEvidenceForm.evidenceType,
+        }),
+        "El servidor no confirmó la actualización de la evidencia",
+        editEvidence.id
+      );
+      if (
+        updated.evidenceType !== editEvidenceForm.evidenceType ||
+        updated.description !== editEvidenceForm.description
+      ) {
+        throw new ApiError(200, "El servidor guardó valores distintos a los enviados", updated, "invalid_response");
+      }
+      setEvidences((current) =>
+        current.map((evidence) => (evidence.id === updated.id ? updated : evidence))
+      );
+      toast.success("Evidencia actualizada");
+      setEditEvidence(null);
+    }, "Error al actualizar la evidencia");
+    setSavingEvidenceEdit(false);
   }
 
   async function handleDownloadPeriod(pi: PlanItem, periodKey: string) {
@@ -1948,6 +2012,23 @@ export default function PlanDetailPage() {
               </div>
             )}
             <div className="space-y-2">
+              <Label htmlFor="cal-type">Tipo *</Label>
+              <select
+                id="cal-type"
+                className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                value={calUploadType}
+                onChange={(e) => setCalUploadType(e.target.value as EvidenceType | "")}
+                required
+              >
+                <option value="">Selecciona un tipo</option>
+                {EVIDENCE_TYPE_VALUES.map((type) => (
+                  <option key={type} value={type}>
+                    {type}
+                  </option>
+                ))}
+              </select>
+            </div>
+            <div className="space-y-2">
               <Label htmlFor="cal-file">Archivo (máx 10MB)</Label>
               <Input id="cal-file" name="file" type="file" required />
             </div>
@@ -1967,6 +2048,76 @@ export default function PlanDetailPage() {
               <Button type="submit" disabled={uploadingCal}>
                 <Upload className="w-4 h-4 mr-2" />
                 {uploadingCal ? "Subiendo..." : "Subir Evidencia"}
+              </Button>
+            </div>
+          </form>
+        </DialogContent>
+      </Dialog>
+
+      {/* Edit Evidence Dialog */}
+      <Dialog open={!!editEvidence} onOpenChange={(open) => { if (!open) setEditEvidence(null); }}>
+        <DialogContent className="max-w-md">
+          <DialogHeader>
+            <DialogTitle>Editar Evidencia</DialogTitle>
+          </DialogHeader>
+          {editEvidence && (
+            <div className="space-y-1 mb-2">
+              <p className="text-sm font-medium break-all">{editEvidence.fileName}</p>
+              {editEvidence.activityMonth && (
+                <p className="text-xs text-muted-foreground">
+                  Mes de actividad{" "}
+                  <span className="font-medium">
+                    {new Date(`${editEvidence.activityMonth}-01T00:00:00`)
+                      .toLocaleString("es", { month: "long", year: "numeric" })}
+                  </span>
+                  {" · no editable"}
+                </p>
+              )}
+            </div>
+          )}
+          <form onSubmit={handleEditEvidenceSubmit} className="space-y-4">
+            <div className="space-y-2">
+              <Label htmlFor="edit-ev-type">Tipo *</Label>
+              <select
+                id="edit-ev-type"
+                className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                value={editEvidenceForm.evidenceType}
+                onChange={(e) =>
+                  setEditEvidenceForm((prev) => ({
+                    ...prev,
+                    evidenceType: e.target.value as EvidenceType | "",
+                  }))
+                }
+                required
+              >
+                <option value="">Selecciona un tipo</option>
+                {EVIDENCE_TYPE_VALUES.map((type) => (
+                  <option key={type} value={type}>
+                    {type}
+                  </option>
+                ))}
+              </select>
+            </div>
+
+            <div className="space-y-2">
+              <Label htmlFor="edit-ev-desc">Descripción *</Label>
+              <Input
+                id="edit-ev-desc"
+                value={editEvidenceForm.description}
+                onChange={(e) =>
+                  setEditEvidenceForm((prev) => ({ ...prev, description: e.target.value }))
+                }
+                placeholder="Breve descripción de la evidencia"
+                required
+              />
+            </div>
+
+            <div className="flex gap-2 justify-end">
+              <Button type="button" variant="outline" onClick={() => setEditEvidence(null)}>
+                Cancelar
+              </Button>
+              <Button type="submit" disabled={savingEvidenceEdit}>
+                {savingEvidenceEdit ? "Guardando..." : "Guardar cambios"}
               </Button>
             </div>
           </form>
@@ -2061,6 +2212,29 @@ export default function PlanDetailPage() {
                   ))}
                 </select>
               </div>
+            </div>
+
+            <div className="space-y-2">
+              <Label htmlFor="manual-type">Tipo *</Label>
+              <select
+                id="manual-type"
+                className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                value={manualEvidenceForm.evidenceType}
+                onChange={(e) =>
+                  setManualEvidenceForm((prev) => ({
+                    ...prev,
+                    evidenceType: e.target.value as EvidenceType | "",
+                  }))
+                }
+                required
+              >
+                <option value="">Selecciona un tipo</option>
+                {EVIDENCE_TYPE_VALUES.map((type) => (
+                  <option key={type} value={type}>
+                    {type}
+                  </option>
+                ))}
+              </select>
             </div>
 
             <div className="space-y-2">
@@ -2398,6 +2572,7 @@ export default function PlanDetailPage() {
                   <TableHead className="w-[48px]"></TableHead>
                   <TableHead>Item</TableHead>
                   <TableHead>Mes-Año</TableHead>
+                  <TableHead>Tipo</TableHead>
                   <TableHead>Archivo</TableHead>
                   <TableHead>Subido por</TableHead>
                   <TableHead>Descripción</TableHead>
@@ -2475,6 +2650,9 @@ export default function PlanDetailPage() {
                         ? new Date(`${ev.activityMonth}-01T00:00:00`).toLocaleDateString("es", { month: "short", year: "numeric" })
                         : "-"}
                     </TableCell>
+                    <TableCell className="whitespace-nowrap text-sm">
+                      {ev.evidenceType}
+                    </TableCell>
                     <TableCell className="font-medium">{ev.fileName}</TableCell>
                     <TableCell>{ev.uploaderName}</TableCell>
                     <TableCell className="max-w-[200px] truncate">
@@ -2494,6 +2672,16 @@ export default function PlanDetailPage() {
                             <ExternalLink className="w-4 h-4" />
                           </Button>
                         </a>
+                        {canDeleteEvidence && (
+                          <Button
+                            variant="ghost"
+                            size="sm"
+                            title="Editar evidencia"
+                            onClick={() => openEditEvidence(ev)}
+                          >
+                            <Pencil className="w-4 h-4" />
+                          </Button>
+                        )}
                         {canDeleteEvidence && (
                           <Button
                             variant="ghost"

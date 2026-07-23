@@ -79,6 +79,15 @@ export interface Assignment {
 
 export type EvidenceValidationStatus = "pending" | "valid" | "invalid";
 
+export const EVIDENCE_TYPE_VALUES = [
+  "Informe",
+  "Registro Fotográfico",
+  "Certificado",
+  "Acta",
+  "Otros",
+] as const;
+export type EvidenceType = typeof EVIDENCE_TYPE_VALUES[number];
+
 export interface Evidence {
   id: string;
   planId: string;
@@ -89,12 +98,22 @@ export interface Evidence {
   driveFileId: string;
   driveUrl: string;
   description: string;
+  /** PMA only. RGDP evidence has no type; use PmaEvidence where it is required. */
+  evidenceType?: EvidenceType;
   validationStatus: EvidenceValidationStatus;
   validationComment?: string;
   validatedBy?: string;
   validatedAt?: string;
   activityMonth?: string; // format: "YYYY-MM"
   createdAt: string;
+}
+
+/**
+ * PMA evidence always carries a type: it is mandatory on upload and migration
+ * 0016 backfilled every historical row, so the column is NOT NULL.
+ */
+export interface PmaEvidence extends Evidence {
+  evidenceType: EvidenceType;
 }
 
 export type FindingComponent = "LEGAL" | "OPERACIONAL" | "AMBIENTAL";

@@ -11,6 +11,7 @@ import {
 import { BadRequest, Forbidden, NotFound } from "../../lib/errors.js";
 import { getStorage, buildEvidencePath } from "../../storage/index.js";
 import { assertPmaActivityMonth } from "../../lib/activityMonth.js";
+import type { EvidenceType } from "@pma/types";
 import type { AccessTokenClaims } from "../../auth/jwt.js";
 import { enqueueStorageCleanupPaths } from "../shared/storageCleanup.js";
 import {
@@ -28,6 +29,7 @@ export type EvidenceCreateInput = {
   uploaderName: string;
   fileName: string;
   description?: string;
+  evidenceType: EvidenceType;
   activityMonth?: string;
   data: Buffer;
   contentType?: string;
@@ -49,6 +51,7 @@ function toApi(row: EvidenceRow) {
     driveFileId: row.storagePath,
     driveUrl: storageUrl,
     description: row.description,
+    evidenceType: row.evidenceType,
     validationStatus: row.validationStatus,
     validationComment: row.validationComment ?? undefined,
     validatedBy: row.validatedBy ?? undefined,
@@ -163,6 +166,7 @@ export async function createEvidence(_adminId: string, input: EvidenceCreateInpu
           storagePath,
           storageUrl: getStorage().getUrl(storagePath),
           description: input.description ?? "",
+          evidenceType: input.evidenceType,
           validationStatus: "pending",
           activityMonth: input.activityMonth ?? null,
         })
@@ -326,7 +330,17 @@ export async function getEvidenceByStoragePath(storagePath: string) {
   return rows[0] ? toApi(rows[0]) : null;
 }
 
-export type EvidenceAccessAction = "read" | "validate" | "delete";
+export type EvidenceAccessAction = "read" | "validate" | "delete" | "edit";
+
+/**
+ * The activity month is deliberately not editable: it is baked into the
+ * reporting-period folder of the storage path, so changing it would have to
+ * relocate the file to keep storage and database consistent.
+ */
+export type EvidenceUpdateInput = {
+  description?: string;
+  evidenceType?: EvidenceType;
+};
 
 export async function canUserAccessEvidence(
   evidence: { planId: string; planItemId?: string | null; uploadedBy?: string | null },
@@ -415,6 +429,53 @@ export async function canUserUploadEvidence(
     ))
     .limit(1);
   return exactItem.length > 0;
+}
+
+/**
+ * Edits an evidence's description and type.
+ *
+ * The activity month is intentionally not editable: it determines the
+ * reporting-period folder in the storage path, so changing it would require
+ * relocating the file to keep storage and database consistent.
+ *
+ * Authorization is revalidated here under locks, so a grant revoked between the
+ * route's check and this commit aborts instead of writing through stale state.
+ */
+export async function updateEvidenceDetails(
+  evidenceId: string,
+  actorId: string,
+  input: EvidenceUpdateInput
+) {
+  const db = getDb();
+  return db.transaction(async (tx) => {
+    const actor = await lockAndAssertActor(tx, actorId, "pma", ["ADMIN", "REPORTER", "VIEWER"]);
+    const [evidence] = await tx
+      .select()
+      .from(pmaEvidences)
+      .where(eq(pmaEvidences.id, evidenceId))
+      .limit(1)
+      .for("update");
+    if (!evidence) throw NotFound("Evidence not found");
+    if (!(await canUserAccessEvidence(
+      evidence,
+      { sub: actor.id, role: actor.role },
+      "edit",
+      tx,
+    ))) {
+      throw Forbidden("El acceso a la evidencia fue revocado durante la edición");
+    }
+
+    const [row] = await tx
+      .update(pmaEvidences)
+      .set({
+        ...(input.description !== undefined ? { description: input.description } : {}),
+        ...(input.evidenceType !== undefined ? { evidenceType: input.evidenceType } : {}),
+      })
+      .where(eq(pmaEvidences.id, evidenceId))
+      .returning();
+    if (!row) throw new Error("Evidence update returned no row");
+    return toApi(row);
+  });
 }
 
 export async function updateEvidenceValidation(

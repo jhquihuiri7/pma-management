@@ -90,6 +90,7 @@ test(
           uploadedBy: appRevocationUserId,
           uploaderName: "App revocation test",
           fileName: "historical-pma.pdf",
+          evidenceType: "Otros",
           storagePath: `PMA/test/${pmaEvidenceId}/historical-pma.pdf`,
           validationStatus: "valid",
           validatedBy: appRevocationUserId,

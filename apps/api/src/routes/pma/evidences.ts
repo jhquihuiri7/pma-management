@@ -1,5 +1,10 @@
 import type { FastifyInstance, FastifyReply, FastifyRequest } from "fastify";
 import { z } from "zod";
+// Taken from the pg enum rather than @pma/types: that package ships raw
+// TypeScript (its `main` is src/index.ts), so a value import survives
+// compilation and crashes the production build on an unknown ".ts" extension.
+// Only `import type` is safe from it. This also pins validation to the column.
+import { evidenceTypeEnum } from "../../db/schema/enums.js";
 import { authenticate, requireRole, requireApp } from "../../auth/middleware.js";
 import { BadRequest, Forbidden, NotFound } from "../../lib/errors.js";
 import {
@@ -9,6 +14,7 @@ import {
   getEvidencesForUser,
   getEvidenceById,
   updateEvidenceValidation,
+  updateEvidenceDetails,
   deleteEvidence,
   canUserAccessEvidence,
   canUserUploadEvidence,
@@ -32,6 +38,15 @@ const legacyValidationSchema = z.object({
     context.addIssue({ code: z.ZodIssueCode.custom, path: ["validationComment"], message: "El motivo de rechazo es obligatorio" });
   }
 });
+
+// activityMonth is not editable: it is part of the storage path's period folder.
+const detailsUpdateSchema = z.object({
+  description: z.string().max(10_000).optional(),
+  evidenceType: z.enum(evidenceTypeEnum.enumValues).optional(),
+}).strict().refine(
+  (body) => Object.values(body).some((value) => value !== undefined),
+  { message: "Debes enviar al menos un campo para actualizar" }
+);
 
 const queryListSchema = z.object({
   planId: z.string().uuid().optional(),
@@ -60,6 +75,7 @@ const uploadFieldsSchema = z.object({
   planId: z.string().uuid(),
   planItemId: optionalMultipartUuid,
   description: z.string().max(10_000).default(""),
+  evidenceType: z.enum(evidenceTypeEnum.enumValues),
   activityMonth: z.preprocess(
     (value) => value === "" ? undefined : value,
     z.string().regex(/^\d{4}-(0[1-9]|1[0-2])$/).optional()
@@ -121,6 +137,20 @@ export async function pmaEvidencesRoutes(app: FastifyInstance) {
     return updateEvidenceValidation(id, body.status, u.adminId, u.sub, body.comment);
   });
 
+  // Editing metadata is scoped like deletion: ADMINs any evidence, REPORTERs
+  // their own uploads, VIEWERs evidence within their assigned plans.
+  app.patch("/:id", { preHandler: requireRole("ADMIN", "REPORTER", "VIEWER") }, async (req) => {
+    const { id } = evidenceParamsSchema.parse(req.params);
+    const body = detailsUpdateSchema.parse(req.body);
+    const u = req.user!;
+    const evidence = await getEvidenceById(id);
+    if (!evidence) throw NotFound("Evidence not found");
+    if (!(await canUserAccessEvidence(evidence, u, "edit"))) {
+      throw Forbidden("No tienes acceso a esta evidencia");
+    }
+    return updateEvidenceDetails(id, u.sub, body);
+  });
+
   app.delete("/:id", { preHandler: requireRole("ADMIN", "REPORTER", "VIEWER") }, async (req) => {
     const { id } = evidenceParamsSchema.parse(req.params);
     const u = req.user!;
@@ -144,8 +174,9 @@ export async function uploadPmaEvidence(req: FastifyRequest, reply: FastifyReply
     limits: {
       fileSize: EVIDENCE_MAX_BYTES,
       files: 1,
-      fields: 4,
-      parts: 5,
+      // planId, planItemId, description, evidenceType, activityMonth (+ the file).
+      fields: 5,
+      parts: 6,
       fieldSize: 20_000,
     },
   });
@@ -173,6 +204,7 @@ export async function uploadPmaEvidence(req: FastifyRequest, reply: FastifyReply
     uploaderName: u.name,
     fileName: data.filename,
     description: parsed.description,
+    evidenceType: parsed.evidenceType,
     activityMonth: parsed.activityMonth,
     data: buf,
     contentType: data.mimetype,
