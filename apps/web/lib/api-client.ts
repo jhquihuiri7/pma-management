@@ -357,7 +357,11 @@ async function request<T = unknown>(path: string, opts: RequestOptions = {}): Pr
   if (res.status === 204) return undefined as T;
 
   const contentType = res.headers.get("content-type") ?? "";
-  if (contentType.includes("application/json")) {
+  // Parse every JSON media type, including structured-syntax suffixes like
+  // application/geo+json (RFC 6839) used by the GIS layer-data endpoint. A bare
+  // `includes("application/json")` misses `geo+json`, which then falls through
+  // to res.text() and hands callers an unparsed string.
+  if (/\bjson\b/i.test(contentType)) {
     try {
       return (await res.json()) as T;
     } catch (error) {

@@ -45,6 +45,29 @@ test("el cliente único traduce /api/users y valida la respuesta", async () => {
   }
 });
 
+test("parsea respuestas con sufijo de sintaxis estructurada +json (geo+json)", async () => {
+  // El endpoint de datos de capas GIS responde application/geo+json (RFC 6839).
+  // Debe parsearse como objeto, no devolverse como texto: si vuelve como string,
+  // layer.geojson.features es undefined y el editor GIS revienta al renderizar.
+  const originalFetch = globalThis.fetch;
+  const featureCollection = { type: "FeatureCollection", features: [] as unknown[] };
+  globalThis.fetch = async () => new Response(JSON.stringify(featureCollection), {
+    status: 200,
+    headers: { "content-type": "application/geo+json" },
+  });
+
+  try {
+    const result = await api.get<{ type: string; features: unknown[] }>(
+      "/geo/api/maps/m1/layers/l1/data"
+    );
+    assert.equal(typeof result, "object");
+    assert.deepEqual(result, featureCollection);
+    assert.ok(Array.isArray(result.features));
+  } finally {
+    globalThis.fetch = originalFetch;
+  }
+});
+
 test("normaliza timeout y cancelación sin confundirlos con éxito HTTP", async () => {
   const originalFetch = globalThis.fetch;
   globalThis.fetch = (_input, init) => new Promise<Response>((_resolve, reject) => {
