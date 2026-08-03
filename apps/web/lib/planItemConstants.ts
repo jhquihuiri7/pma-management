@@ -66,6 +66,24 @@ function normalize(value: string): string {
     .trim();
 }
 
+/**
+ * Strict counterpart of `matchClosestOption`: resolves only values that match an
+ * option exactly once casing, accents and surrounding whitespace are ignored.
+ * Legacy rows imported from Excel kept trailing spaces ("DOSPPSVR "), which no
+ * `<option>` matched — the browser then displayed the first option while the
+ * form still held the padded value, and the save was rejected. The substring
+ * fallback is deliberately left out here so healing a value can never turn it
+ * into a different option.
+ */
+export function canonicalOption(
+  input: string,
+  options: readonly string[]
+): string | null {
+  const norm = normalize(input);
+  if (!norm) return null;
+  return options.find((o) => normalize(o) === norm) ?? null;
+}
+
 export function matchClosestOption(
   input: string,
   options: readonly string[]

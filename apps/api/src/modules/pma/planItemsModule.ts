@@ -24,7 +24,8 @@ export type PlanItemCreateInput = {
   verification_method?: string;
   periodicity: string;
   budget?: number;
-  report_per: "6 meses" | "1 año" | "2 años";
+  /** Omit to adopt the plan's period; an explicit value must match the plan. */
+  report_per?: "6 meses" | "1 año" | "2 años";
   observation?: string;
 };
 
@@ -187,7 +188,12 @@ export async function createPlanItem(planId: string, input: PlanItemCreateInput,
     if (!(await canUserAccessPlan(planId, { sub: actor.id, role: actor.role }, tx))) {
       throw Forbidden("No tienes acceso a este plan");
     }
-    if (input.report_per !== plan[0].reportPer) throw BadRequest("report_per no coincide con el plan");
+    // report_per describes the plan's reporting period, so an item that leaves
+    // it out simply inherits it. Resolving it here — against the row already
+    // locked above — keeps the value authoritative and rules out a caller that
+    // read the plan earlier and raced a change to it.
+    const reportPer = input.report_per ?? plan[0].reportPer;
+    if (reportPer !== plan[0].reportPer) throw BadRequest("report_per no coincide con el plan");
     const [row] = await tx
       .insert(pmaPlanItems)
       .values({
@@ -202,7 +208,7 @@ export async function createPlanItem(planId: string, input: PlanItemCreateInput,
         verificationMethod: input.verification_method ?? "",
         periodicity: input.periodicity ?? "",
         budget: String(input.budget ?? 0),
-        reportPer: input.report_per,
+        reportPer,
         observation: input.observation ?? null,
       })
       .returning();
@@ -505,7 +511,9 @@ export async function bulkCreatePlanItems(
     if (!(await canUserAccessPlan(planId, { sub: actor.id, role: actor.role }, tx))) {
       throw Forbidden("No tienes acceso a este plan");
     }
-    if (items.some((item) => item.report_per !== plan[0].reportPer)) {
+    // Same rule as the single-item create: omitted means "the plan's period".
+    const reportPer = plan[0].reportPer;
+    if (items.some((item) => item.report_per !== undefined && item.report_per !== reportPer)) {
       throw BadRequest("Uno o más report_per no coinciden con el plan");
     }
     const rows = await tx
@@ -523,7 +531,7 @@ export async function bulkCreatePlanItems(
           verificationMethod: i.verification_method ?? "",
           periodicity: i.periodicity ?? "",
           budget: String(i.budget ?? 0),
-          reportPer: i.report_per,
+          reportPer,
           observation: i.observation ?? null,
         }))
       )

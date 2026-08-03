@@ -71,13 +71,34 @@ function extractToken(req: FastifyRequest): string | null {
   return null;
 }
 
+const MAX_REPORTED_ISSUES = 3;
+
+/**
+ * A bare "Invalid request data" left users retrying a form with no idea which
+ * field the server rejected. Name the offending paths so the toast is
+ * actionable; `details` still carries the full flattened error.
+ */
+export function validationMessage(err: ZodError): string {
+  const issues = err.issues.map((issue) => {
+    const path = issue.path.join(".");
+    return path ? `${path}: ${issue.message}` : issue.message;
+  });
+  if (issues.length === 0) return "Datos inválidos";
+
+  const shown = issues.slice(0, MAX_REPORTED_ISSUES).join("; ");
+  const rest = issues.length - MAX_REPORTED_ISSUES;
+  return rest > 0
+    ? `Datos inválidos — ${shown} (y ${rest} campo(s) más)`
+    : `Datos inválidos — ${shown}`;
+}
+
 export function registerErrorHandler(app: FastifyInstance) {
   app.setErrorHandler((err, req, reply) => {
     const error = err instanceof Error ? err : new Error("Unknown error");
     if (err instanceof ZodError) {
       return reply.status(400).send({
         error: "ValidationError",
-        message: "Invalid request data",
+        message: validationMessage(err),
         details: err.flatten(),
       });
     }

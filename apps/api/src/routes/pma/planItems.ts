@@ -13,7 +13,6 @@ import {
   unassignReporterFromDireccion,
   bulkCreatePlanItems,
   isReporterAssignedToItem,
-  type PlanItemCreateInput,
 } from "../../modules/pma/planItemsModule.js";
 import { getPlanById, canUserAccessPlan } from "../../modules/pma/plansModule.js";
 
@@ -26,40 +25,59 @@ const PERIODICITY_VALUES = [
   "En caso de suceder", "Mensual", "Permanente", "Semanal", "Semestral",
   "Trianual", "Trimestral", "Cuatrimestral", "Unica vez",
 ] as const;
+const REPORT_PER_VALUES = ["6 meses", "1 año", "2 años"] as const;
 const planParamsSchema = z.object({ planId: z.string().uuid() });
 const itemParamsSchema = planParamsSchema.extend({ itemId: z.string().uuid() });
 
-const itemBase = z.object({
+// The edit form round-trips these values straight from the stored row, so any
+// legacy padding in the database ("DOSPPSVR " from an early Excel import) came
+// back verbatim and a bare enum rejected every update. Trim before matching.
+// A plain `.or(z.literal(""))` union reports only "Invalid input"; the explicit
+// refinement names the accepted values instead.
+const direccionField = z.string().trim().refine(
+  (value): value is (typeof DIRECCION_VALUES)[number] | "" =>
+    value === "" || (DIRECCION_VALUES as readonly string[]).includes(value),
+  { message: `Debe ser una de: ${DIRECCION_VALUES.join(", ")} (o vacío)` },
+);
+const periodicityField = z.string().trim().pipe(z.enum(PERIODICITY_VALUES));
+const reportPerField = z.string().trim().pipe(z.enum(REPORT_PER_VALUES));
+
+// Exported for the regression tests: both production bugs these schemas now
+// guard against were payload-shape bugs, invisible from the route handlers.
+export const itemBase = z.object({
   item: z.string().trim().min(1).max(2_000),
   subplan: z.string().trim().min(1).max(300),
-  direccion: z.enum(DIRECCION_VALUES).or(z.literal("")).optional(),
+  direccion: direccionField.optional(),
   environmental_activity: z.string().max(10_000).optional(),
   identified_environmental_impact: z.string().max(10_000).optional(),
   proposed_measure: z.string().max(10_000).optional(),
   indicator: z.string().max(5_000).optional(),
   verification_method: z.string().max(5_000).optional(),
-  periodicity: z.enum(PERIODICITY_VALUES),
+  periodicity: periodicityField,
   budget: z.number().finite().nonnegative().max(999_999_999_999.99).optional(),
-  report_per: z.enum(["6 meses", "1 año", "2 años"]),
+  // Optional because report_per belongs to the plan, not to the item: an item
+  // that omits it adopts the plan's value. Requiring it here forced every
+  // client to already know the plan's period, and the item form — which has no
+  // control for it — always guessed "6 meses", making the first item of any
+  // other plan impossible to create. An explicit value is still validated
+  // against the plan.
+  report_per: reportPerField.optional(),
   observation: z.string().max(10_000).optional(),
 }).strict();
 
-const itemUpdate = itemBase.partial().refine(
+export const itemUpdate = itemBase.partial().refine(
   (body) => Object.keys(body).length > 0,
   "Debes enviar al menos un campo",
 );
-const bulkItem = itemBase.extend({
-  report_per: z.enum(["6 meses", "1 año", "2 años"]).optional(),
-}).strict();
-const bulkSchema = z.object({ items: z.array(bulkItem).min(1).max(1_000) }).strict();
+const bulkSchema = z.object({ items: z.array(itemBase).min(1).max(1_000) }).strict();
 const observationSchema = z.object({ observation: z.string().max(10_000) }).strict();
 const assignDireccionSchema = z.object({
-  direccion: z.enum(DIRECCION_VALUES),
+  direccion: z.string().trim().pipe(z.enum(DIRECCION_VALUES)),
   userId: z.string().uuid(),
   category: z.enum(["Responsable", "Colaborador"]),
 }).strict();
 const unassignDireccionSchema = z.object({
-  direccion: z.enum(DIRECCION_VALUES),
+  direccion: z.string().trim().pipe(z.enum(DIRECCION_VALUES)),
   userId: z.string().uuid(),
 }).strict();
 
@@ -87,7 +105,7 @@ export async function pmaPlanItemsRoutes(app: FastifyInstance) {
   app.post("/", { preHandler: requireRole("ADMIN", "VIEWER") }, async (req, reply) => {
     const { planId } = planParamsSchema.parse(req.params);
     await assertPlanAccess(planId, req.user!);
-    const body = itemBase.parse(req.body) as PlanItemCreateInput;
+    const body = itemBase.parse(req.body);
     const row = await createPlanItem(planId, body, req.user!.sub);
     reply.status(201);
     return row;
@@ -95,13 +113,11 @@ export async function pmaPlanItemsRoutes(app: FastifyInstance) {
 
   app.post("/bulk", { preHandler: requireRole("ADMIN", "VIEWER") }, async (req, reply) => {
     const { planId } = planParamsSchema.parse(req.params);
-    const plan = await assertPlanAccess(planId, req.user!);
+    await assertPlanAccess(planId, req.user!);
     const { items } = bulkSchema.parse(req.body);
-    const normalized = items.map((item) => ({
-      ...item,
-      report_per: item.report_per ?? plan.report_per,
-    })) as PlanItemCreateInput[];
-    const rows = await bulkCreatePlanItems(planId, normalized, req.user!.sub);
+    // The plan's report_per is applied inside the module's locked read instead
+    // of from a plan loaded here, so it cannot go stale between the two.
+    const rows = await bulkCreatePlanItems(planId, items, req.user!.sub);
     reply.status(201);
     return { created: rows.length, failed: [], items: rows };
   });

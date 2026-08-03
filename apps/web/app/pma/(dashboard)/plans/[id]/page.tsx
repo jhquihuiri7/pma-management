@@ -54,7 +54,12 @@ import {
   DropdownMenuItem,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
-import { SUBPLAN_OPTIONS, PERIODICITY_OPTIONS, DIRECCION_OPTIONS } from "@/lib/planItemConstants";
+import {
+  SUBPLAN_OPTIONS,
+  PERIODICITY_OPTIONS,
+  DIRECCION_OPTIONS,
+  canonicalOption,
+} from "@/lib/planItemConstants";
 import { parseExcelFile, ParsedItemRow } from "@/lib/excelImport";
 import {
   createPeriodHelpers,
@@ -64,6 +69,11 @@ import {
   type ItemRange,
 } from "@/lib/planPeriods";
 
+// `report_per` is deliberately absent: it belongs to the plan, this form has no
+// control for it, and hardcoding a default here made the payload contradict any
+// plan not reporting every 6 months — which the API rejected, leaving the first
+// item of such a plan impossible to create. Creates now let the plan supply it;
+// edits leave the stored value untouched.
 const EMPTY_ITEM_FORM = {
   item: "",
   subplan: "",
@@ -75,8 +85,47 @@ const EMPTY_ITEM_FORM = {
   verification_method: "",
   periodicity: "",
   budget: "",
-  report_per: "6 meses",
 };
+
+/**
+ * A `<select>` whose value matches no `<option>` renders the first enabled one,
+ * so the row's real value stayed hidden while the form kept submitting it.
+ * Rendering the stray value as its own option keeps what is displayed and what
+ * will be sent in sync, and flags that it needs correcting.
+ */
+function OutOfCatalogOption({
+  value,
+  options,
+}: {
+  value: string;
+  options: readonly string[];
+}) {
+  if (!value || options.includes(value)) return null;
+  return <option value={value}>{`⚠ ${value} (fuera del catálogo)`}</option>;
+}
+
+/**
+ * Hydrate the form from a stored row. `direccion` and `periodicity` go through
+ * the catalog because rows imported before the selectors existed can carry
+ * padding or casing the API's enums reject; a value that still matches nothing
+ * is kept as-is so the selector can flag it instead of hiding it.
+ */
+function itemFormToEdit(pi: PlanItem): typeof EMPTY_ITEM_FORM {
+  const direccion = pi.direccion ?? "";
+  return {
+    item: pi.item,
+    subplan: pi.subplan,
+    direccion: canonicalOption(direccion, DIRECCION_OPTIONS) ?? direccion,
+    environmental_activity: pi.environmental_activity,
+    identified_environmental_impact: pi.identified_environmental_impact,
+    proposed_measure: pi.proposed_measure,
+    indicator: pi.indicator,
+    verification_method: pi.verification_method,
+    periodicity:
+      canonicalOption(pi.periodicity, PERIODICITY_OPTIONS) ?? pi.periodicity,
+    budget: String(pi.budget),
+  };
+}
 
 const FINDING_COMPONENT_OPTIONS: FindingComponent[] = [
   "LEGAL",
@@ -1214,21 +1263,7 @@ export default function PlanDetailPage() {
                     setEditingItem(null);
                     setItemForm(EMPTY_ITEM_FORM);
                   } else if (open && !editingItem && planItems.length > 0) {
-                    const last = planItems[planItems.length - 1];
-                    setItemForm({
-                      item: last.item,
-                      subplan: last.subplan,
-                      direccion: last.direccion ?? "",
-                      environmental_activity: last.environmental_activity,
-                      identified_environmental_impact:
-                        last.identified_environmental_impact,
-                      proposed_measure: last.proposed_measure,
-                      indicator: last.indicator,
-                      verification_method: last.verification_method,
-                      periodicity: last.periodicity,
-                      budget: String(last.budget),
-                      report_per: last.report_per ?? "6 meses",
-                    });
+                    setItemForm(itemFormToEdit(planItems[planItems.length - 1]));
                   } else if (open && !editingItem) {
                     setItemForm(EMPTY_ITEM_FORM);
                   }
@@ -1270,6 +1305,10 @@ export default function PlanDetailPage() {
                         <option value="" disabled>
                           Seleccionar subplan...
                         </option>
+                        <OutOfCatalogOption
+                          value={itemForm.subplan}
+                          options={SUBPLAN_OPTIONS}
+                        />
                         {SUBPLAN_OPTIONS.map((option) => (
                           <option key={option} value={option}>
                             {option}
@@ -1291,6 +1330,10 @@ export default function PlanDetailPage() {
                         <option value="" disabled>
                           Seleccionar dirección...
                         </option>
+                        <OutOfCatalogOption
+                          value={itemForm.direccion}
+                          options={DIRECCION_OPTIONS}
+                        />
                         {DIRECCION_OPTIONS.map((option) => (
                           <option key={option} value={option}>
                             {option}
@@ -1315,6 +1358,10 @@ export default function PlanDetailPage() {
                         <option value="" disabled>
                           Seleccionar periodicidad...
                         </option>
+                        <OutOfCatalogOption
+                          value={itemForm.periodicity}
+                          options={PERIODICITY_OPTIONS}
+                        />
                         {PERIODICITY_OPTIONS.map((option) => (
                           <option key={option} value={option}>{option}</option>
                         ))}
@@ -1494,19 +1541,7 @@ export default function PlanDetailPage() {
                               title="Editar Item"
                               onClick={() => {
                                 setEditingItem(pi);
-                                setItemForm({
-                                  item: pi.item,
-                                  subplan: pi.subplan,
-                                  direccion: pi.direccion ?? "",
-                                  environmental_activity: pi.environmental_activity,
-                                  identified_environmental_impact: pi.identified_environmental_impact,
-                                  proposed_measure: pi.proposed_measure,
-                                  indicator: pi.indicator,
-                                  verification_method: pi.verification_method,
-                                  periodicity: pi.periodicity,
-                                  budget: String(pi.budget),
-                                  report_per: pi.report_per ?? "6 meses",
-                                });
+                                setItemForm(itemFormToEdit(pi));
                                 setAddItemOpen(true);
                               }}
                             >
