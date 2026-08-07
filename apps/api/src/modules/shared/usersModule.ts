@@ -24,7 +24,7 @@ import { lockAndAssertActor, lockAndAssertGlobalAdmin } from "./transactionalAct
 
 // API-side AppKey: legacy keys are normalized at the API boundary and never
 // reach Postgres. The Drizzle enum only contains the canonical keys.
-export type AppKey = "pma" | "rgdp" | "geo";
+export type AppKey = "pma" | "rgdp" | "geo" | "previene";
 
 const TOKEN_TTL_MS = 24 * 60 * 60 * 1000;
 

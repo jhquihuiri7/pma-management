@@ -1,0 +1,39 @@
+/* Leaflet ships its controls at z-index 1000, which puts the +/- buttons on top
+   of the filter popovers and the evidence lightbox. The map is the background
+   of this module, so its chrome belongs below the module's own UI. */
+.previene-map .leaflet-top,
+.previene-map .leaflet-bottom {
+  z-index: 400;
+}
+
+.previene-map .leaflet-container {
+  font-family: inherit;
+  background: #dceaf2;
+}
+
+.previene-map .leaflet-control-attribution {
+  font-size: 10px;
+}
+
+/* Markers are composed of absolutely positioned layers (accuracy halo behind,
+   shape in front); the default divIcon background/border would draw a white
+   box around them. */
+.previene-marker {
+  background: transparent;
+  border: 0;
+}
+
+@keyframes previene-slide-in {
+  from {
+    opacity: 0;
+    transform: translateX(14px);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+
+.previene-panel {
+  animation: previene-slide-in 0.22s ease-out;
+}

@@ -20,7 +20,7 @@ export type AuthUser = {
   name: string;
   role: "ADMIN" | "REPORTER" | "VIEWER";
   adminId: string;
-  apps: Array<"pma" | "rgdp" | "geo">;
+  apps: Array<"pma" | "rgdp" | "geo" | "previene">;
 };
 
 interface AuthState {

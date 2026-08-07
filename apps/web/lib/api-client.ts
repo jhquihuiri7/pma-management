@@ -67,7 +67,8 @@ function apiUrl(input: string): string {
     input.startsWith("/api/") ||
     input.startsWith("/pma/") ||
     input.startsWith("/rgdp/") ||
-    input.startsWith("/geo/")
+    input.startsWith("/geo/") ||
+    input.startsWith("/previene/")
   ) {
     return `${BASE_URL}${input}`;
   }
@@ -404,7 +405,7 @@ export const auth = {
       !response.user.adminId ||
       !["ADMIN", "REPORTER", "VIEWER"].includes(response.user.role) ||
       !Array.isArray(response.user.apps) ||
-      response.user.apps.some((app) => !["pma", "rgdp", "geo"].includes(app))
+      response.user.apps.some((app) => !["pma", "rgdp", "geo", "previene"].includes(app))
     ) {
       throw new ApiError(200, "El servidor devolvió una sesión inválida", response, "invalid_response");
     }
@@ -431,6 +432,6 @@ export const auth = {
     name: string;
     role: "ADMIN" | "REPORTER" | "VIEWER";
     adminId: string;
-    apps: Array<"pma" | "rgdp" | "geo">;
+    apps: Array<"pma" | "rgdp" | "geo" | "previene">;
   } }>("/auth/me"),
 };

@@ -19,6 +19,8 @@ import {
 } from "./modules/shared/storageCleanup.js";
 import { buildGeoRasterDir } from "./storage/index.js";
 import { processPendingMail } from "./modules/shared/mailOutbox.js";
+import { runPrevieneSync } from "./modules/previene/syncModule.js";
+import { isPrevieneConfigured } from "./modules/previene/client.js";
 import { closeMail } from "./mail/index.js";
 import { closeDb } from "./db/client.js";
 
@@ -28,9 +30,11 @@ const RASTER_RECONCILE_INTERVAL_MS = 60_000;
 let cleanupTimer: NodeJS.Timeout | undefined;
 let mailTimer: NodeJS.Timeout | undefined;
 let rasterReconcileTimer: NodeJS.Timeout | undefined;
+let previeneTimer: NodeJS.Timeout | undefined;
 let cleanupPromise: Promise<void> | null = null;
 let mailPromise: Promise<void> | null = null;
 let rasterReconcilePromise: Promise<void> | null = null;
+let previenePromise: Promise<void> | null = null;
 let shuttingDown = false;
 
 async function drainStorageCleanup(): Promise<void> {
@@ -71,6 +75,30 @@ async function reconcileQueuedRasters(): Promise<void> {
     }
   })().finally(() => { rasterReconcilePromise = null; });
   return rasterReconcilePromise;
+}
+
+/**
+ * Pull new and modified citizen reports from the Galápagos Previene API.
+ *
+ * Runs here rather than in the API process so a slow upstream never occupies
+ * the request event loop, and so exactly one poller exists no matter how many
+ * API replicas are running. A second worker is safe but pointless: the run
+ * takes an exclusive advisory lock for its whole duration, so the loser is
+ * turned away with `skipped/locked` rather than duplicating the walk.
+ */
+async function syncPreviene(): Promise<void> {
+  if (previenePromise) return previenePromise;
+  previenePromise = (async () => {
+    const result = await runPrevieneSync();
+    if (result.status === "ok" && result.reports > 0) {
+      console.log(`[worker] previene: ${result.reports} report(s) in ${result.pages} page(s)`);
+    } else if (result.status === "error") {
+      // Transient failures are expected (upstream restarts); they are recorded
+      // in previene_sync_state so the viewer can explain the stale data.
+      console.error(`[worker] previene sync failed (retryable=${result.retryable}): ${result.message}`);
+    }
+  })().finally(() => { previenePromise = null; });
+  return previenePromise;
 }
 
 /**
@@ -144,6 +172,17 @@ async function main() {
   }, RASTER_RECONCILE_INTERVAL_MS);
   rasterReconcileTimer.unref();
 
+  if (isPrevieneConfigured()) {
+    await syncPreviene().catch((err) => console.error("[worker] initial previene sync failed:", err));
+    previeneTimer = setInterval(() => {
+      void syncPreviene().catch((err) => console.error("[worker] previene sync failed:", err));
+    }, env.PREVIENE_SYNC_INTERVAL_MS);
+    previeneTimer.unref();
+    console.log(`[worker] previene sync every ${Math.round(env.PREVIENE_SYNC_INTERVAL_MS / 1000)}s`);
+  } else {
+    console.warn("[worker] previene sync disabled — PREVIENE_API_KEY is not set");
+  }
+
   console.log(`[worker] listening on "${RASTER_QUEUE}" (batchSize=${env.WORKER_CONCURRENCY})`);
 }
 
@@ -154,9 +193,10 @@ async function shutdown(signal: string) {
   if (cleanupTimer) clearInterval(cleanupTimer);
   if (mailTimer) clearInterval(mailTimer);
   if (rasterReconcileTimer) clearInterval(rasterReconcileTimer);
+  if (previeneTimer) clearInterval(previeneTimer);
   await stopBoss().catch((error) => console.error("[worker] failed to stop pg-boss:", error));
   await Promise.allSettled(
-    [cleanupPromise, mailPromise, rasterReconcilePromise].filter(Boolean) as Promise<void>[]
+    [cleanupPromise, mailPromise, rasterReconcilePromise, previenePromise].filter(Boolean) as Promise<void>[]
   );
   await closeMail().catch((error) => console.error("[worker] failed to close SMTP:", error));
   await closeDb().catch((error) => console.error("[worker] failed to close database pool:", error));

@@ -43,6 +43,25 @@ const schema = z.object({
   TITILER_INTERNAL_URL: z.string().default("http://titiler:8000"),
   TITILER_DATA_ROOT: z.string().default("/data/storage"),
 
+  // Galápagos Previene — external read-only reports API (Telegram bot backend).
+  // It listens on the HOST's loopback, so from inside a container 127.0.0.1 is
+  // the container itself: docker-compose maps host.docker.internal for this.
+  // The key never reaches the browser — the API proxies every call.
+  PREVIENE_API_BASE_URL: z.string().default("http://127.0.0.1:8080"),
+  PREVIENE_API_KEY: z.string().default(""),
+  // How often the worker pulls new/modified reports (ms). The spec asks for
+  // 1–5 min; 2 min keeps the "sincronizado hace N min" badge meaningful.
+  PREVIENE_SYNC_INTERVAL_MS: z.coerce.number().int().positive().default(120_000),
+  // Upstream caps limit at 200; asking for more is a 422.
+  PREVIENE_PAGE_SIZE: z.coerce.number().int().min(1).max(200).default(200),
+  // Safety valve: stop after this many pages in one run so a pathological
+  // cursor loop cannot spin forever holding the advisory lock.
+  PREVIENE_MAX_PAGES_PER_RUN: z.coerce.number().int().positive().default(100),
+  PREVIENE_SYNC_TIMEOUT_MS: z.coerce.number().int().positive().default(20_000),
+  // Media is streamed, not buffered, so this bounds time-to-first-byte rather
+  // than the whole transfer — a long video must not be cut off mid-download.
+  PREVIENE_MEDIA_TIMEOUT_MS: z.coerce.number().int().positive().default(30_000),
+
   SMTP_HOST: z.string().optional(),
   SMTP_PORT: z.coerce.number().int().positive().default(587),
   SMTP_USER: z.string().optional(),
@@ -85,5 +104,16 @@ if (env.NODE_ENV === "production") {
   // front and set COOKIE_SECURE=true.
   if (!env.COOKIE_SECURE) {
     console.warn("WARNING: COOKIE_SECURE is false in production — auth cookies will be sent over unencrypted HTTP. Use TLS and set COOKIE_SECURE=true.");
+  }
+  // Not fatal: Galápagos Previene is an opt-in subsystem and the rest of SIGTAR
+  // must still boot without it. Without a key the module simply reports itself
+  // as disconnected instead of silently showing an empty map.
+  if (!env.PREVIENE_API_KEY) {
+    console.warn("WARNING: PREVIENE_API_KEY is not set — the Galápagos Previene module will stay in disconnected mode.");
+  }
+  if (/127\.0\.0\.1|localhost/.test(env.PREVIENE_API_BASE_URL)) {
+    console.warn(
+      "WARNING: PREVIENE_API_BASE_URL points at loopback. Inside a container that resolves to the container itself, not the host — use host.docker.internal (see extra_hosts in docker-compose.yml)."
+    );
   }
 }

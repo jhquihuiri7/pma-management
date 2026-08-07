@@ -4,7 +4,7 @@ import { userApps, users } from "../../db/schema/shared.js";
 import { BadRequest, NotFound } from "../../lib/errors.js";
 import { lockAuthorizationMutations } from "./authorizationLock.js";
 
-type AppKey = "pma" | "rgdp" | "geo";
+type AppKey = "pma" | "rgdp" | "geo" | "previene";
 type AssignableRole = "REPORTER" | "VIEWER";
 
 /** Validate the target of an assignment, not only the actor performing it. */

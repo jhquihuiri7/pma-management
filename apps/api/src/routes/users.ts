@@ -13,11 +13,11 @@ import {
 } from "../modules/shared/usersModule.js";
 import { NotFound } from "../lib/errors.js";
 
-const VALID_APPS: AppKey[] = ["pma", "rgdp", "geo"];
+const VALID_APPS: AppKey[] = ["pma", "rgdp", "geo", "previene"];
 const idParamsSchema = z.object({ id: z.string().uuid() }).strict();
 const appParamsSchema = z.object({
   id: z.string().uuid(),
-  appKey: z.enum(["pma", "rgdp", "geo"]),
+  appKey: z.enum(["pma", "rgdp", "geo", "previene"]),
 }).strict();
 
 const createSchema = z.object({
@@ -26,7 +26,7 @@ const createSchema = z.object({
   role: z.enum(["ADMIN", "REPORTER", "VIEWER"]),
   unit: z.string().trim().max(200).optional(),
   position: z.string().trim().max(200).optional(),
-  apps: z.array(z.enum(["pma", "rgdp", "geo"])).max(3).optional(),
+  apps: z.array(z.enum(["pma", "rgdp", "geo", "previene"])).max(4).optional(),
 }).strict();
 
 const updateSchema = z.object({
@@ -37,7 +37,7 @@ const updateSchema = z.object({
 }).strict().refine((body) => Object.keys(body).length > 0, "Se requiere al menos un cambio");
 
 const assignAppSchema = z.object({
-  appKey: z.enum(["pma", "rgdp", "geo"]),
+  appKey: z.enum(["pma", "rgdp", "geo", "previene"]),
 }).strict();
 
 export async function usersRoutes(app: FastifyInstance) {

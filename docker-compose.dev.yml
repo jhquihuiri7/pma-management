@@ -50,6 +50,16 @@ services:
       STORAGE_ROOT: /data/storage
       STORAGE_PUBLIC_BASE_URL: http://localhost:3001/storage
       TITILER_DATA_ROOT: /data/storage
+      # Loopback inside a container is the container itself; host-gateway below
+      # is what makes the host's reports API reachable.
+      PREVIENE_API_BASE_URL: ${PREVIENE_API_BASE_URL:-http://host.docker.internal:8080}
+      PREVIENE_API_KEY: ${PREVIENE_API_KEY:-}
+      PREVIENE_MEDIA_TIMEOUT_MS: ${PREVIENE_MEDIA_TIMEOUT_MS:-30000}
+      # Read by the api to decide when the cache counts as stale; without it the
+      # degraded banner is timed off zod's default instead of the real interval.
+      PREVIENE_SYNC_INTERVAL_MS: ${PREVIENE_SYNC_INTERVAL_MS:-120000}
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
     ports:
       - "3001:3001"
     volumes:
@@ -100,6 +110,11 @@ services:
       STORAGE_ROOT: /data/storage
       GDAL_CACHEMAX: "1024"
       WORKER_CONCURRENCY: "1"
+      PREVIENE_API_BASE_URL: ${PREVIENE_API_BASE_URL:-http://host.docker.internal:8080}
+      PREVIENE_API_KEY: ${PREVIENE_API_KEY:-}
+      PREVIENE_SYNC_INTERVAL_MS: ${PREVIENE_SYNC_INTERVAL_MS:-120000}
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
     volumes:
       - ./apps/api:/app/apps/api
       - /mnt/synology_smb/sistema-ambiental:/data/storage

@@ -4,7 +4,7 @@ import { useRouter } from "next/navigation";
 import { useEffect } from "react";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
-import { Leaf, Shield, LogOut, Map, Users } from "lucide-react";
+import { Leaf, Shield, LogOut, Map, Users, Siren } from "lucide-react";
 import { useAuth } from "@/lib/auth-context";
 
 const SUBSYSTEM_APPS = [
@@ -37,6 +37,16 @@ const SUBSYSTEM_APPS = [
     color: "text-teal-600",
     border: "border-teal-200 hover:border-teal-400",
     bg: "hover:bg-teal-50",
+  },
+  {
+    key: "previene",
+    label: "Galápagos Previene",
+    description: "Reportes ciudadanos de emergencias y eventos naturales.",
+    href: "/previene",
+    icon: Siren,
+    color: "text-emerald-600",
+    border: "border-emerald-200 hover:border-emerald-400",
+    bg: "hover:bg-emerald-50",
   },
 ] as const;
 

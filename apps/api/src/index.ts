@@ -11,6 +11,7 @@ import { usersRoutes } from "./routes/users.js";
 import { pmaRoutes } from "./routes/pma/index.js";
 import { rgdpRoutes } from "./routes/rgdp/index.js";
 import { geoRoutes } from "./routes/geo/index.js";
+import { previeneRoutes } from "./routes/previene/index.js";
 import { closeDb } from "./db/client.js";
 import { stopBoss } from "./jobs/boss.js";
 import { getDb } from "./db/client.js";
@@ -77,6 +78,7 @@ async function start() {
   await app.register(pmaRoutes, { prefix: "/pma" });
   await app.register(rgdpRoutes, { prefix: "/rgdp" });
   await app.register(geoRoutes, { prefix: "/geo" });
+  await app.register(previeneRoutes, { prefix: "/previene" });
 
   let shuttingDown = false;
   const shutdown = async (signal: string) => {

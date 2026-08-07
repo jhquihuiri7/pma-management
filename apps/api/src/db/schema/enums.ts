@@ -2,7 +2,7 @@ import { pgEnum } from "drizzle-orm/pg-core";
 
 export const userRoleEnum = pgEnum("user_role", ["ADMIN", "REPORTER", "VIEWER"]);
 
-export const appKeyEnum = pgEnum("app_key", ["pma", "rgdp", "geo"]);
+export const appKeyEnum = pgEnum("app_key", ["pma", "rgdp", "geo", "previene"]);
 
 export const planTipoEnum = pgEnum("plan_tipo", ["Licencia", "Registro Ambiental", "N/A"]);
 

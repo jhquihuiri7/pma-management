@@ -1,5 +1,5 @@
 export type UserRole = 'ADMIN' | 'REPORTER' | 'VIEWER';
-export type AppKey = "pma" | "rgdp" | "geo";
+export type AppKey = "pma" | "rgdp" | "geo" | "previene";
 
 export interface User {
   id: string;

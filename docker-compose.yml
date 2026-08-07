@@ -71,6 +71,23 @@ services:
       SMTP_USER: ${SMTP_USER:-}
       SMTP_PASS: ${SMTP_PASS:-}
       SMTP_FROM: ${SMTP_FROM:?SMTP_FROM is required}
+      PREVIENE_API_BASE_URL: ${PREVIENE_API_BASE_URL:-http://galapagos-previene-api:8080}
+      PREVIENE_API_KEY: ${PREVIENE_API_KEY:-}
+      PREVIENE_MEDIA_TIMEOUT_MS: ${PREVIENE_MEDIA_TIMEOUT_MS:-30000}
+      # The api does not run the sync, but it reports staleness as four missed
+      # cycles. With the value only injected into the worker, the api falls back
+      # to the 120000 default and the viewer's "API sin respuesta" banner is
+      # timed off a number nobody configured.
+      PREVIENE_SYNC_INTERVAL_MS: ${PREVIENE_SYNC_INTERVAL_MS:-120000}
+    # The Galápagos Previene API is reached over `previene-link`, NOT over the
+    # host: it binds 127.0.0.1:8080, which host.docker.internal (the bridge
+    # gateway) cannot reach. See the networks block at the bottom of this file
+    # for why it is a dedicated network and not that project's own.
+    networks:
+      - default
+      - previene-link
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
     expose:
       - "3001"
     volumes:
@@ -145,6 +162,15 @@ services:
       SMTP_USER: ${SMTP_USER:-}
       SMTP_PASS: ${SMTP_PASS:-}
       SMTP_FROM: ${SMTP_FROM:?SMTP_FROM is required}
+      # The worker owns the incremental ingestion of citizen reports.
+      PREVIENE_API_BASE_URL: ${PREVIENE_API_BASE_URL:-http://galapagos-previene-api:8080}
+      PREVIENE_API_KEY: ${PREVIENE_API_KEY:-}
+      PREVIENE_SYNC_INTERVAL_MS: ${PREVIENE_SYNC_INTERVAL_MS:-120000}
+    networks:
+      - default
+      - previene-link
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
     volumes:
       - /mnt/synology_smb/sistema-ambiental:/data/storage
     depends_on:
@@ -171,3 +197,33 @@ services:
 
 volumes:
   postgres_data:
+
+networks:
+  # Default project network. Named explicitly because `api` and `worker` now
+  # declare a `networks:` list, and declaring one drops the implicit default.
+  default:
+
+  # Link to the Galápagos Previene API. Deliberately a DEDICATED network rather
+  # than that project's own `galapagospreviene_default`, for one specific
+  # reason: its database container answers to the alias `postgres`, and so does
+  # ours. Joining that network would make `postgres` ambiguous for `api` and
+  # `worker`, whose DATABASE_URL is `@postgres:5432/pma_db` — Docker's DNS could
+  # hand them the wrong database and take PMA, RGDP and GEO down with it.
+  #
+  # Only `galapagos-previene-api` is attached from the other side, so the only
+  # name this network adds is `galapagos-previene-api`, which collides with
+  # nothing.
+  #
+  # `external` because it is shared with a compose project that is not this one.
+  # Create it once, and attach the reports API to it:
+  #
+  #   docker network create sigtar-previene-link
+  #   docker network connect sigtar-previene-link galapagos-previene-api
+  #
+  # That second command is NOT durable: if the Previene project recreates its
+  # api container, the attachment is lost and this module goes into degraded
+  # mode until it is reattached. Declaring the network in that project's compose
+  # is what makes it survive.
+  previene-link:
+    external: true
+    name: sigtar-previene-link
