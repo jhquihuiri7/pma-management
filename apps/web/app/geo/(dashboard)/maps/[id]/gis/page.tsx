@@ -84,6 +84,7 @@ export default function GisEditorPage() {
 
   return (
     <GisEditor
+      geoMap={geoMap}
       mapId={id}
       mapTitle={geoMap?.title}
       backHref="/geo/dashboard"

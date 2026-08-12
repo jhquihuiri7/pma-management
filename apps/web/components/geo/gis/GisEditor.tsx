@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useEffect, useRef, useCallback } from "react";
+import dynamic from "next/dynamic";
 import type { Map as LeafletMap } from "leaflet";
 import type { FeatureCollection } from "geojson";
 import {
@@ -24,7 +25,22 @@ import {
   type RasterLayerManifest,
 } from "./persistence";
 import type { AddLayerInput, AddLayerResult, GisGeometry, GisLayer, RasterLayer, IdentifyInfo, FocusFeature, LayerStyle } from "./types";
+import type { GeoMap } from "@/types/geo";
 import "./gis.css";
+
+const MapExportBuilder = dynamic(
+  () => import("@/components/geo/export/MapExportBuilder"),
+  {
+    ssr: false,
+    loading: () => (
+      <div className="fixed inset-0 z-[1200] grid place-items-center bg-black/10 backdrop-blur-[2px]">
+        <div className="rounded-lg border border-slate-200 bg-white px-4 py-3 text-sm font-medium text-slate-600 shadow-lg">
+          Preparando constructor cartográfico…
+        </div>
+      </div>
+    ),
+  },
+);
 
 type DeferredWrite = {
   timer: ReturnType<typeof setTimeout>;
@@ -90,7 +106,8 @@ function defaultStyleFor(geometry: GisGeometry, index = 0): LayerStyle {
   };
 }
 
-export default function GisEditor({ mapId, mapTitle, backHref, initialCenter, initialZoom, canEdit = false, canDelete = false }: {
+export default function GisEditor({ geoMap, mapId, mapTitle, backHref, initialCenter, initialZoom, canEdit = false, canDelete = false }: {
+  geoMap?: GeoMap;
   mapId?: string;
   mapTitle?: string;
   backHref?: string;
@@ -121,6 +138,7 @@ export default function GisEditor({ mapId, mapTitle, backHref, initialCenter, in
   const [focusFeature, setFocusFeature] = useState<FocusFeature | null>(null);
   const [mapInstance, setMapInstance] = useState<LeafletMap | null>(null);
   const [searchOpen, setSearchOpen] = useState(false);
+  const [exportOpen, setExportOpen] = useState(false);
   const [searchQ, setSearchQ] = useState("");
   const [isFullscreen, setIsFullscreen] = useState(false);
   const [hydrated, setHydrated] = useState(false);
@@ -724,7 +742,14 @@ export default function GisEditor({ mapId, mapTitle, backHref, initialCenter, in
         </div>
 
         <div className="tb-group">
-          <button className="tb-btn" data-tip="Exportar mapa" onClick={() => toast.info("Exportación disponible próximamente.")}><Download size={14} /></button>
+          <button
+            type="button"
+            onClick={() => setExportOpen(true)}
+            className="inline-flex h-8 flex-shrink-0 items-center gap-1.5 rounded-lg bg-teal-600 px-3 text-[13px] font-medium text-white transition-colors hover:bg-teal-700"
+          >
+            <Download className="h-3.5 w-3.5" />
+            Exportar mapa
+          </button>
           {canMutate && (
             <button className="tb-btn primary" onClick={() => setShowUpload(true)}><Upload size={14} /> Agregar capa</button>
           )}
@@ -863,6 +888,40 @@ export default function GisEditor({ mapId, mapTitle, backHref, initialCenter, in
           onAdd={addLayer}
           mapId={mapId}
           onRasterUploaded={handleRasterUploaded}
+        />
+      )}
+
+      {exportOpen && (
+        <MapExportBuilder
+          geoMap={geoMap ?? {
+            id: mapId ?? "mapa",
+            title: mapTitle ?? "Mapa del Geoportal",
+            description: "",
+            categoryId: "geo",
+            layers: [],
+            center: initialCenter ?? [-0.5, -90.5],
+            zoom: initialZoom ?? zoom,
+            createdBy: "Geoportal",
+            createdAt: new Date().toISOString(),
+          }}
+          vectorLayers={layers.filter((layer) => layer.visible)}
+          rasterLayers={rasterLayers.filter((layer) => layer.visible && layer.status === "processed")}
+          view={{
+            basemap,
+            center: mapInstance
+              ? [mapInstance.getCenter().lat, mapInstance.getCenter().lng]
+              : initialCenter ?? [-0.5, -90.5],
+            zoom: mapInstance?.getZoom() ?? zoom,
+            bounds: mapInstance ? {
+              north: mapInstance.getBounds().getNorth(),
+              south: mapInstance.getBounds().getSouth(),
+              east: mapInstance.getBounds().getEast(),
+              west: mapInstance.getBounds().getWest(),
+            } : undefined,
+          }}
+          sourceMapElement={mapInstance?.getContainer() ?? null}
+          selectedFeature={identify?.feature ?? focusFeature?.feature ?? null}
+          onClose={() => setExportOpen(false)}
         />
       )}
     </div>
