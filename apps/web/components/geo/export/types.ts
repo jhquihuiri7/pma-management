@@ -105,7 +105,7 @@ export interface Rect {
 }
 
 export type TitleAlignment = "left" | "center" | "right";
-export type LocatorLevel = "ecuador" | "galapagos" | "santacruz";
+export type LocatorLevel = "ecuador" | "provincia" | "canton";
 export type ScaleBarStyle = "barras" | "linea" | "bloque";
 export type GridDensity = "baja" | "media" | "alta";
 
@@ -141,7 +141,7 @@ export function createDefaultBuilderOptions(): BuilderOptions {
     logoSize: 14,
     legendColumns: 1,
     legendExcludedLayerIds: [],
-    locatorLevels: ["ecuador", "galapagos", "santacruz"],
+    locatorLevels: ["ecuador", "provincia", "canton"],
     locatorLabels: true,
     locatorBorder: true,
     indicators: {

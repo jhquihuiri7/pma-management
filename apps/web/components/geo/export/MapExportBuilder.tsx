@@ -97,7 +97,7 @@ function initialTexts(geoMap: GeoMap, scaleLabel: string, areaLabel: string): Re
     elaborado: "Dirección de Gestión Territorial",
     revisado: "",
     fecha: new Intl.DateTimeFormat("es-EC", { month: "long", year: "numeric" }).format(new Date()),
-    fuente: "Capas visibles del Geoportal institucional",
+    fuente: "Capas visibles del Geoportal institucional · Límites territoriales: INEC, DPA 2020",
     notas: "Las coordenadas y la escala están referidas a la vista cartográfica exportada.",
   };
 }
@@ -245,7 +245,7 @@ export default function MapExportBuilder({ geoMap, vectorLayers, rasterLayers, v
 
         <div className="flex min-h-0 flex-1">
           <ElementsPanel state={state} collapsed={leftCollapsed} onSelect={selectToggle} onToggle={toggle} />
-          <Canvas state={state} data={exportData} mapPreview={<ExportMapPreview layers={vectorLayers} rasterLayers={rasterLayers} view={view} extent={state.extent} targetBounds={exportData.bounds} sourceMapElement={sourceMapElement} />} sheetRef={sheetRef} onSelect={select} onGestureStart={() => dispatch({ type: "snapshot" })} onOverride={override} onHide={(block) => toggle(block)} />
+          <Canvas state={state} data={exportData} mapPreview={<ExportMapPreview layers={vectorLayers} rasterLayers={rasterLayers} view={view} extent={state.extent} targetBounds={exportData.bounds} sourceMapElement={sourceMapElement} />} locatorCenter={view.center} sheetRef={sheetRef} onSelect={select} onGestureStart={() => dispatch({ type: "snapshot" })} onOverride={override} onHide={(block) => toggle(block)} />
           <PropertiesPanel state={state} legendLayers={propertyLegendLayers} hasElevationData={Boolean(exportData.elevation?.length)} hasLandCoverData={Boolean(exportData.landCover?.length)} hasSelection={Boolean(selectedFeature)} collapsed={rightCollapsed} onText={(key, value) => update((current) => ({ ...current, texts: { ...current.texts, [key]: value } }))} onOptions={setOptions} onToggle={toggle} onExtent={(extent) => update((current) => ({ ...current, extent }))} />
         </div>
 

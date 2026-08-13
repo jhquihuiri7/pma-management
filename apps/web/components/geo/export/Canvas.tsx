@@ -18,6 +18,7 @@ import RefSysBlock from "./blocks/RefSysBlock";
 import ScaleBarBlock from "./blocks/ScaleBarBlock";
 import ScaleNumBlock from "./blocks/ScaleNumBlock";
 import TechInfoBlock from "./blocks/TechInfoBlock";
+import TerritorialLocatorMap from "./TerritorialLocatorMap";
 import {
   clampRect,
   overlaps,
@@ -29,11 +30,13 @@ import {
 import { fitScale, MM_TO_PX, paperFontSizePx, paperSize, rects, safeBounds } from "./layout";
 import type { BlockId, BuilderState, Rect } from "./types";
 import { BLOCK_IDS, parentBlock } from "./types";
+import { useTerritorialLocator } from "./use-territorial-locator";
 
 export interface CanvasProps {
   state: BuilderState;
   data: GeoExportData;
   mapPreview: ReactNode;
+  locatorCenter: [number, number];
   sheetRef: RefObject<HTMLDivElement>;
   onSelect: (block: BlockId | null) => void;
   onGestureStart: () => void;
@@ -106,7 +109,7 @@ function tickValues(data: GeoExportData) {
   return { eastings, northings };
 }
 
-export default function Canvas({ state, data, mapPreview, sheetRef, onSelect, onGestureStart, onOverride, onHide }: CanvasProps) {
+export default function Canvas({ state, data, mapPreview, locatorCenter, sheetRef, onSelect, onGestureStart, onOverride, onHide }: CanvasProps) {
   const workspaceRef = useRef<HTMLDivElement>(null);
   const gestureRef = useRef<GestureState | null>(null);
   const [canvasSize, setCanvasSize] = useState<CanvasSize>({ width: 900, height: 620 });
@@ -119,6 +122,35 @@ export default function Canvas({ state, data, mapPreview, sheetRef, onSelect, on
   const paperHeightPx = paper.h * MM_TO_PX;
   const bounds = safeBounds(state.format, state.orientation);
   const selectedBlock = state.selected ? parentBlock(state.selected) : null;
+  const locatorPoint = useMemo(() => ({
+    longitude: data.bounds ? (data.bounds.east + data.bounds.west) / 2 : locatorCenter[1],
+    latitude: data.bounds ? (data.bounds.north + data.bounds.south) / 2 : locatorCenter[0],
+  }), [data.bounds, locatorCenter]);
+  const locator = useTerritorialLocator({ point: locatorPoint, bounds: data.bounds });
+  const locatorLevels = useMemo(() => state.options.locatorLevels.map((level) => {
+    if (level === "ecuador") {
+      return {
+        id: level,
+        label: "Ecuador",
+        preview: <TerritorialLocatorMap features={locator.provinces} selected={locator.province} point={locatorPoint} loading={locator.loading} error={locator.error} source={locator.source} label="Ecuador" />,
+      };
+    }
+    if (level === "provincia") {
+      const label = locator.province?.name ?? "Provincia";
+      return {
+        id: level,
+        label,
+        preview: <TerritorialLocatorMap features={locator.cantons} selected={locator.canton} point={locatorPoint} loading={locator.loading} error={locator.error} source={locator.source} label={`Provincia de ${label}`} />,
+      };
+    }
+    const territory = locator.canton ? [locator.canton] : [];
+    const cantonName = locator.canton?.name ?? "Cantón";
+    return {
+      id: level,
+      label: locator.canton ? `Cantón ${cantonName}` : cantonName,
+      preview: <TerritorialLocatorMap features={territory} selected={locator.canton} point={locatorPoint} viewportBounds={data.bounds} showViewport loading={locator.loading} error={locator.error} source={locator.source} label={`Cantón ${cantonName}`} />,
+    };
+  }), [data.bounds, locator, locatorPoint, state.options.locatorLevels]);
 
   useEffect(() => {
     const element = workspaceRef.current;
@@ -179,7 +211,7 @@ export default function Canvas({ state, data, mapPreview, sheetRef, onSelect, on
       case "header": return <HeaderBlock institution={texts.institucion} unit={texts.unidad} title={texts.titulo} subtitle={texts.subtitulo} system={texts.sistema} showLogo={state.visible.hdr_logo} showTitle={state.visible.hdr_titulo} showSubtitle={state.visible.hdr_subtitulo} showNorth={state.visible.hdr_norte} logoSizeMm={state.options.logoSize} titleSizeEm={state.options.titleSize / 10} titleAlignment={state.options.titleAlign} titleBold={state.options.titleBold} />;
       case "map": return <MapBlock preview={mapPreview} coordinates={tickValues(data)} showCoordinates={state.visible.map_coords} showGrid={state.visible.map_coords} gridDensity={state.options.gridDensity} selected={selectedBlock === "map"} />;
       case "legend": return <LegendBlock title={texts.legendTitle || "LEYENDA"} items={data.legend.filter((item) => !state.options.legendExcludedLayerIds.includes(item.layerId))} columns={state.options.legendColumns} />;
-      case "locator": return <LocatorBlock levels={state.options.locatorLevels.map((level) => ({ id: level, label: level === "ecuador" ? "Ecuador" : level === "galapagos" ? "Galápagos" : "Isla Santa Cruz" }))} showLabels={state.options.locatorLabels} showBorders={state.options.locatorBorder} />;
+      case "locator": return <LocatorBlock levels={locatorLevels} showLabels={state.options.locatorLabels} showBorders={state.options.locatorBorder} />;
       case "indicators": return <IndicatorsBlock indicators={data.indicators.map((indicator) => ({ ...indicator, visible: state.options.indicators[indicator.id as keyof typeof state.options.indicators] ?? true }))} />;
       case "elevation": return <ElevationBlock points={data.elevation ?? []} onHide={() => onHide("elevation")} />;
       case "landcover": return <LandCoverBlock items={data.landCover ?? []} onHide={() => onHide("landcover")} />;

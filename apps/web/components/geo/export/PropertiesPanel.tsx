@@ -193,16 +193,16 @@ export default function PropertiesPanel({
               <>
                 <Field label="Niveles territoriales">
                   <div className="flex flex-wrap gap-1.5">
-                    {(["ecuador", "galapagos", "santacruz"] as LocatorLevel[]).map((level) => {
+                    {(["ecuador", "provincia", "canton"] as LocatorLevel[]).map((level) => {
                       const active = state.options.locatorLevels.includes(level);
-                      const label = level === "ecuador" ? "Ecuador" : level === "galapagos" ? "Galápagos" : "Santa Cruz";
+                      const label = level === "ecuador" ? "Ecuador" : level === "provincia" ? "Provincia" : "Cantón";
                       return <button type="button" key={level} onClick={() => onOptions({ locatorLevels: active ? state.options.locatorLevels.filter((item) => item !== level) : [...state.options.locatorLevels, level] })} className={`rounded-full border px-2.5 py-1 text-[11px] font-medium ${active ? "border-teal-300 bg-teal-50 text-teal-700" : "border-slate-200 text-slate-500"}`}>{label}</button>;
                     })}
                   </div>
                 </Field>
                 <PropertySwitch label="Etiquetas" checked={state.options.locatorLabels} onChange={() => onOptions({ locatorLabels: !state.options.locatorLabels })} />
                 <PropertySwitch label="Bordes" checked={state.options.locatorBorder} onChange={() => onOptions({ locatorBorder: !state.options.locatorBorder })} />
-                <EmptyDataNotice>Los GeoJSON territoriales no están disponibles; el bloque conserva un estado vacío listo para recibirlos.</EmptyDataNotice>
+                <EmptyDataNotice>La provincia y el cantón se identifican automáticamente desde la extensión visible. Fuente: INEC, División Político Administrativa.</EmptyDataNotice>
               </>
             )}
 
