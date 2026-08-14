@@ -25,6 +25,7 @@ import { BadRequest, NotFound, HttpError } from "../../lib/errors.js";
 import { env } from "../../lib/env.js";
 import { beginDurableStorageIntent } from "../../modules/shared/durableFilePersistence.js";
 import { lockAndAssertGeoEditor } from "../../modules/geo/authorization.js";
+import { listWorkspaceCatalog } from "../../modules/geo/workspaceModule.js";
 
 const createSchema = z.object({
   title: z.string().trim().min(1).max(200),
@@ -45,6 +46,9 @@ const updateSchema = createSchema.partial().refine(
 );
 
 const mapParamsSchema = z.object({ id: z.string().uuid() }).strict();
+const workspaceCatalogQuerySchema = z.object({
+  categoryId: z.string().trim().min(1).max(100).optional(),
+}).strict();
 const layerParamsSchema = z.object({ id: z.string().uuid(), layerId: z.string().uuid() }).strict();
 const tileParamsSchema = layerParamsSchema.extend({
   z: z.string().regex(/^\d{1,2}$/),
@@ -90,6 +94,11 @@ const adminOnly = [authenticate, requireApp("geo"), requireRole("ADMIN")];
 
 export async function geoRoutes(app: FastifyInstance) {
   // NOTE: no global auth hook — read routes below are intentionally public.
+
+  app.get("/workspace/catalog", async (req) => {
+    const { categoryId } = workspaceCatalogQuerySchema.parse(req.query);
+    return listWorkspaceCatalog(categoryId);
+  });
 
   app.get("/maps", async () => listMaps());
 

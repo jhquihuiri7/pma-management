@@ -1,0 +1,1564 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link rel="preconnect" href="https://fonts.googleapis.com" />
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet" />
+<style>
+  *{ box-sizing: border-box; }
+  html, body { margin:0; padding:0; }
+  body { font-family: Inter, ui-sans-serif, system-ui, sans-serif; -webkit-font-smoothing: antialiased; }
+  a { color:#0d9488; text-decoration:none; }
+  a:hover { color:#115e59; }
+  @keyframes cartaIn { from { opacity:0; transform: translateY(4px) scale(.995); } to { opacity:1; transform:none; } }
+  @keyframes blockIn { from { opacity:0; transform: scale(.985); } to { opacity:1; transform:none; } }
+  input, textarea, select, button { font-family: inherit; }
+</style>
+</helmet>
+
+<div style="height:100vh;display:flex;flex-direction:column;background:#f8fafc;color:#0f172a;overflow:hidden">
+
+  <div style="display:flex;align-items:center;gap:16px;padding:12px 24px;background:#fff;border-bottom:1px solid #e2e8f0;flex-shrink:0;position:relative;z-index:10">
+    <a href="#" style="display:flex;align-items:center;gap:6px;font-size:14px;color:#64748b;flex-shrink:0">
+      <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m12 19-7-7 7-7" /><path d="M19 12H5" /></svg>
+      Volver
+    </a>
+    <div style="height:16px;width:1px;background:#e2e8f0"></div>
+    <div style="width:28px;height:28px;border-radius:8px;background:linear-gradient(to bottom right,#34d399,#0d9488);display:flex;align-items:center;justify-content:center;flex-shrink:0">
+      <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="#fff" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14.106 5.553a2 2 0 0 0 1.788 0l3.659-1.83A1 1 0 0 1 21 4.619v12.764a1 1 0 0 1-.553.894l-4.553 2.277a2 2 0 0 1-1.788 0l-4.212-2.106a2 2 0 0 0-1.788 0l-3.659 1.83A1 1 0 0 1 3 19.381V6.618a1 1 0 0 1 .553-.894l4.553-2.277a2 2 0 0 1 1.788 0z" /><path d="M15 5.764v15" /><path d="M9 3.236v15" /></svg>
+    </div>
+    <div style="flex:1;min-width:0">
+      <h1 style="margin:0;font-size:14px;font-weight:600;color:#0f172a">Levantamiento Barrio Cactus — Santa Cruz</h1>
+      <p style="margin:0;font-size:12px;color:#047857">Zonas Protegidas</p>
+    </div>
+    <p style="margin:0;font-size:12px;color:#94a3b8;max-width:380px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">Ortofoto 2023, curvas de nivel y límite del área de estudio · GNSS RTK</p>
+    <button onClick="{{ openBuilder }}" style="display:inline-flex;align-items:center;gap:6px;height:32px;padding:0 12px;border:none;border-radius:8px;background:#0d9488;color:#fff;font-size:13px;font-weight:500;cursor:pointer" style-hover="background:#0f766e">
+      <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 15V3" /><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" /><path d="m7 10 5 5 5-5" /></svg>
+      Exportar mapa
+    </button>
+  </div>
+
+  <div style="flex:1;position:relative;overflow:hidden;background:#e8edf1">
+    <div style="position:absolute;inset:0;background-image:url('assets/orto-map.png');background-size:cover;background-position:center"></div>
+    <div style="position:absolute;top:16px;right:56px;z-index:20;background:#fff;border-radius:12px;box-shadow:0 10px 15px -3px rgba(15,23,42,.1);border:1px solid #e2e8f0;width:256px;overflow:hidden">
+      <div style="padding:10px 16px;border-bottom:1px solid #f1f5f9;background:#f8fafc">
+        <p style="margin:0;font-size:13px;font-weight:600;color:#334155">Capas del mapa</p>
+      </div>
+      <ul style="margin:0;padding:0;list-style:none">
+        <li style="display:flex;align-items:center;justify-content:space-between;padding:9px 16px;border-bottom:1px solid #f1f5f9">
+          <span style="font-size:13px;color:#334155">Ortofoto 2023</span>
+          <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="#0d9488" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M2.062 12.348a1 1 0 0 1 0-.696 10.75 10.75 0 0 1 19.876 0 1 1 0 0 1 0 .696 10.75 10.75 0 0 1-19.876 0" /><circle cx="12" cy="12" r="3" /></svg>
+        </li>
+        <li style="display:flex;align-items:center;justify-content:space-between;padding:9px 16px;border-bottom:1px solid #f1f5f9">
+          <span style="font-size:13px;color:#334155">Curvas de nivel</span>
+          <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="#0d9488" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M2.062 12.348a1 1 0 0 1 0-.696 10.75 10.75 0 0 1 19.876 0 1 1 0 0 1 0 .696 10.75 10.75 0 0 1-19.876 0" /><circle cx="12" cy="12" r="3" /></svg>
+        </li>
+        <li style="display:flex;align-items:center;justify-content:space-between;padding:9px 16px;border-bottom:1px solid #f1f5f9">
+          <span style="font-size:13px;color:#334155">Límite área de estudio</span>
+          <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="#0d9488" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M2.062 12.348a1 1 0 0 1 0-.696 10.75 10.75 0 0 1 19.876 0 1 1 0 0 1 0 .696 10.75 10.75 0 0 1-19.876 0" /><circle cx="12" cy="12" r="3" /></svg>
+        </li>
+        <li style="display:flex;align-items:center;justify-content:space-between;padding:9px 16px">
+          <span style="font-size:13px;color:#334155">OpenStreetMap</span>
+          <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="#94a3b8" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M10.733 5.076a10.744 10.744 0 0 1 11.205 6.575 1 1 0 0 1 0 .696 10.747 10.747 0 0 1-1.444 2.49" /><path d="M14.084 14.158a3 3 0 0 1-4.242-4.242" /><path d="M17.479 17.499a10.75 10.75 0 0 1-15.417-5.151 1 1 0 0 1 0-.696 10.75 10.75 0 0 1 4.446-5.143" /><path d="m2 2 20 20" /></svg>
+        </li>
+      </ul>
+    </div>
+    <div style="position:absolute;top:16px;right:16px;z-index:20;background:#fff;border-radius:8px;box-shadow:0 4px 6px -1px rgba(15,23,42,.1);border:1px solid #e2e8f0;padding:8px">
+      <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="#475569" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12.83 2.18a2 2 0 0 0-1.66 0L2.6 6.08a1 1 0 0 0 0 1.83l8.58 3.91a2 2 0 0 0 1.66 0l8.58-3.9a1 1 0 0 0 0-1.83z" /><path d="M2 12a1 1 0 0 0 .58.91l8.6 3.91a2 2 0 0 0 1.65 0l8.58-3.9A1 1 0 0 0 22 12" /><path d="M2 17a1 1 0 0 0 .58.91l8.6 3.91a2 2 0 0 0 1.65 0l8.58-3.9A1 1 0 0 0 22 17" /></svg>
+    </div>
+  </div>
+
+  <sc-if value="{{ open }}" hint-placeholder-val="{{ true }}">
+  <div style="position:fixed;inset:0;z-index:50;background:rgba(0,0,0,.12);backdrop-filter:blur(2px)">
+    <div style="position:absolute;inset:20px;background:#fff;border-radius:14px;box-shadow:0 25px 50px -12px rgba(15,23,42,.35);display:flex;flex-direction:column;overflow:hidden;animation:cartaIn .18s ease-out">
+
+      <div style="flex-shrink:0;border-bottom:1px solid #e2e8f0;display:flex;flex-wrap:wrap;align-items:center;gap:10px;padding:9px 14px;background:#fff;min-height:56px">
+        <div style="display:flex;align-items:center;gap:9px;min-width:0">
+          <div style="width:28px;height:28px;border-radius:8px;background:#0d9488;display:flex;align-items:center;justify-content:center;flex-shrink:0">
+            <svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="#fff" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M6 22a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h8a2.4 2.4 0 0 1 1.704.706l3.588 3.588A2.4 2.4 0 0 1 20 8v12a2 2 0 0 1-2 2z" /><path d="M14 2v5a1 1 0 0 0 1 1h5" /><path d="M10 9H8" /><path d="M16 13H8" /><path d="M16 17H8" /></svg>
+          </div>
+          <div style="min-width:0">
+            <p style="margin:0;font-size:13px;font-weight:600;color:#0f172a;white-space:nowrap">Constructor de carta cartográfica</p>
+            <p style="margin:0;font-size:11px;color:#94a3b8;white-space:nowrap">Exportación PDF · Geoportal</p>
+          </div>
+        </div>
+
+        <div style="position:relative">
+          <button onClick="{{ toggleTpl }}" style="display:inline-flex;align-items:center;gap:6px;height:30px;padding:0 10px;border:1px solid #e2e8f0;border-radius:8px;background:#fff;color:#334155;font-size:12.5px;font-weight:500;cursor:pointer;white-space:nowrap;flex-shrink:0" style-hover="background:#f8fafc">
+            <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect width="7" height="7" x="3" y="3" rx="1" /><rect width="7" height="7" x="14" y="3" rx="1" /><rect width="7" height="7" x="14" y="14" rx="1" /><rect width="7" height="7" x="3" y="14" rx="1" /></svg>
+            {{ tplLabel }}
+            <svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m6 9 6 6 6-6" /></svg>
+          </button>
+          <sc-if value="{{ tplOpen }}" hint-placeholder-val="{{ false }}">
+            <div style="position:absolute;top:36px;left:0;width:250px;background:#fff;border:1px solid #e2e8f0;border-radius:10px;box-shadow:0 12px 24px -8px rgba(15,23,42,.25);padding:6px;z-index:60">
+              <button onClick="{{ tplTecnica }}" style="display:block;width:100%;text-align:left;padding:8px 9px;border:none;background:transparent;border-radius:7px;cursor:pointer" style-hover="background:#f1f5f9">
+                <span style="display:block;font-size:12.5px;font-weight:600;color:#0f172a">Técnica completa</span>
+                <span style="display:block;font-size:11px;color:#94a3b8;margin-top:1px">Todos los módulos de la carta institucional</span>
+              </button>
+              <button onClick="{{ tplBasica }}" style="display:block;width:100%;text-align:left;padding:8px 9px;border:none;background:transparent;border-radius:7px;cursor:pointer" style-hover="background:#f1f5f9">
+                <span style="display:block;font-size:12.5px;font-weight:600;color:#0f172a">Básica</span>
+                <span style="display:block;font-size:11px;color:#94a3b8;margin-top:1px">Mapa, título, norte, leyenda y escala</span>
+              </button>
+              <button onClick="{{ tplAnalisis }}" style="display:block;width:100%;text-align:left;padding:8px 9px;border:none;background:transparent;border-radius:7px;cursor:pointer" style-hover="background:#f1f5f9">
+                <span style="display:block;font-size:12.5px;font-weight:600;color:#0f172a">Análisis territorial</span>
+                <span style="display:block;font-size:11px;color:#94a3b8;margin-top:1px">Mapa, leyenda, indicadores y gráficos</span>
+              </button>
+            </div>
+          </sc-if>
+        </div>
+
+        <div style="flex:1"></div>
+
+        <div style="display:flex;align-items:center;gap:3px;padding:3px;background:#f1f5f9;border-radius:9px">
+          <button onClick="{{ setA4 }}" style="{{ btnA4 }}">A4</button>
+          <button onClick="{{ setA3 }}" style="{{ btnA3 }}">A3</button>
+        </div>
+
+        <div style="display:flex;align-items:center;gap:3px;padding:3px;background:#f1f5f9;border-radius:9px">
+          <button onClick="{{ setH }}" title="Horizontal" style="{{ btnH }}">
+            <svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect width="20" height="12" x="2" y="6" rx="2" /></svg>
+          </button>
+          <button onClick="{{ setV }}" title="Vertical" style="{{ btnV }}">
+            <svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect width="12" height="20" x="6" y="2" rx="2" /></svg>
+          </button>
+        </div>
+
+        <div style="display:flex;align-items:center;gap:3px;padding:3px;background:#f1f5f9;border-radius:9px">
+          <button onClick="{{ setAuto }}" style="{{ btnAuto }}">Automático</button>
+          <button onClick="{{ setCustom }}" style="{{ btnCustom }}">Personalizar</button>
+        </div>
+
+        <div style="display:flex;align-items:center;gap:2px;border:1px solid #e2e8f0;border-radius:9px;padding:2px">
+          <button onClick="{{ zoomOut }}" title="Alejar" style="width:24px;height:24px;display:flex;align-items:center;justify-content:center;border:none;background:transparent;border-radius:6px;color:#475569;cursor:pointer" style-hover="background:#f1f5f9">
+            <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12h14" /></svg>
+          </button>
+          <span style="min-width:42px;text-align:center;font-size:11.5px;font-weight:500;color:#475569;font-variant-numeric:tabular-nums">{{ zoomPct }}</span>
+          <button onClick="{{ zoomIn }}" title="Acercar" style="width:24px;height:24px;display:flex;align-items:center;justify-content:center;border:none;background:transparent;border-radius:6px;color:#475569;cursor:pointer" style-hover="background:#f1f5f9">
+            <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12h14" /><path d="M12 5v14" /></svg>
+          </button>
+        </div>
+
+        <div style="height:22px;width:1px;background:#e2e8f0"></div>
+
+        <div style="display:flex;align-items:center;gap:2px">
+          <button onClick="{{ undo }}" title="Deshacer" style="{{ btnUndo }}">
+            <svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 14 4 9l5-5" /><path d="M4 9h10.5a5.5 5.5 0 0 1 5.5 5.5a5.5 5.5 0 0 1-5.5 5.5H11" /></svg>
+          </button>
+          <button onClick="{{ redo }}" title="Rehacer" style="{{ btnRedo }}">
+            <svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m15 14 5-5-5-5" /><path d="M20 9H9.5A5.5 5.5 0 0 0 4 14.5A5.5 5.5 0 0 0 9.5 20H13" /></svg>
+          </button>
+          <button onClick="{{ resetLayout }}" title="Restaurar diseño" style="width:28px;height:28px;display:flex;align-items:center;justify-content:center;border:1px solid #e2e8f0;background:#fff;border-radius:8px;color:#475569;cursor:pointer" style-hover="background:#f8fafc">
+            <svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 12a9 9 0 1 0 9-9 9.75 9.75 0 0 0-6.74 2.74L3 8" /><path d="M3 3v5h5" /></svg>
+          </button>
+          <button onClick="{{ toggleMargins }}" title="Mostrar márgenes seguros" style="{{ btnMargins }}">
+            <svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect width="18" height="18" x="3" y="3" rx="2" /><path d="M3 9h18" /><path d="M3 15h18" /><path d="M9 3v18" /><path d="M15 3v18" /></svg>
+          </button>
+        </div>
+
+        <div style="height:22px;width:1px;background:#e2e8f0"></div>
+
+        <button onClick="{{ closeBuilder }}" style="height:32px;padding:0 12px;border:1px solid #e2e8f0;border-radius:8px;background:#fff;color:#334155;font-size:13px;font-weight:500;cursor:pointer" style-hover="background:#f8fafc">Cancelar</button>
+        <button onClick="{{ generatePDF }}" style="display:inline-flex;align-items:center;gap:6px;height:32px;padding:0 14px;border:none;border-radius:8px;background:#0d9488;color:#fff;font-size:13px;font-weight:600;cursor:pointer" style-hover="background:#0f766e">
+          <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 15V3" /><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" /><path d="m7 10 5 5 5-5" /></svg>
+          Generar PDF
+        </button>
+      </div>
+
+      <div style="flex:1;min-height:0;display:flex">
+
+        <div style="width:262px;flex-shrink:0;border-right:1px solid #e2e8f0;background:#fff;overflow-y:auto">
+          <div style="padding:14px 14px 10px">
+            <p style="margin:0;font-size:12.5px;font-weight:600;color:#0f172a;letter-spacing:.01em">Elementos de la carta</p>
+            <p style="margin:4px 0 0;font-size:11px;color:#94a3b8;line-height:1.45">Activa o desactiva módulos; la composición se reorganiza sola.</p>
+          </div>
+
+          <div style="margin:0 10px 12px;padding:9px 10px;border:1px solid #ccfbf1;background:#f0fdfa;border-radius:9px;display:flex;align-items:center;gap:9px;cursor:pointer" onClick="{{ sel_map }}">
+            <svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="#0d9488" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14.106 5.553a2 2 0 0 0 1.788 0l3.659-1.83A1 1 0 0 1 21 4.619v12.764a1 1 0 0 1-.553.894l-4.553 2.277a2 2 0 0 1-1.788 0l-4.212-2.106a2 2 0 0 0-1.788 0l-3.659 1.83A1 1 0 0 1 3 19.381V6.618a1 1 0 0 1 .553-.894l4.553-2.277a2 2 0 0 1 1.788 0z" /><path d="M15 5.764v15" /><path d="M9 3.236v15" /></svg>
+            <div style="flex:1;min-width:0">
+              <p style="margin:0;font-size:12px;font-weight:600;color:#0f766e">Mapa principal</p>
+              <p style="margin:0;font-size:10.5px;color:#14b8a6">Elemento fijo · bloqueado</p>
+            </div>
+            <svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="#14b8a6" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect width="18" height="11" x="3" y="11" rx="2" ry="2" /><path d="M7 11V7a5 5 0 0 1 10 0v4" /></svg>
+          </div>
+
+          <p style="margin:0;padding:6px 14px;font-size:10px;font-weight:600;color:#94a3b8;letter-spacing:.07em;text-transform:uppercase">Básicos</p>
+          <div style="padding:0 8px 8px;display:flex;flex-direction:column;gap:1px">
+            <div onClick="{{ sel_header }}" style="{{ row_header }}">
+              <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 5h.01" /><path d="M3 12h.01" /><path d="M3 19h.01" /><path d="M8 5h13" /><path d="M8 12h13" /><path d="M8 19h13" /></svg>
+              <span style="flex:1;font-size:12px;font-weight:500">Encabezado</span>
+              <span onClick="{{ tg_header }}" style="{{ sw_header }}"><span style="{{ kn_header }}"></span></span>
+            </div>
+            <div onClick="{{ sel_hdr_titulo }}" style="{{ row_hdr_titulo }}">
+              <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 4v16" /><path d="M4 7V5a1 1 0 0 1 1-1h14a1 1 0 0 1 1 1v2" /><path d="M9 20h6" /></svg>
+              <span style="flex:1;font-size:12px;font-weight:500">Título</span>
+              <span onClick="{{ tg_hdr_titulo }}" style="{{ sw_hdr_titulo }}"><span style="{{ kn_hdr_titulo }}"></span></span>
+            </div>
+            <div onClick="{{ sel_hdr_subtitulo }}" style="{{ row_hdr_subtitulo }}">
+              <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 5H3" /><path d="M15 12H3" /><path d="M17 19H3" /></svg>
+              <span style="flex:1;font-size:12px;font-weight:500">Subtítulo</span>
+              <span onClick="{{ tg_hdr_subtitulo }}" style="{{ sw_hdr_subtitulo }}"><span style="{{ kn_hdr_subtitulo }}"></span></span>
+            </div>
+            <div onClick="{{ sel_hdr_norte }}" style="{{ row_hdr_norte }}">
+              <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10" /><path d="m16.24 7.76-1.804 5.411a2 2 0 0 1-1.265 1.265L7.76 16.24l1.804-5.411a2 2 0 0 1 1.265-1.265z" /></svg>
+              <span style="flex:1;font-size:12px;font-weight:500">Norte</span>
+              <span onClick="{{ tg_hdr_norte }}" style="{{ sw_hdr_norte }}"><span style="{{ kn_hdr_norte }}"></span></span>
+            </div>
+            <div onClick="{{ sel_map_coords }}" style="{{ row_map_coords }}">
+              <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect width="18" height="18" x="3" y="3" rx="2" /><path d="M3 9h18" /><path d="M3 15h18" /><path d="M9 3v18" /><path d="M15 3v18" /></svg>
+              <span style="flex:1;font-size:12px;font-weight:500">Coordenadas</span>
+              <span onClick="{{ tg_map_coords }}" style="{{ sw_map_coords }}"><span style="{{ kn_map_coords }}"></span></span>
+            </div>
+            <div onClick="{{ sel_scalebar }}" style="{{ row_scalebar }}">
+              <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21.3 15.3a2.4 2.4 0 0 1 0 3.4l-2.6 2.6a2.4 2.4 0 0 1-3.4 0L2.7 8.7a2.41 2.41 0 0 1 0-3.4l2.6-2.6a2.41 2.41 0 0 1 3.4 0Z" /><path d="m14.5 12.5 2-2" /><path d="m11.5 9.5 2-2" /><path d="m8.5 6.5 2-2" /><path d="m17.5 15.5 2-2" /></svg>
+              <span style="flex:1;font-size:12px;font-weight:500">Escala gráfica</span>
+              <span onClick="{{ tg_scalebar }}" style="{{ sw_scalebar }}"><span style="{{ kn_scalebar }}"></span></span>
+            </div>
+            <div onClick="{{ sel_scalenum }}" style="{{ row_scalenum }}">
+              <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="4" x2="20" y1="9" y2="9" /><line x1="4" x2="20" y1="15" y2="15" /><line x1="10" x2="8" y1="3" y2="21" /><line x1="16" x2="14" y1="3" y2="21" /></svg>
+              <span style="flex:1;font-size:12px;font-weight:500">Escala numérica</span>
+              <span onClick="{{ tg_scalenum }}" style="{{ sw_scalenum }}"><span style="{{ kn_scalenum }}"></span></span>
+            </div>
+          </div>
+
+          <p style="margin:0;padding:6px 14px;font-size:10px;font-weight:600;color:#94a3b8;letter-spacing:.07em;text-transform:uppercase">Información cartográfica</p>
+          <div style="padding:0 8px 8px;display:flex;flex-direction:column;gap:1px">
+            <div onClick="{{ sel_legend }}" style="{{ row_legend }}">
+              <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 5h.01" /><path d="M3 12h.01" /><path d="M3 19h.01" /><path d="M8 5h13" /><path d="M8 12h13" /><path d="M8 19h13" /></svg>
+              <span style="flex:1;font-size:12px;font-weight:500">Leyenda</span>
+              <svg viewBox="0 0 24 24" width="12" height="12" fill="none" stroke="#cbd5e1" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="9" cy="12" r="1" /><circle cx="9" cy="5" r="1" /><circle cx="9" cy="19" r="1" /><circle cx="15" cy="12" r="1" /><circle cx="15" cy="5" r="1" /><circle cx="15" cy="19" r="1" /></svg>
+              <span onClick="{{ tg_legend }}" style="{{ sw_legend }}"><span style="{{ kn_legend }}"></span></span>
+            </div>
+            <div onClick="{{ sel_locator }}" style="{{ row_locator }}">
+              <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14.106 5.553a2 2 0 0 0 1.788 0l3.659-1.83A1 1 0 0 1 21 4.619v12.764a1 1 0 0 1-.553.894l-4.553 2.277a2 2 0 0 1-1.788 0l-4.212-2.106a2 2 0 0 0-1.788 0l-3.659 1.83A1 1 0 0 1 3 19.381V6.618a1 1 0 0 1 .553-.894l4.553-2.277a2 2 0 0 1 1.788 0z" /><path d="M15 5.764v15" /><path d="M9 3.236v15" /></svg>
+              <span style="flex:1;font-size:12px;font-weight:500">Mapa de ubicación</span>
+              <svg viewBox="0 0 24 24" width="12" height="12" fill="none" stroke="#cbd5e1" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="9" cy="12" r="1" /><circle cx="9" cy="5" r="1" /><circle cx="9" cy="19" r="1" /><circle cx="15" cy="12" r="1" /><circle cx="15" cy="5" r="1" /><circle cx="15" cy="19" r="1" /></svg>
+              <span onClick="{{ tg_locator }}" style="{{ sw_locator }}"><span style="{{ kn_locator }}"></span></span>
+            </div>
+            <div onClick="{{ sel_refsys }}" style="{{ row_refsys }}">
+              <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10" /><path d="M12 2a14.5 14.5 0 0 0 0 20 14.5 14.5 0 0 0 0-20" /><path d="M2 12h20" /></svg>
+              <span style="flex:1;font-size:12px;font-weight:500">Sistema de referencia</span>
+              <span onClick="{{ tg_refsys }}" style="{{ sw_refsys }}"><span style="{{ kn_refsys }}"></span></span>
+            </div>
+            <div onClick="{{ sel_techinfo }}" style="{{ row_techinfo }}">
+              <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10" /><path d="M12 16v-4" /><path d="M12 8h.01" /></svg>
+              <span style="flex:1;font-size:12px;font-weight:500">Información técnica</span>
+              <span onClick="{{ tg_techinfo }}" style="{{ sw_techinfo }}"><span style="{{ kn_techinfo }}"></span></span>
+            </div>
+          </div>
+
+          <p style="margin:0;padding:6px 14px;font-size:10px;font-weight:600;color:#94a3b8;letter-spacing:.07em;text-transform:uppercase">Análisis</p>
+          <div style="padding:0 8px 8px;display:flex;flex-direction:column;gap:1px">
+            <div onClick="{{ sel_indicators }}" style="{{ row_indicators }}">
+              <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect width="7" height="7" x="3" y="3" rx="1" /><rect width="7" height="7" x="14" y="3" rx="1" /><rect width="7" height="7" x="14" y="14" rx="1" /><rect width="7" height="7" x="3" y="14" rx="1" /></svg>
+              <span style="flex:1;font-size:12px;font-weight:500">Indicadores territoriales</span>
+              <span onClick="{{ tg_indicators }}" style="{{ sw_indicators }}"><span style="{{ kn_indicators }}"></span></span>
+            </div>
+            <div onClick="{{ sel_elevation }}" style="{{ row_elevation }}">
+              <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 3v16a2 2 0 0 0 2 2h16" /><path d="m19 9-5 5-4-4-3 3" /></svg>
+              <span style="flex:1;font-size:12px;font-weight:500">Perfil de elevación</span>
+              <span onClick="{{ tg_elevation }}" style="{{ sw_elevation }}"><span style="{{ kn_elevation }}"></span></span>
+            </div>
+            <div onClick="{{ sel_landcover }}" style="{{ row_landcover }}">
+              <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 3v16a2 2 0 0 0 2 2h16" /><path d="M18 17V9" /><path d="M13 17V5" /><path d="M8 17v-3" /></svg>
+              <span style="flex:1;font-size:12px;font-weight:500">Cobertura del suelo</span>
+              <span onClick="{{ tg_landcover }}" style="{{ sw_landcover }}"><span style="{{ kn_landcover }}"></span></span>
+            </div>
+          </div>
+
+          <p style="margin:0;padding:6px 14px;font-size:10px;font-weight:600;color:#94a3b8;letter-spacing:.07em;text-transform:uppercase">Documentación</p>
+          <div style="padding:0 8px 16px;display:flex;flex-direction:column;gap:1px">
+            <div onClick="{{ sel_docs }}" style="{{ row_docs }}">
+              <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M6 22a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h8a2.4 2.4 0 0 1 1.704.706l3.588 3.588A2.4 2.4 0 0 1 20 8v12a2 2 0 0 1-2 2z" /><path d="M14 2v5a1 1 0 0 0 1 1h5" /><path d="M10 9H8" /><path d="M16 13H8" /><path d="M16 17H8" /></svg>
+              <span style="flex:1;font-size:12px;font-weight:500">Bloque documental</span>
+              <span onClick="{{ tg_docs }}" style="{{ sw_docs }}"><span style="{{ kn_docs }}"></span></span>
+            </div>
+            <div onClick="{{ sel_doc_elaborado }}" style="{{ row_doc_elaborado }}">
+              <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M19 21v-2a4 4 0 0 0-4-4H9a4 4 0 0 0-4 4v2" /><circle cx="12" cy="7" r="4" /></svg>
+              <span style="flex:1;font-size:12px;font-weight:500">Elaborado por</span>
+              <span onClick="{{ tg_doc_elaborado }}" style="{{ sw_doc_elaborado }}"><span style="{{ kn_doc_elaborado }}"></span></span>
+            </div>
+            <div onClick="{{ sel_doc_revisado }}" style="{{ row_doc_revisado }}">
+              <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m16 11 2 2 4-4" /><path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2" /><circle cx="9" cy="7" r="4" /></svg>
+              <span style="flex:1;font-size:12px;font-weight:500">Revisado por</span>
+              <span onClick="{{ tg_doc_revisado }}" style="{{ sw_doc_revisado }}"><span style="{{ kn_doc_revisado }}"></span></span>
+            </div>
+            <div onClick="{{ sel_doc_fecha }}" style="{{ row_doc_fecha }}">
+              <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M8 2v3" /><path d="M16 2v3" /><rect x="3" y="3" width="18" height="18" rx="2" /><path d="M3 9h18" /></svg>
+              <span style="flex:1;font-size:12px;font-weight:500">Fecha</span>
+              <span onClick="{{ tg_doc_fecha }}" style="{{ sw_doc_fecha }}"><span style="{{ kn_doc_fecha }}"></span></span>
+            </div>
+            <div onClick="{{ sel_doc_fuente }}" style="{{ row_doc_fuente }}">
+              <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><ellipse cx="12" cy="5" rx="9" ry="3" /><path d="M3 5V19A9 3 0 0 0 21 19V5" /><path d="M3 12A9 3 0 0 0 21 12" /></svg>
+              <span style="flex:1;font-size:12px;font-weight:500">Fuente</span>
+              <span onClick="{{ tg_doc_fuente }}" style="{{ sw_doc_fuente }}"><span style="{{ kn_doc_fuente }}"></span></span>
+            </div>
+            <div onClick="{{ sel_doc_precision }}" style="{{ row_doc_precision }}">
+              <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10" /><circle cx="12" cy="12" r="6" /><circle cx="12" cy="12" r="2" /></svg>
+              <span style="flex:1;font-size:12px;font-weight:500">Precisión</span>
+              <span onClick="{{ tg_doc_precision }}" style="{{ sw_doc_precision }}"><span style="{{ kn_doc_precision }}"></span></span>
+            </div>
+            <div onClick="{{ sel_doc_notas }}" style="{{ row_doc_notas }}">
+              <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 9a2.4 2.4 0 0 0-.706-1.706l-3.588-3.588A2.4 2.4 0 0 0 15 3H5a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2z" /><path d="M15 3v5a1 1 0 0 0 1 1h5" /></svg>
+              <span style="flex:1;font-size:12px;font-weight:500">Notas</span>
+              <span onClick="{{ tg_doc_notas }}" style="{{ sw_doc_notas }}"><span style="{{ kn_doc_notas }}"></span></span>
+            </div>
+            <div onClick="{{ sel_hdr_logo }}" style="{{ row_hdr_logo }}">
+              <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect width="18" height="18" x="3" y="3" rx="2" ry="2" /><circle cx="9" cy="9" r="2" /><path d="m21 15-3.086-3.086a2 2 0 0 0-2.828 0L6 21" /></svg>
+              <span style="flex:1;font-size:12px;font-weight:500">Logo institucional</span>
+              <span onClick="{{ tg_hdr_logo }}" style="{{ sw_hdr_logo }}"><span style="{{ kn_hdr_logo }}"></span></span>
+            </div>
+          </div>
+        </div>
+
+        <div style="flex:1;min-width:0;display:flex;flex-direction:column;background:#e7ebef">
+          <div ref="{{ refCanvas }}" onClick="{{ clearSel }}" style="flex:1;min-height:0;overflow:auto;display:flex;align-items:flex-start;justify-content:center;padding:28px">
+            <div style="{{ paperWrapStyle }}">
+              <div ref="{{ refPaper }}" style="{{ paperStyle }}">
+
+                <sc-if value="{{ st.margins }}" hint-placeholder-val="{{ true }}">
+                  <div style="{{ marginBoxStyle }}"></div>
+                </sc-if>
+
+                <div onPointerDown="{{ mapDown }}" style="{{ g_map }}">
+                  <div style="position:absolute;inset:0;overflow:hidden;background:#dfe6ea">
+                    <div style="{{ mapImgStyle }}"></div>
+                  </div>
+                  <sc-if value="{{ v_map_coords }}" hint-placeholder-val="{{ true }}">
+                    <div style="position:absolute;inset:0;pointer-events:none">
+                      <sc-for list="{{ coordTicks }}" as="t" hint-placeholder-count="6">
+                        <div style="{{ t.s }}">{{ t.v }}</div>
+                      </sc-for>
+                    </div>
+                  </sc-if>
+                  <sc-if value="{{ mapSelected }}" hint-placeholder-val="{{ false }}">
+                    <div style="position:absolute;top:6px;left:6px;display:flex;align-items:center;gap:5px;padding:3px 7px;border-radius:6px;background:rgba(15,23,42,.82);color:#fff;pointer-events:none">
+                      <svg viewBox="0 0 24 24" width="11" height="11" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect width="18" height="11" x="3" y="11" rx="2" ry="2" /><path d="M7 11V7a5 5 0 0 1 10 0v4" /></svg>
+                      <span style="font-size:9.5px;font-weight:600;letter-spacing:.02em">Mapa principal · Bloqueado</span>
+                    </div>
+                  </sc-if>
+                </div>
+
+                <sc-if value="{{ v_header }}" hint-placeholder-val="{{ true }}">
+                  <div onPointerDown="{{ down_header }}" style="{{ g_header }}">
+                    <div style="display:flex;align-items:center;height:100%;gap:0.8em;padding:0 0.6em">
+                      <sc-if value="{{ v_hdr_logo }}" hint-placeholder-val="{{ true }}">
+                        <img src="assets/logo-cgreg.png" alt="Logo institucional" style="{{ logoStyle }}" />
+                      </sc-if>
+                      <div style="min-width:0;max-width:24%">
+                        <p style="margin:0;font-size:0.92em;font-weight:700;line-height:1.15;color:#0f172a">{{ tx_institucion }}</p>
+                        <p style="margin:0.15em 0 0;font-size:0.78em;color:#334155;line-height:1.2">{{ tx_unidad }}</p>
+                      </div>
+                      <div style="width:1px;height:70%;background:#cbd5e1"></div>
+                      <div style="flex:1;min-width:0;text-align:center">
+                        <sc-if value="{{ v_hdr_titulo }}" hint-placeholder-val="{{ true }}">
+                          <p style="{{ tituloStyle }}">{{ tx_titulo }}</p>
+                        </sc-if>
+                        <sc-if value="{{ v_hdr_subtitulo }}" hint-placeholder-val="{{ true }}">
+                          <p style="margin:0.25em 0 0;font-size:1.05em;color:#334155;line-height:1.2">{{ tx_subtitulo }}</p>
+                        </sc-if>
+                      </div>
+                      <p style="margin:0;font-size:0.75em;color:#475569;text-align:right;max-width:18%;line-height:1.3">{{ tx_sistema }}</p>
+                      <sc-if value="{{ v_hdr_norte }}" hint-placeholder-val="{{ true }}">
+                        <div style="display:flex;flex-direction:column;align-items:center;justify-content:center;width:2.4em;flex-shrink:0">
+                          <span style="font-size:1.05em;font-weight:700;line-height:1;color:#0f172a">N</span>
+                          <svg viewBox="0 0 20 34" width="15" height="26" style="margin-top:0.15em"><polygon points="10,0 18,32 10,24 2,32" fill="#0f172a" /></svg>
+                        </div>
+                      </sc-if>
+                    </div>
+                  </div>
+                </sc-if>
+
+                <sc-if value="{{ v_legend }}" hint-placeholder-val="{{ true }}">
+                  <div onPointerDown="{{ down_legend }}" style="{{ g_legend }}">
+                    <p style="{{ panelTitleStyle }}">{{ tx_legendTitle }}</p>
+                    <div style="{{ legendGridStyle }}">
+                      <sc-for list="{{ legendItems }}" as="it" hint-placeholder-count="6">
+                        <div style="display:flex;align-items:center;gap:0.45em;min-width:0">
+                          <span style="{{ it.s }}"></span>
+                          <span style="font-size:0.72em;color:#1e293b;line-height:1.25;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">{{ it.n }}</span>
+                        </div>
+                      </sc-for>
+                    </div>
+                  </div>
+                </sc-if>
+
+                <sc-if value="{{ v_locator }}" hint-placeholder-val="{{ true }}">
+                  <div onPointerDown="{{ down_locator }}" style="{{ g_locator }}">
+                    <p style="{{ panelTitleStyle }}">MAPA DE UBICACIÓN</p>
+                    <div style="display:flex;gap:0.35em;flex:1;min-height:0">
+                      <sc-for list="{{ locatorMaps }}" as="m" hint-placeholder-count="3">
+                        <div style="{{ m.box }}">
+                          <p style="margin:0;padding:0.15em 0;text-align:center;font-size:0.6em;font-weight:700;color:#0f172a;background:#eef2f6">{{ m.label }}</p>
+                          <div style="{{ m.s }}"></div>
+                        </div>
+                      </sc-for>
+                    </div>
+                  </div>
+                </sc-if>
+
+                <sc-if value="{{ v_indicators }}" hint-placeholder-val="{{ true }}">
+                  <div onPointerDown="{{ down_indicators }}" style="{{ g_indicators }}">
+                    <p style="{{ panelTitleStyle }}">INDICADORES TERRITORIALES</p>
+                    <div style="display:flex;gap:0.35em;flex:1;min-height:0">
+                      <sc-for list="{{ indicatorCards }}" as="c" hint-placeholder-count="4">
+                        <div style="flex:1;min-width:0;border:1px solid #cbd5e1;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:0.15em;padding:0.2em">
+                          <span style="font-size:0.58em;color:#475569;text-transform:uppercase;letter-spacing:.04em">{{ c.k }}</span>
+                          <span style="font-size:0.95em;font-weight:700;color:#0f172a;line-height:1.1">{{ c.v }}</span>
+                        </div>
+                      </sc-for>
+                    </div>
+                  </div>
+                </sc-if>
+
+                <sc-if value="{{ v_elevation }}" hint-placeholder-val="{{ true }}">
+                  <div onPointerDown="{{ down_elevation }}" style="{{ g_elevation }}">
+                    <p style="{{ panelTitleStyle }}">PERFIL DE ELEVACIÓN</p>
+                    <sc-if value="{{ elevHasData }}" hint-placeholder-val="{{ true }}">
+                      <div style="flex:1;min-height:0;display:flex;gap:0.3em;padding:0.2em 0.3em 0">
+                        <div style="display:flex;flex-direction:column;justify-content:space-between;align-items:flex-end">
+                          <span style="font-size:0.55em;color:#475569">240</span>
+                          <span style="font-size:0.55em;color:#475569">200</span>
+                          <span style="font-size:0.55em;color:#475569">160</span>
+                        </div>
+                        <div style="flex:1;min-width:0;border-left:1px solid #94a3b8;border-bottom:1px solid #94a3b8;position:relative">
+                          <svg viewBox="0 0 300 100" preserveAspectRatio="none" style="position:absolute;inset:0;width:100%;height:100%">
+                            <polyline points="{{ elevPoints }}" fill="none" stroke="#3f7d20" stroke-width="1.6" vector-effect="non-scaling-stroke" />
+                          </svg>
+                        </div>
+                      </div>
+                      <p style="margin:0;text-align:center;font-size:0.55em;color:#475569">Distancia (m) · 0 – 1.500</p>
+                    </sc-if>
+                    <sc-if value="{{ elevEmpty }}" hint-placeholder-val="{{ false }}">
+                      <div style="flex:1;min-height:0;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:0.3em;background:#f8fafc;border:1px dashed #cbd5e1;margin:0.25em">
+                        <p style="margin:0;font-size:0.66em;font-weight:600;color:#475569">No hay información de elevación disponible</p>
+                        <button onClick="{{ hideElevation }}" style="border:1px solid #cbd5e1;background:#fff;border-radius:4px;padding:0.15em 0.5em;font-size:0.6em;color:#334155;cursor:pointer">Ocultar componente</button>
+                      </div>
+                    </sc-if>
+                  </div>
+                </sc-if>
+
+                <sc-if value="{{ v_landcover }}" hint-placeholder-val="{{ true }}">
+                  <div onPointerDown="{{ down_landcover }}" style="{{ g_landcover }}">
+                    <p style="{{ panelTitleStyle }}">COBERTURA DEL SUELO</p>
+                    <div style="flex:1;min-height:0;display:flex;flex-direction:column;justify-content:center;gap:0.3em;padding:0 0.4em">
+                      <sc-for list="{{ coverItems }}" as="c" hint-placeholder-count="3">
+                        <div style="display:flex;align-items:center;gap:0.4em">
+                          <span style="width:4.2em;text-align:right;font-size:0.62em;color:#1e293b">{{ c.n }}</span>
+                          <span style="flex:1;height:0.55em;background:#eef2f6;position:relative">
+                            <span style="{{ c.s }}"></span>
+                          </span>
+                        </div>
+                      </sc-for>
+                      <div style="display:flex;justify-content:space-between;padding-left:4.6em">
+                        <span style="font-size:0.52em;color:#64748b">0%</span>
+                        <span style="font-size:0.52em;color:#64748b">50%</span>
+                        <span style="font-size:0.52em;color:#64748b">100%</span>
+                      </div>
+                    </div>
+                  </div>
+                </sc-if>
+
+                <sc-if value="{{ v_scalebar }}" hint-placeholder-val="{{ true }}">
+                  <div onPointerDown="{{ down_scalebar }}" style="{{ g_scalebar }}">
+                    <p style="{{ panelTitleStyle }}">ESCALA GRÁFICA</p>
+                    <div style="flex:1;min-height:0;display:flex;flex-direction:column;justify-content:center;gap:0.15em;padding:0 0.6em">
+                      <div style="display:flex;justify-content:space-between">
+                        <span style="font-size:0.55em;color:#334155">0</span>
+                        <span style="font-size:0.55em;color:#334155">50</span>
+                        <span style="font-size:0.55em;color:#334155">100</span>
+                        <span style="font-size:0.55em;color:#334155">150</span>
+                        <span style="font-size:0.55em;color:#334155">200</span>
+                        <span style="font-size:0.55em;color:#334155">250 m</span>
+                      </div>
+                      <div style="{{ scaleBarStyle }}">
+                        <sc-for list="{{ scaleSegments }}" as="s" hint-placeholder-count="5">
+                          <span style="{{ s.s }}"></span>
+                        </sc-for>
+                      </div>
+                    </div>
+                  </div>
+                </sc-if>
+
+                <sc-if value="{{ v_scalenum }}" hint-placeholder-val="{{ true }}">
+                  <div onPointerDown="{{ down_scalenum }}" style="{{ g_scalenum }}">
+                    <p style="{{ panelTitleStyle }}">ESCALA NUMÉRICA</p>
+                    <div style="flex:1;min-height:0;display:flex;align-items:center;justify-content:center">
+                      <span style="font-size:1.35em;color:#0f172a;letter-spacing:.01em">{{ tx_escala }}</span>
+                    </div>
+                  </div>
+                </sc-if>
+
+                <sc-if value="{{ v_refsys }}" hint-placeholder-val="{{ true }}">
+                  <div onPointerDown="{{ down_refsys }}" style="{{ g_refsys }}">
+                    <p style="{{ panelTitleStyle }}">SISTEMA DE REFERENCIA</p>
+                    <div style="flex:1;min-height:0;display:flex;flex-direction:column;justify-content:center;gap:0.12em;padding:0 0.7em">
+                      <p style="margin:0;font-size:0.68em;color:#1e293b">Sistema de coordenadas: {{ tx_srs }}</p>
+                      <p style="margin:0;font-size:0.68em;color:#1e293b">Datum: {{ tx_datum }}</p>
+                      <p style="margin:0;font-size:0.68em;color:#1e293b">Unidades: {{ tx_unidades }}</p>
+                    </div>
+                  </div>
+                </sc-if>
+
+                <sc-if value="{{ v_techinfo }}" hint-placeholder-val="{{ true }}">
+                  <div onPointerDown="{{ down_techinfo }}" style="{{ g_techinfo }}">
+                    <p style="{{ panelTitleStyle }}">INFORMACIÓN TÉCNICA</p>
+                    <div style="flex:1;min-height:0;display:flex;flex-direction:column;justify-content:center;gap:0.14em;padding:0 0.7em">
+                      <div style="display:flex;gap:0.5em"><span style="width:4.2em;font-size:0.66em;color:#475569">Escala:</span><span style="font-size:0.66em;color:#0f172a">{{ tx_escala }}</span></div>
+                      <div style="display:flex;gap:0.5em"><span style="width:4.2em;font-size:0.66em;color:#475569">Área:</span><span style="font-size:0.66em;color:#0f172a">{{ tx_area }}</span></div>
+                      <div style="display:flex;gap:0.5em"><span style="width:4.2em;font-size:0.66em;color:#475569">Hoja:</span><span style="font-size:0.66em;color:#0f172a">{{ tx_hoja }}</span></div>
+                      <div style="display:flex;gap:0.5em"><span style="width:4.2em;font-size:0.66em;color:#475569">Código:</span><span style="font-size:0.66em;color:#0f172a">{{ tx_codigo }}</span></div>
+                    </div>
+                  </div>
+                </sc-if>
+
+                <sc-if value="{{ v_docs }}" hint-placeholder-val="{{ true }}">
+                  <div onPointerDown="{{ down_docs }}" style="{{ g_docs }}">
+                    <div style="{{ docsGridStyle }}">
+                      <sc-for list="{{ docFields }}" as="f" hint-placeholder-count="6">
+                        <div style="min-width:0;padding:0 0.5em;border-left:1px solid #e2e8f0">
+                          <p style="margin:0;font-size:0.6em;font-weight:700;color:#0f766e;text-transform:uppercase;letter-spacing:.04em">{{ f.label }}</p>
+                          <p style="margin:0.15em 0 0;font-size:0.62em;color:#1e293b;line-height:1.3">{{ f.value }}</p>
+                        </div>
+                      </sc-for>
+                    </div>
+                  </div>
+                </sc-if>
+
+                <sc-for list="{{ guides }}" as="gd" hint-placeholder-count="0">
+                  <div style="{{ gd.s }}"></div>
+                </sc-for>
+
+                <sc-if value="{{ hasSel }}" hint-placeholder-val="{{ false }}">
+                  <div style="{{ selRingStyle }}"></div>
+                </sc-if>
+
+                <sc-for list="{{ handles }}" as="h" hint-placeholder-count="0">
+                  <div onPointerDown="{{ h.down }}" style="{{ h.s }}"></div>
+                </sc-for>
+
+              </div>
+            </div>
+          </div>
+
+          <div style="height:34px;flex-shrink:0;border-top:1px solid #dbe2e8;background:#f1f5f9;display:flex;align-items:center;gap:10px;padding:0 14px;overflow:hidden">
+            <sc-if value="{{ hasWarnings }}" hint-placeholder-val="{{ false }}">
+              <div style="display:flex;align-items:center;gap:7px;min-width:0;flex:1">
+                <svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="#b45309" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m21.73 18-8-14a2 2 0 0 0-3.48 0l-8 14A2 2 0 0 0 4 21h16a2 2 0 0 0 1.73-3" /><path d="M12 9v4" /><path d="M12 17h.01" /></svg>
+                <span style="font-size:11.5px;color:#92400e;font-weight:500;white-space:nowrap">{{ warnCount }}</span>
+                <span style="font-size:11.5px;color:#a16207;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">{{ warnFirst }}</span>
+              </div>
+            </sc-if>
+            <sc-if value="{{ noWarnings }}" hint-placeholder-val="{{ true }}">
+              <div style="display:flex;align-items:center;gap:7px;flex-shrink:0;white-space:nowrap">
+                <svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="#0d9488" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10" /><path d="m9 12 2 2 4-4" /></svg>
+                <span style="font-size:11.5px;color:#0f766e;font-weight:500;white-space:nowrap">Carta lista para exportar</span>
+              </div>
+            </sc-if>
+            <div style="flex:1"></div>
+            <span style="font-size:11px;color:#94a3b8;white-space:nowrap;min-width:0;overflow:hidden;text-overflow:ellipsis">{{ sheetLabel }} · lo que ves es lo que se exporta</span>
+          </div>
+        </div>
+
+        <div style="width:292px;flex-shrink:0;border-left:1px solid #e2e8f0;background:#fff;overflow-y:auto">
+          <div style="padding:14px 14px 8px;border-bottom:1px solid #f1f5f9;display:flex;align-items:center;gap:8px">
+            <p style="margin:0;font-size:12.5px;font-weight:600;color:#0f172a">Propiedades</p>
+            <span style="{{ selBadgeStyle }}">{{ selName }}</span>
+          </div>
+
+          <sc-if value="{{ noSel }}" hint-placeholder-val="{{ true }}">
+            <div style="padding:26px 18px;text-align:center">
+              <p style="margin:0;font-size:12px;color:#94a3b8;line-height:1.5">Selecciona un elemento en la hoja o en el panel izquierdo para editar sus propiedades.</p>
+            </div>
+          </sc-if>
+
+          <sc-if value="{{ p_header }}" hint-placeholder-val="{{ false }}">
+            <div style="padding:12px 14px;display:flex;flex-direction:column;gap:11px">
+              <label style="display:block">
+                <span style="{{ lblStyle }}">Título principal</span>
+                <input value="{{ tx_titulo }}" onChange="{{ ch_titulo }}" style="{{ inputStyle }}" />
+              </label>
+              <label style="display:block">
+                <span style="{{ lblStyle }}">Subtítulo</span>
+                <input value="{{ tx_subtitulo }}" onChange="{{ ch_subtitulo }}" style="{{ inputStyle }}" />
+              </label>
+              <label style="display:block">
+                <span style="{{ lblStyle }}">Institución</span>
+                <input value="{{ tx_institucion }}" onChange="{{ ch_institucion }}" style="{{ inputStyle }}" />
+              </label>
+              <label style="display:block">
+                <span style="{{ lblStyle }}">Dirección / unidad</span>
+                <input value="{{ tx_unidad }}" onChange="{{ ch_unidad }}" style="{{ inputStyle }}" />
+              </label>
+              <label style="display:block">
+                <span style="{{ lblStyle }}">Sistema</span>
+                <input value="{{ tx_sistema }}" onChange="{{ ch_sistema }}" style="{{ inputStyle }}" />
+              </label>
+              <div>
+                <span style="{{ lblStyle }}">Tamaño del título · {{ titleSizeLabel }}</span>
+                <input type="range" min="14" max="30" step="1" value="{{ titleSize }}" onChange="{{ ch_titleSize }}" style="width:100%;accent-color:#0d9488" />
+              </div>
+              <div>
+                <span style="{{ lblStyle }}">Alineación</span>
+                <div style="display:flex;gap:4px">
+                  <button onClick="{{ alignLeft }}" style="{{ btnAlignL }}">Izquierda</button>
+                  <button onClick="{{ alignCenter }}" style="{{ btnAlignC }}">Centro</button>
+                </div>
+              </div>
+              <div style="display:flex;align-items:center;justify-content:space-between">
+                <span style="font-size:12px;color:#334155">Título en negrita</span>
+                <span onClick="{{ tg_bold }}" style="{{ sw_bold }}"><span style="{{ kn_bold }}"></span></span>
+              </div>
+              <div style="display:flex;align-items:center;justify-content:space-between">
+                <span style="font-size:12px;color:#334155">Logo institucional</span>
+                <span onClick="{{ tg_hdr_logo }}" style="{{ sw_hdr_logo }}"><span style="{{ kn_hdr_logo }}"></span></span>
+              </div>
+              <div>
+                <span style="{{ lblStyle }}">Tamaño del logo · {{ logoSizeLabel }}</span>
+                <input type="range" min="8" max="22" step="1" value="{{ logoSize }}" onChange="{{ ch_logoSize }}" style="width:100%;accent-color:#0d9488" />
+              </div>
+            </div>
+          </sc-if>
+
+          <sc-if value="{{ p_map }}" hint-placeholder-val="{{ false }}">
+            <div style="padding:12px 14px;display:flex;flex-direction:column;gap:11px">
+              <div style="display:flex;gap:8px;padding:9px 10px;border-radius:9px;background:#f0fdfa;border:1px solid #ccfbf1">
+                <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="#0d9488" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="flex-shrink:0;margin-top:1px"><rect width="18" height="11" x="3" y="11" rx="2" ry="2" /><path d="M7 11V7a5 5 0 0 1 10 0v4" /></svg>
+                <p style="margin:0;font-size:11.5px;color:#0f766e;line-height:1.45">El mapa es el elemento estructural de la carta: no puede ocultarse ni moverse. Su tamaño lo calcula el sistema.</p>
+              </div>
+              <div>
+                <span style="{{ lblStyle }}">Extensión a exportar</span>
+                <div style="display:flex;flex-direction:column;gap:4px">
+                  <button onClick="{{ extActual }}" style="{{ btnExtActual }}">Extensión actual del visor</button>
+                  <button onClick="{{ extCapas }}" style="{{ btnExtCapas }}">Ajustar a capas visibles</button>
+                  <button onClick="{{ extSeleccion }}" style="{{ btnExtSeleccion }}">Ajustar a selección</button>
+                  <button onClick="{{ extGeometria }}" style="{{ btnExtGeometria }}">Ajustar a geometría de estudio</button>
+                </div>
+              </div>
+              <div style="display:flex;align-items:center;justify-content:space-between">
+                <span style="font-size:12px;color:#334155">Coordenadas en el marco</span>
+                <span onClick="{{ tg_map_coords }}" style="{{ sw_map_coords }}"><span style="{{ kn_map_coords }}"></span></span>
+              </div>
+              <div>
+                <span style="{{ lblStyle }}">Densidad de la retícula</span>
+                <div style="display:flex;gap:4px">
+                  <button onClick="{{ densBaja }}" style="{{ btnDensBaja }}">Baja</button>
+                  <button onClick="{{ densMedia }}" style="{{ btnDensMedia }}">Media</button>
+                  <button onClick="{{ densAlta }}" style="{{ btnDensAlta }}">Alta</button>
+                </div>
+              </div>
+            </div>
+          </sc-if>
+
+          <sc-if value="{{ p_legend }}" hint-placeholder-val="{{ false }}">
+            <div style="padding:12px 14px;display:flex;flex-direction:column;gap:11px">
+              <label style="display:block">
+                <span style="{{ lblStyle }}">Título de la leyenda</span>
+                <input value="{{ tx_legendTitle }}" onChange="{{ ch_legendTitle }}" style="{{ inputStyle }}" />
+              </label>
+              <div>
+                <span style="{{ lblStyle }}">Columnas</span>
+                <div style="display:flex;gap:4px">
+                  <button onClick="{{ cols1 }}" style="{{ btnCols1 }}">1 columna</button>
+                  <button onClick="{{ cols2 }}" style="{{ btnCols2 }}">2 columnas</button>
+                </div>
+              </div>
+              <div>
+                <span style="{{ lblStyle }}">Capas incluidas · {{ legendCountLabel }}</span>
+                <div style="display:flex;flex-direction:column;gap:2px;border:1px solid #e2e8f0;border-radius:8px;padding:4px">
+                  <sc-for list="{{ legendAll }}" as="l" hint-placeholder-count="8">
+                    <div onClick="{{ l.toggle }}" style="{{ l.rowStyle }}">
+                      <span style="{{ l.s }}"></span>
+                      <span style="flex:1;font-size:11.5px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">{{ l.n }}</span>
+                      <span style="{{ l.eyeStyle }}">
+                        <svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M2.062 12.348a1 1 0 0 1 0-.696 10.75 10.75 0 0 1 19.876 0 1 1 0 0 1 0 .696 10.75 10.75 0 0 1-19.876 0" /><circle cx="12" cy="12" r="3" /></svg>
+                      </span>
+                    </div>
+                  </sc-for>
+                </div>
+                <p style="margin:6px 0 0;font-size:10.5px;color:#94a3b8;line-height:1.4">Excluir una capa de la leyenda no la quita del mapa.</p>
+              </div>
+            </div>
+          </sc-if>
+
+          <sc-if value="{{ p_locator }}" hint-placeholder-val="{{ false }}">
+            <div style="padding:12px 14px;display:flex;flex-direction:column;gap:11px">
+              <div>
+                <span style="{{ lblStyle }}">Niveles territoriales</span>
+                <div style="display:flex;flex-wrap:wrap;gap:5px">
+                  <button onClick="{{ locEcuador }}" style="{{ chipEcuador }}">Ecuador</button>
+                  <button onClick="{{ locGalapagos }}" style="{{ chipGalapagos }}">Galápagos</button>
+                  <button onClick="{{ locSantaCruz }}" style="{{ chipSantaCruz }}">Isla Santa Cruz</button>
+                </div>
+              </div>
+              <div style="display:flex;align-items:center;justify-content:space-between">
+                <span style="font-size:12px;color:#334155">Etiquetas de nivel</span>
+                <span onClick="{{ tg_locLabels }}" style="{{ sw_locLabels }}"><span style="{{ kn_locLabels }}"></span></span>
+              </div>
+              <div style="display:flex;align-items:center;justify-content:space-between">
+                <span style="font-size:12px;color:#334155">Borde del recuadro</span>
+                <span onClick="{{ tg_locBorder }}" style="{{ sw_locBorder }}"><span style="{{ kn_locBorder }}"></span></span>
+              </div>
+            </div>
+          </sc-if>
+
+          <sc-if value="{{ p_indicators }}" hint-placeholder-val="{{ false }}">
+            <div style="padding:12px 14px;display:flex;flex-direction:column;gap:9px">
+              <p style="margin:0;font-size:11.5px;color:#94a3b8;line-height:1.45">Los valores se toman del mapa cuando están disponibles.</p>
+              <div style="display:flex;align-items:center;justify-content:space-between">
+                <span style="font-size:12px;color:#334155">Escala · {{ tx_escala }}</span>
+                <span onClick="{{ tg_ind_escala }}" style="{{ sw_ind_escala }}"><span style="{{ kn_ind_escala }}"></span></span>
+              </div>
+              <div style="display:flex;align-items:center;justify-content:space-between">
+                <span style="font-size:12px;color:#334155">Área · {{ tx_area }}</span>
+                <span onClick="{{ tg_ind_area }}" style="{{ sw_ind_area }}"><span style="{{ kn_ind_area }}"></span></span>
+              </div>
+              <div style="display:flex;align-items:center;justify-content:space-between">
+                <span style="font-size:12px;color:#334155">Precisión · {{ tx_precision }}</span>
+                <span onClick="{{ tg_ind_precision }}" style="{{ sw_ind_precision }}"><span style="{{ kn_ind_precision }}"></span></span>
+              </div>
+              <div style="display:flex;align-items:center;justify-content:space-between">
+                <span style="font-size:12px;color:#334155">Hoja · {{ tx_hoja }}</span>
+                <span onClick="{{ tg_ind_hoja }}" style="{{ sw_ind_hoja }}"><span style="{{ kn_ind_hoja }}"></span></span>
+              </div>
+            </div>
+          </sc-if>
+
+          <sc-if value="{{ p_elevation }}" hint-placeholder-val="{{ false }}">
+            <div style="padding:12px 14px;display:flex;flex-direction:column;gap:11px">
+              <div style="display:flex;align-items:center;justify-content:space-between">
+                <span style="font-size:12px;color:#334155">Simular sin datos</span>
+                <span onClick="{{ tg_elevEmpty }}" style="{{ sw_elevEmpty }}"><span style="{{ kn_elevEmpty }}"></span></span>
+              </div>
+              <p style="margin:0;font-size:11.5px;color:#94a3b8;line-height:1.45">Perfil calculado sobre el eje mayor del área de estudio: 1.500 m, 40 muestras.</p>
+              <button onClick="{{ growElevation }}" style="{{ btnGhostStyle }}">Aumentar altura del módulo</button>
+              <button onClick="{{ shrinkElevation }}" style="{{ btnGhostStyle }}">Reducir altura del módulo</button>
+            </div>
+          </sc-if>
+
+          <sc-if value="{{ p_landcover }}" hint-placeholder-val="{{ false }}">
+            <div style="padding:12px 14px;display:flex;flex-direction:column;gap:9px">
+              <p style="margin:0;font-size:11.5px;color:#94a3b8;line-height:1.45">Clases obtenidas de la capa de cobertura vegetal y construcciones.</p>
+              <sc-for list="{{ coverItems }}" as="c" hint-placeholder-count="3">
+                <div style="display:flex;align-items:center;justify-content:space-between">
+                  <span style="font-size:12px;color:#334155">{{ c.n }} · {{ c.pctLabel }}</span>
+                  <span style="{{ c.dot }}"></span>
+                </div>
+              </sc-for>
+            </div>
+          </sc-if>
+
+          <sc-if value="{{ p_scalebar }}" hint-placeholder-val="{{ false }}">
+            <div style="padding:12px 14px;display:flex;flex-direction:column;gap:11px">
+              <div>
+                <span style="{{ lblStyle }}">Estilo</span>
+                <div style="display:flex;flex-direction:column;gap:4px">
+                  <button onClick="{{ sbBarras }}" style="{{ btnSbBarras }}">Barras alternadas</button>
+                  <button onClick="{{ sbLinea }}" style="{{ btnSbLinea }}">Línea con marcas</button>
+                  <button onClick="{{ sbBloque }}" style="{{ btnSbBloque }}">Bloque sólido</button>
+                </div>
+              </div>
+              <p style="margin:0;font-size:11.5px;color:#94a3b8;line-height:1.45">Generada a partir de la escala actual del mapa ({{ tx_escala }}).</p>
+            </div>
+          </sc-if>
+
+          <sc-if value="{{ p_scalenum }}" hint-placeholder-val="{{ false }}">
+            <div style="padding:12px 14px;display:flex;flex-direction:column;gap:11px">
+              <label style="display:block">
+                <span style="{{ lblStyle }}">Escala</span>
+                <input value="{{ tx_escala }}" onChange="{{ ch_escala }}" style="{{ inputStyle }}" />
+              </label>
+              <p style="margin:0;font-size:11.5px;color:#94a3b8;line-height:1.45">Calculada automáticamente desde el nivel de zoom del visor.</p>
+            </div>
+          </sc-if>
+
+          <sc-if value="{{ p_refsys }}" hint-placeholder-val="{{ false }}">
+            <div style="padding:12px 14px;display:flex;flex-direction:column;gap:11px">
+              <label style="display:block">
+                <span style="{{ lblStyle }}">Sistema de coordenadas</span>
+                <input value="{{ tx_srs }}" onChange="{{ ch_srs }}" style="{{ inputStyle }}" />
+              </label>
+              <label style="display:block">
+                <span style="{{ lblStyle }}">Datum</span>
+                <input value="{{ tx_datum }}" onChange="{{ ch_datum }}" style="{{ inputStyle }}" />
+              </label>
+              <label style="display:block">
+                <span style="{{ lblStyle }}">Unidades</span>
+                <input value="{{ tx_unidades }}" onChange="{{ ch_unidades }}" style="{{ inputStyle }}" />
+              </label>
+              <p style="margin:0;font-size:11.5px;color:#94a3b8;line-height:1.45">Obtenido del GIS: proyección de la vista actual.</p>
+            </div>
+          </sc-if>
+
+          <sc-if value="{{ p_techinfo }}" hint-placeholder-val="{{ false }}">
+            <div style="padding:12px 14px;display:flex;flex-direction:column;gap:11px">
+              <label style="display:block">
+                <span style="{{ lblStyle }}">Área</span>
+                <input value="{{ tx_area }}" onChange="{{ ch_area }}" style="{{ inputStyle }}" />
+              </label>
+              <label style="display:block">
+                <span style="{{ lblStyle }}">Hoja</span>
+                <input value="{{ tx_hoja }}" onChange="{{ ch_hoja }}" style="{{ inputStyle }}" />
+              </label>
+              <label style="display:block">
+                <span style="{{ lblStyle }}">Código</span>
+                <input value="{{ tx_codigo }}" onChange="{{ ch_codigo }}" style="{{ inputStyle }}" />
+              </label>
+            </div>
+          </sc-if>
+
+          <sc-if value="{{ p_docs }}" hint-placeholder-val="{{ false }}">
+            <div style="padding:12px 14px;display:flex;flex-direction:column;gap:11px">
+              <label style="display:block">
+                <span style="{{ lblStyle }}">Elaborado por</span>
+                <input value="{{ tx_elaborado }}" onChange="{{ ch_elaborado }}" style="{{ inputStyle }}" />
+              </label>
+              <label style="display:block">
+                <span style="{{ lblStyle }}">Revisado por</span>
+                <input value="{{ tx_revisado }}" onChange="{{ ch_revisado }}" style="{{ inputStyle }}" />
+              </label>
+              <label style="display:block">
+                <span style="{{ lblStyle }}">Fecha</span>
+                <input value="{{ tx_fecha }}" onChange="{{ ch_fecha }}" style="{{ inputStyle }}" />
+              </label>
+              <label style="display:block">
+                <span style="{{ lblStyle }}">Fuente</span>
+                <input value="{{ tx_fuente }}" onChange="{{ ch_fuente }}" style="{{ inputStyle }}" />
+              </label>
+              <label style="display:block">
+                <span style="{{ lblStyle }}">Precisión</span>
+                <input value="{{ tx_precision }}" onChange="{{ ch_precision }}" style="{{ inputStyle }}" />
+              </label>
+              <label style="display:block">
+                <span style="{{ lblStyle }}">Notas</span>
+                <textarea onChange="{{ ch_notas }}" value="{{ tx_notas }}" style="{{ areaStyle }}"></textarea>
+              </label>
+            </div>
+          </sc-if>
+
+          <sc-if value="{{ showLayoutNote }}" hint-placeholder-val="{{ true }}">
+            <div style="margin:4px 14px 16px;padding:9px 10px;border-radius:9px;background:#f8fafc;border:1px solid #e2e8f0;display:flex;gap:8px">
+              <svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="#64748b" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="flex-shrink:0;margin-top:1px"><path d="M12 2v20" /><path d="m15 19-3 3-3-3" /><path d="m19 9 3 3-3 3" /><path d="M2 12h20" /><path d="m5 9-3 3 3 3" /><path d="m9 5 3-3 3 3" /></svg>
+              <p style="margin:0;font-size:11px;color:#64748b;line-height:1.45">{{ layoutNote }}</p>
+            </div>
+          </sc-if>
+        </div>
+
+      </div>
+    </div>
+  </div>
+  </sc-if>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props="{&quot;plantillaInicial&quot;:{&quot;editor&quot;:&quot;enum&quot;,&quot;options&quot;:[&quot;tecnica&quot;,&quot;basica&quot;,&quot;analisis&quot;],&quot;default&quot;:&quot;tecnica&quot;,&quot;tsType&quot;:&quot;string&quot;,&quot;section&quot;:&quot;Inicio&quot;},&quot;formatoInicial&quot;:{&quot;editor&quot;:&quot;enum&quot;,&quot;options&quot;:[&quot;A4&quot;,&quot;A3&quot;],&quot;default&quot;:&quot;A4&quot;,&quot;tsType&quot;:&quot;string&quot;,&quot;section&quot;:&quot;Inicio&quot;},&quot;abrirConstructor&quot;:{&quot;editor&quot;:&quot;boolean&quot;,&quot;default&quot;:true,&quot;tsType&quot;:&quot;boolean&quot;,&quot;section&quot;:&quot;Inicio&quot;},&quot;mostrarMargenes&quot;:{&quot;editor&quot;:&quot;boolean&quot;,&quot;default&quot;:true,&quot;tsType&quot;:&quot;boolean&quot;,&quot;section&quot;:&quot;Inicio&quot;}}">
+const MM = 3.7795275591;
+const PAPERS = { A4: [210, 297], A3: [297, 420] };
+const BLOCKS = ["header","map","legend","locator","indicators","elevation","landcover","scalebar","scalenum","refsys","techinfo","docs"];
+const COL_ORDER = ["legend","locator","indicators","elevation","landcover"];
+const COL_W = { legend: 1.15, locator: 1.0, indicators: 0.6, elevation: 0.85, landcover: 0.62 };
+const NAMES = {
+  header:"Encabezado", map:"Mapa principal", legend:"Leyenda", locator:"Mapa de ubicación",
+  indicators:"Indicadores", elevation:"Perfil de elevación", landcover:"Cobertura del suelo",
+  scalebar:"Escala gráfica", scalenum:"Escala numérica", refsys:"Sistema de referencia",
+  techinfo:"Información técnica", docs:"Bloque documental"
+};
+const PARENT = {
+  header:"header", hdr_logo:"header", hdr_titulo:"header", hdr_subtitulo:"header", hdr_norte:"header",
+  map_coords:"map", legend:"legend", locator:"locator", indicators:"indicators", elevation:"elevation",
+  landcover:"landcover", scalebar:"scalebar", scalenum:"scalenum", refsys:"refsys", techinfo:"techinfo",
+  docs:"docs", doc_elaborado:"docs", doc_revisado:"docs", doc_fecha:"docs", doc_fuente:"docs",
+  doc_precision:"docs", doc_notas:"docs"
+};
+const ROWS = Object.keys(PARENT);
+const LAYERS = [
+  { id:"punto", n:"Punto de control", k:"dot", c:"#2e7d32" },
+  { id:"via1", n:"Vía principal", k:"line", c:"#e8b53a", w:3 },
+  { id:"via2", n:"Vía secundaria", k:"line", c:"#c9a227", w:1.6 },
+  { id:"limite", n:"Límite del área de estudio", k:"box", c:"#e53935" },
+  { id:"const", n:"Construcciones", k:"fill", c:"#c8c8c8" },
+  { id:"curvas", n:"Curvas de nivel", k:"line", c:"#a1662f", w:1.2 },
+  { id:"hidro", n:"Hidrografía", k:"line", c:"#2196f3", w:1.6 },
+  { id:"veg", n:"Cobertura vegetal", k:"fill", c:"#b7d3a1" }
+];
+const COVER = [ { n:"Vegetación", p:100, c:"#5b8f3a" }, { n:"Construido", p:26, c:"#b4b4b4" }, { n:"Vías", p:17, c:"#f0b429" } ];
+const ELEV = [188,190,194,199,205,209,214,219,223,227,230,232,231,228,225,223,221,220,219,217,214,212,210,208,205,202,199,196,193,190,187,184,181,178,176,174,172,170,168,166];
+const TPL = {
+  tecnica: { on: ROWS.slice(), off: [] },
+  basica: { on: ["header","hdr_logo","hdr_titulo","hdr_subtitulo","hdr_norte","legend","scalebar","scalenum"], off: [] },
+  analisis: { on: ["header","hdr_logo","hdr_titulo","hdr_subtitulo","hdr_norte","legend","indicators","elevation","landcover","scalebar","scalenum","refsys","techinfo","docs","doc_elaborado","doc_fecha","doc_fuente"], off: [] }
+};
+const TPL_LABEL = { tecnica:"Técnica completa", basica:"Básica", analisis:"Análisis territorial" };
+
+function visFrom(list) {
+  const v = {};
+  ROWS.forEach(id => { v[id] = list.indexOf(id) >= 0; });
+  return v;
+}
+function overlap(a, b) {
+  return a.x < b.x + b.w - 0.4 && b.x < a.x + a.w - 0.4 && a.y < b.y + b.h - 0.4 && b.y < a.y + a.h - 0.4;
+}
+
+class Component extends DCLogic {
+  state = {
+    open: this.props.abrirConstructor !== false,
+    format: this.props.formatoInicial === "A3" ? "A3" : "A4",
+    orient: "h",
+    mode: "auto",
+    zoom: 1,
+    sel: null,
+    tpl: this.props.plantillaInicial || "tecnica",
+    tplOpen: false,
+    margins: this.props.mostrarMargenes !== false,
+    vis: visFrom(TPL[this.props.plantillaInicial || "tecnica"].on),
+    ov: {},
+    guides: [],
+    collide: false,
+    hist: [],
+    future: [],
+    cw: 900, ch: 620,
+    ext: "actual",
+    dens: "media",
+    opts: {
+      legendCols: 1, titleSize: 21, titleAlign: "center", titleBold: true, logoSize: 14,
+      scaleStyle: "barras", locLevels: ["ecuador","galapagos","santacruz"], locLabels: true, locBorder: true,
+      elevEmpty: false, legendOff: [], ind: { escala:true, area:true, precision:true, hoja:true }
+    },
+    texts: {
+      institucion: "Consejo de Gobierno del Régimen Especial de Galápagos",
+      unidad: "Dirección Distrital Santa Cruz",
+      titulo: "MAPA TÉCNICO GEOGRÁFICO",
+      subtitulo: "Sector: Barrio Cactus | Cantón Santa Cruz | Provincia de Galápagos",
+      sistema: "DGTAR | Sistema de Información Territorial",
+      legendTitle: "LEYENDA",
+      escala: "1:5.000", area: "12,45 ha", precision: "±1 m", hoja: "1 de 1", codigo: "CGREG-SCZ-2024-001",
+      srs: "WGS 84 / UTM Zona 15S", datum: "WGS 84", unidades: "Metros",
+      elaborado: "Dirección Técnica de Planificación · CGREG",
+      revisado: "Dirección Distrital Santa Cruz · CGREG",
+      fecha: "Mayo 2024",
+      fuente: "Levantamiento GNSS RTK y Ortofoto 2023 – CGREG",
+      notas: "Las coordenadas están referidas al sistema WGS 84 / UTM Zona 15S. Este mapa es de uso técnico y no constituye documento legal."
+    }
+  };
+
+  componentDidMount() {
+    this._onResize = () => this.measure();
+    window.addEventListener("resize", this._onResize);
+    this.measure();
+    this._onKey = (e) => {
+      if (!this.state.open) return;
+      if (e.key === "Escape") this.setState({ sel: null, tplOpen: false });
+    };
+    window.addEventListener("keydown", this._onKey);
+  }
+  componentDidUpdate() {
+    if (this._wasOpen !== this.state.open) {
+      this._wasOpen = this.state.open;
+      this.measure();
+    }
+  }
+  componentWillUnmount() {
+    window.removeEventListener("resize", this._onResize);
+    window.removeEventListener("keydown", this._onKey);
+  }
+  measure() {
+    const el = this.canvasEl;
+    if (el) this.setState({ cw: el.clientWidth, ch: el.clientHeight });
+  }
+
+  snap() {
+    const s = this.state;
+    return { vis: { ...s.vis }, ov: JSON.parse(JSON.stringify(s.ov)), texts: { ...s.texts },
+      opts: JSON.parse(JSON.stringify(s.opts)), format: s.format, orient: s.orient, mode: s.mode };
+  }
+  commit(patch) {
+    this.setState(st => ({ ...patch, hist: st.hist.concat([this.snap()]).slice(-40), future: [] }));
+  }
+
+  paper() {
+    const p = PAPERS[this.state.format];
+    return this.state.orient === "h" ? [p[1], p[0]] : [p[0], p[1]];
+  }
+  scaleF() { return this.state.format === "A3" ? 1.3 : 1; }
+
+  autoLayout() {
+    const [W, H] = this.paper();
+    const s = this.scaleF(), g = 3 * s, M = 8 * s;
+    const vis = this.state.vis;
+    const x0 = M, y0 = M, w = W - 2 * M, h = H - 2 * M;
+    const r = {};
+    const land = this.state.orient === "h";
+    const headerH = (land ? 20 : 24) * s;
+    const infoH = (land ? 18 : 19) * s;
+    const docsH = (land ? 19 : 22) * s;
+
+    let y = y0;
+    if (vis.header) { r.header = { x: x0, y, w, h: headerH }; y += headerH + g; }
+    const infoAny = vis.scalebar || vis.scalenum || vis.refsys || (land && vis.techinfo);
+    let bandBottom = y0 + h - (vis.docs ? docsH + g : 0);
+    const infoY = bandBottom - infoH;
+    if (infoAny) bandBottom = infoY - g;
+    const bandH = Math.max(30, bandBottom - y);
+
+    if (land) {
+      const col = COL_ORDER.filter(id => vis[id]);
+      let colW = col.length ? Math.min(Math.max(w * 0.27, 62 * s), 80 * s) : 0;
+      if (w - colW - g < w * 0.55) colW = w - g - w * 0.55;
+      const mapW = w - (colW ? colW + g : 0);
+      r.map = { x: x0, y, w: mapW, h: bandH };
+      if (col.length) {
+        const tw = col.reduce((a, id) => a + COL_W[id], 0);
+        const avail = bandH - g * (col.length - 1);
+        let cy = y;
+        col.forEach(id => {
+          const ch = avail * (COL_W[id] / tw);
+          r[id] = { x: x0 + mapW + g, y: cy, w: colW, h: ch };
+          cy += ch + g;
+        });
+      }
+      if (infoAny) {
+        const left = ["scalebar","scalenum","refsys"].filter(id => vis[id]);
+        const lw = { scalebar: 1.45, scalenum: 0.8, refsys: 1.3 };
+        const tw = left.reduce((a, id) => a + lw[id], 0) || 1;
+        const availW = (vis.techinfo ? mapW : w) - g * Math.max(0, left.length - 1);
+        let cx = x0;
+        left.forEach(id => {
+          const cwid = availW * (lw[id] / tw);
+          r[id] = { x: cx, y: infoY, w: cwid, h: infoH };
+          cx += cwid + g;
+        });
+        if (vis.techinfo) r.techinfo = { x: x0 + mapW + g, y: infoY, w: Math.max(colW, 50 * s), h: infoH };
+      }
+    } else {
+      const mods = COL_ORDER.filter(id => vis[id]).concat(vis.techinfo ? ["techinfo"] : []);
+      const rowsN = Math.ceil(mods.length / 2);
+      const modH = rowsN ? Math.min(bandH * 0.52, bandH * (0.155 * rowsN)) : 0;
+      const mapH = bandH - (modH ? modH + g : 0);
+      r.map = { x: x0, y, w, h: mapH };
+      if (rowsN) {
+        const rowH = (modH - g * (rowsN - 1)) / rowsN;
+        const cw2 = (w - g) / 2;
+        mods.forEach((id, i) => {
+          const rw = Math.floor(i / 2), cl = i % 2;
+          const solo = i === mods.length - 1 && mods.length % 2 === 1;
+          r[id] = { x: x0 + (solo ? 0 : cl * (cw2 + g)), y: y + mapH + g + rw * (rowH + g), w: solo ? w : cw2, h: rowH };
+        });
+      }
+      if (infoAny) {
+        const left = ["scalebar","scalenum","refsys"].filter(id => vis[id]);
+        const lw = { scalebar: 1.45, scalenum: 0.8, refsys: 1.3 };
+        const tw = left.reduce((a, id) => a + lw[id], 0) || 1;
+        const availW = w - g * Math.max(0, left.length - 1);
+        let cx = x0;
+        left.forEach(id => {
+          const cwid = availW * (lw[id] / tw);
+          r[id] = { x: cx, y: infoY, w: cwid, h: infoH };
+          cx += cwid + g;
+        });
+      }
+    }
+    if (vis.docs) r.docs = { x: x0, y: y0 + h - docsH, w, h: docsH };
+    return r;
+  }
+
+  rects() {
+    const auto = this.autoLayout();
+    if (this.state.mode !== "custom") return auto;
+    const out = {};
+    Object.keys(auto).forEach(id => {
+      const o = this.state.ov[id];
+      out[id] = o && id !== "map" ? { x: o.x, y: o.y, w: o.w, h: o.h } : auto[id];
+    });
+    return out;
+  }
+
+  fit() {
+    const [W, H] = this.paper();
+    const k = Math.min((this.state.cw - 56) / (W * MM), (this.state.ch - 56) / (H * MM));
+    return Math.max(0.12, k);
+  }
+  k() { return this.fit() * this.state.zoom; }
+
+  bounds() {
+    const [W, H] = this.paper();
+    const M = 8 * this.scaleF();
+    return { x: M, y: M, w: W - 2 * M, h: H - 2 * M };
+  }
+
+  startDrag(id, e, kind) {
+    if (this.state.mode !== "custom" || id === "map") { this.setState({ sel: id }); return; }
+    e.preventDefault();
+    e.stopPropagation();
+    const rs = this.rects();
+    const base = { ...rs[id] };
+    const k = this.k();
+    const sx = e.clientX, sy = e.clientY;
+    const ov0 = { ...this.state.ov };
+    Object.keys(rs).forEach(o => { if (!ov0[o]) ov0[o] = { ...rs[o] }; });
+    const b = this.bounds();
+    const others = Object.keys(rs).filter(o => o !== id).map(o => rs[o]);
+    this.setState({ sel: id, ov: ov0, hist: this.state.hist.concat([this.snap()]).slice(-40), future: [] });
+
+    const move = (ev) => {
+      const dx = (ev.clientX - sx) / (MM * k), dy = (ev.clientY - sy) / (MM * k);
+      let r = { ...base };
+      if (kind === "move") { r.x = base.x + dx; r.y = base.y + dy; }
+      else {
+        if (kind.indexOf("e") >= 0) r.w = base.w + dx;
+        if (kind.indexOf("s") >= 0) r.h = base.h + dy;
+        if (kind.indexOf("w") >= 0) { r.x = base.x + dx; r.w = base.w - dx; }
+        if (kind.indexOf("n") >= 0) { r.y = base.y + dy; r.h = base.h - dy; }
+        r.w = Math.max(24, r.w); r.h = Math.max(12, r.h);
+      }
+      const gd = [];
+      const th = 2.2;
+      const snapTo = (val, targets) => {
+        for (let i = 0; i < targets.length; i++) if (Math.abs(val - targets[i]) < th) return targets[i];
+        return null;
+      };
+      const vx = [], hy = [];
+      others.forEach(o => { vx.push(o.x, o.x + o.w, o.x + o.w / 2); hy.push(o.y, o.y + o.h, o.y + o.h / 2); });
+      vx.push(b.x, b.x + b.w, b.x + b.w / 2); hy.push(b.y, b.y + b.h, b.y + b.h / 2);
+      if (kind === "move") {
+        const cands = [[r.x, 0], [r.x + r.w, r.w], [r.x + r.w / 2, r.w / 2]];
+        for (let i = 0; i < cands.length; i++) {
+          const t = snapTo(cands[i][0], vx);
+          if (t !== null) { r.x = t - cands[i][1]; gd.push({ t: "v", p: t }); break; }
+        }
+        const candsY = [[r.y, 0], [r.y + r.h, r.h], [r.y + r.h / 2, r.h / 2]];
+        for (let i = 0; i < candsY.length; i++) {
+          const t = snapTo(candsY[i][0], hy);
+          if (t !== null) { r.y = t - candsY[i][1]; gd.push({ t: "h", p: t }); break; }
+        }
+      } else {
+        const tx = snapTo(r.x + r.w, vx); if (tx !== null && kind.indexOf("e") >= 0) { r.w = tx - r.x; gd.push({ t: "v", p: tx }); }
+        const ty = snapTo(r.y + r.h, hy); if (ty !== null && kind.indexOf("s") >= 0) { r.h = ty - r.y; gd.push({ t: "h", p: ty }); }
+      }
+      r.x = Math.min(Math.max(b.x, r.x), b.x + b.w - r.w);
+      r.y = Math.min(Math.max(b.y, r.y), b.y + b.h - r.h);
+      r.w = Math.min(r.w, b.x + b.w - r.x);
+      r.h = Math.min(r.h, b.y + b.h - r.y);
+      const hit = others.some(o => overlap(r, o));
+      this.setState(st => ({ ov: { ...st.ov, [id]: r }, guides: gd, collide: hit }));
+    };
+    const up = () => {
+      window.removeEventListener("pointermove", move);
+      window.removeEventListener("pointerup", up);
+      let r = { ...(this.state.ov[id] || base) };
+      let tries = 0;
+      while (tries < 12) {
+        const hit = others.filter(o => overlap(r, o));
+        if (!hit.length) break;
+        const o = hit[0];
+        const dxs = [o.x - (r.x + r.w) - 1.5, o.x + o.w - r.x + 1.5];
+        const dys = [o.y - (r.y + r.h) - 1.5, o.y + o.h - r.y + 1.5];
+        const best = [ { a: "x", d: dxs[0] }, { a: "x", d: dxs[1] }, { a: "y", d: dys[0] }, { a: "y", d: dys[1] } ]
+          .sort((p, q) => Math.abs(p.d) - Math.abs(q.d))[0];
+        if (best.a === "x") r.x += best.d; else r.y += best.d;
+        r.x = Math.min(Math.max(b.x, r.x), b.x + b.w - r.w);
+        r.y = Math.min(Math.max(b.y, r.y), b.y + b.h - r.h);
+        tries++;
+      }
+      const still = others.some(o => overlap(r, o));
+      this.setState(st => ({ ov: { ...st.ov, [id]: still ? base : r }, guides: [], collide: false }));
+    };
+    window.addEventListener("pointermove", move);
+    window.addEventListener("pointerup", up);
+  }
+
+  applyTpl(name) {
+    this.commit({ tpl: name, vis: visFrom(TPL[name].on), ov: {}, tplOpen: false, sel: null });
+  }
+  toggle(id) {
+    const vis = { ...this.state.vis, [id]: !this.state.vis[id] };
+    this.commit({ vis, ov: this.state.mode === "custom" ? this.state.ov : {} });
+  }
+  setText(k, v) {
+    this.setState(st => ({ texts: { ...st.texts, [k]: v } }));
+  }
+  setOpt(k, v) {
+    this.setState(st => ({ opts: { ...st.opts, [k]: typeof v === "function" ? v(st.opts[k]) : v } }));
+  }
+  undo() {
+    const h = this.state.hist.slice();
+    if (!h.length) return;
+    const prev = h.pop();
+    const cur = this.snap();
+    this.setState({ ...prev, hist: h, future: this.state.future.concat([cur]) });
+  }
+  redo() {
+    const f = this.state.future.slice();
+    if (!f.length) return;
+    const next = f.pop();
+    this.setState({ ...next, hist: this.state.hist.concat([this.snap()]), future: f });
+  }
+
+  warnings() {
+    const out = [];
+    const rs = this.rects();
+    const b = this.bounds();
+    const vis = this.state.vis;
+    Object.keys(rs).forEach(id => {
+      const r = rs[id];
+      if (!vis[id] && id !== "map") return;
+      if (r.x < b.x - 0.5 || r.y < b.y - 0.5 || r.x + r.w > b.x + b.w + 0.5 || r.y + r.h > b.y + b.h + 0.5)
+        out.push(NAMES[id] + " sale del área imprimible");
+      if (id !== "map" && (r.w < 26 || r.h < 11)) out.push(NAMES[id] + " es demasiado pequeño para leerse");
+    });
+    const ids = Object.keys(rs).filter(id => id === "map" || vis[id]);
+    for (let i = 0; i < ids.length; i++)
+      for (let j = i + 1; j < ids.length; j++)
+        if (overlap(rs[ids[i]], rs[ids[j]])) out.push(NAMES[ids[i]] + " se superpone con " + NAMES[ids[j]]);
+    if (vis.elevation && this.state.opts.elevEmpty) out.push("Perfil de elevación sin datos disponibles");
+    if (vis.docs && !this.state.texts.notas.trim()) out.push("El campo Notas está vacío");
+    if (vis.legend && this.state.opts.legendOff.length === LAYERS.length) out.push("La leyenda no incluye ninguna capa");
+    return out.filter((v, i, a) => a.indexOf(v) === i);
+  }
+
+  generatePDF() {
+    const el = this.paperEl;
+    if (!el) return;
+    const [W, H] = this.paper();
+    const clone = el.cloneNode(true);
+    clone.style.transform = "none";
+    clone.style.boxShadow = "none";
+    clone.style.margin = "0";
+    clone.querySelectorAll("[data-editor-chrome]").forEach(n => n.remove());
+    const win = window.open("", "_blank", "width=1200,height=800");
+    if (!win) return;
+    win.document.write(
+      '<!doctype html><html><head><meta charset="utf-8"><title>' + this.state.texts.titulo + '</title>' +
+      '<base href="' + location.href + '">' +
+      '<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">' +
+      '<style>@page{size:' + W + 'mm ' + H + 'mm;margin:0}html,body{margin:0;padding:0;background:#fff;font-family:Inter,sans-serif}</style>' +
+      '</head><body>' + clone.outerHTML + '</body></html>'
+    );
+    win.document.close();
+    setTimeout(() => { win.focus(); win.print(); }, 700);
+  }
+
+  renderVals() {
+    const s = this.state;
+    const v = {};
+    const [W, H] = this.paper();
+    const k = this.k();
+    const sf = this.scaleF();
+    const px = (mm) => mm * MM;
+    const rs = this.rects();
+    const b = this.bounds();
+    const custom = s.mode === "custom";
+    const selParent = s.sel ? (PARENT[s.sel] || s.sel) : null;
+
+    v.st = s;
+    v.open = s.open;
+    v.tplOpen = s.tplOpen;
+    v.tplLabel = TPL_LABEL[s.tpl] || "Plantillas";
+    v.openBuilder = () => this.setState({ open: true });
+    v.closeBuilder = () => this.setState({ open: false, tplOpen: false });
+    v.toggleTpl = () => this.setState({ tplOpen: !s.tplOpen });
+    v.tplTecnica = () => this.applyTpl("tecnica");
+    v.tplBasica = () => this.applyTpl("basica");
+    v.tplAnalisis = () => this.applyTpl("analisis");
+    v.generatePDF = () => this.generatePDF();
+    v.clearSel = (e) => { if (e.target === this.canvasEl) this.setState({ sel: null, tplOpen: false }); };
+    v.refCanvas = (el) => { if (el && el !== this.canvasEl) { this.canvasEl = el; setTimeout(() => this.measure(), 0); } };
+
+    const seg = (on) => "height:24px;padding:0 10px;border:none;border-radius:7px;font-size:12px;font-weight:" + (on ? "600" : "500") +
+      ";cursor:pointer;background:" + (on ? "#fff" : "transparent") + ";color:" + (on ? "#0f766e" : "#64748b") +
+      ";box-shadow:" + (on ? "0 1px 2px rgba(15,23,42,.12)" : "none");
+    const segIcon = (on) => "width:26px;height:24px;display:flex;align-items:center;justify-content:center;border:none;border-radius:7px;cursor:pointer;background:" +
+      (on ? "#fff" : "transparent") + ";color:" + (on ? "#0f766e" : "#64748b") + ";box-shadow:" + (on ? "0 1px 2px rgba(15,23,42,.12)" : "none");
+    v.btnA4 = seg(s.format === "A4"); v.btnA3 = seg(s.format === "A3");
+    v.btnH = segIcon(s.orient === "h"); v.btnV = segIcon(s.orient === "v");
+    v.btnAuto = seg(!custom); v.btnCustom = seg(custom);
+    v.setA4 = () => this.commit({ format: "A4", ov: {} });
+    v.setA3 = () => this.commit({ format: "A3", ov: {} });
+    v.setH = () => this.commit({ orient: "h", ov: {} });
+    v.setV = () => this.commit({ orient: "v", ov: {} });
+    v.setAuto = () => this.commit({ mode: "auto" });
+    v.setCustom = () => this.setState({ mode: "custom", ov: this.autoLayout() });
+    v.zoomIn = () => this.setState(st => ({ zoom: Math.min(2.6, st.zoom + 0.12) }));
+    v.zoomOut = () => this.setState(st => ({ zoom: Math.max(0.45, st.zoom - 0.12) }));
+    v.zoomPct = Math.round(k * 100) + "%";
+    v.sheetLabel = s.format + " " + (s.orient === "h" ? "horizontal" : "vertical");
+    const iconBtn = (dis) => "width:28px;height:28px;display:flex;align-items:center;justify-content:center;border:1px solid #e2e8f0;background:#fff;border-radius:8px;color:" +
+      (dis ? "#cbd5e1" : "#475569") + ";cursor:" + (dis ? "default" : "pointer");
+    v.btnUndo = iconBtn(!s.hist.length); v.btnRedo = iconBtn(!s.future.length);
+    v.undo = () => this.undo(); v.redo = () => this.redo();
+    v.resetLayout = () => this.commit({ ov: {}, mode: "auto" });
+    v.toggleMargins = () => this.setState({ margins: !s.margins });
+    v.btnMargins = "width:28px;height:28px;display:flex;align-items:center;justify-content:center;border:1px solid " +
+      (s.margins ? "#99f6e4" : "#e2e8f0") + ";background:" + (s.margins ? "#f0fdfa" : "#fff") +
+      ";border-radius:8px;color:" + (s.margins ? "#0d9488" : "#475569") + ";cursor:pointer";
+
+    ROWS.forEach(id => {
+      const on = !!s.vis[id];
+      const selected = selParent === (PARENT[id] || id);
+      v["v_" + id] = on;
+      v["sel_" + id] = () => this.setState({ sel: id, tplOpen: false });
+      v["tg_" + id] = (e) => { if (e && e.stopPropagation) e.stopPropagation(); this.toggle(id); };
+      v["row_" + id] = "display:flex;align-items:center;gap:8px;padding:6px 7px;border-radius:8px;cursor:pointer;color:" +
+        (on ? "#334155" : "#94a3b8") + ";background:" + (selected ? "#f0fdfa" : "transparent") +
+        ";box-shadow:" + (selected ? "inset 0 0 0 1px #99f6e4" : "none") + ";transition:background .12s";
+      v["sw_" + id] = "flex-shrink:0;width:26px;height:15px;border-radius:999px;background:" + (on ? "#0d9488" : "#e2e8f0") +
+        ";position:relative;display:block;transition:background .15s;cursor:pointer";
+      v["kn_" + id] = "position:absolute;top:2px;left:" + (on ? "13px" : "2px") +
+        ";width:11px;height:11px;border-radius:999px;background:#fff;transition:left .15s;box-shadow:0 1px 2px rgba(15,23,42,.25);display:block";
+    });
+    v.hideElevation = (e) => { if (e && e.stopPropagation) e.stopPropagation(); this.toggle("elevation"); };
+
+    const fontBase = 10 * (px(W) / 1122) * (s.format === "A3" ? 1.28 : 1);
+    v.paperWrapStyle = "width:" + px(W) * k + "px;height:" + px(H) * k + "px;flex-shrink:0";
+    v.paperStyle = "width:" + px(W) + "px;height:" + px(H) + "px;background:#fff;position:relative;transform:scale(" + k +
+      ");transform-origin:top left;box-shadow:0 8px 24px -6px rgba(15,23,42,.28),0 0 0 1px rgba(15,23,42,.08);font-size:" + fontBase + "px";
+    v.marginBoxStyle = "position:absolute;left:" + px(b.x) + "px;top:" + px(b.y) + "px;width:" + px(b.w) + "px;height:" + px(b.h) +
+      "px;border:1px dashed #99f6e4;pointer-events:none";
+    v.refPaper = (el) => { this.paperEl = el; };
+
+    const blockBase = (id, r, extra) => {
+      const selected = selParent === id;
+      const canMove = custom && id !== "map";
+      return "position:absolute;left:" + px(r.x) + "px;top:" + px(r.y) + "px;width:" + px(r.w) + "px;height:" + px(r.h) +
+        "px;box-sizing:border-box;display:flex;flex-direction:column;overflow:hidden;animation:blockIn .16s ease-out;cursor:" +
+        (canMove ? "move" : "pointer") + ";" + (extra || "") +
+        (selected ? "outline:1.5px solid #0d9488;outline-offset:0;" : "");
+    };
+    const panelStyle = "border:1px solid #1f3a5f;background:#fff;";
+    BLOCKS.forEach(id => {
+      const r = rs[id];
+      if (!r) { v["g_" + id] = "display:none"; return; }
+      v["down_" + id] = (e) => this.startDrag(id, e, "move");
+      let extra = panelStyle;
+      if (id === "header" || id === "docs") extra = "border:1px solid #1f3a5f;background:#fff;";
+      if (id === "map") extra = "border:1.5px solid #1f3a5f;background:#e8edf1;";
+      v["g_" + id] = blockBase(id, r, extra);
+    });
+    v.mapDown = (e) => this.startDrag("map", e, "move");
+    v.mapSelected = selParent === "map";
+    v.g_map = v.g_map;
+
+    const dens = s.dens === "alta" ? 7 : s.dens === "baja" ? 3 : 5;
+    const mapR = rs.map;
+    const inset = s.vis.map_coords ? 4.2 * sf : 0;
+    v.mapImgStyle = "position:absolute;left:" + px(inset) + "px;top:" + px(inset) + "px;right:" + px(inset) + "px;bottom:" + px(inset) +
+      "px;background-image:url('assets/orto-map.png');background-size:cover;background-position:center;border:" +
+      (s.vis.map_coords ? "1px solid #0f172a" : "none");
+    const ticks = [];
+    const xs = []; for (let i = 0; i < dens; i++) xs.push(797200 + i * Math.round(1000 / (dens - 1) / 100) * 100);
+    const ys = [9914200, 9914000, 9913800];
+    xs.forEach((val, i) => {
+      const p = (i / (xs.length - 1)) * 100;
+      ticks.push({ v: val, s: "position:absolute;top:0;left:" + p + "%;transform:translateX(-50%);font-size:0.56em;color:#0f172a" });
+      ticks.push({ v: val, s: "position:absolute;bottom:0;left:" + p + "%;transform:translateX(-50%);font-size:0.56em;color:#0f172a" });
+    });
+    ys.forEach((val, i) => {
+      const p = 12 + (i / (ys.length - 1)) * 76;
+      ticks.push({ v: val, s: "position:absolute;left:0;top:" + p + "%;transform:translate(-32%,-50%) rotate(-90deg);font-size:0.56em;color:#0f172a" });
+      ticks.push({ v: val, s: "position:absolute;right:0;top:" + p + "%;transform:translate(32%,-50%) rotate(90deg);font-size:0.56em;color:#0f172a" });
+    });
+    v.coordTicks = ticks;
+
+    Object.keys(s.texts).forEach(kk => { v["tx_" + kk] = s.texts[kk]; v["ch_" + kk] = (e) => this.setText(kk, e.target.value); });
+    v.titleSize = s.opts.titleSize;
+    v.titleSizeLabel = s.opts.titleSize + " pt";
+    v.ch_titleSize = (e) => this.setOpt("titleSize", Number(e.target.value));
+    v.logoSize = s.opts.logoSize;
+    v.logoSizeLabel = s.opts.logoSize + " mm";
+    v.ch_logoSize = (e) => this.setOpt("logoSize", Number(e.target.value));
+    v.tituloStyle = "margin:0;font-size:" + (s.opts.titleSize / 10).toFixed(2) + "em;font-weight:" + (s.opts.titleBold ? "700" : "500") +
+      ";letter-spacing:.01em;line-height:1.1;color:#0f172a;text-align:" + s.opts.titleAlign;
+    v.logoStyle = "width:" + px(s.opts.logoSize * sf) + "px;height:" + px(s.opts.logoSize * sf) + "px;object-fit:contain;flex-shrink:0";
+    v.panelTitleStyle = "margin:0;padding:0.18em 0;text-align:center;font-size:0.72em;font-weight:700;letter-spacing:.03em;color:#0f172a;background:#eef2f6;border-bottom:1px solid #cbd5e1";
+
+    const off = s.opts.legendOff;
+    const sym = (l) => {
+      if (l.k === "dot") return "flex-shrink:0;width:0.5em;height:0.5em;border-radius:999px;background:" + l.c + ";display:block";
+      if (l.k === "line") return "flex-shrink:0;width:1.1em;height:" + (l.w * 0.9) + "px;background:" + l.c + ";display:block";
+      if (l.k === "box") return "flex-shrink:0;width:1.1em;height:0.6em;border:1.2px solid " + l.c + ";display:block";
+      return "flex-shrink:0;width:1.1em;height:0.6em;background:" + l.c + ";border:0.5px solid #94a3b8;display:block";
+    };
+    v.legendItems = LAYERS.filter(l => off.indexOf(l.id) < 0).map(l => ({ n: l.n, s: sym(l) }));
+    v.legendGridStyle = "flex:1;min-height:0;display:grid;grid-template-columns:repeat(" + s.opts.legendCols +
+      ",minmax(0,1fr));gap:0.18em 0.5em;align-content:start;padding:0.35em 0.5em";
+    v.legendAll = LAYERS.map(l => {
+      const on = off.indexOf(l.id) < 0;
+      return {
+        n: l.n, s: sym(l),
+        rowStyle: "display:flex;align-items:center;gap:7px;padding:4px 6px;border-radius:6px;cursor:pointer;color:" + (on ? "#334155" : "#94a3b8"),
+        eyeStyle: "display:flex;color:" + (on ? "#0d9488" : "#cbd5e1"),
+        toggle: () => this.setOpt("legendOff", cur => cur.indexOf(l.id) < 0 ? cur.concat([l.id]) : cur.filter(x => x !== l.id))
+      };
+    });
+    v.legendCountLabel = (LAYERS.length - off.length) + " de " + LAYERS.length;
+    v.cols1 = () => this.setOpt("legendCols", 1);
+    v.cols2 = () => this.setOpt("legendCols", 2);
+
+    const LOC = { ecuador: ["ECUADOR", "assets/loc-ecuador.png"], galapagos: ["GALÁPAGOS", "assets/loc-galapagos.png"], santacruz: ["ISLA SANTA CRUZ", "assets/loc-santacruz.png"] };
+    v.locatorMaps = s.opts.locLevels.map(id => ({
+      label: s.opts.locLabels ? LOC[id][0] : "",
+      box: "flex:1;min-width:0;background:#f8fafc;display:flex;flex-direction:column;overflow:hidden;border:" +
+        (s.opts.locBorder ? "1px solid #cbd5e1" : "none"),
+      s: "flex:1;min-height:0;background-image:url('" + LOC[id][1] + "');background-size:contain;background-position:center;background-repeat:no-repeat;background-color:#fff"
+    }));
+    const chip = (on) => "padding:4px 9px;border-radius:999px;border:1px solid " + (on ? "#5eead4" : "#e2e8f0") + ";background:" +
+      (on ? "#f0fdfa" : "#fff") + ";color:" + (on ? "#0f766e" : "#64748b") + ";font-size:11.5px;font-weight:500;cursor:pointer";
+    const togLoc = (id) => () => this.setOpt("locLevels", cur =>
+      cur.indexOf(id) >= 0 ? cur.filter(x => x !== id) : ["ecuador","galapagos","santacruz"].filter(x => cur.indexOf(x) >= 0 || x === id));
+    v.chipEcuador = chip(s.opts.locLevels.indexOf("ecuador") >= 0);
+    v.chipGalapagos = chip(s.opts.locLevels.indexOf("galapagos") >= 0);
+    v.chipSantaCruz = chip(s.opts.locLevels.indexOf("santacruz") >= 0);
+    v.locEcuador = togLoc("ecuador"); v.locGalapagos = togLoc("galapagos"); v.locSantaCruz = togLoc("santacruz");
+
+    const swPair = (name, on, fn) => {
+      v["sw_" + name] = "flex-shrink:0;width:26px;height:15px;border-radius:999px;background:" + (on ? "#0d9488" : "#e2e8f0") + ";position:relative;display:block;cursor:pointer";
+      v["kn_" + name] = "position:absolute;top:2px;left:" + (on ? "13px" : "2px") + ";width:11px;height:11px;border-radius:999px;background:#fff;box-shadow:0 1px 2px rgba(15,23,42,.25);display:block";
+      v["tg_" + name] = fn;
+    };
+    swPair("bold", s.opts.titleBold, () => this.setOpt("titleBold", c => !c));
+    swPair("locLabels", s.opts.locLabels, () => this.setOpt("locLabels", c => !c));
+    swPair("locBorder", s.opts.locBorder, () => this.setOpt("locBorder", c => !c));
+    swPair("elevEmpty", s.opts.elevEmpty, () => this.setOpt("elevEmpty", c => !c));
+    ["escala","area","precision","hoja"].forEach(kk => {
+      swPair("ind_" + kk, s.opts.ind[kk], () => this.setOpt("ind", c => ({ ...c, [kk]: !c[kk] })));
+    });
+
+    const INDS = [
+      { id: "escala", k: "Escala", v: s.texts.escala },
+      { id: "area", k: "Área", v: s.texts.area },
+      { id: "precision", k: "Precisión", v: s.texts.precision },
+      { id: "hoja", k: "Hoja", v: s.texts.hoja }
+    ];
+    v.indicatorCards = INDS.filter(c => s.opts.ind[c.id]);
+
+    v.elevHasData = !s.opts.elevEmpty;
+    v.elevEmpty = s.opts.elevEmpty;
+    v.elevPoints = ELEV.map((e, i) => (i * (300 / (ELEV.length - 1))).toFixed(1) + "," + (100 - ((e - 155) / 90) * 100).toFixed(1)).join(" ");
+    const resizeElev = (d) => {
+      const cur = this.rects();
+      if (!cur.elevation) return;
+      const r = { ...cur.elevation };
+      r.h = Math.max(14, r.h + d);
+      this.setState({ mode: "custom", ov: { ...cur, elevation: r }, sel: "elevation" });
+    };
+    v.growElevation = () => resizeElev(8);
+    v.shrinkElevation = () => resizeElev(-8);
+
+    v.coverItems = COVER.map(c => ({
+      n: c.n, pctLabel: c.p + "%",
+      s: "position:absolute;left:0;top:0;bottom:0;width:" + c.p + "%;background:" + c.c + ";display:block",
+      dot: "width:12px;height:12px;border-radius:3px;background:" + c.c + ";display:block"
+    }));
+
+    const segsN = 5;
+    const segs = [];
+    for (let i = 0; i < segsN; i++) {
+      let st2 = "flex:1;height:100%;display:block;";
+      if (s.opts.scaleStyle === "barras") st2 += "background:" + (i % 2 ? "#fff" : "#0f172a") + ";border:0.6px solid #0f172a;";
+      else if (s.opts.scaleStyle === "linea") st2 += "background:#fff;border-left:1px solid #0f172a;border-bottom:1px solid #0f172a;";
+      else st2 += "background:#0f172a;";
+      segs.push({ s: st2 });
+    }
+    v.scaleSegments = segs;
+    v.scaleBarStyle = "display:flex;height:0.62em;width:100%;" + (s.opts.scaleStyle === "bloque" ? "border:0.6px solid #0f172a;" : "");
+    const sbBtn = (on) => "text-align:left;padding:7px 9px;border:1px solid " + (on ? "#5eead4" : "#e2e8f0") + ";background:" +
+      (on ? "#f0fdfa" : "#fff") + ";color:" + (on ? "#0f766e" : "#334155") + ";border-radius:8px;font-size:12px;font-weight:500;cursor:pointer";
+    v.btnSbBarras = sbBtn(s.opts.scaleStyle === "barras");
+    v.btnSbLinea = sbBtn(s.opts.scaleStyle === "linea");
+    v.btnSbBloque = sbBtn(s.opts.scaleStyle === "bloque");
+    v.sbBarras = () => this.setOpt("scaleStyle", "barras");
+    v.sbLinea = () => this.setOpt("scaleStyle", "linea");
+    v.sbBloque = () => this.setOpt("scaleStyle", "bloque");
+
+    const DOCF = [
+      { id: "doc_elaborado", label: "Elaborado por", value: s.texts.elaborado },
+      { id: "doc_revisado", label: "Revisado por", value: s.texts.revisado },
+      { id: "doc_fecha", label: "Fecha", value: s.texts.fecha },
+      { id: "doc_fuente", label: "Fuente", value: s.texts.fuente },
+      { id: "doc_precision", label: "Precisión", value: s.texts.precision },
+      { id: "doc_notas", label: "Notas", value: s.texts.notas }
+    ];
+    const docsOn = DOCF.filter(f => s.vis[f.id]);
+    v.docFields = docsOn;
+    v.docsGridStyle = "flex:1;min-height:0;display:grid;grid-template-columns:repeat(" + Math.max(1, docsOn.length) +
+      ",minmax(0,1fr));gap:0;align-items:start;padding:0.35em 0.2em";
+
+    v.guides = s.guides.map(g => g.t === "v"
+      ? { s: "position:absolute;left:" + px(g.p) + "px;top:0;bottom:0;width:1px;background:#f43f5e;pointer-events:none;z-index:30" }
+      : { s: "position:absolute;top:" + px(g.p) + "px;left:0;right:0;height:1px;background:#f43f5e;pointer-events:none;z-index:30" });
+
+    const selR = selParent && rs[selParent] ? rs[selParent] : null;
+    v.hasSel = !!selR;
+    v.selRingStyle = selR ? "position:absolute;left:" + px(selR.x) + "px;top:" + px(selR.y) + "px;width:" + px(selR.w) + "px;height:" + px(selR.h) +
+      "px;border:1.5px solid " + (s.collide ? "#f43f5e" : "#0d9488") + ";box-shadow:0 0 0 3px " + (s.collide ? "rgba(244,63,94,.18)" : "rgba(13,148,136,.14)") +
+      ";pointer-events:none;z-index:25" : "display:none";
+    const hs = [];
+    if (selR && custom && selParent !== "map") {
+      const HK = [["nw",0,0],["n",0.5,0],["ne",1,0],["e",1,0.5],["se",1,1],["s",0.5,1],["sw",0,1],["w",0,0.5]];
+      HK.forEach(hk => {
+        const cx = px(selR.x + selR.w * hk[1]), cy = px(selR.y + selR.h * hk[2]);
+        hs.push({
+          s: "position:absolute;left:" + (cx - 4.5) + "px;top:" + (cy - 4.5) + "px;width:9px;height:9px;background:#fff;border:1.5px solid #0d9488;border-radius:2px;z-index:31;cursor:" +
+            (hk[0].length === 2 ? (hk[0] === "nw" || hk[0] === "se" ? "nwse-resize" : "nesw-resize") : (hk[0] === "n" || hk[0] === "s" ? "ns-resize" : "ew-resize")),
+          down: (e) => this.startDrag(selParent, e, hk[0])
+        });
+      });
+    }
+    v.handles = hs;
+
+    const warns = this.warnings();
+    v.hasWarnings = warns.length > 0;
+    v.noWarnings = warns.length === 0;
+    v.warnCount = warns.length === 1 ? "1 advertencia" : warns.length + " advertencias";
+    v.warnFirst = warns[0] || "";
+
+    v.noSel = !s.sel;
+    v.selName = s.sel ? NAMES[selParent] : "";
+    v.selBadgeStyle = s.sel
+      ? "padding:2px 7px;border-radius:999px;background:#f0fdfa;color:#0f766e;font-size:10.5px;font-weight:600;border:1px solid #ccfbf1"
+      : "display:none";
+    BLOCKS.forEach(id => { v["p_" + id] = selParent === id; });
+
+    v.lblStyle = "display:block;font-size:11px;font-weight:500;color:#64748b;margin-bottom:5px";
+    v.inputStyle = "width:100%;height:30px;padding:0 9px;border:1px solid #e2e8f0;border-radius:8px;font-size:12px;color:#0f172a;outline:none;background:#fff";
+    v.areaStyle = "width:100%;height:70px;padding:7px 9px;border:1px solid #e2e8f0;border-radius:8px;font-size:12px;color:#0f172a;outline:none;resize:vertical;line-height:1.45";
+    v.btnGhostStyle = "text-align:left;padding:7px 9px;border:1px solid #e2e8f0;background:#fff;color:#334155;border-radius:8px;font-size:12px;font-weight:500;cursor:pointer";
+    const smallSeg = (on) => "flex:1;padding:6px 8px;border:1px solid " + (on ? "#5eead4" : "#e2e8f0") + ";background:" + (on ? "#f0fdfa" : "#fff") +
+      ";color:" + (on ? "#0f766e" : "#334155") + ";border-radius:8px;font-size:11.5px;font-weight:500;cursor:pointer";
+    v.btnAlignL = smallSeg(s.opts.titleAlign === "left");
+    v.btnAlignC = smallSeg(s.opts.titleAlign === "center");
+    v.alignLeft = () => this.setOpt("titleAlign", "left");
+    v.alignCenter = () => this.setOpt("titleAlign", "center");
+    v.btnCols1 = smallSeg(s.opts.legendCols === 1);
+    v.btnCols2 = smallSeg(s.opts.legendCols === 2);
+    v.btnDensBaja = smallSeg(s.dens === "baja");
+    v.btnDensMedia = smallSeg(s.dens === "media");
+    v.btnDensAlta = smallSeg(s.dens === "alta");
+    v.densBaja = () => this.setState({ dens: "baja" });
+    v.densMedia = () => this.setState({ dens: "media" });
+    v.densAlta = () => this.setState({ dens: "alta" });
+    const extBtn = (on) => "text-align:left;padding:7px 9px;border:1px solid " + (on ? "#5eead4" : "#e2e8f0") + ";background:" +
+      (on ? "#f0fdfa" : "#fff") + ";color:" + (on ? "#0f766e" : "#334155") + ";border-radius:8px;font-size:12px;font-weight:500;cursor:pointer";
+    v.btnExtActual = extBtn(s.ext === "actual");
+    v.btnExtCapas = extBtn(s.ext === "capas");
+    v.btnExtSeleccion = extBtn(s.ext === "seleccion");
+    v.btnExtGeometria = extBtn(s.ext === "geometria");
+    v.extActual = () => this.setState({ ext: "actual" });
+    v.extCapas = () => this.setState({ ext: "capas" });
+    v.extSeleccion = () => this.setState({ ext: "seleccion" });
+    v.extGeometria = () => this.setState({ ext: "geometria" });
+
+    v.showLayoutNote = true;
+    v.layoutNote = custom
+      ? "Modo Personalizar: arrastra y redimensiona los módulos. Se respetan márgenes, guías de alineación y no se permiten superposiciones."
+      : "Diseño automático: el sistema recompone la hoja cada vez que activas u ocultas un módulo o cambias de formato. Cambia a Personalizar para mover elementos.";
+
+    return v;
+  }
+}
+</script>
+</body>
+</html>

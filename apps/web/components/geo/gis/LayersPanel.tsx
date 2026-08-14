@@ -17,9 +17,10 @@ const RASTER_STATUS: Record<RasterStatus, { text: string; color: string }> = {
 };
 
 // One orthophoto row: status badge, opacity (when ready), retry (on error).
-function RasterItem({ layer, readOnly, canDelete, busy = false, onChange, onRemove, onRetry }: {
+function RasterItem({ layer, readOnly, canDelete, workspaceMode, isFirst, isLast, busy = false, onChange, onRemove, onRetry, onMove }: {
   layer: RasterLayer; readOnly?: boolean; canDelete?: boolean; busy?: boolean;
-  onChange: (l: RasterLayer) => void; onRemove: () => void; onRetry: () => void;
+  workspaceMode?: boolean; isFirst: boolean; isLast: boolean;
+  onChange: (l: RasterLayer) => void; onRemove: () => void; onRetry: () => void; onMove: (direction: number) => void;
 }) {
   const st = RASTER_STATUS[layer.status];
   const ready = layer.status === "processed";
@@ -43,15 +44,20 @@ function RasterItem({ layer, readOnly, canDelete, busy = false, onChange, onRemo
           <div className="layer-meta">
             <span style={{ color: st.color, fontWeight: 600 }}>{st.text}</span>
             <span>•</span><span>ráster</span>
+            {layer.workspaceSource?.mapTitle && <><span>•</span><span title={layer.workspaceSource.mapTitle}>{layer.workspaceSource.mapTitle}</span></>}
           </div>
         </div>
         {!readOnly && (
           <div className="layer-actions" onClick={(e) => e.stopPropagation()}>
+            {workspaceMode && <>
+              <button className="icon-btn" data-tip="Subir" disabled={deleting || isFirst} onClick={() => onMove(-1)} style={{ opacity: deleting || isFirst ? 0.4 : 1 }}>▲</button>
+              <button className="icon-btn" data-tip="Bajar" disabled={deleting || isLast} onClick={() => onMove(1)} style={{ opacity: deleting || isLast ? 0.4 : 1 }}>▼</button>
+            </>}
             {layer.status === "error" && (
               <button className="icon-btn" data-tip="Reintentar" disabled={deleting} onClick={onRetry}><RotateCcw size={13} /></button>
             )}
             {canDelete && (
-              <button className="icon-btn" data-tip="Eliminar" disabled={deleting} onClick={onRemove}><Trash2 size={13} /></button>
+              <button className="icon-btn" data-tip={workspaceMode ? "Quitar del Workspace" : "Eliminar"} disabled={deleting} onClick={onRemove}><Trash2 size={13} /></button>
             )}
           </div>
         )}
@@ -219,8 +225,9 @@ function StyleEditor({ layer, onChange }: { layer: GisLayer; onChange: (l: GisLa
   );
 }
 
-function LayerItem({ layer, active, isFirst, isLast, readOnly, canDelete, busy = false, onClick, onChange, onRemove, onMove }: {
+function LayerItem({ layer, active, isFirst, isLast, readOnly, canDelete, workspaceMode, busy = false, onClick, onChange, onRemove, onMove }: {
   layer: GisLayer; active: boolean; isFirst: boolean; isLast: boolean; readOnly?: boolean; canDelete?: boolean; busy?: boolean;
+  workspaceMode?: boolean;
   onClick: () => void; onChange: (l: GisLayer) => void; onRemove: () => void; onMove: (d: number) => void;
 }) {
   const [expanded, setExpanded] = useState(active);
@@ -248,6 +255,7 @@ function LayerItem({ layer, active, isFirst, isLast, readOnly, canDelete, busy =
           <div className="layer-meta">
             <span>{layer.geometry}</span><span>•</span>
             <span>{layer.geojson.features.length} feat.</span>
+            {layer.workspaceSource?.mapTitle && <><span>•</span><span title={layer.workspaceSource.mapTitle}>{layer.workspaceSource.mapTitle}</span></>}
           </div>
         </div>
         {!readOnly && (
@@ -255,7 +263,7 @@ function LayerItem({ layer, active, isFirst, isLast, readOnly, canDelete, busy =
             <button className="icon-btn" data-tip="Subir" disabled={busy || isFirst} onClick={() => onMove(-1)} style={{ opacity: busy || isFirst ? 0.4 : 1 }}>▲</button>
             <button className="icon-btn" data-tip="Bajar" disabled={busy || isLast} onClick={() => onMove(1)} style={{ opacity: busy || isLast ? 0.4 : 1 }}>▼</button>
             {canDelete && (
-              <button className="icon-btn" data-tip="Eliminar" disabled={busy} onClick={onRemove}><Trash2 size={13} /></button>
+              <button className="icon-btn" data-tip={workspaceMode ? "Quitar del Workspace" : "Eliminar"} disabled={busy} onClick={onRemove}><Trash2 size={13} /></button>
             )}
             <button className="icon-btn" data-tip={expanded ? "Cerrar" : "Estilos"} disabled={busy} onClick={() => setExpanded(!expanded)}>
               <ChevronRight size={13} style={{ transform: expanded ? "rotate(90deg)" : "none", transition: "transform 0.15s" }} />
@@ -275,7 +283,7 @@ function LayerItem({ layer, active, isFirst, isLast, readOnly, canDelete, busy =
 
 export default function LayersPanel({
   layers, activeId, onActive, onChange, onRemove, onMove, onOpenUpload, readOnly, canDelete,
-  rasterLayers = [], onRasterChange, onRasterRemove, onRasterRetry, busyLayerIds, busyRasterIds,
+  rasterLayers = [], onRasterChange, onRasterRemove, onRasterRetry, onRasterMove, busyLayerIds, busyRasterIds, workspaceMode,
 }: {
   layers: GisLayer[];
   activeId: string | null;
@@ -287,10 +295,12 @@ export default function LayersPanel({
   readOnly?: boolean;
   /** Delete buttons are gated separately: only ADMIN may delete layers. */
   canDelete?: boolean;
+  workspaceMode?: boolean;
   rasterLayers?: RasterLayer[];
   onRasterChange?: (l: RasterLayer) => void;
   onRasterRemove?: (id: string) => void;
   onRasterRetry?: (id: string) => void;
+  onRasterMove?: (id: string, direction: number) => void;
   busyLayerIds?: ReadonlySet<string>;
   busyRasterIds?: ReadonlySet<string>;
 }) {
@@ -303,7 +313,7 @@ export default function LayersPanel({
           <div className="rail-sub">{total} {total === 1 ? "capa" : "capas"} cargada{total === 1 ? "" : "s"}</div>
         </div>
         {!readOnly && (
-          <button className="tb-btn primary" onClick={onOpenUpload} data-tip="Agregar capa (shapefile u ortofoto)">
+          <button className="tb-btn primary" onClick={onOpenUpload} data-tip={workspaceMode ? "Agregar desde el catálogo SIGTAR" : "Agregar capa (shapefile u ortofoto)"}>
             <Upload size={14} />
           </button>
         )}
@@ -315,7 +325,9 @@ export default function LayersPanel({
             <b>Sin capas aún</b>
             {readOnly
               ? "Este mapa todavía no tiene capas publicadas."
-              : "Arrastra un .shp / .zip (vector) o un .tif / .tiff (ortofoto) para comenzar."}
+              : workspaceMode
+                ? "Agrega capas publicadas desde cualquier mapa del SIGTAR."
+                : "Arrastra un .shp / .zip (vector) o un .tif / .tiff (ortofoto) para comenzar."}
           </div>
         )}
 
@@ -328,6 +340,7 @@ export default function LayersPanel({
             isLast={idx === layers.length - 1}
             readOnly={readOnly}
             canDelete={canDelete}
+            workspaceMode={workspaceMode}
             busy={busyLayerIds?.has(layer.id)}
             onClick={() => onActive(layer.id)}
             onChange={onChange}
@@ -342,16 +355,20 @@ export default function LayersPanel({
           <div style={{ padding: "8px 12px 4px", fontSize: 10.5, textTransform: "uppercase", letterSpacing: 0.4, color: "var(--muted-fg)" }}>
             Ortofotos
           </div>
-          {rasterLayers.map((r) => (
+          {rasterLayers.map((r, index) => (
             <RasterItem
               key={r.id}
               layer={r}
+              isFirst={index === 0}
+              isLast={index === rasterLayers.length - 1}
               readOnly={readOnly}
               canDelete={canDelete}
+              workspaceMode={workspaceMode}
               busy={busyRasterIds?.has(r.id)}
               onChange={(l) => onRasterChange?.(l)}
               onRemove={() => onRasterRemove?.(r.id)}
               onRetry={() => onRasterRetry?.(r.id)}
+              onMove={(direction) => onRasterMove?.(r.id, direction)}
             />
           ))}
         </div>

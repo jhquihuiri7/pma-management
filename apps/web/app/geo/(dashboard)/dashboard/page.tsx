@@ -12,7 +12,9 @@ import {
   Database,
   Search,
   Map,
+  PanelsTopLeft,
 } from "lucide-react";
+import Link from "next/link";
 import { toast } from "sonner";
 import { GEO_CATEGORIES, GEO_MAPS } from "@/lib/geo-mock-data";
 import type { GeoCategory, GeoMap } from "@/types/geo";
@@ -213,11 +215,16 @@ export default function GeoDashboardPage() {
                 Visualiza datos espaciales por sistema, temática y territorio.
               </p>
             </div>
-            {canEdit && (
-              <div className="flex-shrink-0">
-                <AddMapDialog onAdd={handleAdd} />
-              </div>
-            )}
+            <div className="flex w-40 flex-shrink-0 flex-col gap-2">
+              {canEdit && <AddMapDialog onAdd={handleAdd} triggerClassName="w-full" />}
+              <Link
+                href="/geo/workspace"
+                className="inline-flex h-9 w-full items-center justify-center gap-2 rounded-md border border-white/50 bg-white/95 px-4 text-sm font-medium text-teal-800 shadow-sm transition-colors hover:bg-white"
+              >
+                <PanelsTopLeft className="h-4 w-4" />
+                Workspace
+              </Link>
+            </div>
           </div>
 
           {/* Search */}

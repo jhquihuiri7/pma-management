@@ -20,6 +20,12 @@ export interface LayerStyle {
   labelField: string | null;
 }
 
+export interface WorkspaceLayerSource {
+  mapId: string;
+  layerId: string;
+  mapTitle?: string;
+}
+
 export interface GisLayer {
   id: string;
   name: string;
@@ -35,6 +41,8 @@ export interface GisLayer {
   zIndex?: number;
   /** True once the layer is stored on the server/NAS. */
   persisted?: boolean;
+  /** Original published layer when this is a local Workspace composition. */
+  workspaceSource?: WorkspaceLayerSource;
 }
 
 export type RasterStatus =
@@ -62,6 +70,8 @@ export interface RasterLayer {
   bbox: number[] | null;
   /** XYZ template ".../tiles/{z}/{x}/{y}.png" consumed by L.tileLayer. */
   tileUrl: string;
+  /** Original published raster when this is a local Workspace composition. */
+  workspaceSource?: WorkspaceLayerSource;
 }
 
 export interface Basemap {

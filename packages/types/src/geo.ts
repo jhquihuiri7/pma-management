@@ -37,3 +37,30 @@ export interface GeoMap {
   createdAt: string;
   updatedAt?: string;
 }
+
+export interface GeoWorkspaceVectorCatalogLayer {
+  kind: "vector";
+  layerId: string;
+  name: string;
+  geometryType: "Point" | "LineString" | "Polygon";
+  crs: string;
+  featureCount: number;
+  bbox: number[] | null;
+  style: Record<string, unknown>;
+}
+
+export interface GeoWorkspaceRasterCatalogLayer {
+  kind: "raster";
+  layerId: string;
+  name: string;
+  bbox: number[] | null;
+  opacity: number;
+}
+
+export interface GeoWorkspaceCatalogMap {
+  mapId: string;
+  mapTitle: string;
+  categoryId: string;
+  thematic: string;
+  layers: Array<GeoWorkspaceVectorCatalogLayer | GeoWorkspaceRasterCatalogLayer>;
+}

@@ -4,17 +4,19 @@ import { useState, useEffect, useRef, useCallback } from "react";
 import dynamic from "next/dynamic";
 import type { Map as LeafletMap } from "leaflet";
 import type { FeatureCollection } from "geojson";
+import type { GeoWorkspaceCatalogMap } from "@pma/types/geo";
 import {
   PanelLeft, PanelRight, Table2, Info, Ruler, ZoomIn, ZoomOut, Home,
   Search, Download, Upload, X, AlignLeft, Maximize, Minimize, ArrowLeft,
-  MousePointer, MapPin,
+  MousePointer, MapPin, FileDown, FileUp,
 } from "lucide-react";
 import { toast } from "sonner";
-import { apiErrorMessage } from "@/lib/api-client";
+import { api, apiErrorMessage } from "@/lib/api-client";
 import LayersPanel from "./LayersPanel";
 import UploadModal from "./UploadModal";
 import GisMap from "./GisMap";
 import DashboardsPanel from "./DashboardsPanel";
+import WorkspaceLayerCatalogModal, { type WorkspaceCatalogSelection } from "./WorkspaceLayerCatalogModal";
 import { inferSchema, fmtNum, categoryCounts } from "./charts";
 import { toDMS, toUTM, formatUTM, inspectPoint as inspectLayersAt, formatDistance, type PointHit } from "./geo-point";
 import { BASEMAPS, BASEMAP_PREVIEWS, COLOR_RAMPS } from "./gis-data";
@@ -25,6 +27,13 @@ import {
   type RasterLayerManifest,
 } from "./persistence";
 import type { AddLayerInput, AddLayerResult, GisGeometry, GisLayer, RasterLayer, IdentifyInfo, FocusFeature, LayerStyle } from "./types";
+import {
+  buildWorkspaceDocument,
+  MAX_WORKSPACE_FILE_BYTES,
+  parseWorkspaceDocument,
+  workspaceLayerKey,
+  type WorkspaceDocument,
+} from "./workspace";
 import type { GeoMap } from "@/types/geo";
 import "./gis.css";
 
@@ -106,7 +115,7 @@ function defaultStyleFor(geometry: GisGeometry, index = 0): LayerStyle {
   };
 }
 
-export default function GisEditor({ geoMap, mapId, mapTitle, backHref, initialCenter, initialZoom, canEdit = false, canDelete = false }: {
+export default function GisEditor({ geoMap, mapId, mapTitle, backHref, initialCenter, initialZoom, canEdit = false, canDelete = false, mode = "persisted-map" }: {
   geoMap?: GeoMap;
   mapId?: string;
   mapTitle?: string;
@@ -118,7 +127,9 @@ export default function GisEditor({ geoMap, mapId, mapTitle, backHref, initialCe
   // VIEWER) gets canEdit; deleting layers stays ADMIN-only via canDelete.
   canEdit?: boolean;
   canDelete?: boolean;
+  mode?: "persisted-map" | "workspace";
 }) {
+  const isWorkspace = mode === "workspace";
   const [layers, setLayers] = useState<GisLayer[]>([]);
   const layersRef = useRef<GisLayer[]>([]);
   const [rasterLayers, setRasterLayers] = useState<RasterLayer[]>([]);
@@ -139,6 +150,10 @@ export default function GisEditor({ geoMap, mapId, mapTitle, backHref, initialCe
   const [mapInstance, setMapInstance] = useState<LeafletMap | null>(null);
   const [searchOpen, setSearchOpen] = useState(false);
   const [exportOpen, setExportOpen] = useState(false);
+  const [workspaceDirty, setWorkspaceDirty] = useState(false);
+  const workspaceDirtyRef = useRef(false);
+  const workspaceFileRef = useRef<HTMLInputElement>(null);
+  const suppressWorkspaceViewportDirtyRef = useRef(false);
   const [searchQ, setSearchQ] = useState("");
   const [isFullscreen, setIsFullscreen] = useState(false);
   const [hydrated, setHydrated] = useState(false);
@@ -161,7 +176,16 @@ export default function GisEditor({ geoMap, mapId, mapTitle, backHref, initialCe
   // Auto-fit happens once (first layer of an empty map); a remembered viewport
   // or any user pan/zoom disables it so the view is never yanked around.
   const hasAutoFitted = useRef(false);
-  const canMutate = canEdit && hydrated && hydrationError === null;
+  const canMutate = (isWorkspace || canEdit) && hydrated && hydrationError === null;
+  const markWorkspaceDirty = useCallback(() => {
+    if (!isWorkspace) return;
+    workspaceDirtyRef.current = true;
+    setWorkspaceDirty(true);
+  }, [isWorkspace]);
+  const markWorkspaceClean = useCallback(() => {
+    workspaceDirtyRef.current = false;
+    setWorkspaceDirty(false);
+  }, []);
   useEffect(() => {
     layersRef.current = layers;
   }, [layers]);
@@ -244,6 +268,14 @@ export default function GisEditor({ geoMap, mapId, mapTitle, backHref, initialCe
 
   const handleViewportChange = useCallback((center: [number, number], zoom: number) => {
     hasAutoFitted.current = true; // the view is now user/remembered-controlled
+    if (isWorkspace) {
+      if (suppressWorkspaceViewportDirtyRef.current) {
+        suppressWorkspaceViewportDirtyRef.current = false;
+      } else {
+        markWorkspaceDirty();
+      }
+      return;
+    }
     if (!mapId || !canMutate) return; // public/read-only users don't persist viewport
     scheduleDeferredWrite("viewport", 0, async () => {
       try {
@@ -253,13 +285,17 @@ export default function GisEditor({ geoMap, mapId, mapTitle, backHref, initialCe
         throw error;
       }
     });
-  }, [mapId, canMutate, runQueuedWrite, scheduleDeferredWrite]);
+  }, [mapId, canMutate, isWorkspace, markWorkspaceDirty, runQueuedWrite, scheduleDeferredWrite]);
 
   // Load persisted layers for this map (so the editor doesn't start from zero).
   useEffect(() => {
     let cancelled = false;
     (async () => {
-      if (!mapId) { setHydrated(true); return; }
+      if (!mapId) {
+        setSaveState("saved");
+        setHydrated(true);
+        return;
+      }
       setSaveState("loading");
       try {
         const manifests = await fetchLayers(mapId);
@@ -299,10 +335,10 @@ export default function GisEditor({ geoMap, mapId, mapTitle, backHref, initialCe
 
   // Once loaded, if the map has no layers yet, prompt admins to add one.
   useEffect(() => {
-    if (!canMutate) return;
+    if (!canMutate || isWorkspace) return;
     const t = setTimeout(() => { setLayers((cur) => { if (cur.length === 0) setShowUpload(true); return cur; }); }, 400);
     return () => clearTimeout(t);
-  }, [canMutate]);
+  }, [canMutate, isWorkspace]);
 
   // Debounced metadata save (style/visibility/name/order) for a persisted layer.
   const scheduleSave = useCallback((layer: GisLayer) => {
@@ -334,7 +370,11 @@ export default function GisEditor({ geoMap, mapId, mapTitle, backHref, initialCe
   useEffect(() => {
     mountedRef.current = true;
     const warnBeforeUnload = (event: BeforeUnloadEvent) => {
-      if (pendingWriteCount.current === 0 && Object.keys(deferredWrites.current).length === 0) return;
+      if (
+        pendingWriteCount.current === 0 &&
+        Object.keys(deferredWrites.current).length === 0 &&
+        !(isWorkspace && workspaceDirtyRef.current)
+      ) return;
       event.preventDefault();
       event.returnValue = "";
     };
@@ -349,7 +389,7 @@ export default function GisEditor({ geoMap, mapId, mapTitle, backHref, initialCe
         console.error("No se pudieron completar las escrituras GIS al desmontar", error);
       });
     };
-  }, [flushDeferredWrites]);
+  }, [flushDeferredWrites, isWorkspace]);
 
   useEffect(() => {
     if (!mapInstance) return;
@@ -439,6 +479,7 @@ export default function GisEditor({ geoMap, mapId, mapTitle, backHref, initialCe
     });
     setActiveLayerId(id);
     maybeAutoFit();
+    markWorkspaceDirty();
     return { persisted: false, id };
   };
 
@@ -449,6 +490,7 @@ export default function GisEditor({ geoMap, mapId, mapTitle, backHref, initialCe
       layersRef.current = updated;
       return updated;
     });
+    markWorkspaceDirty();
     scheduleSave(next);
   };
 
@@ -462,6 +504,7 @@ export default function GisEditor({ geoMap, mapId, mapTitle, backHref, initialCe
         return next;
       });
       if (activeLayerId === id) setActiveLayerId(null);
+      markWorkspaceDirty();
       return;
     }
 
@@ -495,6 +538,7 @@ export default function GisEditor({ geoMap, mapId, mapTitle, backHref, initialCe
   };
 
   const moveLayer = (id: string, direction: number) => {
+    if (isWorkspace && layersRef.current.some((layer) => layer.id === id)) markWorkspaceDirty();
     setLayers((prev) => {
       const idx = prev.findIndex((l) => l.id === id);
       if (idx < 0) return prev;
@@ -535,6 +579,7 @@ export default function GisEditor({ geoMap, mapId, mapTitle, backHref, initialCe
       rasterLayersRef.current = updated;
       return updated;
     });
+    markWorkspaceDirty();
     if (!mapId || !canMutate) return;
     if (next.status === "deleting") return;
     const key = `raster:${next.id}`;
@@ -564,7 +609,16 @@ export default function GisEditor({ geoMap, mapId, mapTitle, backHref, initialCe
   };
 
   const removeRaster = async (id: string) => {
-    if (!mapId || rasterActionIdsRef.current.has(id)) return;
+    if (!mapId) {
+      setRasterLayers((current) => {
+        const next = current.filter((raster) => raster.id !== id);
+        rasterLayersRef.current = next;
+        return next;
+      });
+      markWorkspaceDirty();
+      return;
+    }
+    if (rasterActionIdsRef.current.has(id)) return;
     const previous = rasterLayers.find((r) => r.id === id);
     if (!previous || previous.status === "deleting") return;
     rasterActionIdsRef.current.add(id);
@@ -595,6 +649,26 @@ export default function GisEditor({ geoMap, mapId, mapTitle, backHref, initialCe
       rasterActionIdsRef.current.delete(id);
       setBusyRasterIds(new Set(rasterActionIdsRef.current));
     }
+  };
+
+  const moveRaster = (id: string, direction: number) => {
+    if (!isWorkspace) return;
+    setRasterLayers((current) => {
+      const index = current.findIndex((layer) => layer.id === id);
+      const nextIndex = index + direction;
+      if (index < 0 || nextIndex < 0 || nextIndex >= current.length) return current;
+      const next = [...current];
+      const first = { ...next[index] };
+      const second = { ...next[nextIndex] };
+      const firstZ = first.zIndex;
+      first.zIndex = second.zIndex;
+      second.zIndex = firstZ;
+      next[index] = second;
+      next[nextIndex] = first;
+      rasterLayersRef.current = next;
+      return next;
+    });
+    markWorkspaceDirty();
   };
 
   const retryRaster = async (id: string) => {
@@ -641,6 +715,210 @@ export default function GisEditor({ geoMap, mapId, mapTitle, backHref, initialCe
     return () => clearInterval(t);
   }, [mapId, hasPendingRaster]);
 
+  const handleWorkspaceCatalogAdd = async (items: WorkspaceCatalogSelection[]) => {
+    const vectorItems = items.filter((item) => item.layer.kind === "vector");
+    const vectorResults: PromiseSettledResult<{ item: WorkspaceCatalogSelection; geojson: FeatureCollection }>[] = [];
+    for (let offset = 0; offset < vectorItems.length; offset += 8) {
+      vectorResults.push(...await Promise.allSettled(vectorItems.slice(offset, offset + 8).map(async (item) => ({
+        item,
+        geojson: await fetchLayerData(item.mapId, item.layer.layerId),
+      }))));
+    }
+    const loadedVectors = vectorResults.flatMap((result) => result.status === "fulfilled" ? [result.value] : []);
+    const failedVectors = vectorResults.length - loadedVectors.length;
+
+    let nextVectorZ = layersRef.current.reduce((max, layer) => Math.max(max, layer.zIndex ?? 0), -1) + 1;
+    const newVectors: GisLayer[] = loadedVectors.map(({ item, geojson }) => {
+      const sourceStyle = item.layer.kind === "vector" ? item.layer.style as Partial<LayerStyle> : {};
+      const layer: GisLayer = {
+        id: workspaceLayerKey("vector", item.mapId, item.layer.layerId),
+        name: item.layer.name,
+        geometry: item.layer.kind === "vector" ? item.layer.geometryType : "Polygon",
+        geojson,
+        crs: item.layer.kind === "vector" ? item.layer.crs : "EPSG:4326",
+        visible: true,
+        loadedAt: Date.now(),
+        style: { ...defaultStyleFor(item.layer.kind === "vector" ? item.layer.geometryType : "Polygon", layersRef.current.length), ...sourceStyle },
+        zIndex: nextVectorZ++,
+        persisted: false,
+        workspaceSource: { mapId: item.mapId, layerId: item.layer.layerId, mapTitle: item.mapTitle },
+      };
+      return layer;
+    });
+
+    let nextRasterZ = rasterLayersRef.current.reduce((max, layer) => Math.max(max, layer.zIndex), -1) + 1;
+    const newRasters: RasterLayer[] = items.flatMap((item) => item.layer.kind === "raster" ? [{
+      id: workspaceLayerKey("raster", item.mapId, item.layer.layerId),
+      name: item.layer.name,
+      status: "processed" as const,
+      errorMessage: null,
+      opacity: item.layer.opacity,
+      visible: true,
+      zIndex: nextRasterZ++,
+      bbox: item.layer.bbox,
+      tileUrl: rasterTileUrl(item.mapId, item.layer.layerId),
+      workspaceSource: { mapId: item.mapId, layerId: item.layer.layerId, mapTitle: item.mapTitle },
+    }] : []);
+
+    if (newVectors.length > 0) {
+      const next = [...newVectors, ...layersRef.current].sort((a, b) => (b.zIndex ?? 0) - (a.zIndex ?? 0));
+      layersRef.current = next;
+      setLayers(next);
+      setActiveLayerId(newVectors[0].id);
+    }
+    if (newRasters.length > 0) {
+      const next = [...newRasters, ...rasterLayersRef.current].sort((a, b) => b.zIndex - a.zIndex);
+      rasterLayersRef.current = next;
+      setRasterLayers(next);
+    }
+
+    const loadedCount = newVectors.length + newRasters.length;
+    if (loadedCount > 0) {
+      markWorkspaceDirty();
+      const bboxes = items.map((item) => item.layer.bbox).filter((bbox): bbox is number[] => Array.isArray(bbox) && bbox.length === 4);
+      if (!hasAutoFitted.current && mapInstance && bboxes.length > 0) {
+        const minX = Math.min(...bboxes.map((bbox) => bbox[0]));
+        const minY = Math.min(...bboxes.map((bbox) => bbox[1]));
+        const maxX = Math.max(...bboxes.map((bbox) => bbox[2]));
+        const maxY = Math.max(...bboxes.map((bbox) => bbox[3]));
+        try { mapInstance.fitBounds([[minY, minX], [maxY, maxX]], { padding: [40, 40] }); } catch { /* invalid catalog bounds */ }
+        hasAutoFitted.current = true;
+      }
+      toast.success(`${loadedCount} ${loadedCount === 1 ? "capa agregada" : "capas agregadas"} al Workspace`);
+    }
+    if (failedVectors > 0) toast.warning(`${failedVectors} ${failedVectors === 1 ? "capa no pudo cargarse" : "capas no pudieron cargarse"}`);
+  };
+
+  const workspaceExistingKeys = new Set<string>([
+    ...layers.flatMap((layer) => layer.workspaceSource
+      ? [workspaceLayerKey("vector", layer.workspaceSource.mapId, layer.workspaceSource.layerId)]
+      : []),
+    ...rasterLayers.flatMap((layer) => layer.workspaceSource
+      ? [workspaceLayerKey("raster", layer.workspaceSource.mapId, layer.workspaceSource.layerId)]
+      : []),
+  ]);
+
+  const downloadWorkspace = () => {
+    if (!isWorkspace) return;
+    const center = mapInstance
+      ? [mapInstance.getCenter().lat, mapInstance.getCenter().lng] as [number, number]
+      : initialCenter ?? [-0.5, -90.5];
+    const document = buildWorkspaceDocument({
+      center,
+      zoom: mapInstance?.getZoom() ?? zoom,
+      basemap,
+      vectorLayers: layersRef.current,
+      rasterLayers: rasterLayersRef.current,
+    });
+    const blob = new Blob([JSON.stringify(document, null, 2)], { type: "application/json" });
+    const url = URL.createObjectURL(blob);
+    const anchor = window.document.createElement("a");
+    anchor.href = url;
+    anchor.download = `sigtar-workspace-${new Date().toISOString().slice(0, 10)}.json`;
+    window.document.body.appendChild(anchor);
+    anchor.click();
+    anchor.remove();
+    window.setTimeout(() => URL.revokeObjectURL(url), 0);
+    markWorkspaceClean();
+    toast.success("Workspace descargado correctamente");
+  };
+
+  const restoreWorkspace = async (document: WorkspaceDocument) => {
+    const catalog = await api.get<GeoWorkspaceCatalogMap[]>("/geo/workspace/catalog");
+    const catalogByKey = new Map<string, { map: GeoWorkspaceCatalogMap; layer: GeoWorkspaceCatalogMap["layers"][number] }>();
+    for (const map of catalog) {
+      for (const layer of map.layers) catalogByKey.set(workspaceLayerKey(layer.kind, map.mapId, layer.layerId), { map, layer });
+    }
+
+    const restoredVectors: GisLayer[] = [];
+    const restoredRasters: RasterLayer[] = [];
+    let missing = 0;
+    const vectorTasks: Array<() => Promise<GisLayer>> = [];
+
+    for (const entry of document.layers) {
+      const match = catalogByKey.get(workspaceLayerKey(entry.kind, entry.source.mapId, entry.source.layerId));
+      if (!match || match.layer.kind !== entry.kind) {
+        missing += 1;
+        continue;
+      }
+      if (entry.kind === "raster" && match.layer.kind === "raster") {
+        restoredRasters.push({
+          id: workspaceLayerKey("raster", entry.source.mapId, entry.source.layerId),
+          name: entry.presentation.name,
+          status: "processed",
+          errorMessage: null,
+          opacity: entry.presentation.opacity,
+          visible: entry.presentation.visible,
+          zIndex: entry.presentation.zIndex,
+          bbox: match.layer.bbox,
+          tileUrl: rasterTileUrl(entry.source.mapId, entry.source.layerId),
+          workspaceSource: { ...entry.source, mapTitle: match.map.mapTitle },
+        });
+      } else if (entry.kind === "vector" && match.layer.kind === "vector") {
+        const vectorLayer = match.layer;
+        const sourceMapTitle = match.map.mapTitle;
+        vectorTasks.push(async () => ({
+          id: workspaceLayerKey("vector", entry.source.mapId, entry.source.layerId),
+          name: entry.presentation.name,
+          geometry: vectorLayer.geometryType,
+          geojson: await fetchLayerData(entry.source.mapId, entry.source.layerId),
+          crs: vectorLayer.crs,
+          visible: entry.presentation.visible,
+          loadedAt: Date.now(),
+          style: entry.presentation.style,
+          zIndex: entry.presentation.zIndex,
+          persisted: false,
+          workspaceSource: { ...entry.source, mapTitle: sourceMapTitle },
+        }));
+      }
+    }
+
+    for (let offset = 0; offset < vectorTasks.length; offset += 8) {
+      const results = await Promise.allSettled(vectorTasks.slice(offset, offset + 8).map((task) => task()));
+      for (const result of results) {
+        if (result.status === "fulfilled") restoredVectors.push(result.value);
+        else missing += 1;
+      }
+    }
+
+    restoredVectors.sort((a, b) => (b.zIndex ?? 0) - (a.zIndex ?? 0));
+    restoredRasters.sort((a, b) => b.zIndex - a.zIndex);
+    layersRef.current = restoredVectors;
+    rasterLayersRef.current = restoredRasters;
+    setLayers(restoredVectors);
+    setRasterLayers(restoredRasters);
+    setActiveLayerId(restoredVectors[0]?.id ?? null);
+    setBasemap(document.view.basemap);
+    setZoom(document.view.zoom);
+    hasAutoFitted.current = document.layers.length > 0;
+    if (mapInstance) {
+      suppressWorkspaceViewportDirtyRef.current = true;
+      mapInstance.setView(document.view.center, document.view.zoom);
+      window.setTimeout(() => { suppressWorkspaceViewportDirtyRef.current = false; }, 500);
+    }
+    markWorkspaceClean();
+    if (missing > 0) {
+      toast.warning(`Workspace restaurado; ${missing} ${missing === 1 ? "capa ya no está disponible" : "capas ya no están disponibles"}`);
+    } else {
+      toast.success("Workspace restaurado correctamente");
+    }
+  };
+
+  const loadWorkspaceFile = async (file: File) => {
+    if (file.size > MAX_WORKSPACE_FILE_BYTES) {
+      toast.error("El archivo supera el límite de 2 MB");
+      return;
+    }
+    if ((layersRef.current.length > 0 || rasterLayersRef.current.length > 0) &&
+      !window.confirm("Cargar este archivo reemplazará el Workspace actual. ¿Deseas continuar?")) return;
+    try {
+      const raw = JSON.parse(await file.text()) as unknown;
+      await restoreWorkspace(parseWorkspaceDocument(raw));
+    } catch (error) {
+      toast.error(apiErrorMessage(error, "No se pudo cargar el Workspace"));
+    }
+  };
+
   const handleIdentify = (info: IdentifyInfo) => {
     setIdentify(info);
     if (info?.layerId) setActiveLayerId(info.layerId);
@@ -658,6 +936,8 @@ export default function GisEditor({ geoMap, mapId, mapTitle, backHref, initialCe
   const handleBackClick = async (event: React.MouseEvent<HTMLAnchorElement>) => {
     if (!backHref) return;
     event.preventDefault();
+    if (isWorkspace && workspaceDirtyRef.current &&
+      !window.confirm("El Workspace tiene cambios sin descargar. ¿Deseas salir de todas formas?")) return;
     try {
       await flushDeferredWrites();
       window.location.assign(backHref);
@@ -689,6 +969,27 @@ export default function GisEditor({ geoMap, mapId, mapTitle, backHref, initialCe
         </div>
 
         <div className="tb-group">
+          {isWorkspace && (
+            <>
+              <input
+                ref={workspaceFileRef}
+                type="file"
+                accept="application/json,.json"
+                style={{ display: "none" }}
+                onChange={(event) => {
+                  const file = event.target.files?.[0];
+                  if (file) void loadWorkspaceFile(file);
+                  event.target.value = "";
+                }}
+              />
+              <button className="tb-btn" onClick={() => workspaceFileRef.current?.click()} data-tip="Cargar configuración desde JSON">
+                <FileUp size={14} /> Cargar Workspace
+              </button>
+              <button className="tb-btn" onClick={downloadWorkspace} data-tip="Descargar configuración JSON">
+                <FileDown size={14} /> Descargar Workspace
+              </button>
+            </>
+          )}
           <button
             className={"tb-btn" + (tool === "inspect" ? " active" : "")}
             onClick={() => { if (tool === "inspect") { setTool("pan"); setInspectPoint(null); } else setTool("inspect"); }}
@@ -766,13 +1067,15 @@ export default function GisEditor({ geoMap, mapId, mapTitle, backHref, initialCe
         onMove={moveLayer}
         onOpenUpload={() => setShowUpload(true)}
         readOnly={!canMutate}
-        canDelete={canDelete}
+        canDelete={isWorkspace || canDelete}
+        workspaceMode={isWorkspace}
         busyLayerIds={deletingLayerIds}
         busyRasterIds={busyRasterIds}
         rasterLayers={rasterLayers}
         onRasterChange={updateRaster}
         onRasterRemove={removeRaster}
         onRasterRetry={retryRaster}
+        onRasterMove={moveRaster}
       />
 
       {/* MAP AREA */}
@@ -817,7 +1120,7 @@ export default function GisEditor({ geoMap, mapId, mapTitle, backHref, initialCe
 
         <div className="map-floating basemap-switch">
           {Object.entries(BASEMAPS).map(([key, b]) => (
-            <div key={key} className={"basemap-tile" + (basemap === key ? " active" : "")} style={{ background: BASEMAP_PREVIEWS[key] }} onClick={() => setBasemap(key)} data-tip={b.name}>
+            <div key={key} className={"basemap-tile" + (basemap === key ? " active" : "")} style={{ background: BASEMAP_PREVIEWS[key] }} onClick={() => { setBasemap(key); markWorkspaceDirty(); }} data-tip={b.name}>
               <span>{b.name}</span>
             </div>
           ))}
@@ -866,6 +1169,12 @@ export default function GisEditor({ geoMap, mapId, mapTitle, backHref, initialCe
         <span className="sep">|</span>
         <span>Vista: {coord[0].toFixed(4)}°, {coord[1].toFixed(4)}°</span>
         <div style={{ flex: 1 }} />
+        {isWorkspace && (
+          <>
+            <span>{workspaceDirty ? "Cambios sin descargar" : "Sin cambios pendientes"}</span>
+            <span className="sep">|</span>
+          </>
+        )}
         {mapId && (
           <>
             <span>
@@ -883,12 +1192,20 @@ export default function GisEditor({ geoMap, mapId, mapTitle, backHref, initialCe
       </div>
 
       {showUpload && (
-        <UploadModal
-          onClose={() => setShowUpload(false)}
-          onAdd={addLayer}
-          mapId={mapId}
-          onRasterUploaded={handleRasterUploaded}
-        />
+        isWorkspace ? (
+          <WorkspaceLayerCatalogModal
+            existingKeys={workspaceExistingKeys}
+            onClose={() => setShowUpload(false)}
+            onAdd={handleWorkspaceCatalogAdd}
+          />
+        ) : (
+          <UploadModal
+            onClose={() => setShowUpload(false)}
+            onAdd={addLayer}
+            mapId={mapId}
+            onRasterUploaded={handleRasterUploaded}
+          />
+        )
       )}
 
       {exportOpen && (

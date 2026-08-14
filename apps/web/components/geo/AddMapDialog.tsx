@@ -10,9 +10,10 @@ import type { GeoMap } from "@/types/geo";
 
 interface Props {
   onAdd: (map: GeoMap) => void;
+  triggerClassName?: string;
 }
 
-export default function AddMapDialog({ onAdd }: Props) {
+export default function AddMapDialog({ onAdd, triggerClassName = "" }: Props) {
   const [open, setOpen] = useState(false);
   const [form, setForm] = useState({
     title: "",
@@ -68,7 +69,7 @@ export default function AddMapDialog({ onAdd }: Props) {
     return (
       <Button
         onClick={() => setOpen(true)}
-        className="bg-teal-600 hover:bg-teal-700 text-white gap-2"
+        className={`bg-teal-600 hover:bg-teal-700 text-white gap-2 ${triggerClassName}`}
       >
         <Plus className="w-4 h-4" />
         Agregar Mapa
