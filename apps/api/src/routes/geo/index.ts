@@ -33,7 +33,15 @@ import {
   reorderVisualizations,
   updateVisualization,
 } from "../../modules/geo/visualizationsModule.js";
-import { GEO_CHART_AGGREGATIONS, GEO_CHART_TYPES } from "@pma/types/geo";
+
+// Keep runtime validation values inside the API bundle. The shared types package
+// intentionally exposes TypeScript sources and is therefore safe for type-only
+// imports, but importing runtime constants from it would make the production
+// Node process attempt to execute a raw .ts file.
+const GEO_CHART_TYPES = [
+  "kpi", "bar", "stackedBar", "line", "area", "donut", "histogram", "scatter", "sankey", "table",
+] as const;
+const GEO_CHART_AGGREGATIONS = ["count", "distinctCount", "sum", "avg", "min", "max"] as const;
 
 const createSchema = z.object({
   title: z.string().trim().min(1).max(200),
