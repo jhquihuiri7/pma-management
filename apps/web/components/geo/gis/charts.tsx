@@ -14,9 +14,9 @@ export function inferColumnType(values: unknown[]): ColumnType {
   const dateRe = /^\d{4}-\d{2}-\d{2}/;
   if (nonNull.every((v) => typeof v === "string" && dateRe.test(v))) return "date";
 
+  if (nonNull.every((v) => typeof v === "boolean")) return "boolean";
+
   if (nonNull.every((v) => typeof v === "number" && !Number.isNaN(v))) {
-    const uniq = new Set(nonNull);
-    if (uniq.size <= 4 && Array.from(uniq).every((v) => Number.isInteger(v as number))) return "categorical";
     return "numeric";
   }
 
@@ -25,10 +25,20 @@ export function inferColumnType(values: unknown[]): ColumnType {
 
 export function inferSchema(features: Feature[]): SchemaColumn[] {
   if (!features || features.length === 0) return [];
-  const keys = Object.keys(features[0].properties || {});
+  // A valid GeoJSON collection may introduce an attribute after the first
+  // feature. Keep insertion order while profiling the union of every row.
+  const keys = Array.from(new Set(features.flatMap((feature) => Object.keys(feature.properties || {}))));
   return keys.map((key) => {
     const values = features.map((f) => (f.properties || {})[key]);
-    return { key, type: inferColumnType(values), values };
+    const present = values.filter((value) => value !== null && value !== undefined && value !== "");
+    return {
+      key,
+      type: inferColumnType(values),
+      values,
+      nullCount: values.length - present.length,
+      uniqueCount: new Set(present.map((value) => typeof value === "object" ? JSON.stringify(value) : String(value))).size,
+      sample: present.slice(0, 5),
+    };
   });
 }
 

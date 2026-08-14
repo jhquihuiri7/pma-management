@@ -5,6 +5,7 @@ import dynamic from "next/dynamic";
 import type { Map as LeafletMap } from "leaflet";
 import type { FeatureCollection } from "geojson";
 import type { GeoWorkspaceCatalogMap } from "@pma/types/geo";
+import type { GeoLayerVisualization } from "@pma/types/geo";
 import {
   PanelLeft, PanelRight, Table2, Info, Ruler, ZoomIn, ZoomOut, Home,
   Search, Download, Upload, X, AlignLeft, Maximize, Minimize, ArrowLeft,
@@ -151,6 +152,7 @@ export default function GisEditor({ geoMap, mapId, mapTitle, backHref, initialCe
   const [searchOpen, setSearchOpen] = useState(false);
   const [exportOpen, setExportOpen] = useState(false);
   const [workspaceDirty, setWorkspaceDirty] = useState(false);
+  const [workspaceVisualizations, setWorkspaceVisualizations] = useState<Record<string, GeoLayerVisualization[]>>({});
   const workspaceDirtyRef = useRef(false);
   const workspaceFileRef = useRef<HTMLInputElement>(null);
   const suppressWorkspaceViewportDirtyRef = useRef(false);
@@ -504,6 +506,11 @@ export default function GisEditor({ geoMap, mapId, mapTitle, backHref, initialCe
         return next;
       });
       if (activeLayerId === id) setActiveLayerId(null);
+      setWorkspaceVisualizations((current) => {
+        const next = { ...current };
+        delete next[id];
+        return next;
+      });
       markWorkspaceDirty();
       return;
     }
@@ -809,6 +816,7 @@ export default function GisEditor({ geoMap, mapId, mapTitle, backHref, initialCe
       basemap,
       vectorLayers: layersRef.current,
       rasterLayers: rasterLayersRef.current,
+      visualizationsByLayer: workspaceVisualizations,
     });
     const blob = new Blob([JSON.stringify(document, null, 2)], { type: "application/json" });
     const url = URL.createObjectURL(blob);
@@ -832,6 +840,7 @@ export default function GisEditor({ geoMap, mapId, mapTitle, backHref, initialCe
 
     const restoredVectors: GisLayer[] = [];
     const restoredRasters: RasterLayer[] = [];
+    const restoredVisualizations: Record<string, GeoLayerVisualization[]> = {};
     let missing = 0;
     const vectorTasks: Array<() => Promise<GisLayer>> = [];
 
@@ -857,8 +866,14 @@ export default function GisEditor({ geoMap, mapId, mapTitle, backHref, initialCe
       } else if (entry.kind === "vector" && match.layer.kind === "vector") {
         const vectorLayer = match.layer;
         const sourceMapTitle = match.map.mapTitle;
+        const restoredLayerId = workspaceLayerKey("vector", entry.source.mapId, entry.source.layerId);
+        restoredVisualizations[restoredLayerId] = entry.presentation.visualizations.map((visualization) => ({
+          ...visualization,
+          mapId: entry.source.mapId,
+          layerId: restoredLayerId,
+        }));
         vectorTasks.push(async () => ({
-          id: workspaceLayerKey("vector", entry.source.mapId, entry.source.layerId),
+          id: restoredLayerId,
           name: entry.presentation.name,
           geometry: vectorLayer.geometryType,
           geojson: await fetchLayerData(entry.source.mapId, entry.source.layerId),
@@ -887,6 +902,7 @@ export default function GisEditor({ geoMap, mapId, mapTitle, backHref, initialCe
     rasterLayersRef.current = restoredRasters;
     setLayers(restoredVectors);
     setRasterLayers(restoredRasters);
+    setWorkspaceVisualizations(restoredVisualizations);
     setActiveLayerId(restoredVectors[0]?.id ?? null);
     setBasemap(document.view.basemap);
     setZoom(document.view.zoom);
@@ -964,7 +980,7 @@ export default function GisEditor({ geoMap, mapId, mapTitle, backHref, initialCe
 
         <div className="tb-group">
           <button className={"tb-btn" + (showLeft ? " active" : "")} onClick={() => setShowLeft(!showLeft)} data-tip="Capas"><PanelLeft size={14} /></button>
-          <button className={"tb-btn" + (showRight ? " active" : "")} onClick={() => setShowRight(!showRight)} data-tip="Dashboards"><PanelRight size={14} /></button>
+          <button className={"tb-btn" + (showRight ? " active" : "")} onClick={() => setShowRight(!showRight)} data-tip="Visualizaciones"><PanelRight size={14} /></button>
           <button className={"tb-btn" + (attrPanelOpen ? " active" : "")} onClick={() => setAttrPanelOpen(!attrPanelOpen)} data-tip="Tabla de atributos"><Table2 size={14} /></button>
         </div>
 
@@ -1159,7 +1175,17 @@ export default function GisEditor({ geoMap, mapId, mapTitle, backHref, initialCe
       </div>
 
       {/* RIGHT RAIL */}
-      <DashboardsPanel layer={activeLayer} />
+      <DashboardsPanel
+        layer={activeLayer}
+        mapId={mapId}
+        canConfigure={canMutate}
+        workspaceMode={isWorkspace}
+        workspaceVisualizations={isWorkspace && activeLayer ? workspaceVisualizations[activeLayer.id] : undefined}
+        onWorkspaceChange={(layerId, visualizations) => {
+          setWorkspaceVisualizations((current) => ({ ...current, [layerId]: visualizations }));
+          markWorkspaceDirty();
+        }}
+      />
 
       {/* STATUS BAR */}
       <div className="statusbar">

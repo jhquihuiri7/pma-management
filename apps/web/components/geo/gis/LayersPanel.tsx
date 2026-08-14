@@ -94,7 +94,7 @@ function RasterItem({ layer, readOnly, canDelete, workspaceMode, isFirst, isLast
 function StyleEditor({ layer, onChange }: { layer: GisLayer; onChange: (l: GisLayer) => void }) {
   const schema = inferSchema(layer.geojson.features);
   const numericCols = schema.filter((c) => c.type === "numeric");
-  const catCols = schema.filter((c) => c.type === "categorical");
+  const catCols = schema.filter((c) => c.type === "categorical" || c.type === "boolean" || c.type === "numeric");
 
   const setStyle = (patch: Partial<LayerStyle>) => onChange({ ...layer, style: { ...layer.style, ...patch } });
 

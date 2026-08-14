@@ -3,7 +3,7 @@ import type { FeatureCollection, Feature, Geometry } from "geojson";
 export type GisGeometry = "Point" | "LineString" | "Polygon";
 export type SymbologyMode = "single" | "category" | "ramp";
 export type Classification = "equal" | "quantile" | "jenks";
-export type ColumnType = "numeric" | "categorical" | "date" | "empty";
+export type ColumnType = "numeric" | "categorical" | "date" | "boolean" | "empty";
 
 export interface LayerStyle {
   mode: SymbologyMode;
@@ -84,6 +84,9 @@ export interface SchemaColumn {
   key: string;
   type: ColumnType;
   values: unknown[];
+  nullCount?: number;
+  uniqueCount?: number;
+  sample?: unknown[];
 }
 
 export interface IdentifyInfo {

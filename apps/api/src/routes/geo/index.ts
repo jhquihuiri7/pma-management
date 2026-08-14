@@ -26,6 +26,14 @@ import { env } from "../../lib/env.js";
 import { beginDurableStorageIntent } from "../../modules/shared/durableFilePersistence.js";
 import { lockAndAssertGeoEditor } from "../../modules/geo/authorization.js";
 import { listWorkspaceCatalog } from "../../modules/geo/workspaceModule.js";
+import {
+  createVisualization,
+  deleteVisualization,
+  listVisualizations,
+  reorderVisualizations,
+  updateVisualization,
+} from "../../modules/geo/visualizationsModule.js";
+import { GEO_CHART_AGGREGATIONS, GEO_CHART_TYPES } from "@pma/types/geo";
 
 const createSchema = z.object({
   title: z.string().trim().min(1).max(200),
@@ -50,6 +58,7 @@ const workspaceCatalogQuerySchema = z.object({
   categoryId: z.string().trim().min(1).max(100).optional(),
 }).strict();
 const layerParamsSchema = z.object({ id: z.string().uuid(), layerId: z.string().uuid() }).strict();
+const visualizationParamsSchema = layerParamsSchema.extend({ visualizationId: z.string().uuid() });
 const tileParamsSchema = layerParamsSchema.extend({
   z: z.string().regex(/^\d{1,2}$/),
   x: z.string().regex(/^\d+$/),
@@ -262,6 +271,37 @@ export async function geoRoutes(app: FastifyInstance) {
     const { id, layerId } = layerParamsSchema.parse(req.params);
     const body = updateLayerSchema.parse(req.body);
     return updateLayer(id, layerId, req.user!.sub, body);
+  });
+
+  // ── Layer visualizations ────────────────────────────────────────────────
+  app.get("/maps/:id/layers/:layerId/visualizations", async (req) => {
+    const { id, layerId } = layerParamsSchema.parse(req.params);
+    return listVisualizations(id, layerId);
+  });
+
+  app.post("/maps/:id/layers/:layerId/visualizations", { preHandler: geoEditor }, async (req, reply) => {
+    const { id, layerId } = layerParamsSchema.parse(req.params);
+    const body = visualizationCreateSchema.parse(req.body);
+    reply.status(201);
+    return createVisualization(id, layerId, req.user!.sub, body);
+  });
+
+  app.put("/maps/:id/layers/:layerId/visualizations/order", { preHandler: geoEditor }, async (req) => {
+    const { id, layerId } = layerParamsSchema.parse(req.params);
+    const { ids } = visualizationOrderSchema.parse(req.body);
+    return reorderVisualizations(id, layerId, req.user!.sub, ids);
+  });
+
+  app.patch("/maps/:id/layers/:layerId/visualizations/:visualizationId", { preHandler: geoEditor }, async (req) => {
+    const { id, layerId, visualizationId } = visualizationParamsSchema.parse(req.params);
+    const body = visualizationUpdateSchema.parse(req.body);
+    return updateVisualization(id, layerId, visualizationId, req.user!.sub, body);
+  });
+
+  app.delete("/maps/:id/layers/:layerId/visualizations/:visualizationId", { preHandler: geoEditor }, async (req) => {
+    const { id, layerId, visualizationId } = visualizationParamsSchema.parse(req.params);
+    await deleteVisualization(id, layerId, visualizationId, req.user!.sub);
+    return { ok: true };
   });
 
   app.delete("/maps/:id/layers/:layerId", { preHandler: adminOnly }, async (req) => {
@@ -542,6 +582,67 @@ const updateLayerSchema = z.object({
   visible: z.boolean().optional(),
   zIndex: z.number().int().min(-10_000).max(10_000).optional(),
 }).strict().refine((body) => Object.keys(body).length > 0, "Debes enviar al menos un campo");
+
+const visualizationBindingSchema = z.object({
+  role: z.enum(["dimension", "measure", "series", "x", "y", "size", "level", "weight", "value"]),
+  field: z.string().trim().min(1).max(200),
+  aggregation: z.enum(GEO_CHART_AGGREGATIONS).optional(),
+  dateGrain: z.enum(["year", "quarter", "month", "day"]).optional(),
+}).strict();
+
+const visualizationOptionsSchema = z.object({
+  palette: z.string().trim().min(1).max(50).optional(),
+  orientation: z.enum(["horizontal", "vertical"]).optional(),
+  sort: z.enum(["none", "asc", "desc"]).optional(),
+  topN: z.number().int().min(1).max(100).optional(),
+  includeNulls: z.boolean().optional(),
+  showLegend: z.boolean().optional(),
+  showLabels: z.boolean().optional(),
+  bins: z.number().int().min(3).max(30).optional(),
+}).strict();
+
+const visualizationBaseSchema = z.object({
+  type: z.enum(GEO_CHART_TYPES),
+  title: z.string().trim().min(1).max(200),
+  position: z.number().int().min(0).max(10_000),
+  bindings: z.array(visualizationBindingSchema).max(10),
+  options: visualizationOptionsSchema,
+  version: z.literal(1),
+}).strict().superRefine((value, ctx) => {
+  const count = (role: string) => value.bindings.filter((binding) => binding.role === role).length;
+  const allowedRoles: Record<(typeof GEO_CHART_TYPES)[number], string[]> = {
+    kpi: ["value"], bar: ["dimension", "measure"], stackedBar: ["dimension", "series", "measure"],
+    line: ["dimension", "measure", "series"], area: ["dimension", "measure"], donut: ["dimension", "measure"],
+    histogram: ["value"], scatter: ["x", "y", "size", "series"], sankey: ["level", "weight"], table: ["dimension", "measure"],
+  };
+  value.bindings.forEach((binding, index) => {
+    if (!allowedRoles[value.type].includes(binding.role)) ctx.addIssue({ code: z.ZodIssueCode.custom, path: ["bindings", index, "role"], message: `El rol ${binding.role} no corresponde a ${value.type}` });
+  });
+  const exact = (role: string, expected: number) => {
+    if (count(role) !== expected) ctx.addIssue({ code: z.ZodIssueCode.custom, path: ["bindings"], message: `${value.type} requiere ${expected} campo(s) ${role}` });
+  };
+  if (value.type === "kpi" || value.type === "histogram") exact("value", 1);
+  if (["bar", "line", "area", "donut"].includes(value.type)) exact("dimension", 1);
+  if (value.type === "stackedBar") { exact("dimension", 1); exact("series", 1); }
+  if (value.type === "scatter") { exact("x", 1); exact("y", 1); }
+  if (["bar", "stackedBar", "line", "area", "donut"].includes(value.type) && count("measure") > 1) ctx.addIssue({ code: z.ZodIssueCode.custom, path: ["bindings"], message: "Solo se admite una medida" });
+  if (value.type === "line" && count("series") > 1) ctx.addIssue({ code: z.ZodIssueCode.custom, path: ["bindings"], message: "Solo se admite una serie" });
+  if (value.type === "scatter" && (count("size") > 1 || count("series") > 1)) ctx.addIssue({ code: z.ZodIssueCode.custom, path: ["bindings"], message: "Dispersión admite un tamaño y un color" });
+  if (value.type === "sankey" && (count("level") < 2 || count("level") > 5)) {
+    ctx.addIssue({ code: z.ZodIssueCode.custom, path: ["bindings"], message: "Sankey requiere entre 2 y 5 niveles" });
+  }
+  if (value.type === "table" && (count("dimension") < 1 || count("dimension") > 3)) {
+    ctx.addIssue({ code: z.ZodIssueCode.custom, path: ["bindings"], message: "La tabla requiere entre 1 y 3 dimensiones" });
+  }
+  if (value.type === "table" && count("measure") > 3) ctx.addIssue({ code: z.ZodIssueCode.custom, path: ["bindings"], message: "La tabla admite máximo 3 medidas" });
+  if (value.type === "sankey" && count("weight") > 1) ctx.addIssue({ code: z.ZodIssueCode.custom, path: ["bindings"], message: "Sankey admite un solo peso" });
+});
+
+const visualizationCreateSchema = visualizationBaseSchema;
+// Updates replace the complete recipe so cross-field validation cannot be
+// bypassed with a partial patch that leaves an invalid role/type combination.
+const visualizationUpdateSchema = visualizationBaseSchema;
+const visualizationOrderSchema = z.object({ ids: z.array(z.string().uuid()).max(20) }).strict();
 
 const updateRasterSchema = z.object({
   name: z.string().trim().min(1).max(200).optional(),

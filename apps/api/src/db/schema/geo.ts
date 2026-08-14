@@ -58,6 +58,31 @@ export const geoMapLayers = pgTable(
   })
 );
 
+/** User-authored analytical recipes shown in the GIS right rail. */
+export const geoLayerVisualizations = pgTable(
+  "geo_layer_visualizations",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    mapId: uuid("map_id")
+      .notNull()
+      .references(() => geoMaps.id, { onDelete: "cascade" }),
+    layerId: uuid("layer_id")
+      .notNull()
+      .references(() => geoMapLayers.id, { onDelete: "cascade" }),
+    type: text("type").notNull(),
+    title: text("title").notNull(),
+    position: integer("position").notNull().default(0),
+    config: jsonb("config").notNull(),
+    version: integer("version").notNull().default(1),
+    createdBy: uuid("created_by").references(() => users.id, { onDelete: "set null" }),
+    createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
+    updatedAt: timestamp("updated_at", { withTimezone: true }).defaultNow().notNull(),
+  },
+  (t) => ({
+    layerIdx: index("geo_layer_visualizations_layer_idx").on(t.mapId, t.layerId, t.position),
+  }),
+);
+
 /**
  * One row per raster layer (orthophoto). Unlike vectors, the heavy pixels are
  * never sent to the browser: the original .tif lives on the NAS, a worker turns

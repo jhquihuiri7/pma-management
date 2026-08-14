@@ -9,6 +9,7 @@ import {
 } from "@/lib/api-client";
 import type { Feature, FeatureCollection } from "geojson";
 import type { GisGeometry, LayerStyle, RasterStatus } from "./types";
+import type { GeoLayerVisualization, GeoVisualizationDraft } from "@pma/types/geo";
 
 export interface LayerManifest {
   id: string;
@@ -99,6 +100,49 @@ export async function deleteLayerRemote(mapId: string, layerId: string): Promise
     await api.delete<unknown>(`${base(mapId)}/${layerId}`),
     "El servidor no confirmó la eliminación de la capa"
   );
+}
+
+// ── User-authored visualizations ──────────────────────────────────────────
+
+const visualizationBase = (mapId: string, layerId: string) => `${base(mapId)}/${layerId}/visualizations`;
+
+export function fetchVisualizations(mapId: string, layerId: string): Promise<GeoLayerVisualization[]> {
+  return api.get<GeoLayerVisualization[]>(visualizationBase(mapId, layerId));
+}
+
+export async function createVisualizationRemote(
+  mapId: string,
+  layerId: string,
+  draft: GeoVisualizationDraft,
+): Promise<GeoLayerVisualization> {
+  return requirePersistedEntity<GeoLayerVisualization>(
+    await api.post<unknown>(visualizationBase(mapId, layerId), draft),
+    "El servidor no confirmó la visualización",
+  );
+}
+
+export async function updateVisualizationRemote(
+  mapId: string,
+  layerId: string,
+  visualizationId: string,
+  draft: GeoVisualizationDraft,
+): Promise<GeoLayerVisualization> {
+  return requirePersistedEntity<GeoLayerVisualization>(
+    await api.patch<unknown>(`${visualizationBase(mapId, layerId)}/${visualizationId}`, draft),
+    "El servidor no confirmó los cambios de la visualización",
+    visualizationId,
+  );
+}
+
+export async function deleteVisualizationRemote(mapId: string, layerId: string, visualizationId: string): Promise<void> {
+  requireOkReceipt(
+    await api.delete<unknown>(`${visualizationBase(mapId, layerId)}/${visualizationId}`),
+    "El servidor no confirmó la eliminación de la visualización",
+  );
+}
+
+export function reorderVisualizationsRemote(mapId: string, layerId: string, ids: string[]): Promise<GeoLayerVisualization[]> {
+  return api.put<GeoLayerVisualization[]>(`${visualizationBase(mapId, layerId)}/order`, { ids });
 }
 
 // ── Raster (orthophoto) layers ─────────────────────────────────────────────

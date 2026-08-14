@@ -80,8 +80,43 @@ test("rechaza versiones incompatibles y referencias duplicadas", () => {
     vectorLayers: [vectorLayer()], rasterLayers: [],
     exportedAt: "2026-08-14T12:00:00.000Z",
   });
-  assert.throws(() => parseWorkspaceDocument({ ...document, version: 2 }), /no es compatible/);
+  assert.throws(() => parseWorkspaceDocument({ ...document, version: 99 }), /no es compatible/);
   assert.throws(() => parseWorkspaceDocument({ ...document, layers: [document.layers[0], document.layers[0]] }), /duplicada/);
+});
+
+test("migra Workspace v1 a v2 sin inventar visualizaciones", () => {
+  const document = buildWorkspaceDocument({
+    center: [0, 0], zoom: 7, basemap: "light",
+    vectorLayers: [vectorLayer()], rasterLayers: [],
+    exportedAt: "2026-08-14T12:00:00.000Z",
+  });
+  const legacy = structuredClone(document) as any;
+  legacy.version = 1;
+  delete legacy.layers[0].presentation.visualizations;
+  const parsed = parseWorkspaceDocument(legacy);
+  assert.equal(parsed.version, WORKSPACE_VERSION);
+  assert.deepEqual((parsed.layers[0] as any).presentation.visualizations, []);
+});
+
+test("conserva recetas de visualización sin serializar datos derivados", () => {
+  const layer = vectorLayer();
+  const visualizationId = "44444444-4444-4444-8444-444444444444";
+  const document = buildWorkspaceDocument({
+    center: [0, 0], zoom: 7, basemap: "light", vectorLayers: [layer], rasterLayers: [],
+    visualizationsByLayer: {
+      [layer.id]: [{
+        id: visualizationId, mapId: MAP_ID, layerId: layer.id, type: "sankey", title: "Flujo", position: 0, version: 1,
+        bindings: [{ role: "level", field: "origen" }, { role: "level", field: "destino" }], options: {},
+      }],
+    },
+    exportedAt: "2026-08-14T12:00:00.000Z",
+  });
+  const parsed = parseWorkspaceDocument(document);
+  const vector = parsed.layers[0];
+  assert.equal(vector.kind, "vector");
+  if (vector.kind === "vector") assert.equal(vector.presentation.visualizations[0].id, visualizationId);
+  assert.equal(JSON.stringify(document).includes("nodes"), false);
+  assert.equal(JSON.stringify(document).includes("links"), false);
 });
 
 test("rechaza URLs y campos no permitidos en una referencia importada", () => {

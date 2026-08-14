@@ -696,6 +696,98 @@
   text-align: center; padding: 18px 6px;
 }
 
+/* User-authored visualization cards and builder */
+.gis-shell .rail-empty {
+  flex: 1; display: grid; place-content: center; justify-items: center; gap: 10px;
+  padding: 28px; color: var(--muted-fg); text-align: center; font-size: 12px;
+}
+.gis-shell .rail-empty:first-letter { font-size: 30px; color: var(--border-strong); }
+.gis-shell .rail-empty.small { min-height: 180px; }
+.gis-shell .add-viz-card {
+  width: 100%; min-height: 142px; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 5px;
+  border: 1.5px dashed color-mix(in srgb, var(--data-green) 45%, var(--border)); border-radius: 10px;
+  background: color-mix(in srgb, var(--data-green) 3%, transparent); color: var(--muted-fg); transition: .16s ease;
+}
+.gis-shell .add-viz-card:hover { border-color: var(--data-green); background: color-mix(in srgb, var(--data-green) 8%, transparent); color: var(--foreground); transform: translateY(-1px); }
+.gis-shell .add-viz-card > span { width: 36px; height: 36px; display: grid; place-items: center; border-radius: 50%; border: 1px solid var(--border); background: var(--background); color: var(--data-green); }
+.gis-shell .add-viz-card strong { font-size: 12.5px; }
+.gis-shell .add-viz-card small { font-size: 10.5px; font-weight: 400; }
+.gis-shell .viz-card-icon { display: inline-grid; place-items: center; width: 22px; height: 22px; margin-right: 6px; border-radius: 5px; background: var(--muted); color: var(--data-green); font-family: var(--font-mono); }
+.gis-shell .viz-card .dash-card-body { padding: 0 7px 7px; }
+.gis-shell .viz-card-actions { display: flex; gap: 2px; flex-shrink: 0; }
+.gis-shell .viz-card-actions button { width: 23px; height: 23px; display: grid; place-items: center; border: 0; border-radius: 4px; background: transparent; color: var(--muted-fg); font-size: 11px; }
+.gis-shell .viz-card-actions button:hover:not(:disabled) { background: var(--hover); color: var(--foreground); }
+.gis-shell .viz-card-actions button:disabled { opacity: .25; cursor: default; }
+.gis-shell .viz-invalid { min-height: 110px; display: flex; flex-direction: column; place-content: center; align-items: center; gap: 4px; border: 1px dashed #d3a699; border-radius: 7px; color: #7a3325; text-align: center; font-size: 11px; padding: 15px; }
+.gis-shell .viz-invalid button { margin-top: 5px; border: 1px solid currentColor; border-radius: 5px; background: transparent; color: inherit; padding: 3px 8px; }
+.gis-shell .viz-kpi { display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 5px; }
+.gis-shell .viz-kpi strong { font-size: 34px; color: var(--data-green); letter-spacing: -1px; }
+.gis-shell .viz-kpi span { color: var(--muted-fg); font-size: 10.5px; }
+.gis-shell .viz-table-wrap { overflow: auto; border: 1px solid var(--border); border-radius: 6px; }
+.gis-shell .viz-table { width: 100%; border-collapse: collapse; font-size: 10.5px; }
+.gis-shell .viz-table th { position: sticky; top: 0; background: var(--muted); color: var(--muted-fg); text-align: left; font-weight: 600; }
+.gis-shell .viz-table th, .gis-shell .viz-table td { padding: 6px 8px; border-bottom: 1px solid var(--border); white-space: nowrap; }
+.gis-shell .columns-table-wrap { overflow: auto; border: 1px solid var(--border); border-radius: 7px; }
+.gis-shell .columns-table { width: 100%; border-collapse: collapse; font-size: 10.5px; }
+.gis-shell .columns-table th, .gis-shell .columns-table td { padding: 7px 8px; border-bottom: 1px solid var(--border); text-align: right; }
+.gis-shell .columns-table th:first-child, .gis-shell .columns-table td:first-child { text-align: left; max-width: 105px; overflow: hidden; text-overflow: ellipsis; font-family: var(--font-mono); }
+.gis-shell .columns-table th { color: var(--muted-fg); font-size: 9.5px; text-transform: uppercase; }
+
+.gis-shell .viz-builder-backdrop { position: fixed; inset: 48px 0 26px; z-index: 1250; display: flex; justify-content: flex-end; background: rgba(23, 31, 27, .22); backdrop-filter: blur(1.5px); }
+.gis-shell .viz-builder { width: min(1000px, calc(100vw - 40px)); height: 100%; display: flex; flex-direction: column; background: var(--background); border-left: 1px solid var(--border); box-shadow: -18px 0 50px rgba(20, 30, 25, .18); animation: gis-slide-in-right .18s ease-out; }
+@keyframes gis-slide-in-right { from { transform: translateX(24px); opacity: .7; } to { transform: translateX(0); opacity: 1; } }
+.gis-shell .viz-builder-head { height: 62px; flex: 0 0 62px; display: flex; align-items: center; justify-content: space-between; padding: 0 18px; border-bottom: 1px solid var(--border); }
+.gis-shell .viz-builder-title { font-size: 15px; font-weight: 650; }
+.gis-shell .viz-builder-sub { color: var(--muted-fg); font-size: 10.5px; margin-top: 2px; }
+.gis-shell .viz-gallery { overflow-y: auto; padding: 24px; display: grid; grid-template-columns: repeat(3, minmax(180px, 1fr)); gap: 12px; }
+.gis-shell .viz-gallery-card { min-height: 145px; display: flex; flex-direction: column; align-items: flex-start; justify-content: center; gap: 5px; padding: 17px; border: 1px solid var(--border); border-radius: 10px; background: var(--background); text-align: left; transition: .15s ease; }
+.gis-shell .viz-gallery-card:hover:not(:disabled) { border-color: var(--data-green); box-shadow: 0 6px 20px rgba(30, 70, 50, .09); transform: translateY(-1px); }
+.gis-shell .viz-gallery-card:disabled { opacity: .48; cursor: not-allowed; background: var(--muted); }
+.gis-shell .viz-gallery-icon { width: 38px; height: 38px; display: grid; place-items: center; border-radius: 8px; background: #e7f0ea; color: #1f5a3f; font-size: 18px; font-family: var(--font-mono); }
+.gis-shell .viz-gallery-card strong { font-size: 13px; margin-top: 4px; }
+.gis-shell .viz-gallery-card small { color: var(--muted-fg); font-size: 10.5px; }
+.gis-shell .viz-gallery-card em { color: #8c4937; font-style: normal; font-size: 9.5px; }
+.gis-shell .viz-builder-grid { min-height: 0; flex: 1; display: grid; grid-template-columns: 190px minmax(300px, 1fr) 275px; }
+.gis-shell .viz-fields, .gis-shell .viz-bindings { min-height: 0; overflow-y: auto; padding: 12px; background: color-mix(in srgb, var(--muted) 52%, var(--background)); }
+.gis-shell .viz-fields { border-right: 1px solid var(--border); }
+.gis-shell .viz-bindings { border-left: 1px solid var(--border); }
+.gis-shell .viz-back { display: flex; align-items: center; gap: 4px; border: 0; background: transparent; color: var(--muted-fg); font-size: 10.5px; padding: 4px 0 12px; }
+.gis-shell .viz-side-title { color: var(--muted-fg); font-size: 9.5px; font-weight: 700; text-transform: uppercase; letter-spacing: .6px; margin-bottom: 8px; }
+.gis-shell .viz-field-list { display: grid; gap: 4px; }
+.gis-shell .viz-field { width: 100%; min-width: 0; display: grid; grid-template-columns: 14px minmax(0,1fr) auto; align-items: center; gap: 5px; padding: 7px; border: 1px solid var(--border); border-radius: 5px; background: var(--background); text-align: left; }
+.gis-shell .viz-field > span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 11px; }
+.gis-shell .viz-field em { color: var(--muted-fg); font-size: 8.5px; font-style: normal; }
+.gis-shell .viz-preview { min-width: 0; min-height: 0; display: flex; flex-direction: column; padding: 16px; }
+.gis-shell .viz-preview-head { display: flex; align-items: center; gap: 8px; padding-bottom: 12px; }
+.gis-shell .viz-preview-head > span { width: 30px; height: 30px; display: grid; place-items: center; border-radius: 6px; background: #e7f0ea; color: #1f5a3f; }
+.gis-shell .viz-preview-head input { flex: 1; min-width: 0; height: 34px; border: 1px solid transparent; border-radius: 5px; padding: 0 8px; background: transparent; font-size: 14px; font-weight: 600; }
+.gis-shell .viz-preview-head input:hover, .gis-shell .viz-preview-head input:focus { border-color: var(--border); outline: none; background: var(--background); }
+.gis-shell .viz-preview-canvas { min-height: 0; flex: 1; display: grid; place-items: center; border: 1px solid var(--border); border-radius: 9px; background: var(--background); padding: 14px; overflow: auto; }
+.gis-shell .viz-preview-canvas > * { width: 100%; }
+.gis-shell .viz-preview-empty { display: flex; flex-direction: column; align-items: center; gap: 10px; color: var(--muted-fg); text-align: center; font-size: 11px; }
+.gis-shell .viz-drop-zone { padding: 8px; margin-bottom: 8px; border: 1px solid var(--border); border-radius: 7px; background: var(--background); }
+.gis-shell .viz-drop-title { display: flex; flex-direction: column; gap: 1px; margin-bottom: 6px; }
+.gis-shell .viz-drop-title > span { font-size: 10.5px; font-weight: 650; }
+.gis-shell .viz-drop-title small { color: var(--muted-fg); font-size: 8.8px; }
+.gis-shell .viz-drop-placeholder { padding: 7px; border: 1px dashed var(--border-strong); border-radius: 4px; color: var(--muted-fg); font-size: 9.5px; text-align: center; }
+.gis-shell .viz-binding { display: flex; align-items: center; gap: 4px; margin-bottom: 5px; padding: 5px; border-radius: 4px; background: var(--muted); }
+.gis-shell .viz-binding-name { min-width: 0; flex: 1; overflow: hidden; text-overflow: ellipsis; font-size: 9.5px; font-weight: 600; }
+.gis-shell .viz-binding select { min-width: 0; max-width: 70px; border: 1px solid var(--border); border-radius: 3px; background: var(--background); font-size: 8.5px; }
+.gis-shell .viz-binding-remove, .gis-shell .viz-order button { border: 0; background: transparent; color: var(--muted-fg); padding: 2px; }
+.gis-shell .viz-order { display: flex; }
+.gis-shell .viz-options-title { margin-top: 16px; }
+.gis-shell .viz-option { display: flex; align-items: center; justify-content: space-between; gap: 8px; margin-bottom: 8px; font-size: 10px; }
+.gis-shell .viz-option input, .gis-shell .viz-option select { width: 95px; border: 1px solid var(--border); border-radius: 4px; background: var(--background); padding: 4px; }
+.gis-shell .viz-check { display: flex; align-items: center; gap: 6px; margin-top: 10px; font-size: 10px; }
+.gis-shell .viz-builder-foot { min-height: 54px; flex: 0 0 54px; display: flex; align-items: center; gap: 8px; padding: 8px 16px; border-top: 1px solid var(--border); }
+.gis-shell .viz-errors { min-width: 0; flex: 1; color: var(--muted-fg); font-size: 10.5px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+
+@media (max-width: 850px) {
+  .gis-shell .viz-builder { width: 100vw; }
+  .gis-shell .viz-builder-grid { grid-template-columns: 160px minmax(260px, 1fr) 235px; }
+  .gis-shell .viz-gallery { grid-template-columns: repeat(2, minmax(160px, 1fr)); }
+}
+
 /* ============================================================
    Attribute table panel (slides up from bottom)
    ============================================================ */

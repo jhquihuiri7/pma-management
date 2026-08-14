@@ -1,7 +1,9 @@
+import type { GeoLayerVisualization, GeoVisualizationDraft } from "@pma/types/geo";
+import { GEO_CHART_AGGREGATIONS, GEO_CHART_TYPES } from "@pma/types/geo";
 import type { GisLayer, LayerStyle, RasterLayer } from "./types";
 
 export const WORKSPACE_SCHEMA = "sigtar-workspace" as const;
-export const WORKSPACE_VERSION = 1 as const;
+export const WORKSPACE_VERSION = 2 as const;
 export const MAX_WORKSPACE_FILE_BYTES = 2 * 1024 * 1024;
 export const MAX_WORKSPACE_LAYERS = 1_000;
 
@@ -18,6 +20,7 @@ export type WorkspaceVectorEntry = {
     visible: boolean;
     zIndex: number;
     style: LayerStyle;
+    visualizations: Array<GeoVisualizationDraft & { id: string }>;
   };
 };
 
@@ -54,6 +57,7 @@ export function buildWorkspaceDocument(args: {
   basemap: string;
   vectorLayers: GisLayer[];
   rasterLayers: RasterLayer[];
+  visualizationsByLayer?: Record<string, GeoLayerVisualization[]>;
   exportedAt?: string;
 }): WorkspaceDocument {
   const vectors: WorkspaceVectorEntry[] = args.vectorLayers.flatMap((layer) => {
@@ -66,6 +70,15 @@ export function buildWorkspaceDocument(args: {
         visible: layer.visible,
         zIndex: layer.zIndex ?? 0,
         style: layer.style,
+        visualizations: (args.visualizationsByLayer?.[layer.id] ?? []).map((visualization) => ({
+          id: visualization.id,
+          type: visualization.type,
+          title: visualization.title,
+          position: visualization.position,
+          bindings: visualization.bindings,
+          options: visualization.options,
+          version: 1,
+        })),
       },
     }];
   });
@@ -95,7 +108,7 @@ export function parseWorkspaceDocument(value: unknown): WorkspaceDocument {
   const root = record(value, "El archivo no contiene un objeto JSON válido");
   onlyKeys(root, ["schema", "version", "exportedAt", "view", "layers"], "El Workspace contiene campos no permitidos");
   if (root.schema !== WORKSPACE_SCHEMA) throw new Error("El archivo no es un Workspace de SIGTAR");
-  if (root.version !== WORKSPACE_VERSION) {
+  if (root.version !== 1 && root.version !== WORKSPACE_VERSION) {
     throw new Error(`La versión ${String(root.version)} del Workspace no es compatible`);
   }
   if (typeof root.exportedAt !== "string" || !Number.isFinite(Date.parse(root.exportedAt))) {
@@ -118,6 +131,7 @@ export function parseWorkspaceDocument(value: unknown): WorkspaceDocument {
   }
 
   const seen = new Set<string>();
+  const sourceVersion = root.version;
   const layers = root.layers.map((raw, index) => {
     const layer = record(raw, `La capa ${index + 1} no es válida`);
     onlyKeys(layer, ["kind", "source", "presentation"], `La capa ${index + 1} contiene campos no permitidos`);
@@ -139,7 +153,7 @@ export function parseWorkspaceDocument(value: unknown): WorkspaceDocument {
     const presentation = record(layer.presentation, `La presentación de la capa ${index + 1} no es válida`);
     onlyKeys(
       presentation,
-      layer.kind === "raster" ? ["name", "visible", "zIndex", "opacity"] : ["name", "visible", "zIndex", "style"],
+      layer.kind === "raster" ? ["name", "visible", "zIndex", "opacity"] : sourceVersion === 1 ? ["name", "visible", "zIndex", "style"] : ["name", "visible", "zIndex", "style", "visualizations"],
       `La presentación de la capa ${index + 1} contiene campos no permitidos`,
     );
     const common = {
@@ -160,7 +174,11 @@ export function parseWorkspaceDocument(value: unknown): WorkspaceDocument {
     return {
       kind: "vector" as const,
       source: { mapId: source.mapId, layerId: source.layerId },
-      presentation: { ...common, style: parseStyle(presentation.style, index + 1) },
+      presentation: {
+        ...common,
+        style: parseStyle(presentation.style, index + 1),
+        visualizations: sourceVersion === 1 ? [] : parseVisualizations(presentation.visualizations, index + 1),
+      },
     };
   });
 
@@ -171,6 +189,68 @@ export function parseWorkspaceDocument(value: unknown): WorkspaceDocument {
     view: { center: [lat, lng], zoom, basemap: view.basemap },
     layers,
   };
+}
+
+function parseVisualizations(value: unknown, layerIndex: number): Array<GeoVisualizationDraft & { id: string }> {
+  if (!Array.isArray(value) || value.length > 20) throw new Error(`Las visualizaciones de la capa ${layerIndex} no son válidas`);
+  const ids = new Set<string>();
+  return value.map((raw, index) => {
+    const item = record(raw, `La visualización ${index + 1} de la capa ${layerIndex} no es válida`);
+    onlyKeys(item, ["id", "type", "title", "position", "bindings", "options", "version"], `La visualización ${index + 1} contiene campos no permitidos`);
+    const id = boundedString(item.id, "El identificador de visualización no es válido", 100);
+    if (!UUID_RE.test(id)) throw new Error("El identificador de visualización no es válido");
+    if (ids.has(id)) throw new Error(`La capa ${layerIndex} contiene una visualización duplicada`);
+    ids.add(id);
+    if (typeof item.type !== "string" || !(GEO_CHART_TYPES as readonly string[]).includes(item.type)) throw new Error("El tipo de visualización no es válido");
+    if (item.version !== 1) throw new Error("La versión de visualización no es compatible");
+    if (!Array.isArray(item.bindings) || item.bindings.length > 10) throw new Error("Los campos de visualización no son válidos");
+    const bindings = item.bindings.map((rawBinding) => {
+      const field = record(rawBinding, "Un campo de visualización no es válido");
+      onlyKeys(field, ["role", "field", "aggregation", "dateGrain"], "Un campo de visualización contiene propiedades no permitidas");
+      const roles = ["dimension", "measure", "series", "x", "y", "size", "level", "weight", "value"];
+      if (typeof field.role !== "string" || !roles.includes(field.role)) throw new Error("El rol de visualización no es válido");
+      if (field.aggregation !== undefined && (typeof field.aggregation !== "string" || !(GEO_CHART_AGGREGATIONS as readonly string[]).includes(field.aggregation))) throw new Error("La agregación no es válida");
+      const grains = ["year", "quarter", "month", "day"];
+      if (field.dateGrain !== undefined && (typeof field.dateGrain !== "string" || !grains.includes(field.dateGrain))) throw new Error("La granularidad de fecha no es válida");
+      return {
+        role: field.role as GeoLayerVisualization["bindings"][number]["role"],
+        field: boundedString(field.field, "La columna de visualización no es válida", 200),
+        ...(field.aggregation ? { aggregation: field.aggregation as GeoLayerVisualization["bindings"][number]["aggregation"] } : {}),
+        ...(field.dateGrain ? { dateGrain: field.dateGrain as GeoLayerVisualization["bindings"][number]["dateGrain"] } : {}),
+      };
+    });
+    const options = parseVisualizationOptions(item.options);
+    return {
+      id,
+      type: item.type as GeoLayerVisualization["type"],
+      title: boundedString(item.title, "El título de visualización no es válido", 200),
+      position: integerValue(item.position, "La posición de visualización no es válida", 0, 10_000),
+      bindings,
+      options,
+      version: 1 as const,
+    };
+  });
+}
+
+function parseVisualizationOptions(value: unknown): GeoLayerVisualization["options"] {
+  const options = record(value, "Las opciones de visualización no son válidas");
+  onlyKeys(options, ["palette", "orientation", "sort", "topN", "includeNulls", "showLegend", "showLabels", "bins"], "Las opciones de visualización contienen campos no permitidos");
+  const parsed: GeoLayerVisualization["options"] = {};
+  if (options.palette !== undefined) parsed.palette = boundedString(options.palette, "La paleta no es válida", 50);
+  if (options.orientation !== undefined) {
+    if (options.orientation !== "horizontal" && options.orientation !== "vertical") throw new Error("La orientación no es válida");
+    parsed.orientation = options.orientation;
+  }
+  if (options.sort !== undefined) {
+    if (options.sort !== "none" && options.sort !== "asc" && options.sort !== "desc") throw new Error("El orden no es válido");
+    parsed.sort = options.sort;
+  }
+  if (options.topN !== undefined) parsed.topN = integerValue(options.topN, "Top N no es válido", 1, 100);
+  if (options.bins !== undefined) parsed.bins = integerValue(options.bins, "Los intervalos no son válidos", 3, 30);
+  if (options.includeNulls !== undefined) parsed.includeNulls = booleanValue(options.includeNulls, "La opción de nulos no es válida");
+  if (options.showLegend !== undefined) parsed.showLegend = booleanValue(options.showLegend, "La opción de leyenda no es válida");
+  if (options.showLabels !== undefined) parsed.showLabels = booleanValue(options.showLabels, "La opción de etiquetas no es válida");
+  return parsed;
 }
 
 function parseStyle(value: unknown, index: number): LayerStyle {
