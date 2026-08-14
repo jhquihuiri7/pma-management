@@ -1,6 +1,8 @@
 import type { FeatureCollection, Feature, Geometry } from "geojson";
+import type { GeoLayerAttributeSchema } from "@pma/types/geo";
 
 export type GisGeometry = "Point" | "LineString" | "Polygon";
+export type GisTool = "pan" | "identify" | "measure" | "inspect" | "draw-point" | "draw-line" | "draw-polygon";
 export type SymbologyMode = "single" | "category" | "ramp";
 export type Classification = "equal" | "quantile" | "jenks";
 export type ColumnType = "numeric" | "categorical" | "date" | "boolean" | "empty";
@@ -41,6 +43,9 @@ export interface GisLayer {
   zIndex?: number;
   /** True once the layer is stored on the server/NAS. */
   persisted?: boolean;
+  dataRevision?: number;
+  attributeSchema?: GeoLayerAttributeSchema | null;
+  manualEntryEnabled?: boolean;
   /** Original published layer when this is a local Workspace composition. */
   workspaceSource?: WorkspaceLayerSource;
 }

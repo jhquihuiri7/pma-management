@@ -8,6 +8,8 @@ import {
 } from "../../modules/geo/mapsModule.js";
 import {
   listLayers, createLayer, updateLayer, deleteLayer, getLayerDataPath,
+  getLayerRevisionDataPath, getLayerCaptureSchema, updateLayerCaptureSchema,
+  appendFeature, listLayerRevisions,
 } from "../../modules/geo/layersModule.js";
 import { open } from "node:fs/promises";
 import {
@@ -66,6 +68,7 @@ const workspaceCatalogQuerySchema = z.object({
   categoryId: z.string().trim().min(1).max(100).optional(),
 }).strict();
 const layerParamsSchema = z.object({ id: z.string().uuid(), layerId: z.string().uuid() }).strict();
+const layerRevisionParamsSchema = layerParamsSchema.extend({ revision: z.coerce.number().int().min(1) });
 const visualizationParamsSchema = layerParamsSchema.extend({ visualizationId: z.string().uuid() });
 const tileParamsSchema = layerParamsSchema.extend({
   z: z.string().regex(/^\d{1,2}$/),
@@ -107,6 +110,7 @@ const rasterFieldsSchema = z.object({
 //     them, but not delete.
 //   - adminOnly: destructive ops (delete) stay restricted to ADMIN.
 const geoEditor = [authenticate, requireApp("geo")];
+const geoFeatureEditor = [authenticate, requireApp("geo"), requireRole("ADMIN", "REPORTER")];
 const adminOnly = [authenticate, requireApp("geo"), requireRole("ADMIN")];
 
 export async function geoRoutes(app: FastifyInstance) {
@@ -168,8 +172,19 @@ export async function geoRoutes(app: FastifyInstance) {
     const path = await getLayerDataPath(id, layerId);
     const storage = getStorage();
     if (!(await storage.exists(path))) throw NotFound("Layer data not found");
-    // Bytes are gzip on disk; the browser transparently inflates. Layer data is
-    // immutable per layer id, so it can be cached aggressively.
+    // Compatibility route for clients that do not know the revision. Since the
+    // pointed object can now change after an append, it must be revalidated.
+    reply.header("Content-Type", "application/geo+json");
+    reply.header("Content-Encoding", "gzip");
+    reply.header("Cache-Control", "private, no-cache");
+    return reply.send(await storage.stream(path));
+  });
+
+  app.get("/maps/:id/layers/:layerId/data/:revision", async (req, reply) => {
+    const { id, layerId, revision } = layerRevisionParamsSchema.parse(req.params);
+    const path = await getLayerRevisionDataPath(id, layerId, revision);
+    const storage = getStorage();
+    if (!(await storage.exists(path))) throw NotFound("Layer revision data not found");
     reply.header("Content-Type", "application/geo+json");
     reply.header("Content-Encoding", "gzip");
     reply.header("Cache-Control", "private, max-age=31536000, immutable");
@@ -279,6 +294,30 @@ export async function geoRoutes(app: FastifyInstance) {
     const { id, layerId } = layerParamsSchema.parse(req.params);
     const body = updateLayerSchema.parse(req.body);
     return updateLayer(id, layerId, req.user!.sub, body);
+  });
+
+  app.get("/maps/:id/layers/:layerId/schema", { preHandler: adminOnly }, async (req) => {
+    const { id, layerId } = layerParamsSchema.parse(req.params);
+    return getLayerCaptureSchema(id, layerId);
+  });
+
+  app.put("/maps/:id/layers/:layerId/schema", { preHandler: adminOnly }, async (req) => {
+    const { id, layerId } = layerParamsSchema.parse(req.params);
+    const body = layerCaptureSchema.parse(req.body);
+    return updateLayerCaptureSchema(id, layerId, req.user!.sub, body.schema, body.manualEntryEnabled);
+  });
+
+  app.post("/maps/:id/layers/:layerId/features", { preHandler: geoFeatureEditor }, async (req, reply) => {
+    const { id, layerId } = layerParamsSchema.parse(req.params);
+    const body = featureCreateSchema.parse(req.body);
+    const result = await appendFeature(id, layerId, req.user!.sub, body);
+    reply.status(201);
+    return result;
+  });
+
+  app.get("/maps/:id/layers/:layerId/revisions", { preHandler: geoEditor }, async (req) => {
+    const { id, layerId } = layerParamsSchema.parse(req.params);
+    return listLayerRevisions(id, layerId);
   });
 
   // ── Layer visualizations ────────────────────────────────────────────────
@@ -590,6 +629,50 @@ const updateLayerSchema = z.object({
   visible: z.boolean().optional(),
   zIndex: z.number().int().min(-10_000).max(10_000).optional(),
 }).strict().refine((body) => Object.keys(body).length > 0, "Debes enviar al menos un campo");
+
+const attributePrimitiveSchema = z.union([z.string(), z.number().finite(), z.boolean()]);
+const derivedFieldSchema = z.discriminatedUnion("kind", [
+  z.object({ kind: z.literal("latitude") }).strict(),
+  z.object({ kind: z.literal("longitude") }).strict(),
+  z.object({ kind: z.literal("yearFromDate"), sourceField: z.string().trim().min(1).max(200) }).strict(),
+]);
+const attributeFieldSchema = z.object({
+  key: z.string().trim().min(1).max(200),
+  label: z.string().trim().min(1).max(200),
+  type: z.enum(["string", "integer", "number", "date", "datetime", "boolean"]),
+  required: z.boolean(),
+  unique: z.boolean().optional(),
+  readOnly: z.boolean().optional(),
+  maxLength: z.number().int().min(1).max(100_000).optional(),
+  min: z.number().finite().optional(),
+  max: z.number().finite().optional(),
+  pattern: z.string().max(200).optional(),
+  allowedValues: z.array(attributePrimitiveSchema).max(1_000).optional(),
+  defaultValue: attributePrimitiveSchema.nullable().optional(),
+  derived: derivedFieldSchema.optional(),
+}).strict();
+const layerAttributeSchema = z.object({
+  version: z.literal(1),
+  fields: z.array(attributeFieldSchema).max(500),
+  geometry: z.object({
+    maxVertices: z.number().int().min(1).max(100_000),
+    extent: bboxSchema.nullable().optional(),
+  }).strict(),
+}).strict();
+const layerCaptureSchema = z.object({
+  manualEntryEnabled: z.boolean(),
+  schema: layerAttributeSchema,
+}).strict();
+const featureCreateSchema = z.object({
+  expectedRevision: z.number().int().min(1),
+  clientFeatureId: z.string().uuid(),
+  properties: z.record(z.unknown()),
+  geometry: z.object({
+    type: z.enum(["Point", "LineString", "Polygon"]),
+    coordinates: z.unknown(),
+  }).strict(),
+  reason: z.string().trim().max(500).optional(),
+}).strict();
 
 const visualizationBindingSchema = z.object({
   role: z.enum(["dimension", "measure", "series", "x", "y", "size", "level", "weight", "value"]),

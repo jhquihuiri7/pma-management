@@ -1,21 +1,32 @@
-import { and, eq, asc } from "drizzle-orm";
-import { randomUUID } from "node:crypto";
+import { and, eq, asc, desc } from "drizzle-orm";
+import { createHash, randomUUID } from "node:crypto";
 import { promisify } from "node:util";
-import { gzip as gzipCallback } from "node:zlib";
+import { gzip as gzipCallback, gunzip as gunzipCallback } from "node:zlib";
+import type { Feature, FeatureCollection } from "geojson";
+import type { GeoLayerAttributeSchema } from "@pma/types/geo";
 import { getDb } from "../../db/client.js";
-import { geoMaps, geoMapLayers } from "../../db/schema/geo.js";
-import { NotFound } from "../../lib/errors.js";
+import { geoMaps, geoMapLayers, geoLayerRevisions } from "../../db/schema/geo.js";
+import { BadRequest, HttpError, NotFound } from "../../lib/errors.js";
 import {
   getStorage,
   buildGeoMapDir,
   buildGeoLayerDataPath,
   buildGeoLayerSourcePath,
+  buildGeoLayerRevisionPath,
 } from "../../storage/index.js";
 import { enqueueStorageDirectoryCleanup } from "../shared/storageCleanup.js";
 import { beginDurableStorageIntent } from "../shared/durableFilePersistence.js";
-import { lockAndAssertGeoAdmin, lockAndAssertGeoEditor } from "./authorization.js";
+import { lockAndAssertGeoAdmin, lockAndAssertGeoEditor, lockAndAssertGeoFeatureEditor } from "./authorization.js";
+import {
+  assertValidAttributeSchema,
+  bboxForFeatures,
+  inferAttributeSchema,
+  validateAndBuildFeature,
+} from "./featureValidation.js";
 
 const gzip = promisify(gzipCallback);
+const gunzip = promisify(gunzipCallback);
+const VECTOR_MAX_FILE_BYTES = 50 * 1024 * 1024;
 
 export type CreateLayerInput = {
   name: string;
@@ -38,6 +49,14 @@ export type UpdateLayerInput = {
   style?: unknown;
   visible?: boolean;
   zIndex?: number;
+};
+
+export type AppendFeatureInput = {
+  expectedRevision: number;
+  clientFeatureId: string;
+  properties: Record<string, unknown>;
+  geometry: unknown;
+  reason?: string;
 };
 
 async function assertMap(mapId: string, db: any = getDb()) {
@@ -108,6 +127,17 @@ export async function createLayer(mapId: string, actorId: string, input: CreateL
         })
         .returning();
       if (!persisted) throw new Error("Geo layer insert returned no row");
+      await tx.insert(geoLayerRevisions).values({
+        layerId,
+        revision: 1,
+        dataPath,
+        featureCount: input.featureCount ?? 0,
+        bbox: (input.bbox ?? null) as unknown as object,
+        sizeBytes: input.data.byteLength,
+        checksum: createHash("sha256").update(compressedData).digest("hex"),
+        action: "snapshot",
+        createdBy: actorId,
+      });
       return persisted;
     }, {
       beforeIntentLock: (tx) => lockAndAssertGeoEditor(tx, actorId).then(() => undefined),
@@ -150,6 +180,186 @@ export async function updateLayer(
   });
 }
 
+export async function getLayerCaptureSchema(mapId: string, layerId: string) {
+  const layer = await findLayer(mapId, layerId);
+  if (layer.attributeSchema) {
+    return {
+      schema: layer.attributeSchema as unknown as GeoLayerAttributeSchema,
+      schemaVersion: layer.schemaVersion,
+      manualEntryEnabled: layer.manualEntryEnabled,
+      inferred: false,
+    };
+  }
+  const collection = await readFeatureCollection(layer.dataPath);
+  return {
+    schema: inferAttributeSchema(collection),
+    schemaVersion: layer.schemaVersion,
+    manualEntryEnabled: false,
+    inferred: true,
+  };
+}
+
+export async function updateLayerCaptureSchema(
+  mapId: string,
+  layerId: string,
+  actorId: string,
+  schema: GeoLayerAttributeSchema,
+  manualEntryEnabled: boolean,
+) {
+  const validated = assertValidAttributeSchema(schema);
+  return getDb().transaction(async (tx) => {
+    await lockAndAssertGeoAdmin(tx, actorId);
+    const [row] = await tx
+      .update(geoMapLayers)
+      .set({
+        attributeSchema: validated as unknown as object,
+        schemaVersion: 1,
+        manualEntryEnabled,
+        updatedAt: new Date(),
+      })
+      .where(and(eq(geoMapLayers.id, layerId), eq(geoMapLayers.mapId, mapId)))
+      .returning();
+    if (!row) throw NotFound("Layer not found");
+    return rowToApi(row);
+  });
+}
+
+export async function appendFeature(
+  mapId: string,
+  layerId: string,
+  actorId: string,
+  input: AppendFeatureInput,
+) {
+  const layer = await findLayer(mapId, layerId);
+  const duplicate = await getDb()
+    .select({ revision: geoLayerRevisions.revision })
+    .from(geoLayerRevisions)
+    .where(and(eq(geoLayerRevisions.layerId, layerId), eq(geoLayerRevisions.featureId, input.clientFeatureId)))
+    .limit(1);
+  if (duplicate.length > 0) return existingFeatureReceipt(layer, input.clientFeatureId);
+  if (!layer.manualEntryEnabled || !layer.attributeSchema) {
+    throw new HttpError(409, "La captura manual no está configurada para esta capa.");
+  }
+  if (input.expectedRevision !== layer.dataRevision) {
+    throw new HttpError(409, "La capa cambió desde que fue cargada. Actualiza los datos e intenta nuevamente.");
+  }
+
+  const collection = await readFeatureCollection(layer.dataPath);
+  const schema = assertValidAttributeSchema(layer.attributeSchema as unknown as GeoLayerAttributeSchema);
+  const feature = validateAndBuildFeature({
+    featureId: input.clientFeatureId,
+    properties: input.properties,
+    geometry: input.geometry,
+    geometryType: assertGeometryType(layer.geometryType),
+    schema,
+    existingFeatures: collection.features,
+  });
+  const nextCollection: FeatureCollection = {
+    type: "FeatureCollection",
+    features: [...collection.features, feature],
+  };
+  const serialized = Buffer.from(JSON.stringify(nextCollection), "utf8");
+  if (serialized.byteLength > VECTOR_MAX_FILE_BYTES) {
+    throw new HttpError(413, "La nueva revisión supera el límite de 50 MB para una capa vectorial.");
+  }
+  const bbox = bboxForFeatures(nextCollection.features);
+  const compressed = await gzip(serialized);
+  const nextRevision = layer.dataRevision + 1;
+  const dataPath = buildGeoLayerRevisionPath(mapId, layerId, nextRevision, randomUUID());
+  const checksum = createHash("sha256").update(compressed).digest("hex");
+  const storage = getStorage();
+  const intent = await beginDurableStorageIntent({
+    path: dataPath,
+    reason: `geo:layer-revision:${layerId}:${nextRevision}`,
+    storage,
+    db: getDb(),
+  });
+
+  try {
+    await storage.upload({ path: dataPath, data: compressed, contentType: "application/gzip" });
+    const persisted = await intent.finalize(async (tx) => {
+      const [locked] = await tx
+        .select()
+        .from(geoMapLayers)
+        .where(and(eq(geoMapLayers.id, layerId), eq(geoMapLayers.mapId, mapId)))
+        .limit(1)
+        .for("update");
+      if (!locked) throw NotFound("Layer not found");
+      if (!locked.manualEntryEnabled || !locked.attributeSchema) throw new HttpError(409, "La captura manual fue desactivada.");
+      if (locked.dataRevision !== input.expectedRevision || locked.dataPath !== layer.dataPath) {
+        throw new HttpError(409, "Otra persona actualizó la capa. Recarga e intenta nuevamente.");
+      }
+      const now = new Date();
+      await tx.insert(geoLayerRevisions).values({
+        layerId,
+        revision: nextRevision,
+        dataPath,
+        featureCount: nextCollection.features.length,
+        bbox: bbox as unknown as object,
+        sizeBytes: serialized.byteLength,
+        checksum,
+        action: "append",
+        featureId: input.clientFeatureId,
+        featureSnapshot: feature as unknown as object,
+        changeReason: input.reason?.trim() || null,
+        createdBy: actorId,
+        createdAt: now,
+      });
+      const [updated] = await tx
+        .update(geoMapLayers)
+        .set({
+          dataPath,
+          dataRevision: nextRevision,
+          featureCount: nextCollection.features.length,
+          bbox: bbox as unknown as object,
+          sizeBytes: serialized.byteLength,
+          updatedAt: now,
+        })
+        .where(eq(geoMapLayers.id, layerId))
+        .returning();
+      if (!updated) throw NotFound("Layer not found");
+      return { row: updated, updatedAt: now };
+    }, {
+      beforeIntentLock: (tx) => lockAndAssertGeoFeatureEditor(tx, actorId).then(() => undefined),
+    });
+    return {
+      persisted: true as const,
+      feature,
+      revision: nextRevision,
+      featureCount: persisted.row.featureCount,
+      bbox,
+      sizeBytes: persisted.row.sizeBytes,
+      updatedAt: persisted.updatedAt.toISOString(),
+    };
+  } catch (error) {
+    try { await intent.compensate(); }
+    catch (cleanupError) { throw new AggregateError([error, cleanupError], "Layer revision and cleanup both failed"); }
+    throw error;
+  }
+}
+
+export async function listLayerRevisions(mapId: string, layerId: string) {
+  await findLayer(mapId, layerId);
+  const rows = await getDb()
+    .select({
+      id: geoLayerRevisions.id,
+      revision: geoLayerRevisions.revision,
+      featureCount: geoLayerRevisions.featureCount,
+      bbox: geoLayerRevisions.bbox,
+      sizeBytes: geoLayerRevisions.sizeBytes,
+      checksum: geoLayerRevisions.checksum,
+      action: geoLayerRevisions.action,
+      featureId: geoLayerRevisions.featureId,
+      changeReason: geoLayerRevisions.changeReason,
+      createdBy: geoLayerRevisions.createdBy,
+      createdAt: geoLayerRevisions.createdAt,
+    })
+    .from(geoLayerRevisions)
+    .where(eq(geoLayerRevisions.layerId, layerId))
+    .orderBy(desc(geoLayerRevisions.revision));
+  return rows;
+}
+
 export async function deleteLayer(mapId: string, layerId: string, actorId: string) {
   await getDb().transaction(async (tx) => {
     await lockAndAssertGeoAdmin(tx, actorId);
@@ -183,6 +393,64 @@ export async function getLayerDataPath(mapId: string, layerId: string): Promise<
   return rows[0].dataPath;
 }
 
+export async function getLayerRevisionDataPath(mapId: string, layerId: string, revision: number): Promise<string> {
+  const layer = await findLayer(mapId, layerId);
+  if (revision === layer.dataRevision) return layer.dataPath;
+  const [row] = await getDb()
+    .select({ dataPath: geoLayerRevisions.dataPath })
+    .from(geoLayerRevisions)
+    .where(and(eq(geoLayerRevisions.layerId, layerId), eq(geoLayerRevisions.revision, revision)))
+    .limit(1);
+  if (!row) throw NotFound("Layer revision not found");
+  return row.dataPath;
+}
+
+async function findLayer(mapId: string, layerId: string) {
+  const [row] = await getDb()
+    .select()
+    .from(geoMapLayers)
+    .where(and(eq(geoMapLayers.id, layerId), eq(geoMapLayers.mapId, mapId)))
+    .limit(1);
+  if (!row) throw NotFound("Layer not found");
+  return row;
+}
+
+async function readFeatureCollection(path: string): Promise<FeatureCollection> {
+  const storage = getStorage();
+  if (!(await storage.exists(path))) throw NotFound("Layer data not found");
+  let parsed: unknown;
+  try { parsed = JSON.parse((await gunzip(await storage.download(path))).toString("utf8")); }
+  catch { throw BadRequest("La revisión vigente de la capa no contiene GeoJSON válido."); }
+  if (!isRecord(parsed) || parsed.type !== "FeatureCollection" || !Array.isArray(parsed.features)) {
+    throw BadRequest("La revisión vigente no es un FeatureCollection.");
+  }
+  return parsed as unknown as FeatureCollection;
+}
+
+async function existingFeatureReceipt(layer: typeof geoMapLayers.$inferSelect, featureId: string) {
+  const collection = await readFeatureCollection(layer.dataPath);
+  const feature = collection.features.find((candidate) => String(candidate.id) === featureId);
+  if (!feature) throw new HttpError(409, "La solicitud ya fue registrada, pero la capa cambió posteriormente.");
+  return {
+    persisted: true as const,
+    feature,
+    revision: layer.dataRevision,
+    featureCount: layer.featureCount,
+    bbox: layer.bbox as number[],
+    sizeBytes: layer.sizeBytes,
+    updatedAt: layer.updatedAt.toISOString(),
+  };
+}
+
+function assertGeometryType(value: string): "Point" | "LineString" | "Polygon" {
+  if (value !== "Point" && value !== "LineString" && value !== "Polygon") throw BadRequest("Tipo de geometría de capa no soportado.");
+  return value;
+}
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === "object" && value !== null && !Array.isArray(value);
+}
+
 function rowToApi(row: typeof geoMapLayers.$inferSelect) {
   return {
     id: row.id,
@@ -193,8 +461,10 @@ function rowToApi(row: typeof geoMapLayers.$inferSelect) {
     featureCount: row.featureCount,
     bbox: row.bbox,
     sourceFormat: row.sourceFormat,
-    sourcePath: row.sourcePath,
-    dataPath: row.dataPath,
+    dataRevision: row.dataRevision,
+    attributeSchema: row.attributeSchema,
+    schemaVersion: row.schemaVersion,
+    manualEntryEnabled: row.manualEntryEnabled,
     sizeBytes: row.sizeBytes,
     style: row.style,
     visible: row.visible,

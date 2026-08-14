@@ -117,6 +117,16 @@ export function buildGeoLayerDataPath(mapId: string, layerId: string): string {
   return `${buildGeoLayerDir(mapId, layerId)}/data.geojson.gz`;
 }
 
+export function buildGeoLayerRevisionPath(
+  mapId: string,
+  layerId: string,
+  revision: number,
+  nonce: string,
+): string {
+  const cleanNonce = nonce.replace(/[^a-z0-9-]/gi, "").toLowerCase();
+  return `${buildGeoLayerDir(mapId, layerId)}/revisions/${revision}-${cleanNonce}.geojson.gz`;
+}
+
 export function buildGeoLayerSourcePath(mapId: string, layerId: string, ext: string): string {
   const clean = ext.replace(/[^a-z0-9]/gi, "").toLowerCase() || "bin";
   return `${buildGeoLayerDir(mapId, layerId)}/source.${clean}`;

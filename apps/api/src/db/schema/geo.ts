@@ -1,4 +1,4 @@
-import { pgTable, uuid, text, timestamp, jsonb, doublePrecision, integer, bigint, boolean, index } from "drizzle-orm/pg-core";
+import { pgTable, uuid, text, timestamp, jsonb, doublePrecision, integer, bigint, boolean, index, uniqueIndex } from "drizzle-orm/pg-core";
 import { users } from "./shared.js";
 
 export const geoMaps = pgTable(
@@ -45,6 +45,10 @@ export const geoMapLayers = pgTable(
     sourceFormat: text("source_format").notNull().default("geojson"), // shapefile | geojson
     sourcePath: text("source_path"), // NAS path to original upload (.zip/.shp), nullable
     dataPath: text("data_path").notNull(), // NAS path to normalized GeoJSON
+    dataRevision: integer("data_revision").notNull().default(1),
+    attributeSchema: jsonb("attribute_schema"),
+    schemaVersion: integer("schema_version").notNull().default(1),
+    manualEntryEnabled: boolean("manual_entry_enabled").notNull().default(false),
     sizeBytes: integer("size_bytes").notNull().default(0),
     style: jsonb("style").notNull(),
     visible: boolean("visible").notNull().default(true),
@@ -56,6 +60,34 @@ export const geoMapLayers = pgTable(
   (t) => ({
     mapIdx: index("geo_map_layers_map_idx").on(t.mapId),
   })
+);
+
+/** Immutable vector snapshots. Revision 1 is the original normalized upload. */
+export const geoLayerRevisions = pgTable(
+  "geo_layer_revisions",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    layerId: uuid("layer_id")
+      .notNull()
+      .references(() => geoMapLayers.id, { onDelete: "cascade" }),
+    revision: integer("revision").notNull(),
+    dataPath: text("data_path").notNull(),
+    featureCount: integer("feature_count").notNull(),
+    bbox: jsonb("bbox"),
+    sizeBytes: integer("size_bytes").notNull(),
+    checksum: text("checksum"),
+    action: text("action").notNull().default("snapshot"),
+    featureId: uuid("feature_id"),
+    featureSnapshot: jsonb("feature_snapshot"),
+    changeReason: text("change_reason"),
+    createdBy: uuid("created_by").references(() => users.id, { onDelete: "set null" }),
+    createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
+  },
+  (t) => ({
+    layerRevisionUq: uniqueIndex("geo_layer_revisions_layer_revision_uq").on(t.layerId, t.revision),
+    layerFeatureUq: uniqueIndex("geo_layer_revisions_layer_feature_uq").on(t.layerId, t.featureId),
+    layerCreatedIdx: index("geo_layer_revisions_layer_created_idx").on(t.layerId, t.createdAt),
+  }),
 );
 
 /** User-authored analytical recipes shown in the GIS right rail. */

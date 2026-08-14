@@ -1,13 +1,14 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
-import { Copy, Edit3, Plus, Trash2 } from "lucide-react";
+import { Copy, Edit3, Plus, ShieldCheck, Trash2 } from "lucide-react";
 import { toast } from "sonner";
 import type { GeoLayerVisualization, GeoVisualizationDraft } from "@pma/types/geo";
 import { apiErrorMessage } from "@/lib/api-client";
 import {
   createVisualizationRemote, deleteVisualizationRemote, fetchVisualizations,
-  reorderVisualizationsRemote, updateVisualizationRemote,
+  reorderVisualizationsRemote, updateVisualizationRemote, fetchLayerRevisions,
+  type LayerRevisionManifest,
 } from "./persistence";
 import { inferSchema } from "./charts";
 import { CHART_BY_TYPE, validateVisualization } from "./chart-config";
@@ -28,13 +29,16 @@ function ColumnsView({ schema }: { schema: SchemaColumn[] }) {
   </table></div>;
 }
 
-function MetadataView({ layer, schema }: { layer: GisLayer; schema: SchemaColumn[] }) {
+function MetadataView({ layer, schema, revisions, revisionsLoading, canManageSchema, onConfigureSchema }: { layer: GisLayer; schema: SchemaColumn[]; revisions: LayerRevisionManifest[]; revisionsLoading: boolean; canManageSchema?: boolean; onConfigureSchema?: () => void }) {
   const rows: [string, string | number][] = [
     ["Nombre", layer.name], ["Archivo", layer.filename || "—"], ["Geometría", layer.geometry],
     ["Features", layer.geojson.features.length], ["Columnas", schema.length], ["CRS", layer.crs || "EPSG:4326"],
     ["Tamaño", layer.size || "—"], ["Cargado", new Date(layer.loadedAt || Date.now()).toLocaleString("es-EC")],
+    ["Revisión de datos", layer.dataRevision ?? 1], ["Captura manual", layer.manualEntryEnabled ? "Habilitada" : "Deshabilitada"],
   ];
-  return <div className="dash-card"><div className="dash-card-head"><div className="dh-title">Información de capa</div></div><div className="dash-card-body">{rows.map(([key, value]) => <div key={key} className="identify-row"><span className="k">{key}</span><span className="v">{value}</span></div>)}</div></div>;
+  return <><div className="dash-card"><div className="dash-card-head"><div className="dh-title">Información de capa</div></div><div className="dash-card-body">{rows.map(([key, value]) => <div key={key} className="identify-row"><span className="k">{key}</span><span className="v">{value}</span></div>)}{canManageSchema && <button className="mt-3 flex w-full items-center justify-center gap-2 rounded-lg border border-teal-200 bg-teal-50 px-3 py-2 text-xs font-semibold text-teal-800 hover:bg-teal-100" onClick={onConfigureSchema}><ShieldCheck size={14} />Configurar captura</button>}</div></div>
+    {(revisionsLoading || revisions.length > 0) && <div className="dash-card"><div className="dash-card-head"><div className="dh-title">Historial de datos</div></div><div className="dash-card-body">{revisionsLoading ? <div className="text-xs text-slate-500">Cargando revisiones…</div> : revisions.slice(0, 8).map((revision) => <div key={revision.id} className="border-b border-slate-100 py-2 last:border-0"><div className="flex items-center justify-between text-xs"><strong className="text-slate-700">Revisión {revision.revision}</strong><span className="text-slate-400">{new Date(revision.createdAt).toLocaleString("es-EC")}</span></div><div className="mt-1 text-[11px] text-slate-500">{revision.action === "append" ? "Nueva observación" : "Carga inicial"} · {revision.featureCount} entidades{revision.changeReason ? ` · ${revision.changeReason}` : ""}</div></div>)}</div></div>}
+  </>;
 }
 
 function VisualizationCard({ item, layer, invalid, canConfigure, first, last, onEdit, onDuplicate, onDelete, onMove }: {
@@ -50,14 +54,17 @@ function VisualizationCard({ item, layer, invalid, canConfigure, first, last, on
   </article>;
 }
 
-export default function DashboardsPanel({ layer, mapId, canConfigure = false, workspaceMode = false, workspaceVisualizations = EMPTY_VISUALIZATIONS, onWorkspaceChange }: {
+export default function DashboardsPanel({ layer, mapId, canConfigure = false, canManageSchema = false, onConfigureSchema, workspaceMode = false, workspaceVisualizations = EMPTY_VISUALIZATIONS, onWorkspaceChange }: {
   layer: GisLayer | undefined; mapId?: string; canConfigure?: boolean; workspaceMode?: boolean;
+  canManageSchema?: boolean; onConfigureSchema?: () => void;
   workspaceVisualizations?: GeoLayerVisualization[]; onWorkspaceChange?: (layerId: string, items: GeoLayerVisualization[]) => void;
 }) {
   const [tab, setTab] = useState<"dashboards" | "columns" | "metadata">("dashboards");
   const [items, setItems] = useState<GeoLayerVisualization[]>(workspaceVisualizations);
   const [loading, setLoading] = useState(false);
   const [builder, setBuilder] = useState<{ id?: string; draft?: GeoVisualizationDraft } | null>(null);
+  const [revisions, setRevisions] = useState<LayerRevisionManifest[]>([]);
+  const [revisionsLoading, setRevisionsLoading] = useState(false);
   const schema = useMemo(() => inferSchema(layer?.geojson.features || []), [layer]);
 
   useEffect(() => {
@@ -70,6 +77,14 @@ export default function DashboardsPanel({ layer, mapId, canConfigure = false, wo
     fetchVisualizations(mapId, layer.id).then((loaded) => { if (!cancelled) setItems(loaded); }).catch((error) => { if (!cancelled) toast.error(apiErrorMessage(error, "No se pudieron cargar las visualizaciones")); }).finally(() => { if (!cancelled) setLoading(false); });
     return () => { cancelled = true; };
   }, [layer, mapId, workspaceMode, workspaceVisualizations]);
+
+  useEffect(() => {
+    if (tab !== "metadata" || !canConfigure || !mapId || !layer?.persisted || workspaceMode) { setRevisions([]); setRevisionsLoading(false); return; }
+    let cancelled = false;
+    setRevisionsLoading(true);
+    fetchLayerRevisions(mapId, layer.id).then((items) => { if (!cancelled) setRevisions(items); }).catch((error) => { if (!cancelled) toast.error(apiErrorMessage(error, "No se pudo cargar el historial de la capa")); }).finally(() => { if (!cancelled) setRevisionsLoading(false); });
+    return () => { cancelled = true; };
+  }, [tab, canConfigure, mapId, layer, workspaceMode]);
 
   const commitWorkspace = (next: GeoLayerVisualization[]) => { setItems(next); if (layer) onWorkspaceChange?.(layer.id, next); };
 
@@ -120,7 +135,7 @@ export default function DashboardsPanel({ layer, mapId, canConfigure = false, wo
       {tab === "dashboards" && <>{loading && <div className="empty">Cargando visualizaciones…</div>}{!loading && items.map((item, index) => <VisualizationCard key={item.id} item={item} layer={layer} invalid={validateVisualization(item, schema)} canConfigure={canConfigure} first={index === 0} last={index === items.length - 1} onEdit={() => setBuilder({ id: item.id, draft: toDraft(item) })} onDuplicate={() => setBuilder({ draft: { ...toDraft(item), title: `${item.title} (copia)`, position: items.length } })} onDelete={() => void remove(item)} onMove={(delta) => void move(index, delta)} />)}
         {canConfigure && items.length < 20 && <button className="add-viz-card" onClick={() => setBuilder({})}><span><Plus size={20} /></span><strong>Crear visualización</strong><small>Combina y agrupa columnas de esta capa</small></button>}
         {!loading && !canConfigure && items.length === 0 && <div className="rail-empty small">◇<span>Esta capa todavía no tiene visualizaciones publicadas.</span></div>}</>}
-      {tab === "columns" && <ColumnsView schema={schema} />}{tab === "metadata" && <MetadataView layer={layer} schema={schema} />}
+      {tab === "columns" && <ColumnsView schema={schema} />}{tab === "metadata" && <MetadataView layer={layer} schema={schema} revisions={revisions} revisionsLoading={revisionsLoading} canManageSchema={canManageSchema} onConfigureSchema={onConfigureSchema} />}
     </div>
     {builder && <VisualizationBuilder layer={layer} initial={builder.draft} position={items.length} onClose={() => setBuilder(null)} onSave={save} />}
   </div>;

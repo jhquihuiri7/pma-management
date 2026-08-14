@@ -10,6 +10,11 @@ import {
 import type { Feature, FeatureCollection } from "geojson";
 import type { GisGeometry, LayerStyle, RasterStatus } from "./types";
 import type { GeoLayerVisualization, GeoVisualizationDraft } from "@pma/types/geo";
+import type {
+  GeoFeatureCreateInput,
+  GeoFeatureCreateResult,
+  GeoLayerAttributeSchema,
+} from "@pma/types/geo";
 
 export interface LayerManifest {
   id: string;
@@ -20,8 +25,10 @@ export interface LayerManifest {
   featureCount: number;
   bbox: number[] | null;
   sourceFormat: string;
-  sourcePath: string | null;
-  dataPath: string;
+  dataRevision: number;
+  attributeSchema: GeoLayerAttributeSchema | null;
+  schemaVersion: number;
+  manualEntryEnabled: boolean;
   sizeBytes: number;
   style: LayerStyle;
   visible: boolean;
@@ -51,8 +58,62 @@ export async function fetchLayers(mapId: string): Promise<LayerManifest[]> {
   return api.get<LayerManifest[]>(base(mapId));
 }
 
-export async function fetchLayerData(mapId: string, layerId: string): Promise<FeatureCollection> {
-  return api.get<FeatureCollection>(`${base(mapId)}/${layerId}/data`);
+export async function fetchLayerData(mapId: string, layerId: string, revision?: number): Promise<FeatureCollection> {
+  return api.get<FeatureCollection>(`${base(mapId)}/${layerId}/data${revision ? `/${revision}` : ""}`);
+}
+
+export interface LayerCaptureSchemaResponse {
+  schema: GeoLayerAttributeSchema;
+  schemaVersion: number;
+  manualEntryEnabled: boolean;
+  inferred: boolean;
+}
+
+export function fetchLayerCaptureSchema(mapId: string, layerId: string): Promise<LayerCaptureSchemaResponse> {
+  return api.get<LayerCaptureSchemaResponse>(`${base(mapId)}/${layerId}/schema`);
+}
+
+export async function updateLayerCaptureSchemaRemote(
+  mapId: string,
+  layerId: string,
+  schema: GeoLayerAttributeSchema,
+  manualEntryEnabled: boolean,
+): Promise<LayerManifest> {
+  return requirePersistedEntity<LayerManifest>(
+    await api.put<unknown>(`${base(mapId)}/${layerId}/schema`, { schema, manualEntryEnabled }),
+    "El servidor no confirmó el esquema de captura",
+    layerId,
+  );
+}
+
+export async function createFeatureRemote(
+  mapId: string,
+  layerId: string,
+  input: GeoFeatureCreateInput,
+): Promise<GeoFeatureCreateResult> {
+  const result = await api.post<GeoFeatureCreateResult>(`${base(mapId)}/${layerId}/features`, input);
+  if (result.persisted !== true || !result.feature || result.revision < 1) {
+    throw new ApiError(0, "El servidor no confirmó la nueva observación", result, "invalid_response");
+  }
+  return result;
+}
+
+export interface LayerRevisionManifest {
+  id: string;
+  revision: number;
+  featureCount: number;
+  bbox: number[] | null;
+  sizeBytes: number;
+  checksum: string | null;
+  action: "snapshot" | "append";
+  featureId: string | null;
+  changeReason: string | null;
+  createdBy: string | null;
+  createdAt: string;
+}
+
+export function fetchLayerRevisions(mapId: string, layerId: string): Promise<LayerRevisionManifest[]> {
+  return api.get<LayerRevisionManifest[]>(`${base(mapId)}/${layerId}/revisions`);
 }
 
 export async function createLayerRemote(mapId: string, args: CreateLayerArgs): Promise<LayerManifest> {

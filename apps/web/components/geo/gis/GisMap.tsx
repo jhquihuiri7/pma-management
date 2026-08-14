@@ -4,7 +4,8 @@ import { useEffect, useRef } from "react";
 import L from "leaflet";
 import "leaflet/dist/leaflet.css";
 import { BASEMAPS, COLOR_RAMPS } from "./gis-data";
-import type { GisLayer, RasterLayer, IdentifyInfo, FocusFeature } from "./types";
+import type { Feature, Geometry, Position } from "geojson";
+import type { GisLayer, GisTool, RasterLayer, IdentifyInfo, FocusFeature } from "./types";
 
 type ColorFn = (props: Record<string, unknown>) => string;
 
@@ -82,7 +83,7 @@ interface Props {
   layers: GisLayer[];
   rasterLayers?: RasterLayer[];
   basemap: string;
-  tool?: "pan" | "identify" | "measure" | "inspect";
+  tool?: GisTool;
   initialCenter?: [number, number];
   initialZoom?: number;
   onIdentify?: (info: IdentifyInfo) => void;
@@ -92,9 +93,12 @@ interface Props {
   inspectPoint?: [number, number] | null;
   focusFeature?: FocusFeature | null;
   onMapReady?: (map: L.Map) => void;
+  onDrawGeometry?: (geometry: Geometry) => void;
+  onDrawCancel?: () => void;
+  previewGeometry?: Geometry | null;
 }
 
-export default function GisMap({ layers, rasterLayers, basemap, tool = "pan", initialCenter, initialZoom, onIdentify, onCoordChange, onViewportChange, onPointInspect, inspectPoint, focusFeature, onMapReady }: Props) {
+export default function GisMap({ layers, rasterLayers, basemap, tool = "pan", initialCenter, initialZoom, onIdentify, onCoordChange, onViewportChange, onPointInspect, inspectPoint, focusFeature, onMapReady, onDrawGeometry, onDrawCancel, previewGeometry }: Props) {
   const mapRef = useRef<L.Map | null>(null);
   const containerRef = useRef<HTMLDivElement | null>(null);
   const basemapRef = useRef<L.TileLayer | null>(null);
@@ -102,8 +106,9 @@ export default function GisMap({ layers, rasterLayers, basemap, tool = "pan", in
   const rasterRefs = useRef<Map<string, L.TileLayer>>(new Map());
   const labelLayerRef = useRef<L.FeatureGroup | null>(null);
   const inspectMarkerRef = useRef<L.Marker | null>(null);
-  const cbRef = useRef({ onIdentify, onCoordChange, onMapReady, onViewportChange, onPointInspect, tool });
-  cbRef.current = { onIdentify, onCoordChange, onMapReady, onViewportChange, onPointInspect, tool };
+  const previewRef = useRef<L.GeoJSON | null>(null);
+  const cbRef = useRef({ onIdentify, onCoordChange, onMapReady, onViewportChange, onPointInspect, onDrawGeometry, onDrawCancel, tool });
+  cbRef.current = { onIdentify, onCoordChange, onMapReady, onViewportChange, onPointInspect, onDrawGeometry, onDrawCancel, tool };
 
   // Init (once)
   useEffect(() => {
@@ -233,7 +238,7 @@ export default function GisMap({ layers, rasterLayers, basemap, tool = "pan", in
             lyr.on("click", (e: L.LeafletMouseEvent) => {
               // While measuring or inspecting a point, let the click bubble to the
               // map so it adds a vertex / drops the inspection pin.
-              if (cbRef.current.tool === "measure" || cbRef.current.tool === "inspect") return;
+              if (cbRef.current.tool === "measure" || cbRef.current.tool === "inspect" || cbRef.current.tool.startsWith("draw-")) return;
               L.DomEvent.stopPropagation(e);
               cbRef.current.onIdentify?.({ layerId: layer.id, layerName: layer.name, feature, latlng: e.latlng });
             });
@@ -345,6 +350,69 @@ export default function GisMap({ layers, rasterLayers, basemap, tool = "pan", in
     });
     inspectMarkerRef.current = L.marker(inspectPoint, { icon, interactive: false, zIndexOffset: 1000 }).addTo(map);
   }, [inspectPoint]);
+
+  // Manual feature capture: click once for a point; click vertices and double
+  // click to finish lines/polygons. Geometry is emitted in GeoJSON [lng, lat].
+  useEffect(() => {
+    const map = mapRef.current;
+    if (!map || !tool.startsWith("draw-")) return;
+    const group = L.layerGroup().addTo(map);
+    const points: L.LatLng[] = [];
+    let guide: L.Layer | null = null;
+    map.getContainer().style.cursor = "crosshair";
+    map.doubleClickZoom.disable();
+
+    const redraw = () => {
+      if (guide) group.removeLayer(guide);
+      if (points.length === 0) return;
+      const nextGuide = tool === "draw-polygon"
+        ? L.polygon(points, { color: "#0f766e", weight: 2, dashArray: "6 4", fillOpacity: 0.12 })
+        : L.polyline(points, { color: "#0f766e", weight: 2, dashArray: "6 4" });
+      guide = nextGuide;
+      group.addLayer(nextGuide);
+    };
+    const finish = () => {
+      const coordinates = points.map((point) => [point.lng, point.lat] as Position);
+      if (tool === "draw-line" && coordinates.length >= 2) cbRef.current.onDrawGeometry?.({ type: "LineString", coordinates });
+      if (tool === "draw-polygon" && coordinates.length >= 3) cbRef.current.onDrawGeometry?.({ type: "Polygon", coordinates: [[...coordinates, coordinates[0]]] });
+    };
+    const click = (event: L.LeafletMouseEvent) => {
+      L.DomEvent.stop(event);
+      if (tool === "draw-point") {
+        cbRef.current.onDrawGeometry?.({ type: "Point", coordinates: [event.latlng.lng, event.latlng.lat] });
+        return;
+      }
+      const previous = points[points.length - 1];
+      if (previous && previous.lat === event.latlng.lat && previous.lng === event.latlng.lng) return;
+      points.push(event.latlng);
+      group.addLayer(L.circleMarker(event.latlng, { radius: 4, color: "#ffffff", weight: 1.5, fillColor: "#0f766e", fillOpacity: 1 }));
+      redraw();
+    };
+    const doubleClick = (event: L.LeafletMouseEvent) => { L.DomEvent.stop(event); finish(); };
+    const keydown = (event: KeyboardEvent) => { if (event.key === "Escape") cbRef.current.onDrawCancel?.(); };
+    map.on("click", click);
+    map.on("dblclick", doubleClick);
+    window.addEventListener("keydown", keydown);
+    return () => {
+      map.off("click", click); map.off("dblclick", doubleClick);
+      window.removeEventListener("keydown", keydown);
+      map.removeLayer(group);
+      map.getContainer().style.cursor = "";
+      map.doubleClickZoom.enable();
+    };
+  }, [tool]);
+
+  useEffect(() => {
+    const map = mapRef.current;
+    if (!map) return;
+    if (previewRef.current) { map.removeLayer(previewRef.current); previewRef.current = null; }
+    if (!previewGeometry) return;
+    const previewFeature: Feature = { type: "Feature", properties: {}, geometry: previewGeometry };
+    previewRef.current = L.geoJSON(previewFeature, {
+      style: { color: "#0f766e", weight: 3, dashArray: "7 5", fillColor: "#14b8a6", fillOpacity: 0.2 },
+      pointToLayer: (_feature, latlng) => L.circleMarker(latlng, { radius: 8, color: "#ffffff", weight: 2, fillColor: "#0f766e", fillOpacity: 1 }),
+    }).addTo(map);
+  }, [previewGeometry]);
 
   // Distance-measuring tool: click to add vertices, double-click (or Esc) to finish.
   useEffect(() => {

@@ -25,6 +25,7 @@ export default function GisEditorPage() {
   // Reading the map is public; editing requires the same GEO grant as the API.
   const canEdit = user?.role === "ADMIN" || user?.apps.includes("geo") === true;
   const canDelete = user?.role?.toUpperCase() === "ADMIN";
+  const canAppendFeatures = user?.role === "ADMIN" || (user?.role === "REPORTER" && user?.apps.includes("geo") === true);
   const [geoMap, setGeoMap] = useState<GeoMap | null>(null);
   const [loaded, setLoaded] = useState(false);
   const [loadError, setLoadError] = useState<string | null>(null);
@@ -92,6 +93,7 @@ export default function GisEditorPage() {
       initialZoom={geoMap?.zoom}
       canEdit={canEdit}
       canDelete={canDelete}
+      canAppendFeatures={canAppendFeatures}
     />
   );
 }

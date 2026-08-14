@@ -47,6 +47,66 @@ export interface GeoWorkspaceVectorCatalogLayer {
   featureCount: number;
   bbox: number[] | null;
   style: Record<string, unknown>;
+  dataRevision: number;
+}
+
+export type GeoAttributeFieldType =
+  | "string"
+  | "integer"
+  | "number"
+  | "date"
+  | "datetime"
+  | "boolean";
+
+export type GeoDerivedField =
+  | { kind: "latitude" }
+  | { kind: "longitude" }
+  | { kind: "yearFromDate"; sourceField: string };
+
+export interface GeoAttributeFieldSchema {
+  key: string;
+  label: string;
+  type: GeoAttributeFieldType;
+  required: boolean;
+  unique?: boolean;
+  readOnly?: boolean;
+  maxLength?: number;
+  min?: number;
+  max?: number;
+  pattern?: string;
+  allowedValues?: Array<string | number | boolean>;
+  defaultValue?: string | number | boolean | null;
+  derived?: GeoDerivedField;
+}
+
+export interface GeoGeometryRules {
+  maxVertices: number;
+  /** Optional [minLng, minLat, maxLng, maxLat] operational capture extent. */
+  extent?: [number, number, number, number] | null;
+}
+
+export interface GeoLayerAttributeSchema {
+  version: 1;
+  fields: GeoAttributeFieldSchema[];
+  geometry: GeoGeometryRules;
+}
+
+export interface GeoFeatureCreateInput {
+  expectedRevision: number;
+  clientFeatureId: string;
+  properties: Record<string, unknown>;
+  geometry: Record<string, unknown>;
+  reason?: string;
+}
+
+export interface GeoFeatureCreateResult {
+  persisted: true;
+  feature: import("geojson").Feature;
+  revision: number;
+  featureCount: number;
+  bbox: number[];
+  sizeBytes: number;
+  updatedAt: string;
 }
 
 export interface GeoWorkspaceRasterCatalogLayer {

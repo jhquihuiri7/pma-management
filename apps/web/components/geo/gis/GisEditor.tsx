@@ -3,7 +3,7 @@
 import { useState, useEffect, useRef, useCallback } from "react";
 import dynamic from "next/dynamic";
 import type { Map as LeafletMap } from "leaflet";
-import type { FeatureCollection } from "geojson";
+import type { FeatureCollection, Geometry } from "geojson";
 import type { GeoWorkspaceCatalogMap } from "@pma/types/geo";
 import type { GeoLayerVisualization } from "@pma/types/geo";
 import {
@@ -17,6 +17,8 @@ import LayersPanel from "./LayersPanel";
 import UploadModal from "./UploadModal";
 import GisMap from "./GisMap";
 import DashboardsPanel from "./DashboardsPanel";
+import AddFeaturePanel from "./AddFeaturePanel";
+import LayerSchemaDialog from "./LayerSchemaDialog";
 import WorkspaceLayerCatalogModal, { type WorkspaceCatalogSelection } from "./WorkspaceLayerCatalogModal";
 import { inferSchema, fmtNum, categoryCounts } from "./charts";
 import { toDMS, toUTM, formatUTM, inspectPoint as inspectLayersAt, formatDistance, type PointHit } from "./geo-point";
@@ -27,7 +29,7 @@ import {
   fetchRasterLayers, rasterTileUrl, updateRasterRemote, deleteRasterRemote, retryRasterRemote,
   type RasterLayerManifest,
 } from "./persistence";
-import type { AddLayerInput, AddLayerResult, GisGeometry, GisLayer, RasterLayer, IdentifyInfo, FocusFeature, LayerStyle } from "./types";
+import type { AddLayerInput, AddLayerResult, GisGeometry, GisLayer, GisTool, RasterLayer, IdentifyInfo, FocusFeature, LayerStyle } from "./types";
 import {
   buildWorkspaceDocument,
   MAX_WORKSPACE_FILE_BYTES,
@@ -70,6 +72,9 @@ function manifestToLayer(m: LayerManifest, geojson: FeatureCollection): GisLayer
     style: m.style,
     zIndex: m.zIndex,
     persisted: true,
+    dataRevision: m.dataRevision,
+    attributeSchema: m.attributeSchema,
+    manualEntryEnabled: m.manualEntryEnabled,
   };
 }
 
@@ -116,7 +121,7 @@ function defaultStyleFor(geometry: GisGeometry, index = 0): LayerStyle {
   };
 }
 
-export default function GisEditor({ geoMap, mapId, mapTitle, backHref, initialCenter, initialZoom, canEdit = false, canDelete = false, mode = "persisted-map" }: {
+export default function GisEditor({ geoMap, mapId, mapTitle, backHref, initialCenter, initialZoom, canEdit = false, canDelete = false, canAppendFeatures = false, mode = "persisted-map" }: {
   geoMap?: GeoMap;
   mapId?: string;
   mapTitle?: string;
@@ -128,6 +133,7 @@ export default function GisEditor({ geoMap, mapId, mapTitle, backHref, initialCe
   // VIEWER) gets canEdit; deleting layers stays ADMIN-only via canDelete.
   canEdit?: boolean;
   canDelete?: boolean;
+  canAppendFeatures?: boolean;
   mode?: "persisted-map" | "workspace";
 }) {
   const isWorkspace = mode === "workspace";
@@ -137,11 +143,14 @@ export default function GisEditor({ geoMap, mapId, mapTitle, backHref, initialCe
   const rasterLayersRef = useRef<RasterLayer[]>([]);
   const [activeLayerId, setActiveLayerId] = useState<string | null>(null);
   const [basemap, setBasemap] = useState("light");
-  const [tool, setTool] = useState<"pan" | "identify" | "measure" | "inspect">("pan");
+  const [tool, setTool] = useState<GisTool>("pan");
   const [showUpload, setShowUpload] = useState(false);
   const [identify, setIdentify] = useState<IdentifyInfo | null>(null);
   const [inspectPoint, setInspectPoint] = useState<[number, number] | null>(null);
   const [attrPanelOpen, setAttrPanelOpen] = useState(false);
+  const [captureLayerId, setCaptureLayerId] = useState<string | null>(null);
+  const [captureGeometry, setCaptureGeometry] = useState<Geometry | null>(null);
+  const [schemaLayerId, setSchemaLayerId] = useState<string | null>(null);
   const [coord, setCoord] = useState<[number, number]>([-0.5, -90.5]);
   const [zoom, setZoom] = useState(7);
   const [showLegend, setShowLegend] = useState(true);
@@ -303,7 +312,7 @@ export default function GisEditor({ geoMap, mapId, mapTitle, backHref, initialCe
         const manifests = await fetchLayers(mapId);
         manifests.sort((a, b) => (b.zIndex ?? 0) - (a.zIndex ?? 0)); // top of stack first
         const built = await Promise.all(
-          manifests.map(async (m) => manifestToLayer(m, await fetchLayerData(mapId, m.id)))
+          manifests.map(async (m) => manifestToLayer(m, await fetchLayerData(mapId, m.id, m.dataRevision)))
         );
         if (!cancelled) {
           layersRef.current = built;
@@ -414,6 +423,57 @@ export default function GisEditor({ geoMap, mapId, mapTitle, backHref, initialCe
   };
 
   const activeLayer = layers.find((l) => l.id === activeLayerId);
+  const captureLayer = layers.find((layer) => layer.id === captureLayerId);
+  const schemaLayer = layers.find((layer) => layer.id === schemaLayerId);
+
+  const closeFeatureCapture = () => {
+    setCaptureLayerId(null);
+    setCaptureGeometry(null);
+    if (tool.startsWith("draw-")) setTool("pan");
+  };
+
+  const startFeatureCapture = (layer: GisLayer) => {
+    if (!mapId || !layer.persisted || !layer.manualEntryEnabled || !layer.attributeSchema) return;
+    setActiveLayerId(layer.id);
+    setCaptureLayerId(layer.id);
+    setCaptureGeometry(null);
+    setAttrPanelOpen(false);
+    setTool("pan");
+  };
+
+  const handleFeatureSaved = (result: import("@pma/types/geo").GeoFeatureCreateResult, keepOpen: boolean) => {
+    if (!captureLayer) return;
+    setLayers((current) => {
+      const next = current.map((layer) => layer.id === captureLayer.id ? {
+        ...layer,
+        geojson: { ...layer.geojson, features: [...layer.geojson.features, result.feature] },
+        dataRevision: result.revision,
+        size: humanSize(result.sizeBytes),
+      } : layer);
+      layersRef.current = next;
+      const updated = next.find((layer) => layer.id === captureLayer.id);
+      if (updated) confirmedLayers.current.set(updated.id, updated);
+      return next;
+    });
+    setCaptureGeometry(null);
+    setTool("pan");
+    if (!keepOpen) closeFeatureCapture();
+  };
+
+  const handleSchemaSaved = (manifest: LayerManifest) => {
+    setLayers((current) => {
+      const next = current.map((layer) => layer.id === manifest.id ? {
+        ...layer,
+        attributeSchema: manifest.attributeSchema,
+        manualEntryEnabled: manifest.manualEntryEnabled,
+        dataRevision: manifest.dataRevision,
+      } : layer);
+      layersRef.current = next;
+      const updated = next.find((layer) => layer.id === manifest.id);
+      if (updated) confirmedLayers.current.set(updated.id, updated);
+      return next;
+    });
+  };
 
   const addLayer = async (ds: AddLayerInput): Promise<AddLayerResult> => {
     const currentLayers = layersRef.current;
@@ -728,7 +788,7 @@ export default function GisEditor({ geoMap, mapId, mapTitle, backHref, initialCe
     for (let offset = 0; offset < vectorItems.length; offset += 8) {
       vectorResults.push(...await Promise.allSettled(vectorItems.slice(offset, offset + 8).map(async (item) => ({
         item,
-        geojson: await fetchLayerData(item.mapId, item.layer.layerId),
+        geojson: await fetchLayerData(item.mapId, item.layer.layerId, item.layer.kind === "vector" ? item.layer.dataRevision : undefined),
       }))));
     }
     const loadedVectors = vectorResults.flatMap((result) => result.status === "fulfilled" ? [result.value] : []);
@@ -1110,6 +1170,12 @@ export default function GisEditor({ geoMap, mapId, mapTitle, backHref, initialCe
           inspectPoint={inspectPoint}
           focusFeature={focusFeature}
           onMapReady={setMapInstance}
+          previewGeometry={captureGeometry}
+          onDrawGeometry={(geometry) => {
+            setCaptureGeometry(geometry);
+            setTool("pan");
+          }}
+          onDrawCancel={() => setTool("pan")}
         />
 
         {hydrationError && (
@@ -1166,6 +1232,8 @@ export default function GisEditor({ geoMap, mapId, mapTitle, backHref, initialCe
           <AttributeTablePanel
             layer={activeLayer}
             onClose={() => setAttrPanelOpen(false)}
+            canAppend={!!mapId && canMutate && canAppendFeatures && !!activeLayer.persisted && !!activeLayer.manualEntryEnabled && !!activeLayer.attributeSchema}
+            onAppend={() => startFeatureCapture(activeLayer)}
             onSelect={(f) => {
               setFocusFeature({ layerId: activeLayer.id, feature: f });
               setIdentify({ layerId: activeLayer.id, layerName: activeLayer.name, feature: f, latlng: null });
@@ -1179,6 +1247,8 @@ export default function GisEditor({ geoMap, mapId, mapTitle, backHref, initialCe
         layer={activeLayer}
         mapId={mapId}
         canConfigure={canMutate}
+        canManageSchema={!isWorkspace && canDelete && !!mapId}
+        onConfigureSchema={() => activeLayer && setSchemaLayerId(activeLayer.id)}
         workspaceMode={isWorkspace}
         workspaceVisualizations={isWorkspace && activeLayer ? workspaceVisualizations[activeLayer.id] : undefined}
         onWorkspaceChange={(layerId, visualizations) => {
@@ -1265,6 +1335,28 @@ export default function GisEditor({ geoMap, mapId, mapTitle, backHref, initialCe
           sourceMapElement={mapInstance?.getContainer() ?? null}
           selectedFeature={identify?.feature ?? focusFeature?.feature ?? null}
           onClose={() => setExportOpen(false)}
+        />
+      )}
+
+      {mapId && captureLayer && captureLayer.attributeSchema && (
+        <AddFeaturePanel
+          mapId={mapId}
+          layer={captureLayer}
+          geometry={captureGeometry}
+          drawing={tool.startsWith("draw-")}
+          onStartDraw={() => setTool(captureLayer.geometry === "Point" ? "draw-point" : captureLayer.geometry === "LineString" ? "draw-line" : "draw-polygon")}
+          onGeometryChange={setCaptureGeometry}
+          onClose={closeFeatureCapture}
+          onSaved={handleFeatureSaved}
+        />
+      )}
+
+      {mapId && schemaLayer && (
+        <LayerSchemaDialog
+          mapId={mapId}
+          layer={schemaLayer}
+          onClose={() => setSchemaLayerId(null)}
+          onSaved={handleSchemaSaved}
         />
       )}
     </div>
@@ -1457,10 +1549,12 @@ function LegendSection({ layer }: { layer: GisLayer }) {
 }
 
 // ────────────────────────────────────────────────────────────
-function AttributeTablePanel({ layer, onClose, onSelect }: {
+function AttributeTablePanel({ layer, onClose, onSelect, canAppend = false, onAppend }: {
   layer: GisLayer;
   onClose: () => void;
   onSelect?: (f: import("geojson").Feature) => void;
+  canAppend?: boolean;
+  onAppend?: () => void;
 }) {
   const schema = inferSchema(layer.geojson.features);
   const [sort, setSort] = useState<{ key: string; dir: "asc" | "desc" } | null>(null);
@@ -1487,6 +1581,7 @@ function AttributeTablePanel({ layer, onClose, onSelect }: {
           </div>
         </div>
         <div style={{ display: "flex", gap: 4 }}>
+          {canAppend && <button className="btn primary" style={{ height: 30, paddingInline: 10 }} onClick={onAppend}><MapPin size={13} /> Nueva observación</button>}
           <button className="icon-btn" data-tip="Exportar CSV" onClick={() => toast.info("Exportación CSV disponible próximamente.")}><Download size={14} /></button>
           <button className="icon-btn" onClick={onClose}><X size={14} /></button>
         </div>
