@@ -32,7 +32,7 @@ import {
   DialogTitle,
   DialogTrigger,
 } from "@/components/ui/dialog";
-import { Upload, ExternalLink, Trash2, Plus, Users, CheckCircle2, AlertTriangle, XCircle, Pencil, Download, FileSpreadsheet, OctagonAlert } from "lucide-react";
+import { Upload, ExternalLink, Trash2, Plus, Users, CheckCircle2, AlertTriangle, XCircle, Pencil, Download, FileSpreadsheet, OctagonAlert, ArrowLeft, ArrowUp, ArrowDown, ArrowUpDown, ChevronLeft, ChevronRight } from "lucide-react";
 import { toast } from "sonner";
 import {
   Plan,
@@ -86,6 +86,93 @@ const EMPTY_ITEM_FORM = {
   periodicity: "",
   budget: "",
 };
+
+// Column sorting for the items table. It is presentation-only: nothing is sent
+// to the API and no order is persisted. The sorted array is the same one the
+// Cronograma and Reportería tables below iterate, so reordering a column here
+// reorders those rows too and the three tables always read in the same order.
+type ItemSortKey =
+  | "item"
+  | "direccion"
+  | "proposed_measure"
+  | "verification_method"
+  | "observation";
+
+type ItemSort = { key: ItemSortKey; dir: "asc" | "desc" };
+
+// `numeric` keeps item codes in human order: "10" after "2", not after "1".
+const ITEM_COLLATOR = new Intl.Collator("es", { numeric: true, sensitivity: "base" });
+
+function itemSortValue(pi: PlanItem, key: ItemSortKey): string {
+  switch (key) {
+    case "item":
+      return pi.item ?? "";
+    case "direccion":
+      return pi.direccion ?? "";
+    case "proposed_measure":
+      return pi.proposed_measure ?? "";
+    case "verification_method":
+      return pi.verification_method ?? "";
+    case "observation":
+      return pi.observation ?? "";
+  }
+}
+
+function sortPlanItems(items: PlanItem[], sort: ItemSort | null): PlanItem[] {
+  if (!sort) return items;
+  const factor = sort.dir === "asc" ? 1 : -1;
+  return [...items].sort((a, b) => {
+    const va = itemSortValue(a, sort.key).trim();
+    const vb = itemSortValue(b, sort.key).trim();
+    // Blank cells sink to the bottom in both directions: an item with no
+    // "dirección" or no observación is not "the smallest one", it is unranked.
+    if (!va && !vb) return 0;
+    if (!va) return 1;
+    if (!vb) return -1;
+    return ITEM_COLLATOR.compare(va, vb) * factor;
+  });
+}
+
+// Header cell with a sort toggle. Cycles asc -> desc -> unsorted, so the user
+// can always get back to the original (insertion) order.
+function SortableItemHead({
+  label,
+  sortKey,
+  sort,
+  onToggle,
+  className,
+}: {
+  label: string;
+  sortKey: ItemSortKey;
+  sort: ItemSort | null;
+  onToggle: (key: ItemSortKey) => void;
+  className?: string;
+}) {
+  const active = sort !== null && sort.key === sortKey;
+  const Icon = !active ? ArrowUpDown : sort.dir === "asc" ? ArrowUp : ArrowDown;
+  const title = !active
+    ? `Ordenar por ${label} (menor a mayor)`
+    : sort.dir === "asc"
+      ? `Ordenar por ${label} (mayor a menor)`
+      : `Quitar orden por ${label}`;
+
+  return (
+    <TableHead className={className}>
+      <button
+        type="button"
+        onClick={() => onToggle(sortKey)}
+        title={title}
+        aria-label={title}
+        className="inline-flex items-center gap-1 text-left hover:text-foreground transition-colors"
+      >
+        <span>{label}</span>
+        <Icon
+          className={`h-3.5 w-3.5 shrink-0 ${active ? "text-primary" : "text-muted-foreground/40"}`}
+        />
+      </button>
+    </TableHead>
+  );
+}
 
 /**
  * A `<select>` whose value matches no `<option>` renders the first enabled one,
@@ -217,6 +304,9 @@ export default function PlanDetailPage() {
   const [uploadingManualEvidence, setUploadingManualEvidence] = useState(false);
   const [loadError, setLoadError] = useState<string | null>(null);
   const [mutationPending, setMutationPending] = useState(false);
+  const [itemSort, setItemSort] = useState<ItemSort | null>(null);
+  // Año visible del Cronograma; null = año actual (o el último en rango).
+  const [cronoYear, setCronoYear] = useState<number | null>(null);
   const mutationPendingRef = useRef(false);
 
   const runMutation = useCallback(async <T,>(
@@ -955,6 +1045,14 @@ export default function PlanDetailPage() {
     textarea.style.height = `${textarea.scrollHeight}px`;
   }
 
+  function toggleItemSort(key: ItemSortKey) {
+    setItemSort((current) => {
+      if (!current || current.key !== key) return { key, dir: "asc" };
+      if (current.dir === "asc") return { key, dir: "desc" };
+      return null;
+    });
+  }
+
   if (!plan) {
     return loadError ? (
       <div className="space-y-3">
@@ -966,11 +1064,14 @@ export default function PlanDetailPage() {
 
 
   const userId = session?.id ?? "";
-  const visibleItems = (isAdmin || isViewer)
+  const visibleItemsUnsorted = (isAdmin || isViewer)
     ? planItems
     : planItems.filter((pi) =>
         (pi.assignedUsers ?? []).some((a) => a.userId === userId)
       );
+  // Single sorted list shared by the items table, the Cronograma and the
+  // Reportería table, so the three always show rows in the same order.
+  const visibleItems = sortPlanItems(visibleItemsUnsorted, itemSort);
   const visibleEvidences = (isAdmin || isViewer)
     ? evidences
     : evidences.filter(
@@ -1016,34 +1117,61 @@ export default function PlanDetailPage() {
   })();
 
   return (
-    <div className="space-y-6">
+    <div className="-m-8 min-h-screen">
       {mutationPending && (
         <div className="fixed inset-0 z-[90] cursor-wait" aria-label="Operación en curso" />
       )}
       {/* Plan Header */}
-      <div>
-        <div className="flex items-center justify-between mb-1">
-          <div className="flex items-center gap-2">
-            <h1 className="text-2xl font-bold">{plan.title}</h1>
+      <div className="relative min-h-[180px] overflow-hidden bg-gradient-to-br from-teal-700 via-teal-600 to-emerald-700 px-6 py-8">
+        <div
+          className="pointer-events-none absolute inset-0 opacity-10"
+          style={{
+            backgroundImage:
+              "url(\"data:image/svg+xml,%3Csvg width='60' height='60' viewBox='0 0 60 60' xmlns='http://www.w3.org/2000/svg'%3E%3Cg fill='none' fill-rule='evenodd'%3E%3Cg fill='%23ffffff' fill-opacity='1'%3E%3Ccircle cx='30' cy='30' r='1'/%3E%3C/g%3E%3C/g%3E%3C/svg%3E\")",
+          }}
+        />
+        <div className="relative z-10 mx-auto max-w-7xl">
+          <button
+            type="button"
+            onClick={() => router.push("/pma/plans")}
+            className="mb-4 inline-flex items-center gap-1.5 text-sm font-medium text-teal-200 transition-colors hover:text-white"
+          >
+            <ArrowLeft className="h-4 w-4" />
+            Volver a Planes
+          </button>
+          <div className="flex items-start justify-between gap-6">
+            <div>
+              <p className="mb-2 text-sm font-medium uppercase tracking-widest text-teal-200">
+                Detalle del Plan
+              </p>
+              <h1 className="text-3xl font-bold text-white">{plan.title}</h1>
+              <p className="mt-2 max-w-2xl text-sm text-teal-100">
+                {plan.description || "Sin descripción"}
+              </p>
+              <div className="mt-4 flex flex-wrap gap-2">
+                {plan.tipo && <span className="rounded-full bg-white/20 px-3 py-1 text-xs font-medium text-white">{plan.tipo}</span>}
+                {plan.fase && <span className="rounded-full bg-white/20 px-3 py-1 text-xs font-medium text-white">{plan.fase}</span>}
+                {plan.enfoque && <span className="rounded-full bg-white/20 px-3 py-1 text-xs font-medium text-white">{plan.enfoque}</span>}
+                <span className="rounded-full bg-white/20 px-3 py-1 text-xs font-medium text-white">
+                  Creado el {new Date(plan.createdAt).toLocaleDateString()}
+                </span>
+              </div>
+            </div>
+            {isAdmin && (
+              <Button
+                size="sm"
+                className="shrink-0 rounded-lg border border-white/40 bg-white text-red-600 shadow-lg hover:bg-red-50 hover:text-red-700"
+                onClick={() => setDeletePlanOpen(true)}
+              >
+                <Trash2 className="w-4 h-4 mr-2" />
+                Eliminar plan
+              </Button>
+            )}
           </div>
-          {isAdmin && (
-            <Button
-              variant="destructive"
-              size="sm"
-              onClick={() => setDeletePlanOpen(true)}
-            >
-              <Trash2 className="w-4 h-4 mr-2" />
-              Eliminar plan
-            </Button>
-          )}
         </div>
-        <p className="text-muted-foreground mt-1">
-          {plan.description || "Sin descripción"}
-        </p>
-        <p className="text-xs text-muted-foreground mt-2">
-          Creado el {new Date(plan.createdAt).toLocaleDateString()}
-        </p>
       </div>
+
+      <div className="relative z-10 mx-auto -mt-6 max-w-7xl space-y-6 px-6 pb-16 [&_[data-slot=card]]:rounded-2xl [&_[data-slot=card]]:border [&_[data-slot=card]]:border-slate-100 [&_[data-slot=card]]:bg-white [&_[data-slot=card]]:shadow-xl [&_[data-slot=card]]:ring-0 [&_[data-slot=table-head]]:text-xs [&_[data-slot=table-head]]:font-semibold [&_[data-slot=table-head]]:uppercase [&_[data-slot=table-head]]:tracking-wider [&_[data-slot=table-head]]:text-slate-500 [&_[data-slot=table-header]]:bg-slate-50 [&_[data-slot=table-row]]:border-slate-100">
 
       {/* Viewers assigned to this plan */}
       {canEdit && (
@@ -1484,13 +1612,43 @@ export default function PlanDetailPage() {
           ) : (
             <div className="w-full">
               <Table className="w-full table-fixed">
-                <TableHeader>
+                <TableHeader className="bg-slate-50">
                   <TableRow>
-                    <TableHead className="w-[8%]">Item</TableHead>
-                    <TableHead className="w-[11%]">Dirección</TableHead>
-                    <TableHead className="w-[30%]">Medida Propuesta</TableHead>
-                    <TableHead className="w-[23%]">Método Verificación</TableHead>
-                    <TableHead className="w-[20%]">Observación</TableHead>
+                    <SortableItemHead
+                      label="Item"
+                      sortKey="item"
+                      sort={itemSort}
+                      onToggle={toggleItemSort}
+                      className="w-[8%]"
+                    />
+                    <SortableItemHead
+                      label="Dirección"
+                      sortKey="direccion"
+                      sort={itemSort}
+                      onToggle={toggleItemSort}
+                      className="w-[11%]"
+                    />
+                    <SortableItemHead
+                      label="Medida Propuesta"
+                      sortKey="proposed_measure"
+                      sort={itemSort}
+                      onToggle={toggleItemSort}
+                      className="w-[30%]"
+                    />
+                    <SortableItemHead
+                      label="Método Verificación"
+                      sortKey="verification_method"
+                      sort={itemSort}
+                      onToggle={toggleItemSort}
+                      className="w-[23%]"
+                    />
+                    <SortableItemHead
+                      label="Observación"
+                      sortKey="observation"
+                      sort={itemSort}
+                      onToggle={toggleItemSort}
+                      className="w-[20%]"
+                    />
                     {canEdit && <TableHead className="w-[8%]">Acciones</TableHead>}
                   </TableRow>
                 </TableHeader>
@@ -1498,14 +1656,14 @@ export default function PlanDetailPage() {
                   {visibleItems.map((pi) => (
                     <TableRow
                       key={pi.id}
-                      className="cursor-pointer hover:bg-muted/50"
+                      className="cursor-pointer border-b border-slate-100 hover:bg-slate-50"
                       onClick={() => setDetailItem(pi)}
                     >
                       <TableCell className="font-medium align-top break-words">
                         {pi.item}
                       </TableCell>
                       <TableCell className="align-top" title={pi.direccion ?? ""}>
-                        <span className="line-clamp-2 whitespace-normal break-words">{pi.direccion ?? ""}</span>
+                        <span className="line-clamp-2 whitespace-normal break-words rounded-full bg-teal-50 px-2 py-1 text-xs font-medium text-teal-700">{pi.direccion ?? ""}</span>
                       </TableCell>
                       <TableCell className="align-top" title={pi.proposed_measure}>
                         <span className="line-clamp-2 whitespace-normal break-words">{pi.proposed_measure}</span>
@@ -1635,50 +1793,140 @@ export default function PlanDetailPage() {
           vcols.push({ type: "compliance", periodKey: lbl, periodLabel: lbl, year: lastMonth.getFullYear() });
         }
 
-        // Year header grouping
-        const yearColCount = new Map<number, number>();
-        for (const vc of vcols) {
-          yearColCount.set(vc.year, (yearColCount.get(vc.year) ?? 0) + 1);
+        // Años disponibles según el rango ya calculado
+        const availableYears = Array.from(new Set(vcols.map((vc) => vc.year))).sort((a, b) => a - b);
+
+        // Año visible: el elegido, o el año actual si está en rango, o el último
+        const activeYear =
+          cronoYear && availableYears.includes(cronoYear)
+            ? cronoYear
+            : availableYears.includes(todayMonth.getFullYear())
+              ? todayMonth.getFullYear()
+              : availableYears[availableYears.length - 1];
+
+        // Solo las columnas del año visible
+        const yearVcols = vcols.filter((vc) => vc.year === activeYear);
+
+        // Resumen del año visible: estado de las evidencias por periodo de cada item
+        const yearSummary = { valid: 0, pending: 0, invalid: 0, none: 0 };
+        for (const pi of visibleItems) {
+          for (const range of getItemRanges(p, pi.periodicity)) {
+            if (!range.started) continue;
+            if (!range.monthKeys.some((mk) => Number(mk.slice(0, 4)) === activeYear)) continue;
+            let best: "none" | EvidenceValidationStatus = "none";
+            for (const mk of range.monthKeys) {
+              const s = evidenceMonthStatus.get(`${pi.id}-${mk}`);
+              if (s && (best === "none" || statusPriority[s] > statusPriority[best])) best = s;
+            }
+            yearSummary[best] += 1;
+          }
         }
-        const yearHeaders = Array.from(yearColCount.entries())
-          .sort(([a], [b]) => a - b)
-          .map(([year, count]) => ({ year, count }));
+
+        // Cumplimiento del año visible: C sobre las evaluadas (excluyendo N/A)
+        let yearCompC = 0;
+        let yearCompEval = 0;
+        for (const vc of yearVcols) {
+          if (vc.type !== "compliance") continue;
+          for (const pi of visibleItems) {
+            const st = complianceMap.get(`${pi.id}::${vc.periodKey}`);
+            if (!st || st === "N/A") continue;
+            yearCompEval += 1;
+            if (st === "C") yearCompC += 1;
+          }
+        }
+        const yearCompPct = yearCompEval > 0 ? Math.round((yearCompC / yearCompEval) * 100) : null;
 
         return (
-          <Card>
-            <CardHeader>
-              <CardTitle className="text-base">Cronograma</CardTitle>
+          <Card className="rounded-2xl border-[#e2e8f0] shadow-sm">
+            <CardHeader className="flex flex-row items-start justify-between gap-5 pb-4">
+              <div className="min-w-0">
+                <CardTitle className="text-base">Cronograma</CardTitle>
+                <p className="mt-1 text-xs text-muted-foreground">
+                  Vigencia {rangeStart.toLocaleDateString("es", { month: "short", year: "numeric" })} –{" "}
+                  {months[months.length - 1]?.toLocaleDateString("es", { month: "short", year: "numeric" })}
+                  {" · "}Reporte {p.report_per ?? "6 meses"}
+                  {" · "}<span className="font-medium text-teal-700">{visibleItems.length} ítems</span>
+                </p>
+              </div>
+
+              <div className="flex shrink-0 items-center gap-2">
+                <span className="text-[10.5px] font-semibold uppercase tracking-wider text-muted-foreground">Año</span>
+                <Button
+                  variant="outline" size="icon" className="h-8 w-[30px]"
+                  disabled={activeYear <= availableYears[0]}
+                  onClick={() => setCronoYear(activeYear - 1)}
+                  title="Año anterior"
+                >
+                  <ChevronLeft className="h-3.5 w-3.5" />
+                </Button>
+
+                <select
+                  value={activeYear}
+                  onChange={(e) => setCronoYear(Number(e.target.value))}
+                  className="h-8 min-w-[112px] cursor-pointer appearance-none rounded-[9px] border border-teal-200 bg-teal-50 px-3 text-[13px] font-semibold text-teal-700"
+                >
+                  {availableYears.map((y) => (
+                    <option key={y} value={y}>{y}</option>
+                  ))}
+                </select>
+
+                <Button
+                  variant="outline" size="icon" className="h-8 w-[30px]"
+                  disabled={activeYear >= availableYears[availableYears.length - 1]}
+                  onClick={() => setCronoYear(activeYear + 1)}
+                  title="Año siguiente"
+                >
+                  <ChevronRight className="h-3.5 w-3.5" />
+                </Button>
+              </div>
             </CardHeader>
+            <div className="flex flex-wrap items-center gap-2 border-b border-[#f1f5f9] bg-[#f8fafc] px-6 py-2">
+              <span className="rounded-full bg-[#dcfce7] px-2.5 py-0.5 text-[11px] font-medium text-[#166534]">
+                {yearSummary.valid} válidas
+              </span>
+              <span className="rounded-full bg-[#fef9c3] px-2.5 py-0.5 text-[11px] font-medium text-[#854d0e]">
+                {yearSummary.pending} por aprobar
+              </span>
+              <span className="rounded-full bg-[#fee2e2] px-2.5 py-0.5 text-[11px] font-medium text-[#991b1b]">
+                {yearSummary.invalid} rechazadas
+              </span>
+              <span className="rounded-full bg-[#e0f2fe] px-2.5 py-0.5 text-[11px] font-medium text-[#0369a1]">
+                {yearSummary.none} sin entregar
+              </span>
+              <span className="ml-auto text-[11px] font-medium text-teal-700">
+                Cumplimiento del año {yearCompPct === null ? "—" : `${yearCompPct}%`}
+              </span>
+            </div>
             <CardContent>
-              <div className="overflow-x-auto">
-                <table className="text-xs border-collapse w-full">
+              <div>
+                <table className="text-[11px] border-collapse w-full table-fixed">
                   <thead>
                     <tr>
-                      <th className="sticky left-0 z-10 bg-background border border-border px-3 py-2 min-w-[200px] text-left font-medium text-muted-foreground">
-                        Item
-                      </th>
-                      {yearHeaders.map(({ year, count }) => (
-                        <th
-                          key={`y-${year}`}
-                          colSpan={count}
-                          className="border border-border px-2 py-1 text-center font-semibold bg-muted text-muted-foreground"
+                      <th className="w-[200px] bg-background border-b border-[#f1f5f9] px-3 py-2 text-left font-medium text-muted-foreground">
+                        <span
+                          className="inline-flex items-center gap-1"
+                          title={
+                            itemSort
+                              ? "Las filas siguen el orden elegido en la tabla de Items del Plan"
+                              : undefined
+                          }
                         >
-                          {year}
-                        </th>
-                      ))}
-                    </tr>
-                    <tr>
-                      <th className="sticky left-0 z-10 bg-background border border-border" />
-                      {vcols.map((vc, i) => {
+                          Item
+                          {itemSort && (
+                            itemSort.dir === "asc"
+                              ? <ArrowUp className="h-3 w-3 shrink-0 text-primary" />
+                              : <ArrowDown className="h-3 w-3 shrink-0 text-primary" />
+                          )}
+                        </span>
+                      </th>
+                      {yearVcols.map((vc, i) => {
                         if (vc.type === "month") {
                           const isToday = vc.date.getTime() === todayMonth.getTime();
                           return (
                             <th
                               key={`h-${i}`}
-                              className={`border border-border px-1 py-1 text-center font-medium min-w-[48px] ${
-                                isToday
-                                  ? "bg-primary/10 text-primary"
-                                  : "bg-muted/50 text-muted-foreground"
+                              className={`border-b border-[#f1f5f9] px-1 py-1 text-center text-[10px] font-medium ${
+                                isToday ? "bg-primary/10 text-primary" : "text-[#475569]"
                               }`}
                             >
                               {vc.date.toLocaleString("es", { month: "short" })}
@@ -1688,7 +1936,7 @@ export default function PlanDetailPage() {
                         return (
                           <th
                             key={`h-${i}`}
-                            className="border-2 border-border bg-slate-50 px-1 py-1 text-center font-semibold text-slate-500 min-w-[72px]"
+                            className="rounded-t-lg border-b border-[#99f6e4] bg-[#f0fdfa] px-1 py-1 text-center text-[9.5px] font-semibold text-[#0f766e]"
                             title={vc.periodLabel}
                           >
                             Cump.
@@ -1738,13 +1986,13 @@ export default function PlanDetailPage() {
                           `Periodo futuro (aún no disponible) · ${range.label}`;
 
                         return (
-                          <td key={cellKey} colSpan={colSpan} className="border border-border p-0.5">
+                          <td key={cellKey} colSpan={colSpan} className="p-0.5">
                             {started && canUploadEvidence ? (
                               <button
                                 onClick={() => openCalUpload(pi, range)}
-                                className="w-full rounded flex items-center justify-center font-semibold leading-none transition-opacity hover:opacity-75 px-1"
+                                className="w-full rounded-md flex items-center justify-center font-bold leading-none transition-opacity hover:opacity-75 px-1"
                                 style={{
-                                  height: "24px",
+                                  height: "22px",
                                   backgroundColor: style.bg,
                                   color: style.color,
                                   fontSize: "10px",
@@ -1756,9 +2004,9 @@ export default function PlanDetailPage() {
                               </button>
                             ) : (
                               <div
-                                className="w-full rounded flex items-center justify-center leading-none px-1 cursor-not-allowed"
+                                className="w-full rounded-md flex items-center justify-center leading-none px-1 cursor-not-allowed"
                                 style={{
-                                  height: "24px",
+                                  height: "22px",
                                   backgroundColor: style.bg,
                                   color: style.color,
                                   fontSize: "10px",
@@ -1779,29 +2027,32 @@ export default function PlanDetailPage() {
                       ) => {
                         const compStatus = complianceMap.get(`${pi.id}::${vc.periodKey}`);
                         const compBg =
-                          compStatus === "C"                          ? "#dcfce7" :
-                          compStatus === "NC+" || compStatus === "NC-" ? "#fee2e2" :
-                          compStatus === "N/A"                        ? "#fef9c3" :
+                          compStatus === "C"   ? "#ecfdf5" :
+                          compStatus === "NC+" ? "#fef2f2" :
+                          compStatus === "NC-" ? "#fff7ed" :
+                          compStatus === "N/A" ? "#fffbeb" :
                           "#f8fafc";
                         const compColor =
-                          compStatus === "C"                          ? "#166534" :
-                          compStatus === "NC+" || compStatus === "NC-" ? "#991b1b" :
-                          compStatus === "N/A"                        ? "#854d0e" :
+                          compStatus === "C"   ? "#047857" :
+                          compStatus === "NC+" ? "#b91c1c" :
+                          compStatus === "NC-" ? "#c2410c" :
+                          compStatus === "N/A" ? "#b45309" :
                           "#94a3b8";
                         const compBorder =
-                          compStatus === "C"                          ? "#86efac" :
-                          compStatus === "NC+" || compStatus === "NC-" ? "#fca5a5" :
-                          compStatus === "N/A"                        ? "#fde047" :
+                          compStatus === "C"   ? "#6ee7b7" :
+                          compStatus === "NC+" ? "#fca5a5" :
+                          compStatus === "NC-" ? "#fdba74" :
+                          compStatus === "N/A" ? "#fcd34d" :
                           "#e2e8f0";
 
                         return (
-                          <td key={cellKey} className="border-2 border-border p-0.5">
+                          <td key={cellKey} className="bg-[#f0fdfa]/30 p-0.5">
                             {canEdit ? (
                               <DropdownMenu>
                                 <DropdownMenuTrigger
-                                  className="w-full rounded flex items-center justify-center font-bold leading-none transition-opacity hover:opacity-75 bg-transparent border-0 cursor-pointer"
+                                  className="w-full rounded-md flex items-center justify-center font-bold leading-none transition-opacity hover:opacity-75 bg-transparent border-0 cursor-pointer"
                                   style={{
-                                    height: "24px",
+                                    height: "22px",
                                     backgroundColor: compBg,
                                     color: compColor,
                                     fontSize: "10px",
@@ -1813,24 +2064,24 @@ export default function PlanDetailPage() {
                                 </DropdownMenuTrigger>
                                 <DropdownMenuContent align="center">
                                   <DropdownMenuItem onClick={() => handleComplianceChange(pi.id, vc.periodKey, "C")}>
-                                    <span className="font-bold text-green-600 mr-2">C</span> Conforme
+                                    <span className="font-bold text-emerald-600 mr-2">C</span> Conforme
                                   </DropdownMenuItem>
                                   <DropdownMenuItem onClick={() => handleComplianceChange(pi.id, vc.periodKey, "NC+")}>
                                     <span className="font-bold text-red-600 mr-2">NC+</span> No conforme mayor
                                   </DropdownMenuItem>
                                   <DropdownMenuItem onClick={() => handleComplianceChange(pi.id, vc.periodKey, "NC-")}>
-                                    <span className="font-bold text-red-600 mr-2">NC-</span> No conforme menor
+                                    <span className="font-bold text-orange-500 mr-2">NC-</span> No conforme menor
                                   </DropdownMenuItem>
                                   <DropdownMenuItem onClick={() => handleComplianceChange(pi.id, vc.periodKey, "N/A")}>
-                                    <span className="font-bold text-yellow-600 mr-2">N/A</span> No aplica
+                                    <span className="font-bold text-amber-500 mr-2">N/A</span> No aplica
                                   </DropdownMenuItem>
                                 </DropdownMenuContent>
                               </DropdownMenu>
                             ) : (
                               <div
-                                className="w-full rounded flex items-center justify-center font-bold leading-none"
+                                className="w-full rounded-md flex items-center justify-center font-bold leading-none"
                                 style={{
-                                  height: "24px",
+                                  height: "22px",
                                   backgroundColor: compBg,
                                   color: compColor,
                                   fontSize: "10px",
@@ -1857,13 +2108,13 @@ export default function PlanDetailPage() {
                         cells.push(renderRangeCell(group.range, group.count, first, `r-${group.startIdx}`));
                         group = null;
                       };
-                      vcols.forEach((vc, i) => {
+                      yearVcols.forEach((vc, i) => {
                         if (vc.type === "month") {
                           const mk = `${vc.date.getFullYear()}-${String(vc.date.getMonth() + 1).padStart(2, "0")}`;
                           const r = rangeByMonth.get(mk);
                           if (!r) {
                             flush();
-                            cells.push(<td key={`e-${i}`} className="border border-border p-0.5" />);
+                            cells.push(<td key={`e-${i}`} className="bg-[#f8fafc] p-0.5" />);
                             return;
                           }
                           if (group && group.range.index === r.index) {
@@ -1882,9 +2133,9 @@ export default function PlanDetailPage() {
                       return (
                         <tr
                           key={pi.id}
-                          className={rowIdx % 2 === 0 ? "bg-background" : "bg-muted/20"}
+                          className={`border-b border-[#f1f5f9] hover:bg-[#f8fafc] ${rowIdx % 2 === 0 ? "bg-background" : "bg-[#fbfcfd]"}`}
                         >
-                          <td className="sticky left-0 z-10 border border-border px-3 py-1.5 font-medium truncate max-w-[200px] bg-background">
+                          <td className="px-3 py-1.5 font-medium truncate max-w-[200px]">
                             {pi.item}
                           </td>
                           {cells}
@@ -1916,7 +2167,7 @@ export default function PlanDetailPage() {
                   Periodo futuro (aún no disponible)
                 </span>
                 <span className="flex items-center gap-1.5">
-                  <span className="inline-block w-10 h-4 rounded border-2" style={{ backgroundColor: "#f8fafc", borderColor: "#e2e8f0" }} />
+                  <span className="inline-block w-10 h-4 rounded bg-[#f0fdfa] border border-teal-200" />
                   Columna de cumplimiento (C / NC+ / NC-)
                 </span>
                 <span className="ml-auto italic">
@@ -2330,26 +2581,26 @@ export default function PlanDetailPage() {
       {/* Item Detail Dialog */}
       <Dialog open={!!detailItem} onOpenChange={(open) => { if (!open) setDetailItem(null); }}>
         <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
-          <DialogHeader>
-            <DialogTitle>Detalle del Item — {detailItem?.item}</DialogTitle>
+          <DialogHeader className="-mx-6 -mt-6 border-b border-slate-200 bg-slate-50 px-6 py-5">
+            <DialogTitle className="text-slate-900">Detalle del Item — {detailItem?.item}</DialogTitle>
           </DialogHeader>
           {detailItem && (
             <div className="space-y-4 mt-2 text-sm">
               <div className="grid grid-cols-2 gap-4">
                 <div>
-                  <p className="text-xs font-medium text-muted-foreground">Subplan</p>
+                  <p className="text-xs font-semibold uppercase tracking-wider text-slate-500">Subplan</p>
                   <p className="whitespace-pre-wrap break-words">{detailItem.subplan || "—"}</p>
                 </div>
                 <div>
-                  <p className="text-xs font-medium text-muted-foreground">Dirección</p>
+                  <p className="text-xs font-semibold uppercase tracking-wider text-slate-500">Dirección</p>
                   <p className="whitespace-pre-wrap break-words">{detailItem.direccion || "—"}</p>
                 </div>
                 <div>
-                  <p className="text-xs font-medium text-muted-foreground">Periodicidad</p>
+                  <p className="text-xs font-semibold uppercase tracking-wider text-slate-500">Periodicidad</p>
                   <p className="whitespace-pre-wrap break-words">{detailItem.periodicity || "—"}</p>
                 </div>
                 <div>
-                  <p className="text-xs font-medium text-muted-foreground">Presupuesto</p>
+                  <p className="text-xs font-semibold uppercase tracking-wider text-slate-500">Presupuesto</p>
                   <p>
                     {detailItem.budget.toLocaleString("en-US", {
                       style: "currency",
@@ -2359,27 +2610,27 @@ export default function PlanDetailPage() {
                 </div>
               </div>
               <div>
-                <p className="text-xs font-medium text-muted-foreground">Actividad Ambiental</p>
+                <p className="text-xs font-semibold uppercase tracking-wider text-slate-500">Actividad Ambiental</p>
                 <p className="whitespace-pre-wrap break-words">{detailItem.environmental_activity || "—"}</p>
               </div>
               <div>
-                <p className="text-xs font-medium text-muted-foreground">Impacto Ambiental Identificado</p>
+                <p className="text-xs font-semibold uppercase tracking-wider text-slate-500">Impacto Ambiental Identificado</p>
                 <p className="whitespace-pre-wrap break-words">{detailItem.identified_environmental_impact || "—"}</p>
               </div>
               <div>
-                <p className="text-xs font-medium text-muted-foreground">Medida Propuesta</p>
+                <p className="text-xs font-semibold uppercase tracking-wider text-slate-500">Medida Propuesta</p>
                 <p className="whitespace-pre-wrap break-words">{detailItem.proposed_measure || "—"}</p>
               </div>
               <div>
-                <p className="text-xs font-medium text-muted-foreground">Indicador</p>
+                <p className="text-xs font-semibold uppercase tracking-wider text-slate-500">Indicador</p>
                 <p className="whitespace-pre-wrap break-words">{detailItem.indicator || "—"}</p>
               </div>
               <div>
-                <p className="text-xs font-medium text-muted-foreground">Método de Verificación</p>
+                <p className="text-xs font-semibold uppercase tracking-wider text-slate-500">Método de Verificación</p>
                 <p className="whitespace-pre-wrap break-words">{detailItem.verification_method || "—"}</p>
               </div>
-              <div>
-                <p className="text-xs font-medium text-muted-foreground">Observación</p>
+              <div className="rounded-r-xl border-l-4 border-teal-600 bg-slate-50 p-4">
+                <p className="text-xs font-semibold uppercase tracking-wider text-slate-500">Observación</p>
                 <p className="whitespace-pre-wrap break-words">{detailItem.observation || "Sin observación"}</p>
               </div>
             </div>
@@ -3132,6 +3383,7 @@ export default function PlanDetailPage() {
           </div>
         </DialogContent>
       </Dialog>
+      </div>
     </div>
   );
 }

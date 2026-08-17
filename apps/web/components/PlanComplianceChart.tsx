@@ -33,10 +33,10 @@ interface Props {
 }
 
 const CATEGORY_COLORS: Record<string, string> = {
-  C: "#22c55e",
-  "NC+": "#ef4444",
-  "NC-": "#f87171",
-  "N/A": "#eab308",
+  C: "#059669",
+  "NC+": "#dc2626",
+  "NC-": "#f97316",
+  "N/A": "#f59e0b",
   "Sin definir": "#94a3b8",
 };
 
@@ -308,8 +308,8 @@ export default function PlanComplianceChart({
   const pieTotal = cumplido + noCumplido;
 
   const pieData: ChartEntry[] = [
-    { name: "Cumplido", value: cumplido, fill: "#22c55e" },
-    { name: "No cumplido", value: noCumplido, fill: "#ef4444" },
+    { name: "Cumplido", value: cumplido, fill: "#059669" },
+    { name: "No cumplido", value: noCumplido, fill: "#dc2626" },
   ].filter((d) => d.value > 0);
 
   const directionData = buildDirectionData(directionCounts);
@@ -368,7 +368,7 @@ export default function PlanComplianceChart({
   }
 
   return (
-    <Card>
+    <Card className="rounded-2xl border border-slate-100 bg-white shadow-sm ring-0">
       <CardHeader className="flex flex-row items-start justify-between gap-4 pb-2">
         <div className="min-w-0">
           <CardTitle className="text-sm font-semibold truncate" title={plan.title}>
@@ -381,7 +381,7 @@ export default function PlanComplianceChart({
         <div className="flex items-center gap-2 shrink-0">
           {periods.length > 0 ? (
             <select
-              className="flex h-8 rounded-md border border-input bg-background px-2 py-1 text-xs ring-offset-background focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring min-w-[160px]"
+              className="flex h-8 min-w-[160px] rounded-lg border border-slate-200 bg-white px-2 py-1 text-xs text-slate-700 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-teal-500"
               value={selectedPeriod}
               onChange={(e) => setSelectedPeriod(e.target.value)}
             >
@@ -406,7 +406,7 @@ export default function PlanComplianceChart({
           ) : (
             <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
               {/* Bar chart */}
-              <div ref={barRef} className="min-w-0 rounded-lg border border-slate-200 bg-white p-3">
+              <div ref={barRef} className="min-w-0 rounded-xl border border-slate-200 bg-white p-3">
                 <div className="flex items-center justify-between mb-1 px-1">
                   <p className="text-[10px] text-muted-foreground font-medium">
                     Distribución por categoría
@@ -434,14 +434,14 @@ export default function PlanComplianceChart({
                     />
                     <XAxis
                       dataKey="name"
-                      tick={{ fontSize: 10, fontWeight: 600 }}
+                      tick={{ fontSize: 10, fontWeight: 600, fill: "#64748b" }}
                       axisLine={false}
                       tickLine={false}
                     />
                     <YAxis
                       allowDecimals={false}
                       domain={[0, Math.ceil(maxValue * 1.4)]}
-                      tick={{ fontSize: 10 }}
+                      tick={{ fontSize: 10, fill: "#64748b" }}
                       axisLine={false}
                       tickLine={false}
                       width={24}
@@ -457,6 +457,8 @@ export default function PlanComplianceChart({
                         fontSize: 12,
                         borderRadius: 8,
                         border: "1px solid #e2e8f0",
+                        backgroundColor: "#ffffff",
+                        boxShadow: "0 4px 6px -1px rgb(15 23 42 / 0.1)",
                       }}
                     />
                     <Bar dataKey="value" radius={[4, 4, 0, 0]} maxBarSize={52}>
@@ -471,7 +473,7 @@ export default function PlanComplianceChart({
               </div>
 
               {/* Pie chart */}
-              <div ref={pieRef} className="min-w-0 rounded-lg border border-slate-200 bg-white p-3">
+              <div ref={pieRef} className="min-w-0 rounded-xl border border-slate-200 bg-white p-3">
                 <div className="flex items-center justify-between mb-1 px-1">
                   <p className="text-[10px] text-muted-foreground font-medium">
                     Cumplido vs No cumplido
@@ -516,6 +518,8 @@ export default function PlanComplianceChart({
                           fontSize: 12,
                           borderRadius: 8,
                           border: "1px solid #e2e8f0",
+                          backgroundColor: "#ffffff",
+                          boxShadow: "0 4px 6px -1px rgb(15 23 42 / 0.1)",
                         }}
                       />
                       <Legend
@@ -531,7 +535,7 @@ export default function PlanComplianceChart({
               </div>
 
               {/* Direction pie chart */}
-              <div ref={dirRef} className="min-w-0 rounded-lg border border-slate-200 bg-white p-3">
+              <div ref={dirRef} className="min-w-0 rounded-xl border border-slate-200 bg-white p-3">
                 <div className="flex items-center justify-between mb-1 px-1">
                   <p className="text-[10px] text-muted-foreground font-medium">
                     Ítems por Dirección
@@ -575,6 +579,8 @@ export default function PlanComplianceChart({
                           fontSize: 12,
                           borderRadius: 8,
                           border: "1px solid #e2e8f0",
+                          backgroundColor: "#ffffff",
+                          boxShadow: "0 4px 6px -1px rgb(15 23 42 / 0.1)",
                         }}
                       />
                       <Legend

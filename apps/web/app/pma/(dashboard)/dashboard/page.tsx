@@ -98,78 +98,98 @@ export default function DashboardPage() {
   }, [session, isAdmin, isReporter]);
 
   return (
-    <div className="space-y-8">
-      {dashboardError && <p className="text-sm text-red-600" role="alert">{dashboardError}</p>}
-      <div>
-        <h1 className="text-2xl font-bold mb-1">Panel Principal</h1>
-        <p className="text-muted-foreground mb-6">
-          Bienvenido, {session?.name}
-        </p>
+    <div className="-m-8 min-h-screen">
+      <div className="relative overflow-hidden bg-gradient-to-br from-teal-700 via-teal-600 to-emerald-700 px-6 pb-24 pt-12">
+        <div
+          className="pointer-events-none absolute inset-0 opacity-10"
+          style={{
+            backgroundImage:
+              "url(\"data:image/svg+xml,%3Csvg width='60' height='60' viewBox='0 0 60 60' xmlns='http://www.w3.org/2000/svg'%3E%3Cg fill='none' fill-rule='evenodd'%3E%3Cg fill='%23ffffff' fill-opacity='1'%3E%3Ccircle cx='30' cy='30' r='1'/%3E%3C/g%3E%3C/g%3E%3C/svg%3E\")",
+          }}
+        />
+        <div className="relative z-10 mx-auto max-w-7xl">
+          <div className="mb-3 flex items-center gap-2">
+            <FileText className="h-6 w-6 text-teal-200" />
+            <span className="text-sm font-medium uppercase tracking-widest text-teal-200">
+              Plan de Manejo Ambiental
+            </span>
+          </div>
+          <h1 className="mb-2 text-3xl font-bold text-white">Panel de Cumplimiento</h1>
+          <p className="max-w-xl text-base text-teal-100">
+            Consulta el avance de los planes, sus evidencias y el cumplimiento ambiental
+            en un solo lugar. Bienvenido, {session?.name}.
+          </p>
+        </div>
+      </div>
 
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-          <Card>
-            <CardHeader className="flex flex-row items-center justify-between pb-2">
-              <CardTitle className="text-sm font-medium text-muted-foreground">
+      <div className="relative z-10 mx-auto -mt-12 max-w-7xl space-y-8 px-6 pb-16">
+        {dashboardError && (
+          <p className="rounded-xl border border-red-200 bg-red-50 p-4 text-sm text-red-700 shadow-sm" role="alert">
+            {dashboardError}
+          </p>
+        )}
+        <div className="grid grid-cols-1 gap-6 md:grid-cols-3">
+          <Card className="rounded-2xl border border-slate-100 bg-white p-5 shadow-xl ring-0">
+            <CardHeader className="flex flex-row items-center justify-between p-0 pb-3">
+              <CardTitle className="text-sm font-semibold uppercase tracking-wider text-slate-500">
                 {isAdmin ? "Total de Planes" : "Planes Asignados"}
               </CardTitle>
-              <FileText className="w-4 h-4 text-muted-foreground" />
+              <FileText className="h-12 w-12 rounded-xl bg-gradient-to-br from-teal-400 to-teal-600 p-3 text-white shadow-sm" />
             </CardHeader>
-            <CardContent>
-              <div className="text-3xl font-bold">{stats.plans}</div>
+            <CardContent className="p-0">
+              <div className="text-3xl font-bold text-slate-900">{stats.plans}</div>
             </CardContent>
           </Card>
 
           {isAdmin && (
-            <Card>
-              <CardHeader className="flex flex-row items-center justify-between pb-2">
-                <CardTitle className="text-sm font-medium text-muted-foreground">
+            <Card className="rounded-2xl border border-slate-100 bg-white p-5 shadow-xl ring-0">
+              <CardHeader className="flex flex-row items-center justify-between p-0 pb-3">
+                <CardTitle className="text-sm font-semibold uppercase tracking-wider text-slate-500">
                   Usuarios
                 </CardTitle>
-                <Users className="w-4 h-4 text-muted-foreground" />
+                <Users className="h-12 w-12 rounded-xl bg-gradient-to-br from-sky-400 to-sky-600 p-3 text-white shadow-sm" />
               </CardHeader>
-              <CardContent>
-                <div className="text-3xl font-bold">{stats.reporters}</div>
+              <CardContent className="p-0">
+                <div className="text-3xl font-bold text-slate-900">{stats.reporters}</div>
               </CardContent>
             </Card>
           )}
 
           {!isAdmin && !isViewer && (
-            <Card>
-              <CardHeader className="flex flex-row items-center justify-between pb-2">
-                <CardTitle className="text-sm font-medium text-muted-foreground">
+            <Card className="rounded-2xl border border-slate-100 bg-white p-5 shadow-xl ring-0">
+              <CardHeader className="flex flex-row items-center justify-between p-0 pb-3">
+                <CardTitle className="text-sm font-semibold uppercase tracking-wider text-slate-500">
                   Mis Evidencias
                 </CardTitle>
-                <Upload className="w-4 h-4 text-muted-foreground" />
+                <Upload className="h-12 w-12 rounded-xl bg-gradient-to-br from-violet-400 to-violet-600 p-3 text-white shadow-sm" />
               </CardHeader>
-              <CardContent>
-                <div className="text-3xl font-bold">{stats.evidences}</div>
+              <CardContent className="p-0">
+                <div className="text-3xl font-bold text-slate-900">{stats.evidences}</div>
               </CardContent>
             </Card>
           )}
         </div>
-      </div>
 
       {/* Compliance charts */}
-      <div>
+      <div className="rounded-2xl border border-slate-100 bg-white p-6 shadow-xl">
         {/* Tab headers */}
-        <div className="flex items-center gap-0 mb-4 border-b border-border">
+        <div className="mb-6 flex w-fit items-center rounded-xl bg-slate-100 p-1">
           <button
             onClick={() => setActiveTab("por-plan")}
-            className={`px-4 pb-2 text-lg font-semibold transition-colors duration-200 border-b-2 -mb-px ${
+            className={`rounded-lg px-4 py-2 text-sm transition-all duration-200 ${
               activeTab === "por-plan"
-                ? "text-black border-black"
-                : "text-muted-foreground border-transparent hover:text-foreground"
+                ? "bg-white font-semibold text-teal-700 shadow-sm"
+                : "font-medium text-slate-500 hover:text-slate-800"
             }`}
           >
             Cumplimiento por Plan
           </button>
-          <div className="self-stretch w-px bg-border mx-1 mb-px" />
           <button
             onClick={() => setActiveTab("general")}
-            className={`px-4 pb-2 text-lg font-semibold transition-colors duration-200 border-b-2 -mb-px ${
+            className={`rounded-lg px-4 py-2 text-sm transition-all duration-200 ${
               activeTab === "general"
-                ? "text-black border-black"
-                : "text-muted-foreground border-transparent hover:text-foreground"
+                ? "bg-white font-semibold text-teal-700 shadow-sm"
+                : "font-medium text-slate-500 hover:text-slate-800"
             }`}
           >
             Cumplimiento General
@@ -181,7 +201,7 @@ export default function DashboardPage() {
           chartsLoading ? (
             <div className="grid grid-cols-1 gap-6">
               {Array.from({ length: Math.max(stats.plans, 1) }).map((_, i) => (
-                <Card key={i} className="animate-pulse">
+                <Card key={i} className="animate-pulse rounded-2xl border border-slate-100 shadow-sm ring-0">
                   <CardHeader className="pb-2">
                     <div className="h-4 bg-muted rounded w-3/4" />
                   </CardHeader>
@@ -192,7 +212,7 @@ export default function DashboardPage() {
               ))}
             </div>
           ) : planCharts.length === 0 ? (
-            <Card>
+            <Card className="rounded-2xl border border-slate-100 shadow-sm ring-0">
               <CardContent className="py-12 text-center text-sm text-muted-foreground">
                 No hay planes disponibles.
               </CardContent>
@@ -215,7 +235,7 @@ export default function DashboardPage() {
 
         {activeTab === "general" && (
           chartsLoading ? (
-            <Card className="animate-pulse">
+            <Card className="animate-pulse rounded-2xl border border-slate-100 shadow-sm ring-0">
               <CardHeader className="pb-2">
                 <div className="h-4 bg-muted rounded w-3/4" />
               </CardHeader>
@@ -227,6 +247,7 @@ export default function DashboardPage() {
             <GeneralComplianceChart planCharts={planCharts} />
           )
         )}
+        </div>
       </div>
     </div>
   );

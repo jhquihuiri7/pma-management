@@ -10,7 +10,7 @@ export default function DashboardLayout({
     <div className="min-h-screen bg-slate-50">
       <Sidebar />
       <div className="ml-64 min-h-screen">
-        <header className="sticky top-0 z-30 border-b border-slate-200 bg-slate-50/95 px-8 py-3 backdrop-blur">
+        <header className="sticky top-0 z-30 border-b border-slate-200 bg-white/90 px-6 py-3 shadow-sm backdrop-blur">
           <div className="flex items-center justify-end">
             <NotificationsBell />
           </div>

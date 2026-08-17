@@ -59,7 +59,7 @@ export default function Sidebar() {
               href={link.href}
               className={`flex items-center gap-3 px-3 py-2 rounded-lg text-sm font-medium transition-colors ${
                 isActive
-                  ? "bg-slate-100 text-slate-900"
+                  ? "bg-teal-50 text-teal-800"
                   : "text-slate-600 hover:bg-slate-50 hover:text-slate-900"
               }`}
             >
@@ -80,7 +80,7 @@ export default function Sidebar() {
               href="/pma/formatos"
               className={`flex items-center gap-3 px-3 py-2 rounded-lg text-sm font-medium transition-colors ${
                 pathname === "/pma/formatos" || pathname.startsWith("/pma/formatos")
-                  ? "bg-slate-100 text-slate-900"
+                  ? "bg-teal-50 text-teal-800"
                   : "text-slate-600 hover:bg-slate-50 hover:text-slate-900"
               }`}
             >

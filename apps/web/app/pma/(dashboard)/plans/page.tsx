@@ -109,22 +109,34 @@ export default function PlansPage() {
   }
 
   return (
-    <div>
-      <div className="flex items-center justify-between mb-6">
-        <div>
-          <h1 className="text-2xl font-bold">
-            {isAdmin ? "Planes" : "Mis Planes"}
-          </h1>
-          <p className="text-muted-foreground">
-            {isAdmin
-              ? "Gestionar planes ambientales"
-              : "Planes asignados a ti"}
-          </p>
-        </div>
+    <div className="-m-8 min-h-screen">
+      <div className="relative overflow-hidden bg-gradient-to-br from-teal-700 via-teal-600 to-emerald-700 px-6 pb-24 pt-12">
+        <div
+          className="pointer-events-none absolute inset-0 opacity-10"
+          style={{
+            backgroundImage:
+              "url(\"data:image/svg+xml,%3Csvg width='60' height='60' viewBox='0 0 60 60' xmlns='http://www.w3.org/2000/svg'%3E%3Cg fill='none' fill-rule='evenodd'%3E%3Cg fill='%23ffffff' fill-opacity='1'%3E%3Ccircle cx='30' cy='30' r='1'/%3E%3C/g%3E%3C/g%3E%3C/svg%3E\")",
+          }}
+        />
+        <div className="relative z-10 mx-auto flex max-w-7xl items-start justify-between gap-6">
+          <div>
+            <div className="mb-3 flex items-center gap-2">
+              <Map className="h-6 w-6 text-teal-200" />
+              <span className="text-sm font-medium uppercase tracking-widest text-teal-200">
+                Planes de Manejo
+              </span>
+            </div>
+            <h1 className="mb-2 text-3xl font-bold text-white">Catálogo de Planes</h1>
+            <p className="max-w-xl text-base text-teal-100">
+              {isAdmin
+                ? "Gestiona y consulta los planes ambientales disponibles."
+                : "Consulta los planes ambientales que tienes asignados."}
+            </p>
+          </div>
 
         {isAdmin && (
           <Dialog open={open} onOpenChange={setOpen}>
-            <DialogTrigger render={<Button />}>
+            <DialogTrigger render={<Button className="border border-white/40 bg-white text-teal-800 shadow-lg hover:bg-teal-50" />}>
               <Plus className="w-4 h-4 mr-2" />
               Crear Plan
             </DialogTrigger>
@@ -233,19 +245,21 @@ export default function PlansPage() {
                     }
                   />
                 </div>
-                <Button type="submit" className="w-full" disabled={createMutation.isPending}>
+                <Button type="submit" className="w-full bg-teal-600 hover:bg-teal-700" disabled={createMutation.isPending}>
                   {createMutation.isPending ? "Creando..." : "Crear Plan"}
                 </Button>
               </form>
             </DialogContent>
           </Dialog>
         )}
+        </div>
       </div>
 
+      <div className="relative z-10 mx-auto -mt-12 max-w-7xl px-6 pb-16">
       {plans.length === 0 ? (
-        <Card>
+        <Card className="rounded-2xl border border-slate-100 bg-white shadow-xl ring-0">
           <CardContent className="py-12 text-center">
-            <p className="text-muted-foreground">
+            <p className="text-slate-500">
               {isAdmin
                 ? "Sin planes aún. Crea uno para comenzar."
                 : "Aún no tienes planes asignados."
@@ -254,68 +268,82 @@ export default function PlansPage() {
           </CardContent>
         </Card>
       ) : (
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+        <div className="grid grid-cols-1 gap-5 md:grid-cols-2 lg:grid-cols-3">
           {plans.map((plan) => (
-            <Card key={plan.id} className="hover:shadow-md transition-shadow">
-              <CardHeader>
-                <CardTitle className="text-base">{plan.title}</CardTitle>
+            <Card key={plan.id} className="gap-0 overflow-hidden rounded-2xl border border-slate-100 bg-white py-0 shadow-sm ring-0 transition-shadow hover:shadow-lg">
+              <CardHeader className="relative flex h-32 justify-end overflow-hidden bg-gradient-to-br from-teal-600 via-teal-500 to-emerald-600 p-5">
+                <div
+                  className="pointer-events-none absolute inset-0 opacity-10"
+                  style={{
+                    backgroundImage:
+                      "radial-gradient(circle at 20% 50%, white 1px, transparent 1px), radial-gradient(circle at 80% 20%, white 1px, transparent 1px)",
+                    backgroundSize: "60px 60px",
+                  }}
+                />
+                <Map className="absolute right-5 top-5 h-10 w-10 text-white/30" />
+                {plan.fase && (
+                  <span className="absolute left-5 top-4 rounded-full bg-white/90 px-2.5 py-1 text-xs font-medium text-teal-800 shadow-sm">
+                    {plan.fase}
+                  </span>
+                )}
+                <CardTitle className="relative line-clamp-2 text-base font-semibold text-white">{plan.title}</CardTitle>
               </CardHeader>
-              <CardContent className="flex flex-col gap-4">
-                <p className="text-sm text-muted-foreground line-clamp-2">
+              <CardContent className="flex flex-1 flex-col gap-4 p-5">
+                <p className="line-clamp-2 min-h-10 text-sm leading-relaxed text-slate-500">
                   {plan.description || "Sin descripción"}
                 </p>
                 <div className="space-y-1.5">
                   {plan.tipo && (
                     <div className="flex items-center justify-between">
-                      <span className="text-xs text-muted-foreground">Tipo:</span>
-                      <span className="text-xs font-medium bg-slate-100 px-2 py-0.5 rounded">
+                      <span className="text-xs text-slate-400">Tipo:</span>
+                      <span className="rounded-full bg-slate-100 px-2 py-0.5 text-xs font-medium text-slate-700">
                         {plan.tipo}
                       </span>
                     </div>
                   )}
                   {plan.fase && (
                     <div className="flex items-center justify-between">
-                      <span className="text-xs text-muted-foreground">Fase:</span>
-                      <span className="text-xs font-medium bg-blue-100 text-blue-700 px-2 py-0.5 rounded">
+                      <span className="text-xs text-slate-400">Fase:</span>
+                      <span className="rounded-full bg-teal-50 px-2 py-0.5 text-xs font-medium text-teal-700">
                         {plan.fase}
                       </span>
                     </div>
                   )}
                   {plan.enfoque && (
                     <div className="flex items-center justify-between">
-                      <span className="text-xs text-muted-foreground">Enfoque:</span>
-                      <span className="text-xs font-medium bg-green-100 text-green-700 px-2 py-0.5 rounded">
+                      <span className="text-xs text-slate-400">Enfoque:</span>
+                      <span className="rounded-full bg-emerald-50 px-2 py-0.5 text-xs font-medium text-emerald-700">
                         {plan.enfoque}
                       </span>
                     </div>
                   )}
                   <div className="flex items-center justify-between">
-                    <span className="text-xs text-muted-foreground">Reporte:</span>
-                    <span className="text-xs font-medium bg-slate-100 px-2 py-0.5 rounded">
+                    <span className="text-xs text-slate-400">Reporte:</span>
+                    <span className="rounded-full bg-slate-100 px-2 py-0.5 text-xs font-medium text-slate-700">
                       {plan.report_per ?? "6 meses"}
                     </span>
                   </div>
                   {plan.start_date && (
                     <div className="flex items-center justify-between">
-                      <span className="text-xs text-muted-foreground">Fecha inicio:</span>
-                      <span className="text-xs font-medium bg-slate-100 px-2 py-0.5 rounded">
+                      <span className="text-xs text-slate-400">Fecha inicio:</span>
+                      <span className="rounded-full bg-slate-100 px-2 py-0.5 text-xs font-medium text-slate-700">
                         {formatDateOnly(plan.start_date)}
                       </span>
                     </div>
                   )}
                   <div className="flex items-center justify-between">
-                    <span className="text-xs text-muted-foreground">Creado:</span>
-                    <span className="text-xs text-muted-foreground">
+                    <span className="text-xs text-slate-400">Creado:</span>
+                    <span className="text-xs text-slate-500">
                       {new Date(plan.createdAt).toLocaleDateString()}
                     </span>
                   </div>
                 </div>
-                <div className="flex items-center justify-between">
+                <div className="mt-auto flex items-center justify-between border-t border-slate-100 pt-4">
                   <span />
                   <div className="flex items-center gap-1">
                     {plan.visualization_url && (
                       <Button
-                        className="bg-black text-white hover:bg-slate-800"
+                        className="bg-slate-700 text-white hover:bg-slate-800"
                         size="sm"
                         onClick={() => {
                           if (plan.visualization_url) window.open(plan.visualization_url, "_blank");
@@ -335,7 +363,7 @@ export default function PlansPage() {
                       </Button>
                     )}
                     <Link href={`/pma/plans/${plan.id}`}>
-                      <Button variant="ghost" size="sm">
+                      <Button size="sm" className="bg-teal-600 text-white hover:bg-teal-700">
                         Ver <ArrowRight className="w-4 h-4 ml-1" />
                       </Button>
                     </Link>
@@ -346,6 +374,7 @@ export default function PlansPage() {
           ))}
         </div>
       )}
+      </div>
 
       {/* Edit Plan Dialog */}
       <Dialog open={editOpen} onOpenChange={setEditOpen}>
@@ -454,7 +483,7 @@ export default function PlansPage() {
                 }
               />
             </div>
-            <Button type="submit" className="w-full" disabled={editMutation.isPending}>
+            <Button type="submit" className="w-full bg-teal-600 hover:bg-teal-700" disabled={editMutation.isPending}>
               {editMutation.isPending ? "Guardando..." : "Guardar cambios"}
             </Button>
           </form>
