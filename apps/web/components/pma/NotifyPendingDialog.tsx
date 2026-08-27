@@ -44,6 +44,9 @@ const CHECK_BASE =
   "flex size-5 shrink-0 items-center justify-center rounded-md transition-colors";
 
 function statusClasses(status: PendingActivityStatus): string {
+  // Green means the reporter already did their part and only the grade is
+  // missing — worth distinguishing, since chasing them would be unfair.
+  if (status === "Entregado, sin calificar") return "text-emerald-700 bg-emerald-100";
   if (status === "Rechazado") return "text-red-700 bg-red-100";
   if (status === "Pendiente de revisión") return "text-amber-700 bg-amber-100";
   return "text-slate-600 bg-slate-200";
@@ -250,8 +253,8 @@ export function NotifyPendingDialog({
                   )}
                 </div>
                 <p className="mt-2.5 text-xs text-slate-400">
-                  El número indica las actividades sin evidencia válida en ese periodo de
-                  reporte.
+                  El número indica las actividades sin calificación de cumplimiento en ese
+                  periodo de reporte.
                 </p>
 
                 <div className="my-5 h-px bg-slate-100" />
@@ -280,7 +283,7 @@ export function NotifyPendingDialog({
                   </div>
                 ) : reporters.length === 0 ? (
                   <p className="py-8 text-center text-[12.5px] text-slate-400">
-                    No hay actividades pendientes con reportero asignado en este periodo.
+                    No hay actividades sin calificar con reportero asignado en este periodo.
                   </p>
                 ) : (
                   <div className="flex flex-col gap-3">
@@ -492,7 +495,7 @@ export function NotifyPendingDialog({
                     </p>
                     <p className="mt-[3px] text-[11.5px] leading-[1.5] text-teal-700">
                       Tabla con ítem, medida propuesta, dirección, periodicidad y mes límite
-                      de cada actividad pendiente del reportero, más el enlace al plan.
+                      de cada actividad sin calificar del reportero, más el enlace al plan.
                     </p>
                   </div>
                 </div>

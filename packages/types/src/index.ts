@@ -254,14 +254,18 @@ export interface Format {
 // ── PMA: notificación de actividades pendientes ─────────────────────────────
 
 /**
- * Why an occurrence counts as pending. Derived from the evidence attached to
- * the occurrence's reporting range: absent, `invalid`, or still `pending`.
- * Only a `valid` evidence clears an occurrence.
+ * What the reporter sees in the status column of the email.
+ *
+ * The trigger for chasing a period is that it has no row in
+ * `pma_period_compliance` — nobody has graded it. This status is informative
+ * only: it summarises the evidence attached to that period so the reporter
+ * knows whether anything is actually missing on their side.
  */
 export type PendingActivityStatus =
   | "Sin entregar"
   | "Rechazado"
-  | "Pendiente de revisión";
+  | "Pendiente de revisión"
+  | "Entregado, sin calificar";
 
 export interface PendingActivity {
   planItemId: string;
@@ -269,9 +273,9 @@ export interface PendingActivity {
   medida: string;
   direccion: string;
   periodicidad: string;
-  /** Deadline month of the occurrence, "YYYY-MM". */
+  /** Last month of the reporting period, "YYYY-MM". */
   limitMonthKey: string;
-  /** Deadline month label, e.g. "ago 2025". */
+  /** Last month of the reporting period, e.g. "ago 2026". */
   limitMonth: string;
   status: PendingActivityStatus;
 }

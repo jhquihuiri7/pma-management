@@ -1,15 +1,11 @@
-import { getPeriodicityInterval } from "./evidencesModule.js";
-
 /**
  * Server-side mirror of the reporting calendar the web app draws in
  * `apps/web/lib/planPeriods.ts`. The dialog that notifies pending activities
  * cannot trust the browser for what is pending, so the counts and the emailed
  * tables are both derived here from the same primitives the Cronograma uses.
  *
- * Two independent grids overlay the same origin (the plan start month):
- *   - reporting periods ("mar-ago 2025"), `blockSize` months wide, from
- *     the plan's `report_per`;
- *   - item occurrences, `interval` months wide, from the item's periodicity.
+ * Reporting periods ("mar-ago 2025") are `blockSize` months wide, measured from
+ * the plan start month, with `blockSize` coming from the plan's `report_per`.
  */
 
 const BUSINESS_TIME_ZONE = "Pacific/Galapagos";
@@ -138,63 +134,19 @@ export function getPlanPeriods(calendar: PlanCalendar): { blockIndex: number; ke
   return periods;
 }
 
-export type ItemOccurrence = {
-  /** 0-based occurrence index from the plan start. */
-  index: number;
-  startIndex: number;
-  /** Last month of the occurrence — its deadline. */
-  deadlineIndex: number;
-  /** Months an evidence may be attributed to, clipped to the visible calendar. */
-  monthKeys: string[];
-  /** Reporting period this occurrence is due in, or null when it is not yet due. */
-  blockIndex: number | null;
-};
+/** Month indexes covered by a reporting period, first to last. */
+export function getPeriodBounds(
+  calendar: PlanCalendar,
+  blockIndex: number,
+): { startIndex: number; endIndex: number } {
+  const startIndex = calendar.originIndex + blockIndex * calendar.blockSize;
+  return { startIndex, endIndex: startIndex + calendar.blockSize - 1 };
+}
 
-/**
- * Occurrences of one plan item, mirroring `getItemRanges` on the web: each
- * spans `interval` months from the plan origin and is cleared by a single
- * evidence anywhere inside it.
- *
- * `blockIndex` is null when the occurrence's deadline falls beyond the period
- * in progress. That is what keeps long-horizon periodicities out of the
- * pending lists: a "Trianual" or "Única vez" measure is not overdue in a
- * six-month report just because the plan is running.
- */
-export function getItemOccurrences(
-  plan: PlanScheduleInput,
-  periodicity: string,
-  calendar = getPlanCalendar(plan),
-): ItemOccurrence[] {
-  const interval = getPeriodicityInterval(periodicity);
-  const { originIndex, currentIndex, blockSize, currentBlockIndex } = calendar;
-  // The web calendar renders one month past today; evidence can never be
-  // attributed further out, so occurrences beyond it are not laid out at all.
-  const lastVisibleIndex = currentIndex + 1;
-  const single = interval >= 1200;
-
-  const occurrences: ItemOccurrence[] = [];
-  for (let index = 0; index < 1000; index++) {
-    const startIndex = originIndex + index * interval;
-    if (startIndex > lastVisibleIndex) break;
-    const deadlineIndex = originIndex + (index + 1) * interval - 1;
-
-    const monthKeys: string[] = [];
-    const visibleEnd = Math.min(deadlineIndex, lastVisibleIndex);
-    for (let month = startIndex; month <= visibleEnd; month++) {
-      monthKeys.push(monthKeyOf(month));
-    }
-
-    const started = startIndex <= currentIndex;
-    const deadlineBlockIndex = Math.floor((deadlineIndex - originIndex) / blockSize);
-    occurrences.push({
-      index,
-      startIndex,
-      deadlineIndex,
-      monthKeys,
-      blockIndex: started && deadlineBlockIndex <= currentBlockIndex ? deadlineBlockIndex : null,
-    });
-
-    if (single) break;
-  }
-  return occurrences;
+/** "YYYY-MM" of every month in a reporting period. */
+export function getPeriodMonthKeys(calendar: PlanCalendar, blockIndex: number): string[] {
+  const { startIndex, endIndex } = getPeriodBounds(calendar, blockIndex);
+  const keys: string[] = [];
+  for (let month = startIndex; month <= endIndex; month++) keys.push(monthKeyOf(month));
+  return keys;
 }

@@ -4,6 +4,7 @@ import {
   pmaEvidences,
   pmaItemAssignments,
   pmaPendingNotificationLog,
+  pmaPeriodCompliance,
   pmaPlanItems,
   pmaPlans,
 } from "../../db/schema/pma.js";
@@ -14,8 +15,9 @@ import { getMail } from "../../mail/index.js";
 import { pendingActivitiesEmail } from "../../mail/templates.js";
 import { canUserAccessPlan } from "./plansModule.js";
 import {
-  getItemOccurrences,
+  getPeriodBounds,
   getPeriodKey,
+  getPeriodMonthKeys,
   getPlanCalendar,
   getPlanPeriods,
   monthKeyOf,
@@ -85,15 +87,24 @@ async function loadPlanForActor(planId: string, actor: Actor): Promise<PlanRow> 
 type PendingOccurrence = {
   blockIndex: number;
   activity: PendingActivity;
-  /** Users assigned to the item, who each owe this occurrence. */
+  /** Users assigned to the item, who each owe this period's report. */
   assignees: string[];
 };
 
 /**
- * Every pending occurrence of the plan, grouped by nothing yet: the caller
- * decides whether to count them per period or expand them per reporter. Both
- * the chip counters and the emailed tables read this one list, which is what
- * keeps "pendiente" a single criterion.
+ * Every (item, reporting period) pair that has no row in
+ * `pma_period_compliance` — the periods nobody has graded yet — restricted to
+ * items that actually have a reporter to chase.
+ *
+ * The evidence attached to the period is still read, but only to fill the
+ * status column of the email: it tells the reporter whether the gap is a
+ * missing upload, a rejected one, or one still awaiting review. It no longer
+ * decides who gets an email.
+ *
+ * Note on what this criterion means in practice: a period is normally ungraded
+ * because it has not been evaluated yet, and the period in progress is included
+ * deliberately, so a reporter can be notified about a period that has not
+ * closed. That is the intended behaviour, not an oversight.
  */
 async function collectPendingOccurrences(plan: PlanRow, calendar: PlanCalendar) {
   const db = getDb();
@@ -101,10 +112,15 @@ async function collectPendingOccurrences(plan: PlanRow, calendar: PlanCalendar) 
     .select()
     .from(pmaPlanItems)
     .where(eq(pmaPlanItems.planId, plan.id));
-  if (items.length === 0) return { occurrences: [] as PendingOccurrence[], reporters: new Map<string, { name: string; email: string }>() };
+  if (items.length === 0) {
+    return {
+      occurrences: [] as PendingOccurrence[],
+      reporters: new Map<string, { name: string; email: string }>(),
+    };
+  }
 
   const itemIds = items.map((item) => item.id);
-  const [assignmentRows, evidenceRows] = await Promise.all([
+  const [assignmentRows, evidenceRows, complianceRows] = await Promise.all([
     db
       .select({
         planItemId: pmaItemAssignments.planItemId,
@@ -123,6 +139,13 @@ async function collectPendingOccurrences(plan: PlanRow, calendar: PlanCalendar) 
       })
       .from(pmaEvidences)
       .where(eq(pmaEvidences.planId, plan.id)),
+    db
+      .select({
+        planItemId: pmaPeriodCompliance.planItemId,
+        periodKey: pmaPeriodCompliance.periodKey,
+      })
+      .from(pmaPeriodCompliance)
+      .where(inArray(pmaPeriodCompliance.planItemId, itemIds)),
   ]);
 
   const reporters = new Map<string, { name: string; email: string }>();
@@ -133,6 +156,10 @@ async function collectPendingOccurrences(plan: PlanRow, calendar: PlanCalendar) 
     current.push(row.userId);
     assigneesByItem.set(row.planItemId, current);
   }
+
+  // "itemId::periodKey" for every pair a técnico has already graded, whatever
+  // the grade. Only the absence of a row matters here, not C/NC+/NC-/N/A.
+  const graded = new Set(complianceRows.map((row) => `${row.planItemId}::${row.periodKey}`));
 
   // "itemId-YYYY-MM" -> strongest validation status attached to that month.
   const monthStatus = new Map<string, "valid" | "invalid" | "pending">();
@@ -146,31 +173,29 @@ async function collectPendingOccurrences(plan: PlanRow, calendar: PlanCalendar) 
     }
   }
 
+  const periods = getPlanPeriods(calendar);
   const occurrences: PendingOccurrence[] = [];
   for (const item of items) {
     const assignees = assigneesByItem.get(item.id) ?? [];
-    // An item nobody reports on cannot be notified to anyone. It still shows
-    // as non-compliant in the Cronograma; this dialog only chases people.
+    // An item nobody reports on cannot be notified to anyone. It still shows as
+    // ungraded in the Cronograma; this dialog only chases people.
     if (assignees.length === 0) continue;
 
-    for (const occurrence of getItemOccurrences(
-      { startDate: plan.startDate, createdAt: plan.createdAt, reportPer: plan.reportPer },
-      item.periodicity,
-      calendar,
-    )) {
-      if (occurrence.blockIndex === null) continue;
+    for (const { blockIndex, key } of periods) {
+      if (graded.has(`${item.id}::${key}`)) continue;
 
+      // Best evidence anywhere inside the period, for the status column only.
       let best: "none" | "valid" | "invalid" | "pending" = "none";
-      for (const monthKey of occurrence.monthKeys) {
+      for (const monthKey of getPeriodMonthKeys(calendar, blockIndex)) {
         const status = monthStatus.get(`${item.id}-${monthKey}`);
         if (status && (best === "none" || STATUS_PRIORITY[status] > STATUS_PRIORITY[best])) {
           best = status;
         }
       }
-      if (best === "valid") continue;
 
+      const { endIndex } = getPeriodBounds(calendar, blockIndex);
       occurrences.push({
-        blockIndex: occurrence.blockIndex,
+        blockIndex,
         assignees,
         activity: {
           planItemId: item.id,
@@ -178,9 +203,9 @@ async function collectPendingOccurrences(plan: PlanRow, calendar: PlanCalendar) 
           medida: item.proposedMeasure,
           direccion: item.direccion ?? "—",
           periodicidad: item.periodicity,
-          limitMonthKey: monthKeyOf(occurrence.deadlineIndex),
-          limitMonth: monthLabelOf(occurrence.deadlineIndex),
-          status: PENDING_LABEL[best],
+          limitMonthKey: monthKeyOf(endIndex),
+          limitMonth: monthLabelOf(endIndex),
+          status: best === "valid" ? "Entregado, sin calificar" : PENDING_LABEL[best],
         },
       });
     }

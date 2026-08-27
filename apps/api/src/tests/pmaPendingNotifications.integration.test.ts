@@ -8,6 +8,7 @@ import {
   pmaEvidences,
   pmaItemAssignments,
   pmaPendingNotificationLog,
+  pmaPeriodCompliance,
   pmaPlanAssignments,
   pmaPlanItems,
   pmaPlans,
@@ -164,45 +165,64 @@ test(
       ]);
 
       const admin = { sub: ids.admin, role: "ADMIN" as const, email: "admin@example.invalid" };
-      const firstView = await getPendingByReporter(ids.plan, firstPeriod, admin);
 
+      // Grade the first period for every item except the mensual one, so only
+      // that item is left ungraded there.
+      await db.insert(pmaPeriodCompliance).values([
+        { planItemId: ids.itemSemestral, periodKey: firstPeriod, status: "C" },
+        { planItemId: ids.itemUnattended, periodKey: firstPeriod, status: "C" },
+        { planItemId: ids.itemUnicaVez, periodKey: firstPeriod, status: "N/A" },
+      ]);
+
+      const firstView = await getPendingByReporter(ids.plan, firstPeriod, admin);
       assert.equal(firstView.periodKey, firstPeriod);
       assert.ok(firstView.periods.length >= 3, "a 13-month-old plan has at least three periods");
 
       const groupA = firstView.reporters.find((r) => r.reporterId === ids.reporterA);
       const groupB = firstView.reporters.find((r) => r.reporterId === ids.reporterB);
-      assert.ok(groupA, "reporter A owes activities in the first period");
 
-      // Mensual: 6 occurrences, one approved => 5 pending. Semestral approved.
-      assert.equal(groupA.activities.length, 5);
-      assert.deepEqual(
-        groupA.activities.map((activity) => activity.status).sort(),
-        ["Pendiente de revisión", "Rechazado", "Sin entregar", "Sin entregar", "Sin entregar"]
-      );
-      assert.ok(
-        groupA.activities.every((activity) => activity.itemCode === "PPM-03"),
-        "the approved semestral occurrence must not be listed"
-      );
+      // A is assigned to the mensual (ungraded) and the semestral (graded), so
+      // exactly one row — one per (item, period), not one per occurrence.
+      assert.ok(groupA, "reporter A owes the ungraded item of the first period");
+      assert.deepEqual(groupA.activities.map((activity) => activity.itemCode), ["PPM-03"]);
       assert.equal(groupA.direccion, "DOSPPSVR");
-      // B only had the semestral (approved) and the "Unica vez" (never due).
-      assert.equal(groupB, undefined, "a reporter with nothing pending is not listed");
+      // Deadline is the period's last month, not an occurrence deadline.
+      assert.equal(groupA.activities[0].limitMonthKey, monthKey(5));
+      // The status column reports the evidence found inside the period. The
+      // mensual item has an approved evidence in month 0, so the strongest
+      // status is "delivered" even though the grade is missing.
+      assert.equal(groupA.activities[0].status, "Entregado, sin calificar");
 
-      // Chip counters and the group list must agree: one criterion, one source.
-      const firstCount = firstView.periods.find((p) => p.key === firstPeriod)?.pending;
-      assert.equal(firstCount, 5, "the unattended item's occurrences are not chased");
+      // B is assigned only to graded items in this period.
+      assert.equal(groupB, undefined, "a reporter whose items are graded is not listed");
 
-      // The period in progress: the semestral occurrence is now pending for both
-      // reporters assigned to that item.
+      // Chip counters and the group list agree: one criterion, one source. The
+      // unattended item is ungraded in later periods but never chased.
+      assert.equal(
+        firstView.periods.find((p) => p.key === firstPeriod)?.pending,
+        1,
+        "only the ungraded item with a reporter is counted",
+      );
+
+      // The period in progress is offered and chased like any other: nothing is
+      // graded there, so every item that has a reporter appears.
       const currentPeriod = getPeriodKey(calendar, calendar.currentBlockIndex);
       const currentView = await getPendingByReporter(ids.plan, currentPeriod, admin);
+      const currentA = currentView.reporters.find((r) => r.reporterId === ids.reporterA);
       const currentB = currentView.reporters.find((r) => r.reporterId === ids.reporterB);
-      assert.ok(currentB, "reporter B owes the semestral measure of the period in progress");
-      assert.deepEqual(currentB.activities.map((a) => a.itemCode), ["PMS-05"]);
+      assert.deepEqual(currentA?.activities.map((a) => a.itemCode).sort(), ["PMS-05", "PPM-03"]);
+      assert.deepEqual(currentB?.activities.map((a) => a.itemCode).sort(), ["PCA-01", "PMS-05"]);
+      // The item nobody is assigned to never reaches anyone.
       assert.ok(
         currentView.reporters.every((reporter) =>
-          reporter.activities.every((activity) => activity.itemCode !== "PCA-01")
+          reporter.activities.every((activity) => activity.itemCode !== "PMD-09")
         ),
-        '"Unica vez" is never pending in a six-month report'
+        "an item without a reporter cannot be notified",
+      );
+      // With no evidence in the period, the status reads as not delivered.
+      assert.equal(
+        currentB?.activities.find((a) => a.itemCode === "PCA-01")?.status,
+        "Sin entregar",
       );
 
       // Omitting the period resolves to the one in progress.
@@ -265,7 +285,7 @@ test(
 
       assert.equal(result.total, 1);
       assert.equal(result.sent, 0);
-      assert.equal(result.activities, 5);
+      assert.equal(result.activities, 1);
       assert.equal(result.ccCount, 1);
       assert.equal(result.failures.length, 1);
       assert.equal(result.failures[0].reporterId, ids.reporterA);
@@ -277,7 +297,7 @@ test(
       assert.equal(auditRows.length, 1);
       assert.equal(auditRows[0].delivered, false);
       assert.equal(auditRows[0].reporterId, ids.reporterA);
-      assert.equal(auditRows[0].activityCount, 5);
+      assert.equal(auditRows[0].activityCount, 1);
       assert.equal(auditRows[0].periodKey, firstPeriod);
       assert.equal(auditRows[0].sentBy, ids.admin);
       assert.deepEqual(auditRows[0].ccEmails, [`pending-cc-${ids.ccUser}@example.invalid`]);

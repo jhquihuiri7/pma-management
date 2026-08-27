@@ -135,8 +135,13 @@ type PendingActivitiesArgs = {
   link: string;
 };
 
-/** Amber for "under review", red for a rejected delivery, grey for missing. */
+/**
+ * Green when the evidence is already approved and only the grade is missing,
+ * red for a rejected delivery, amber for one still under review, grey when
+ * nothing was uploaded.
+ */
 function statusChip(status: string): string {
+  if (status === "Entregado, sin calificar") return "color:#166534;background:#dcfce7;";
   if (status === "Rechazado") return "color:#9f1239;background:#ffe4e6;";
   if (status === "Pendiente de revisión") return "color:#92400e;background:#fef3c7;";
   return "color:#475569;background:#e2e8f0;";
@@ -202,7 +207,7 @@ export function pendingActivitiesEmail(args: PendingActivitiesArgs): EmailConten
             </tr>
             <tr>
               <td style="padding:8px 32px 0 32px;">
-                <p style="margin:0 0 10px 0;font-size:13px;font-weight:700;color:#51665d;">${escapeHtml(`${args.activities.length} actividad(es) pendiente(s) a tu cargo`)}</p>
+                <p style="margin:0 0 10px 0;font-size:13px;font-weight:700;color:#51665d;">${escapeHtml(`${args.activities.length} actividad(es) sin calificar a tu cargo`)}</p>
                 <table role="presentation" width="100%" cellspacing="0" cellpadding="0" style="border-collapse:collapse;border:1px solid #e5eee8;border-radius:12px;">
                   <tr>
                     <th style="${head}">Ítem</th>
@@ -229,7 +234,7 @@ export function pendingActivitiesEmail(args: PendingActivitiesArgs): EmailConten
             </tr>
             <tr>
               <td style="background:#f7faf8;padding:18px 32px;border-top:1px solid #e5eee8;">
-                <p style="margin:0;font-size:12px;line-height:1.6;color:#6b7d75;">Una actividad queda pendiente mientras no tenga una evidencia aprobada para su periodo. Si ya la cargaste, espera la validación o revisa el comentario del rechazo.</p>
+                <p style="margin:0;font-size:12px;line-height:1.6;color:#6b7d75;">Estas actividades aún no tienen calificación de cumplimiento registrada para el periodo indicado. La columna Estado indica qué evidencia hay cargada: si dice &quot;Sin entregar&quot; falta subirla, y si dice &quot;Rechazado&quot; revisa el comentario de la validación.</p>
               </td>
             </tr>
           </table>
