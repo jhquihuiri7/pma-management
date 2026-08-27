@@ -6,6 +6,12 @@ export interface MailAttachment {
 
 export interface MailMessage {
   to: string | string[];
+  /**
+   * Copied recipients. Every address here sees the others and the `to`, so
+   * only use it for people the recipient is meant to know are watching —
+   * never to fan one message out to a list of unrelated addressees.
+   */
+  cc?: string | string[];
   subject: string;
   html: string;
   text?: string;

@@ -198,27 +198,38 @@ export function createPeriodHelpers(plan: PlanLike) {
     return (diffFromOrigin(mm) + 1) % blockSize === 0;
   }
 
-  function getPeriodLabel(blockEndMonth: Date): string {
-    const diff = diffFromOrigin(new Date(blockEndMonth.getFullYear(), blockEndMonth.getMonth(), 1));
+  /**
+   * Label of the reporting period *containing* `monthInBlock`, always spelled as
+   * the whole block ("mar-ago 2026"), never clipped at the month passed in.
+   *
+   * It used to use the argument as the end of the label, so the period in
+   * progress was named after whatever month happened to be current: the same
+   * block was written as "mar-may 2026" in April, "mar-jul 2026" in June, and
+   * "mar-ago 2026" in August. That produced one `pma_period_compliance` row per
+   * spelling for a single period (66 + 67 duplicated rows are still in the
+   * database), and since the API started validating period keys on 2026-07-22
+   * it also made grading the period in progress fail outright, because
+   * `enabledPeriodKeys` only ever emits whole blocks.
+   */
+  function getPeriodLabel(monthInBlock: Date): string {
+    const diff = diffFromOrigin(new Date(monthInBlock.getFullYear(), monthInBlock.getMonth(), 1));
     const blockIndex = Math.floor(diff / blockSize);
     const blockStart = new Date(blockOrigin.getFullYear(), blockOrigin.getMonth() + blockIndex * blockSize, 1);
+    const blockEnd = new Date(blockOrigin.getFullYear(), blockOrigin.getMonth() + (blockIndex + 1) * blockSize - 1, 1);
     const startLbl = blockStart.toLocaleString("es", { month: "short" });
-    const endLbl = blockEndMonth.toLocaleString("es", { month: "short" });
-    if (blockStart.getFullYear() !== blockEndMonth.getFullYear()) {
-      return `${startLbl} ${blockStart.getFullYear()}-${endLbl} ${blockEndMonth.getFullYear()}`;
+    const endLbl = blockEnd.toLocaleString("es", { month: "short" });
+    if (blockStart.getFullYear() !== blockEnd.getFullYear()) {
+      return `${startLbl} ${blockStart.getFullYear()}-${endLbl} ${blockEnd.getFullYear()}`;
     }
-    return `${startLbl}-${endLbl} ${blockEndMonth.getFullYear()}`;
+    return `${startLbl}-${endLbl} ${blockEnd.getFullYear()}`;
   }
 
   // Returns the period label (e.g. "mar-ago 2025") for a given "YYYY-MM" month
   function getActivityPeriodLabel(activityMonth: string): string {
     const [year, month] = activityMonth.split("-").map(Number);
     const targetDate = new Date(year, month - 1, 1);
-    const diff = diffFromOrigin(targetDate);
-    if (diff < 0) return activityMonth;
-    const blockIndex = Math.floor(diff / blockSize);
-    const blockEnd = new Date(blockOrigin.getFullYear(), blockOrigin.getMonth() + (blockIndex + 1) * blockSize - 1, 1);
-    return getPeriodLabel(blockEnd);
+    if (diffFromOrigin(targetDate) < 0) return activityMonth;
+    return getPeriodLabel(targetDate);
   }
 
   // Returns the Drive folder name (e.g. "mar2025-ago2025") for a given "YYYY-MM" month

@@ -4,6 +4,7 @@ import {
   text,
   timestamp,
   numeric,
+  integer,
   boolean,
   jsonb,
   date,
@@ -39,7 +40,10 @@ export const pmaPlans = pgTable(
     fase: planFaseEnum("fase"),
     enfoque: planEnfoqueEnum("enfoque"),
     reportPer: planReporteEnum("report_per").notNull(),
-    startDate: date("start_date"),
+    // Required: it is the origin of every derived schedule and immutable after
+    // creation, so a missing value would anchor the plan to its `created_at`
+    // permanently. Migration 0024 backfilled and enforced this.
+    startDate: date("start_date").notNull(),
     visualizationUrl: text("visualization_url"),
     storagePath: text("storage_path"),
     location: jsonb("location"),
@@ -207,6 +211,39 @@ export const pmaNotifications = pgTable(
     evidenceEventUniqueIdx: uniqueIndex("pma_notifications_evidence_event_unique_idx")
       .on(t.userId, t.type, t.evidenceId)
       .where(sql`${t.evidenceId} IS NOT NULL AND ${t.type} IN ('evidence_submitted'::notification_type, 'evidence_approved'::notification_type, 'evidence_rejected'::notification_type)`),
+  })
+);
+
+/**
+ * Audit trail for the manual "Notificar pendientes" action. One row per
+ * reporter per send attempt, including the ones SMTP refused, so a partial
+ * result ("se enviaron 3 de 5") stays reconstructable after the fact.
+ */
+export const pmaPendingNotificationLog = pgTable(
+  "pma_pending_notification_log",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    planId: uuid("plan_id")
+      .notNull()
+      .references(() => pmaPlans.id, { onDelete: "cascade" }),
+    periodKey: text("period_key").notNull(),
+    // The reporter may be deleted later; the denormalized name/email keep the
+    // record readable, which is the point of an audit row.
+    reporterId: uuid("reporter_id").references(() => users.id, { onDelete: "set null" }),
+    reporterName: text("reporter_name").notNull(),
+    reporterEmail: text("reporter_email").notNull(),
+    ccEmails: jsonb("cc_emails").notNull().default([]),
+    subject: text("subject").notNull(),
+    activityCount: integer("activity_count").notNull(),
+    delivered: boolean("delivered").notNull(),
+    errorMessage: text("error_message"),
+    sentBy: uuid("sent_by").references(() => users.id, { onDelete: "set null" }),
+    sentByEmail: text("sent_by_email").notNull(),
+    createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
+  },
+  (t) => ({
+    planPeriodIdx: index("pma_pending_notification_log_plan_period_idx").on(t.planId, t.periodKey),
+    createdAtIdx: index("pma_pending_notification_log_created_at_idx").on(t.createdAt),
   })
 );
 

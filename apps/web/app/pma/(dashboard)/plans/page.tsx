@@ -32,7 +32,10 @@ export default function PlansPage() {
   const [editOpen, setEditOpen] = useState(false);
   const [editingPlan, setEditingPlan] = useState<Plan | null>(null);
   const [form, setForm] = useState({ title: "", description: "", tipo: "", fase: "", enfoque: "", report_per: "6 meses", start_date: "", visualization_url: "" });
-  const [editForm, setEditForm] = useState({ title: "", description: "", tipo: "", fase: "", enfoque: "", report_per: "6 meses", start_date: "", visualization_url: "" });
+  // `start_date` and `report_per` are deliberately absent: both are fixed at
+  // creation (see the read-only fields in the edit dialog) and must never reach
+  // PUT /pma/plans/:id, which rejects them outright.
+  const [editForm, setEditForm] = useState({ title: "", description: "", tipo: "", fase: "", enfoque: "", visualization_url: "" });
   const plansLoadGenerationRef = useRef(0);
 
   async function loadPlans() {
@@ -95,8 +98,6 @@ export default function PlansPage() {
       tipo: plan.tipo || "",
       fase: plan.fase || "",
       enfoque: plan.enfoque || "",
-      report_per: plan.report_per ?? "6 meses",
-      start_date: plan.start_date || "",
       visualization_url: plan.visualization_url || "",
     });
     setEditOpen(true);
@@ -446,30 +447,35 @@ export default function PlansPage() {
                 {PLAN_ENFOQUE_VALUES.map(enfoque => <option key={enfoque} value={enfoque}>{enfoque}</option>)}
               </select>
             </div>
+            {/* Periodo de reporte: solo lectura. Junto con la fecha de inicio
+                define la rejilla de periodos, y cambiarlo invalida de golpe
+                todas las claves de cumplimiento del plan (ninguna etiqueta
+                semestral existe en una rejilla de 24 meses) y desalinea las
+                carpetas donde se archivan las evidencias. Se fija al crear. */}
             <div className="space-y-2">
-              <Label htmlFor="edit-reporte">Reporte</Label>
-              <select
-                id="edit-reporte"
-                className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
-                value={editForm.report_per}
-                onChange={(e) =>
-                  setEditForm({ ...editForm, report_per: e.target.value })
-                }
-              >
-                {PLAN_REPORTE_VALUES.map(reporte => <option key={reporte} value={reporte}>{reporte}</option>)}
-              </select>
+              <Label>Reporte</Label>
+              <div className="flex h-10 w-full items-center rounded-md border border-input bg-muted px-3 text-sm text-muted-foreground">
+                {editingPlan?.report_per ?? "6 meses"}
+              </div>
+              <p className="text-xs text-muted-foreground">
+                No editable: define el cronograma completo del plan.
+              </p>
             </div>
+            {/* Fecha de inicio: solo lectura. Define el origen de la rejilla de
+                periodos, de los rangos de evidencia y de los meses límite, así
+                que cambiarla después de la creación desalinea el cronograma y
+                deja huérfanas las calificaciones de cumplimiento ya
+                registradas. Se fija al crear el plan. */}
             <div className="space-y-2">
-              <Label htmlFor="edit-start_date">Fecha de Inicio</Label>
-              <Input
-                id="edit-start_date"
-                type="date"
-                value={editForm.start_date}
-                onChange={(e) =>
-                  setEditForm({ ...editForm, start_date: e.target.value })
-                }
-                required
-              />
+              <Label>Fecha de Inicio</Label>
+              <div className="flex h-10 w-full items-center rounded-md border border-input bg-muted px-3 text-sm text-muted-foreground">
+                {editingPlan?.start_date
+                  ? formatDateOnly(editingPlan.start_date)
+                  : "Sin fecha de inicio (se usa la fecha de creación)"}
+              </div>
+              <p className="text-xs text-muted-foreground">
+                No editable: define el cronograma completo del plan.
+              </p>
             </div>
             <div className="space-y-2">
               <Label htmlFor="edit-visualization_url">URL de Visualización (Opcional)</Label>

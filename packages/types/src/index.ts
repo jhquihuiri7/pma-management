@@ -250,3 +250,73 @@ export interface Format {
   formatsFolderId: string;
   uploadedAt: string;
 }
+
+// ── PMA: notificación de actividades pendientes ─────────────────────────────
+
+/**
+ * Why an occurrence counts as pending. Derived from the evidence attached to
+ * the occurrence's reporting range: absent, `invalid`, or still `pending`.
+ * Only a `valid` evidence clears an occurrence.
+ */
+export type PendingActivityStatus =
+  | "Sin entregar"
+  | "Rechazado"
+  | "Pendiente de revisión";
+
+export interface PendingActivity {
+  planItemId: string;
+  itemCode: string;
+  medida: string;
+  direccion: string;
+  periodicidad: string;
+  /** Deadline month of the occurrence, "YYYY-MM". */
+  limitMonthKey: string;
+  /** Deadline month label, e.g. "ago 2025". */
+  limitMonth: string;
+  status: PendingActivityStatus;
+}
+
+export interface PendingReporter {
+  reporterId: string;
+  name: string;
+  email: string;
+  /** Direcciones of the reporter's pending items, joined with " / ". */
+  direccion: string;
+  activities: PendingActivity[];
+}
+
+export interface PendingPeriodCount {
+  key: string;
+  label: string;
+  pending: number;
+}
+
+/** Payload of `GET /pma/plans/:planId/pending-notifications`. */
+export interface PendingNotificationsPayload {
+  planId: string;
+  planTitle: string;
+  /** Echo of the resolved period; the newest one when the caller sent none. */
+  periodKey: string;
+  periods: PendingPeriodCount[];
+  reporters: PendingReporter[];
+}
+
+export interface PendingNotificationFailure {
+  reporterId: string;
+  name: string;
+  email: string;
+  message: string;
+}
+
+/** Payload of `POST /pma/plans/:planId/pending-notifications`. */
+export interface PendingNotificationsResult {
+  ok: true;
+  /** Reporters whose email was accepted by the SMTP server. */
+  sent: number;
+  /** Reporters the request tried to notify. */
+  total: number;
+  activities: number;
+  ccCount: number;
+  periodKey: string;
+  failures: PendingNotificationFailure[];
+}

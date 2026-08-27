@@ -184,6 +184,7 @@ test(
       await db.insert(pmaPlans).values({
         id: ids.pmaPlan,
         title: "PMA authorization race",
+        startDate: "2026-01-01",
         description: "Original description",
         reportPer: "1 año",
       });

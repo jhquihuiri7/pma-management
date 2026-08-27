@@ -67,8 +67,8 @@ test(
         { userId, appKey: "rgdp" },
       ]);
       await db.insert(pmaPlans).values([
-        { id: pmaPlanId, title: "PMA A", reportPer: "1 año" },
-        { id: otherPmaPlanId, title: "PMA B", reportPer: "1 año" },
+        { id: pmaPlanId, title: "PMA A", reportPer: "1 año", startDate: "2026-01-01" },
+        { id: otherPmaPlanId, title: "PMA B", reportPer: "1 año", startDate: "2026-01-01" },
       ]);
       await db.insert(pmaPlanItems).values([
         { id: pmaItemId, planId: pmaPlanId, item: "A1", subplan: "A", periodicity: "Mensual", reportPer: "1 año" },

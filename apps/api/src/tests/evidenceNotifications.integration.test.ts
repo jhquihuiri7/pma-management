@@ -93,6 +93,9 @@ test(
         id: ids.pmaPlan,
         title: "PMA evidence notification test",
         reportPer: "1 año",
+        // Same origin the removed `start_date` fallback derived from createdAt,
+        // so the current-month evidence below stays inside a started range.
+        startDate: `${currentBusinessMonth()}-01`,
       });
       await db.insert(rgdpPlans).values({
         id: ids.rgdpPlan,

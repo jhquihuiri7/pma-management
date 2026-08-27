@@ -115,3 +115,143 @@ export function passwordResetEmail({ name, link }: AccountEmailArgs): EmailConte
     text: `Hola ${safeName},\n\nRecibimos una solicitud para restablecer tu contraseña. Usa este enlace:\n${link}\n\nEl enlace expira en ${EXPIRY_LABEL}. Si no solicitaste este cambio, ignora este mensaje.`,
   };
 }
+
+type PendingActivityRow = {
+  itemCode: string;
+  medida: string;
+  direccion: string;
+  periodicidad: string;
+  limitMonth: string;
+  status: string;
+};
+
+type PendingActivitiesArgs = {
+  name: string;
+  planTitle: string;
+  periodKey: string;
+  /** Free text written by the sender. Never generated, never rewritten. */
+  message: string;
+  activities: PendingActivityRow[];
+  link: string;
+};
+
+/** Amber for "under review", red for a rejected delivery, grey for missing. */
+function statusChip(status: string): string {
+  if (status === "Rechazado") return "color:#9f1239;background:#ffe4e6;";
+  if (status === "Pendiente de revisión") return "color:#92400e;background:#fef3c7;";
+  return "color:#475569;background:#e2e8f0;";
+}
+
+function pendingRows(activities: PendingActivityRow[]): string {
+  return activities
+    .map((activity, index) => {
+      const zebra = index % 2 === 1 ? "background:#fbfdfb;" : "";
+      const cell = `padding:10px 12px;border-bottom:1px solid #e5eee8;font-size:13px;line-height:1.5;color:#243d34;vertical-align:top;`;
+      return `<tr style="${zebra}">
+        <td style="${cell}white-space:nowrap;font-weight:700;color:#11392d;">${escapeHtml(activity.itemCode)}</td>
+        <td style="${cell}">${escapeHtml(activity.medida)}</td>
+        <td style="${cell}white-space:nowrap;">${escapeHtml(activity.direccion)}</td>
+        <td style="${cell}white-space:nowrap;">${escapeHtml(activity.periodicidad)}</td>
+        <td style="${cell}white-space:nowrap;">${escapeHtml(activity.limitMonth)}</td>
+        <td style="${cell}white-space:nowrap;"><span style="display:inline-block;border-radius:999px;padding:3px 9px;font-size:11px;font-weight:700;${statusChip(activity.status)}">${escapeHtml(activity.status)}</span></td>
+      </tr>`;
+    })
+    .join("");
+}
+
+/**
+ * One reporter's pending activities for one reporting period. The sender's
+ * message is reproduced verbatim (escaped, newlines preserved) — the template
+ * only adds the table and the link the dialog promises to attach.
+ */
+export function pendingActivitiesEmail(args: PendingActivitiesArgs): EmailContent {
+  const safeName = args.name.trim() || "reportero";
+  const safeLink = escapeHtml(args.link);
+  const subject = `Actividades pendientes ${args.planTitle} — ${args.periodKey}`;
+  const head = `padding:10px 12px;border-bottom:2px solid #dbe7df;text-align:left;font-size:11px;font-weight:700;letter-spacing:.06em;text-transform:uppercase;color:#51665d;white-space:nowrap;`;
+  const messageBlock = args.message.trim()
+    ? `<p style="margin:0 0 18px 0;font-size:15px;line-height:1.6;color:#243d34;white-space:pre-wrap;">${escapeHtml(args.message)}</p>`
+    : "";
+
+  const html = `<!doctype html>
+<html lang="es">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>${escapeHtml(subject)}</title>
+  </head>
+  <body style="margin:0;background:#f3f7f4;font-family:Arial,Helvetica,sans-serif;color:#10201a;">
+    <div style="display:none;max-height:0;overflow:hidden;opacity:0;">${escapeHtml(`${args.activities.length} actividad(es) pendiente(s) del periodo ${args.periodKey}`)}</div>
+    <table role="presentation" width="100%" cellspacing="0" cellpadding="0" style="background:#f3f7f4;padding:32px 16px;">
+      <tr>
+        <td align="center">
+          <table role="presentation" width="100%" cellspacing="0" cellpadding="0" style="max-width:860px;background:#ffffff;border:1px solid #dbe7df;border-radius:18px;overflow:hidden;">
+            <tr>
+              <td style="background:#11392d;padding:28px 32px;color:#ffffff;">
+                <div style="display:inline-block;width:44px;height:44px;border-radius:14px;background:#d6f5df;color:#11392d;text-align:center;line-height:44px;font-weight:800;font-size:18px;">GA</div>
+                <p style="margin:18px 0 6px 0;color:#a7d8b8;font-size:12px;font-weight:700;letter-spacing:.08em;text-transform:uppercase;">Actividades pendientes</p>
+                <h1 style="margin:0;font-size:24px;line-height:1.25;font-weight:800;">${escapeHtml(args.planTitle)}</h1>
+                <p style="margin:10px 0 0 0;font-size:14px;color:#c8e6d3;">Periodo de reporte ${escapeHtml(args.periodKey)}</p>
+              </td>
+            </tr>
+            <tr>
+              <td style="padding:30px 32px 0 32px;">
+                <p style="margin:0 0 16px 0;font-size:16px;line-height:1.6;color:#243d34;">Hola ${escapeHtml(safeName)},</p>
+                ${messageBlock}
+              </td>
+            </tr>
+            <tr>
+              <td style="padding:8px 32px 0 32px;">
+                <p style="margin:0 0 10px 0;font-size:13px;font-weight:700;color:#51665d;">${escapeHtml(`${args.activities.length} actividad(es) pendiente(s) a tu cargo`)}</p>
+                <table role="presentation" width="100%" cellspacing="0" cellpadding="0" style="border-collapse:collapse;border:1px solid #e5eee8;border-radius:12px;">
+                  <tr>
+                    <th style="${head}">Ítem</th>
+                    <th style="${head}">Medida propuesta</th>
+                    <th style="${head}">Dirección</th>
+                    <th style="${head}">Periodicidad</th>
+                    <th style="${head}">Mes límite</th>
+                    <th style="${head}">Estado</th>
+                  </tr>
+                  ${pendingRows(args.activities)}
+                </table>
+              </td>
+            </tr>
+            <tr>
+              <td style="padding:26px 32px 10px 32px;">
+                <a href="${safeLink}" style="display:inline-block;background:#16834a;color:#ffffff;text-decoration:none;border-radius:10px;padding:14px 20px;font-weight:700;font-size:15px;">Ver el plan y cargar evidencias</a>
+              </td>
+            </tr>
+            <tr>
+              <td style="padding:8px 32px 28px 32px;">
+                <p style="margin:0 0 10px 0;font-size:13px;line-height:1.6;color:#6b7d75;">Si el botón no funciona, copia y pega este enlace en tu navegador:</p>
+                <p style="margin:0;word-break:break-all;font-size:13px;line-height:1.5;color:#16834a;">${safeLink}</p>
+              </td>
+            </tr>
+            <tr>
+              <td style="background:#f7faf8;padding:18px 32px;border-top:1px solid #e5eee8;">
+                <p style="margin:0;font-size:12px;line-height:1.6;color:#6b7d75;">Una actividad queda pendiente mientras no tenga una evidencia aprobada para su periodo. Si ya la cargaste, espera la validación o revisa el comentario del rechazo.</p>
+              </td>
+            </tr>
+          </table>
+          <p style="margin:18px 0 0 0;font-size:12px;color:#7b8d85;">${PRODUCT_NAME}</p>
+        </td>
+      </tr>
+    </table>
+  </body>
+</html>`;
+
+  const textRows = args.activities
+    .map((a) => `- ${a.itemCode} · ${a.medida} · ${a.direccion} · ${a.periodicidad} · límite ${a.limitMonth} · ${a.status}`)
+    .join("\n");
+  const text = [
+    `Hola ${safeName},`,
+    args.message.trim(),
+    `Actividades pendientes de ${args.planTitle} — periodo ${args.periodKey}:`,
+    textRows,
+    `Ver el plan: ${args.link}`,
+  ]
+    .filter((block) => block.length > 0)
+    .join("\n\n");
+
+  return { subject, html, text };
+}

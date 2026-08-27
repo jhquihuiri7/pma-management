@@ -148,6 +148,34 @@
       "when": 1786700000000,
       "tag": "0020_geo_layer_feature_capture",
       "breakpoints": true
+    },
+    {
+      "idx": 21,
+      "version": "7",
+      "when": 1786800000000,
+      "tag": "0021_pma_pending_notification_log",
+      "breakpoints": true
+    },
+    {
+      "idx": 22,
+      "version": "7",
+      "when": 1786900000000,
+      "tag": "0022_fix_clipped_compliance_period_keys",
+      "breakpoints": true
+    },
+    {
+      "idx": 23,
+      "version": "7",
+      "when": 1787000000000,
+      "tag": "0023_drop_orphaned_compliance_period",
+      "breakpoints": true
+    },
+    {
+      "idx": 24,
+      "version": "7",
+      "when": 1787100000000,
+      "tag": "0024_plan_start_date_required",
+      "breakpoints": true
     }
   ]
 }

@@ -43,6 +43,9 @@ export class SmtpMail implements MailProvider {
     await t.sendMail({
       from: env.SMTP_FROM,
       to: Array.isArray(msg.to) ? msg.to.join(", ") : msg.to,
+      ...(msg.cc && msg.cc.length > 0
+        ? { cc: Array.isArray(msg.cc) ? msg.cc.join(", ") : msg.cc }
+        : {}),
       subject: msg.subject,
       html: msg.html,
       text: msg.text,

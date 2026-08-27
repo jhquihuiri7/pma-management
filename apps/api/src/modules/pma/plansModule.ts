@@ -18,15 +18,25 @@ export type PlanCreateInput = {
   tipo?: "Licencia" | "Registro Ambiental" | "N/A";
   fase?: "Planificación" | "Construcción" | "Operación" | "Cierre";
   enfoque?: "Prevenir impactos" | "Controlar impactos" | "Monitorear y optimizar" | "Restaurar el ambiente";
-  startDate?: string;
+  /** Required: origin of every derived schedule, and immutable once created. */
+  startDate: string;
   visualizationUrl?: string;
 };
 
-export type PlanUpdateInput = Partial<Omit<PlanCreateInput, "tipo" | "fase" | "enfoque" | "startDate" | "visualizationUrl">> & {
+/**
+ * `startDate` and `reportPer` are intentionally not part of this type. Together
+ * they define the plan's schedule grid — the first its origin, the second its
+ * block width — and from that grid come the reporting-period keys stored in
+ * `pma_period_compliance`, every item's evidence ranges and deadline months,
+ * which months accept an upload, and the storage folder each evidence file is
+ * written to. An update that moved either would reshape the grid underneath
+ * rows and files already laid out on the old one. Omitting them here makes that
+ * unrepresentable rather than merely unrouted.
+ */
+export type PlanUpdateInput = Partial<Omit<PlanCreateInput, "tipo" | "fase" | "enfoque" | "startDate" | "reportPer" | "visualizationUrl">> & {
   tipo?: PlanCreateInput["tipo"] | null;
   fase?: PlanCreateInput["fase"] | null;
   enfoque?: PlanCreateInput["enfoque"] | null;
-  startDate?: string | null;
   visualizationUrl?: string | null;
 };
 
@@ -79,7 +89,7 @@ export async function createPlan(actorId: string, input: PlanCreateInput) {
         fase: input.fase,
         enfoque: input.enfoque,
         reportPer: input.reportPer,
-        startDate: input.startDate ?? null,
+        startDate: input.startDate,
         visualizationUrl: input.visualizationUrl ?? null,
       })
       .returning();
@@ -115,14 +125,11 @@ export async function updatePlan(planId: string, actorId: string, updates: PlanU
       .where(eq(pmaPlans.id, planId))
       .returning();
     if (!row) throw NotFound("Plan not found");
-    // Item schedules are evaluated against their stored report period. Keep
-    // them synchronized with the parent plan in the same commit.
-    if (updates.reportPer !== undefined) {
-      await tx
-        .update(pmaPlanItems)
-        .set({ reportPer: updates.reportPer, updatedAt: new Date() })
-        .where(eq(pmaPlanItems.planId, planId));
-    }
+    // No item fan-out here any more. `pmaPlanItems.reportPer` used to be
+    // rewritten whenever the plan's changed, because item schedules are
+    // evaluated against their stored period. `reportPer` is now fixed at
+    // creation and `planItemsModule` rejects any item whose value differs from
+    // its plan's, so the two cannot drift apart and there is nothing to sync.
     return toApi(row);
   });
 }

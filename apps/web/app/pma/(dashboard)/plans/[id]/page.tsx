@@ -32,7 +32,7 @@ import {
   DialogTitle,
   DialogTrigger,
 } from "@/components/ui/dialog";
-import { Upload, ExternalLink, Trash2, Plus, Users, CheckCircle2, AlertTriangle, XCircle, Pencil, Download, FileSpreadsheet, OctagonAlert, ArrowLeft, ArrowUp, ArrowDown, ArrowUpDown, ChevronLeft, ChevronRight } from "lucide-react";
+import { Upload, ExternalLink, Trash2, Plus, Users, CheckCircle2, AlertTriangle, XCircle, Pencil, Download, FileSpreadsheet, OctagonAlert, ArrowLeft, ArrowUp, ArrowDown, ArrowUpDown, ChevronLeft, ChevronRight, Mail } from "lucide-react";
 import { toast } from "sonner";
 import {
   Plan,
@@ -60,6 +60,7 @@ import {
   DIRECCION_OPTIONS,
   canonicalOption,
 } from "@/lib/planItemConstants";
+import { NotifyPendingDialog } from "@/components/pma/NotifyPendingDialog";
 import { parseExcelFile, ParsedItemRow } from "@/lib/excelImport";
 import {
   createPeriodHelpers,
@@ -298,6 +299,7 @@ export default function PlanDetailPage() {
   const [editingFinding, setEditingFinding] = useState<Finding | null>(null);
   const [savingFinding, setSavingFinding] = useState(false);
   const [deletePlanOpen, setDeletePlanOpen] = useState(false);
+  const [notifyPendingOpen, setNotifyPendingOpen] = useState(false);
   const [deletingPlan, setDeletingPlan] = useState(false);
   const [manualEvidenceOpen, setManualEvidenceOpen] = useState(false);
   const [manualEvidenceForm, setManualEvidenceForm] = useState(emptyManualEvidenceForm);
@@ -1157,16 +1159,28 @@ export default function PlanDetailPage() {
                 </span>
               </div>
             </div>
-            {isAdmin && (
-              <Button
-                size="sm"
-                className="shrink-0 rounded-lg border border-white/40 bg-white text-red-600 shadow-lg hover:bg-red-50 hover:text-red-700"
-                onClick={() => setDeletePlanOpen(true)}
-              >
-                <Trash2 className="w-4 h-4 mr-2" />
-                Eliminar plan
-              </Button>
-            )}
+            <div className="flex shrink-0 gap-2">
+              {canEdit && (
+                <Button
+                  size="sm"
+                  className="rounded-lg border border-white/40 bg-white text-teal-700 shadow-lg hover:bg-teal-50 hover:text-teal-800"
+                  onClick={() => setNotifyPendingOpen(true)}
+                >
+                  <Mail className="w-4 h-4 mr-2" />
+                  Notificar pendientes
+                </Button>
+              )}
+              {isAdmin && (
+                <Button
+                  size="sm"
+                  className="rounded-lg border border-white/40 bg-white text-red-600 shadow-lg hover:bg-red-50 hover:text-red-700"
+                  onClick={() => setDeletePlanOpen(true)}
+                >
+                  <Trash2 className="w-4 h-4 mr-2" />
+                  Eliminar plan
+                </Button>
+              )}
+            </div>
           </div>
         </div>
       </div>
@@ -1786,11 +1800,26 @@ export default function PlanDetailPage() {
             vcols.push({ type: "compliance", periodKey: lbl, periodLabel: lbl, year: m.getFullYear() });
           }
         }
-        // If the last month is not a block-end, add a compliance column for the current in-progress period
-        const lastMonth = months[months.length - 1];
-        if (lastMonth && !isBlockEnd(lastMonth)) {
-          const lbl = getPeriodLabel(lastMonth);
-          vcols.push({ type: "compliance", periodKey: lbl, periodLabel: lbl, year: lastMonth.getFullYear() });
+        // Compliance column for the period in progress. It is keyed by the block
+        // containing the CURRENT month, not the calendar's last month: the grid
+        // draws one month into the future, and that month can belong to a block
+        // that has not started, which the API refuses to grade. The dedupe
+        // matters when the current month is itself a block end — the loop above
+        // already emitted that column.
+        // A plan whose start month is still in the future has no period in
+        // progress, and naming one would key a column to a block that has not
+        // begun — which the API refuses to grade.
+        const inProgressKey = todayMonth >= rangeStart ? getPeriodLabel(todayMonth) : null;
+        if (
+          inProgressKey !== null &&
+          !vcols.some((vc) => vc.type === "compliance" && vc.periodKey === inProgressKey)
+        ) {
+          vcols.push({
+            type: "compliance",
+            periodKey: inProgressKey,
+            periodLabel: inProgressKey,
+            year: todayMonth.getFullYear(),
+          });
         }
 
         // Años disponibles según el rango ya calculado
@@ -3339,6 +3368,12 @@ export default function PlanDetailPage() {
           )}
         </DialogContent>
       </Dialog>
+
+      <NotifyPendingDialog
+        open={notifyPendingOpen}
+        onOpenChange={setNotifyPendingOpen}
+        planId={id}
+      />
 
       {/* Delete Plan Confirmation Dialog */}
       <Dialog open={deletePlanOpen} onOpenChange={setDeletePlanOpen}>

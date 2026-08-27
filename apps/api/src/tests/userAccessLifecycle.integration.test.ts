@@ -63,6 +63,7 @@ test(
         await db.insert(pmaPlans).values({
           id: pmaPlanIds[0],
           title: "PMA revoke",
+          startDate: "2026-01-01",
           reportPer: "1 año",
         });
         await db.insert(pmaPlanItems).values({
@@ -263,6 +264,7 @@ test(
         await db.insert(pmaPlans).values({
           id: pmaPlanIds[1],
           title: "PMA role",
+          startDate: "2026-01-01",
           reportPer: "1 año",
         });
         await db.insert(pmaPlanItems).values({

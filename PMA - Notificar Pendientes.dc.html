@@ -1,0 +1,403 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet" />
+<style>
+  *{box-sizing:border-box}
+  html,body{margin:0;padding:0}
+  body{font-family:Inter,ui-sans-serif,system-ui,sans-serif;-webkit-font-smoothing:antialiased;background:#f8fafc;color:#0f172a}
+  a{color:#0d9488;text-decoration:none}
+  a:hover{color:#115e59}
+  input,select,textarea,button{font-family:inherit}
+  table{border-collapse:collapse}
+</style>
+</helmet>
+
+<div style="min-height:100vh;background:#f8fafc">
+
+  <div style="position:relative;overflow:hidden;min-height:180px;padding:32px 24px;background:linear-gradient(to bottom right,#0f766e,#0d9488 55%,#047857)">
+    <div style="position:absolute;inset:0;opacity:.1;pointer-events:none;background-image:radial-gradient(circle at 50% 50%,#fff 1px,transparent 1px);background-size:30px 30px"></div>
+    <div style="position:relative;z-index:1;max-width:1280px;margin:0 auto">
+      <button style="display:inline-flex;align-items:center;gap:6px;margin-bottom:16px;border:none;background:transparent;padding:0;color:#99f6e4;font-size:14px;font-weight:500;cursor:pointer" style-hover="color:#fff">
+        <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m12 19-7-7 7-7"></path><path d="M19 12H5"></path></svg>
+        Volver a Planes
+      </button>
+      <div style="display:flex;align-items:flex-start;justify-content:space-between;gap:24px">
+        <div style="min-width:0">
+          <p style="margin:0 0 8px;font-size:13px;font-weight:500;letter-spacing:.14em;text-transform:uppercase;color:#99f6e4">Detalle del Plan</p>
+          <h1 style="margin:0;font-size:30px;font-weight:700;color:#fff;line-height:1.2">PMA Mina Cerro Quemado – Versión previa a actualización 2024</h1>
+          <p style="margin:8px 0 0;max-width:680px;font-size:14px;color:#ccfbf1">Extracción de material pétreo para obras públicas en la Isla San Cristóbal.</p>
+          <div style="margin-top:16px;display:flex;flex-wrap:wrap;gap:8px">
+            <span style="border-radius:999px;background:rgba(255,255,255,.2);padding:4px 12px;font-size:12px;font-weight:500;color:#fff">Licencia</span>
+            <span style="border-radius:999px;background:rgba(255,255,255,.2);padding:4px 12px;font-size:12px;font-weight:500;color:#fff">Operación</span>
+            <span style="border-radius:999px;background:rgba(255,255,255,.2);padding:4px 12px;font-size:12px;font-weight:500;color:#fff">Monitorear y optimizar</span>
+            <span style="border-radius:999px;background:rgba(255,255,255,.2);padding:4px 12px;font-size:12px;font-weight:500;color:#fff">Creado el 11/8/2026</span>
+          </div>
+        </div>
+        <div style="display:flex;gap:8px;flex-shrink:0">
+          <button onClick="{{ openDialog }}" style="display:inline-flex;align-items:center;gap:8px;height:36px;padding:0 14px;border:1px solid rgba(255,255,255,.4);border-radius:8px;background:#fff;color:#0f766e;font-size:14px;font-weight:600;cursor:pointer;box-shadow:0 10px 15px -3px rgba(15,23,42,.15)" style-hover="background:#f0fdfa">
+            <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m22 7-8.97 5.7a1.94 1.94 0 0 1-2.06 0L2 7"></path><rect x="2" y="4" width="20" height="16" rx="2"></rect></svg>
+            Notificar pendientes
+          </button>
+          <button style="display:inline-flex;align-items:center;gap:8px;height:36px;padding:0 14px;border:1px solid rgba(255,255,255,.4);border-radius:8px;background:#fff;color:#dc2626;font-size:14px;font-weight:600;cursor:pointer;box-shadow:0 10px 15px -3px rgba(15,23,42,.15)" style-hover="background:#fef2f2;color:#b91c1c">
+            <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 6h18"></path><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6"></path><path d="M8 6V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path></svg>
+            Eliminar plan
+          </button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div style="position:relative;z-index:1;max-width:1280px;margin:-24px auto 0;padding:0 24px 64px;display:flex;flex-direction:column;gap:24px">
+    <div style="background:#fff;border:1px solid #f1f5f9;border-radius:16px;box-shadow:0 20px 25px -5px rgba(15,23,42,.08);padding:20px 24px">
+      <div style="display:flex;align-items:center;justify-content:space-between;gap:16px;margin-bottom:16px">
+        <p style="margin:0;font-size:16px;font-weight:600;color:#0f172a">Visualizadores del Plan (2)</p>
+        <button style="display:inline-flex;align-items:center;gap:8px;height:32px;padding:0 12px;border:1px solid #e2e8f0;border-radius:8px;background:#fff;color:#334155;font-size:13px;font-weight:500;cursor:pointer" style-hover="background:#f8fafc">
+          <svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"></path><circle cx="9" cy="7" r="4"></circle><path d="M22 21v-2a4 4 0 0 0-3-3.87"></path></svg>
+          Gestionar Visualizadores
+        </button>
+      </div>
+      <div style="display:flex;flex-direction:column;gap:8px">
+        <sc-for list="{{ viewers }}" as="v" hint-placeholder-count="2">
+        <div style="display:flex;align-items:center;justify-content:space-between;gap:12px;padding:10px 12px;border:1px solid #e2e8f0;border-radius:10px">
+          <div style="min-width:0">
+            <p style="margin:0;font-size:13.5px;font-weight:500;color:#0f172a">{{ v.name }}</p>
+            <p style="margin:2px 0 0;font-size:12px;color:#94a3b8">{{ v.email }}</p>
+          </div>
+          <button style="width:30px;height:30px;border:none;border-radius:8px;background:transparent;color:#ef4444;cursor:pointer;display:flex;align-items:center;justify-content:center" style-hover="background:#fef2f2">
+            <svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 6h18"></path><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6"></path><path d="M8 6V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path></svg>
+          </button>
+        </div>
+        </sc-for>
+      </div>
+    </div>
+
+    <div style="background:#fff;border:1px solid #f1f5f9;border-radius:16px;box-shadow:0 20px 25px -5px rgba(15,23,42,.08);padding:20px 24px">
+      <p style="margin:0 0 16px;font-size:16px;font-weight:600;color:#0f172a">Asignar reporteros por dirección</p>
+      <p style="margin:0 0 6px;font-size:13px;font-weight:500;color:#334155">Dirección</p>
+      <select style="width:100%;height:36px;border:1px solid #e2e8f0;border-radius:8px;background:#fff;padding:0 10px;font-size:13.5px;color:#334155">
+        <option>Selecciona una dirección…</option>
+        <option>DAF</option>
+        <option>DGTAR</option>
+        <option>DOSPPSVR</option>
+        <option>OPC</option>
+      </select>
+    </div>
+
+    <div style="background:#fff;border:1px solid #f1f5f9;border-radius:16px;box-shadow:0 20px 25px -5px rgba(15,23,42,.08);padding:20px 24px">
+      <div style="display:flex;align-items:center;justify-content:space-between;gap:16px">
+        <p style="margin:0;font-size:16px;font-weight:600;color:#0f172a">Items del Plan (30)</p>
+        <div style="display:flex;gap:8px">
+          <button style="display:inline-flex;align-items:center;gap:8px;height:32px;padding:0 12px;border:1px solid #e2e8f0;border-radius:8px;background:#fff;color:#334155;font-size:13px;font-weight:500;cursor:pointer" style-hover="background:#f8fafc">Cargar Excel</button>
+          <button style="display:inline-flex;align-items:center;gap:8px;height:32px;padding:0 12px;border:none;border-radius:8px;background:#0f172a;color:#fff;font-size:13px;font-weight:500;cursor:pointer">+ Agregar Item</button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <sc-if value="{{ dialogOpen }}" hint-placeholder-val="{{ true }}">
+  <div style="position:fixed;inset:0;z-index:70;background:rgba(15,23,42,.45);backdrop-filter:blur(2px);display:flex;align-items:center;justify-content:center;padding:28px">
+    <div style="width:1000px;max-width:100%;max-height:100%;background:#fff;border-radius:18px;box-shadow:0 25px 50px -12px rgba(15,23,42,.4);display:flex;flex-direction:column;overflow:hidden">
+
+      <div style="display:flex;align-items:flex-start;justify-content:space-between;gap:16px;padding:18px 24px;border-bottom:1px solid #e2e8f0;background:#f8fafc">
+        <div style="min-width:0">
+          <p style="margin:0;font-size:11px;font-weight:600;letter-spacing:.09em;text-transform:uppercase;color:#0f766e">Notificar pendientes</p>
+          <p style="margin:4px 0 0;font-size:17px;font-weight:600;color:#0f172a;line-height:1.3">Enviar resumen de actividades pendientes a los reporteros</p>
+        </div>
+        <button onClick="{{ closeDialog }}" style="width:32px;height:32px;border:1px solid #e2e8f0;border-radius:9px;background:#fff;color:#64748b;cursor:pointer;display:flex;align-items:center;justify-content:center;flex-shrink:0" style-hover="background:#f1f5f9">
+          <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M18 6 6 18"></path><path d="m6 6 12 12"></path></svg>
+        </button>
+      </div>
+
+      <sc-if value="{{ notSent }}" hint-placeholder-val="{{ true }}">
+      <div style="flex:1;min-height:0;display:grid;grid-template-columns:1fr 360px">
+
+        <div style="min-height:0;overflow-y:auto;padding:20px 24px;border-right:1px solid #f1f5f9">
+          <p style="margin:0 0 8px;font-size:12px;font-weight:600;letter-spacing:.06em;text-transform:uppercase;color:#64748b">1 · Periodo del cronograma</p>
+          <div style="display:flex;flex-wrap:wrap;gap:8px">
+            <sc-for list="{{ periods }}" as="p" hint-placeholder-count="4">
+            <button onClick="{{ p.onPick }}" style="{{ p.style }}">
+              {{ p.label }}
+              <span style="{{ p.badgeStyle }}">{{ p.pending }}</span>
+            </button>
+            </sc-for>
+          </div>
+          <p style="margin:10px 0 0;font-size:12px;color:#94a3b8">El número indica las actividades sin evidencia válida en ese periodo de reporte.</p>
+
+          <div style="height:1px;background:#f1f5f9;margin:20px 0"></div>
+
+          <div style="display:flex;align-items:center;justify-content:space-between;gap:16px;margin-bottom:12px">
+            <p style="margin:0;font-size:12px;font-weight:600;letter-spacing:.06em;text-transform:uppercase;color:#64748b">2 · Pendientes por reportero</p>
+            <button onClick="{{ toggleAll }}" style="height:28px;padding:0 10px;border:1px solid #e2e8f0;border-radius:8px;background:#fff;color:#0f766e;font-size:12px;font-weight:500;cursor:pointer" style-hover="background:#f0fdfa">{{ toggleAllLabel }}</button>
+          </div>
+
+          <div style="display:flex;flex-direction:column;gap:12px">
+            <sc-for list="{{ groups }}" as="g" hint-placeholder-count="3">
+            <div style="{{ g.cardStyle }}">
+              <div style="display:flex;align-items:center;gap:12px;padding:12px 14px">
+                <button onClick="{{ g.onToggle }}" style="{{ g.checkStyle }}">
+                  <svg viewBox="0 0 24 24" width="12" height="12" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6 9 17l-5-5"></path></svg>
+                </button>
+                <div style="min-width:0;flex:1">
+                  <div style="display:flex;align-items:center;gap:8px">
+                    <p style="margin:0;font-size:13.5px;font-weight:600;color:#0f172a">{{ g.name }}</p>
+                    <span style="font-size:10.5px;font-weight:600;letter-spacing:.04em;color:#0f766e;background:#ccfbf1;border-radius:999px;padding:2px 8px">{{ g.dir }}</span>
+                  </div>
+                  <p style="margin:2px 0 0;font-size:12px;color:#94a3b8">{{ g.email }}</p>
+                </div>
+                <span style="font-size:12px;font-weight:600;color:#b45309;background:#fef3c7;border-radius:999px;padding:3px 10px;white-space:nowrap">{{ g.countLabel }}</span>
+                <button onClick="{{ g.onExpand }}" style="width:28px;height:28px;border:1px solid #e2e8f0;border-radius:8px;background:#fff;color:#64748b;cursor:pointer;display:flex;align-items:center;justify-content:center" style-hover="background:#f1f5f9">
+                  <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="{{ g.chevStyle }}"><path d="m6 9 6 6 6-6"></path></svg>
+                </button>
+              </div>
+              <sc-if value="{{ g.expanded }}" hint-placeholder-val="{{ false }}">
+              <div style="border-top:1px solid #f1f5f9;background:#f8fafc;padding:6px 14px 10px">
+                <sc-for list="{{ g.activities }}" as="a" hint-placeholder-count="3">
+                <div style="display:flex;align-items:flex-start;gap:10px;padding:9px 0;border-bottom:1px solid #eef2f6">
+                  <span style="font-size:11.5px;font-weight:700;color:#0f766e;min-width:52px;padding-top:1px">{{ a.code }}</span>
+                  <div style="min-width:0;flex:1">
+                    <p style="margin:0;font-size:12.5px;color:#334155;line-height:1.4;text-wrap:pretty">{{ a.measure }}</p>
+                    <p style="margin:3px 0 0;font-size:11.5px;color:#94a3b8">{{ a.meta }}</p>
+                  </div>
+                  <span style="{{ a.statusStyle }}">{{ a.status }}</span>
+                </div>
+                </sc-for>
+              </div>
+              </sc-if>
+            </div>
+            </sc-for>
+          </div>
+        </div>
+
+        <div style="min-height:0;overflow-y:auto;padding:20px 24px;display:flex;flex-direction:column;gap:18px;background:#fbfdfd">
+          <div>
+            <p style="margin:0 0 8px;font-size:12px;font-weight:600;letter-spacing:.06em;text-transform:uppercase;color:#64748b">3 · Copia (CC)</p>
+            <div style="display:flex;flex-wrap:wrap;gap:6px;margin-bottom:8px">
+              <sc-for list="{{ ccChips }}" as="c" hint-placeholder-count="1">
+              <span style="display:inline-flex;align-items:center;gap:6px;font-size:12px;font-weight:500;color:#0f766e;background:#ccfbf1;border-radius:999px;padding:4px 6px 4px 10px">
+                {{ c.name }}
+                <button onClick="{{ c.onRemove }}" style="width:16px;height:16px;border:none;border-radius:999px;background:rgba(15,118,110,.14);color:#0f766e;cursor:pointer;display:flex;align-items:center;justify-content:center;padding:0">
+                  <svg viewBox="0 0 24 24" width="10" height="10" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round"><path d="M18 6 6 18"></path><path d="m6 6 12 12"></path></svg>
+                </button>
+              </span>
+              </sc-for>
+            </div>
+            <div style="border:1px solid #e2e8f0;border-radius:10px;background:#fff;max-height:168px;overflow-y:auto;overflow-x:hidden">
+              <sc-for list="{{ ccOptions }}" as="o" hint-placeholder-count="4">
+              <button onClick="{{ o.onToggle }}" style="{{ o.rowStyle }}" style-hover="background:#f8fafc">
+                <span style="{{ o.checkStyle }}">
+                  <svg viewBox="0 0 24 24" width="11" height="11" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6 9 17l-5-5"></path></svg>
+                </span>
+                <span style="min-width:0;flex:1;text-align:left;overflow:hidden">
+                  <span style="display:block;font-size:12.5px;font-weight:500;color:#0f172a;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">{{ o.name }}</span>
+                  <span style="display:block;font-size:11.5px;color:#94a3b8;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">{{ o.email }}</span>
+                </span>
+              </button>
+              </sc-for>
+            </div>
+          </div>
+
+          <div style="flex:1;display:flex;flex-direction:column;min-height:0">
+            <p style="margin:0 0 8px;font-size:12px;font-weight:600;letter-spacing:.06em;text-transform:uppercase;color:#64748b">4 · Mensaje del correo</p>
+            <input value="{{ subject }}" onChange="{{ onSubject }}" style="width:100%;height:34px;border:1px solid #e2e8f0;border-radius:9px;background:#fff;padding:0 11px;font-size:12.5px;color:#334155;outline:none;margin-bottom:8px" />
+            <textarea value="{{ body }}" onChange="{{ onBody }}" placeholder="Escribe el mensaje que acompañará el resumen…" style="width:100%;min-height:120px;flex:1;border:1px solid #e2e8f0;border-radius:9px;background:#fff;padding:10px 11px;font-size:12.5px;line-height:1.5;color:#334155;outline:none;resize:vertical"></textarea>
+            <div style="margin-top:10px;border:1px dashed #99f6e4;border-radius:10px;background:#f0fdfa;padding:10px 12px">
+              <p style="margin:0;font-size:11.5px;font-weight:600;color:#0f766e">Se adjunta automáticamente</p>
+              <p style="margin:3px 0 0;font-size:11.5px;line-height:1.5;color:#0f766e">Tabla con ítem, medida propuesta, dirección, periodicidad y mes límite de cada actividad pendiente del reportero, más el enlace al plan.</p>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <div style="display:flex;align-items:center;justify-content:space-between;gap:16px;padding:14px 24px;border-top:1px solid #e2e8f0;background:#f8fafc">
+        <p style="margin:0;font-size:12.5px;color:#64748b">{{ summary }}</p>
+        <div style="display:flex;gap:8px">
+          <button onClick="{{ closeDialog }}" style="height:36px;padding:0 14px;border:1px solid #e2e8f0;border-radius:9px;background:#fff;color:#334155;font-size:13.5px;font-weight:500;cursor:pointer" style-hover="background:#f1f5f9">Cancelar</button>
+          <button onClick="{{ send }}" style="{{ sendStyle }}">
+            <svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M22 2 11 13"></path><path d="M22 2 15 22l-4-9-9-4Z"></path></svg>
+            {{ sendLabel }}
+          </button>
+        </div>
+      </div>
+      </sc-if>
+
+      <sc-if value="{{ sent }}" hint-placeholder-val="{{ false }}">
+      <div style="padding:52px 24px 56px;display:flex;flex-direction:column;align-items:center;gap:12px">
+        <div style="width:54px;height:54px;border-radius:999px;background:#ccfbf1;color:#0f766e;display:flex;align-items:center;justify-content:center">
+          <svg viewBox="0 0 24 24" width="26" height="26" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6 9 17l-5-5"></path></svg>
+        </div>
+        <p style="margin:0;font-size:18px;font-weight:600;color:#0f172a">{{ sentTitle }}</p>
+        <p style="margin:0;max-width:460px;text-align:center;font-size:13px;line-height:1.6;color:#64748b">{{ sentDetail }}</p>
+        <button onClick="{{ closeDialog }}" style="margin-top:8px;height:36px;padding:0 16px;border:none;border-radius:9px;background:#0f766e;color:#fff;font-size:13.5px;font-weight:600;cursor:pointer">Cerrar</button>
+      </div>
+      </sc-if>
+
+    </div>
+  </div>
+  </sc-if>
+
+</div>
+
+</x-dc>
+<script type="text/x-dc" data-dc-script>
+const PERIODS = [
+  { key: "mar-ago 2024", pending: 0 },
+  { key: "sep 2024-feb 2025", pending: 4 },
+  { key: "mar-ago 2025", pending: 9 },
+  { key: "sep 2025-feb 2026", pending: 12 },
+  { key: "mar-ago 2026", pending: 7 },
+];
+
+const DATA = {
+  "mar-ago 2025": [
+    { id: "r1", name: "Paul Alexander Ortega Gonzales", email: "paul.ortega@gobiernogalapagos.gob.ec", dir: "DOSPPSVR", acts: [
+      { code: "PPM-03", measure: "Humedecimiento de vías internas y frentes de explotación para control de material particulado.", freq: "Mensual", limit: "ago 2025", status: "Sin entregar" },
+      { code: "PPM-07", measure: "Mantenimiento preventivo de maquinaria pesada con registro de horas y repuestos.", freq: "Trimestral", limit: "jun 2025", status: "Rechazado" },
+      { code: "PMD-02", measure: "Entrega de desechos peligrosos a gestor ambiental autorizado con manifiesto único.", freq: "Semestral", limit: "ago 2025", status: "Sin entregar" },
+      { code: "PMS-05", measure: "Monitoreo de ruido ambiental en linderos del área minera.", freq: "Semestral", limit: "ago 2025", status: "Pendiente de revisión" },
+    ] },
+    { id: "r2", name: "María Belén Imaicela Cañizares", email: "maria.imaicela@gobiernogalapagos.gob.ec", dir: "DGTAR", acts: [
+      { code: "PCC-01", measure: "Capacitación en manejo de desechos y respuesta a derrames al personal operativo.", freq: "Semestral", limit: "ago 2025", status: "Sin entregar" },
+      { code: "PRC-02", measure: "Registro de reuniones informativas con la comunidad del sector El Progreso.", freq: "Cuatrimestral", limit: "jul 2025", status: "Sin entregar" },
+      { code: "PSS-04", measure: "Dotación y reposición de equipo de protección personal con acta de entrega.", freq: "Semestral", limit: "ago 2025", status: "Rechazado" },
+    ] },
+    { id: "r3", name: "Jhonatan Quihuiri Bermeo", email: "jhonatan.quihuiri@gobiernogalapagos.gob.ec", dir: "DAF", acts: [
+      { code: "PMD-06", measure: "Informe de gestión de desechos comunes y reciclables del periodo.", freq: "Semestral", limit: "ago 2025", status: "Sin entregar" },
+      { code: "PCA-01", measure: "Presupuesto ejecutado del plan de rehabilitación de áreas afectadas.", freq: "Anual", limit: "ago 2025", status: "Pendiente de revisión" },
+    ] },
+  ],
+};
+
+const CC_USERS = [
+  { id: "u1", name: "Andrea Villafuerte", email: "andrea.villafuerte@gobiernogalapagos.gob.ec" },
+  { id: "u2", name: "Carlos Loyola Tapia", email: "carlos.loyola@gobiernogalapagos.gob.ec" },
+  { id: "u3", name: "Dirección Ambiental (buzón)", email: "ambiental@gobiernogalapagos.gob.ec" },
+  { id: "u4", name: "Sofía Naranjo Cueva", email: "sofia.naranjo@gobiernogalapagos.gob.ec" },
+  { id: "u5", name: "Auditoría Interna", email: "auditoria@gobiernogalapagos.gob.ec" },
+];
+
+const CHECK_ON = "width:20px;height:20px;flex-shrink:0;border:none;border-radius:6px;background:#0f766e;color:#fff;display:flex;align-items:center;justify-content:center;cursor:pointer";
+const CHECK_OFF = "width:20px;height:20px;flex-shrink:0;border:1px solid #cbd5e1;border-radius:6px;background:#fff;color:transparent;display:flex;align-items:center;justify-content:center;cursor:pointer";
+
+class Component extends DCLogic {
+  state = {
+    dialogOpen: true,
+    period: "mar-ago 2025",
+    off: {},
+    expanded: { r1: true },
+    cc: ["u1"],
+    subject: "Actividades pendientes PMA Mina Cerro Quemado — mar-ago 2025",
+    body: "",
+    sent: false,
+  };
+
+  groupsFor(period) {
+    return DATA[period] ?? [];
+  }
+
+  renderVals() {
+    const s = this.state;
+    const groups = this.groupsFor(s.period);
+    const selected = groups.filter((g) => !s.off[g.id]);
+    const actCount = selected.reduce((n, g) => n + g.acts.length, 0);
+    const allOn = selected.length === groups.length && groups.length > 0;
+
+    const statusStyle = (st) => {
+      const base = "font-size:10.5px;font-weight:600;border-radius:999px;padding:3px 9px;white-space:nowrap;flex-shrink:0;";
+      if (st === "Rechazado") return base + "color:#b91c1c;background:#fee2e2";
+      if (st === "Pendiente de revisión") return base + "color:#b45309;background:#fef3c7";
+      return base + "color:#475569;background:#e2e8f0";
+    };
+
+    return {
+      dialogOpen: s.dialogOpen,
+      sent: s.sent,
+      notSent: !s.sent,
+      openDialog: () => this.setState({ dialogOpen: true, sent: false }),
+      closeDialog: () => this.setState({ dialogOpen: false, sent: false }),
+      viewers: [
+        { name: "Paul Alexander Ortega Gonzales", email: "paul.ortega@gobiernogalapagos.gob.ec" },
+        { name: "María Belén Imaicela Cañizares", email: "maria.imaicela@gobiernogalapagos.gob.ec" },
+      ],
+      periods: PERIODS.map((p) => {
+        const on = p.key === s.period;
+        return {
+          label: p.key,
+          pending: p.pending,
+          onPick: () => this.setState({ period: p.key, off: {}, subject: "Actividades pendientes PMA Mina Cerro Quemado — " + p.key }),
+          style: "display:inline-flex;align-items:center;gap:8px;white-space:nowrap;min-height:32px;padding:6px 6px 6px 12px;border-radius:999px;font-size:12.5px;font-weight:600;cursor:pointer;" +
+            (on ? "border:1px solid #0f766e;background:#0f766e;color:#fff" : "border:1px solid #e2e8f0;background:#fff;color:#334155"),
+          badgeStyle: "min-width:20px;height:20px;border-radius:999px;display:inline-flex;align-items:center;justify-content:center;font-size:11px;font-weight:700;padding:0 6px;" +
+            (on ? "background:rgba(255,255,255,.25);color:#fff" : (p.pending ? "background:#fef3c7;color:#b45309" : "background:#f1f5f9;color:#94a3b8")),
+        };
+      }),
+      groups: groups.map((g) => {
+        const on = !s.off[g.id];
+        const exp = !!s.expanded[g.id];
+        return {
+          name: g.name,
+          email: g.email,
+          dir: g.dir,
+          countLabel: g.acts.length + " pendientes",
+          expanded: exp,
+          checkStyle: on ? CHECK_ON : CHECK_OFF,
+          chevStyle: exp ? "transform:rotate(180deg)" : "",
+          cardStyle: "border-radius:12px;overflow:hidden;border:1px solid " + (on ? "#99f6e4" : "#e2e8f0") + ";background:" + (on ? "#fff" : "#f8fafc"),
+          onToggle: () => this.setState((st) => ({ off: Object.assign({}, st.off, { [g.id]: !st.off[g.id] }) })),
+          onExpand: () => this.setState((st) => ({ expanded: Object.assign({}, st.expanded, { [g.id]: !st.expanded[g.id] }) })),
+          activities: g.acts.map((a) => ({
+            code: a.code,
+            measure: a.measure,
+            meta: a.freq + " · límite " + a.limit,
+            status: a.status,
+            statusStyle: statusStyle(a.status),
+          })),
+        };
+      }),
+      toggleAllLabel: allOn ? "Quitar todos" : "Seleccionar todos",
+      toggleAll: () => this.setState(() => {
+        const off = {};
+        if (allOn) groups.forEach((g) => { off[g.id] = true; });
+        return { off };
+      }),
+      ccChips: s.cc.map((id) => {
+        const u = CC_USERS.find((x) => x.id === id);
+        return { name: u.name, onRemove: () => this.setState((st) => ({ cc: st.cc.filter((x) => x !== id) })) };
+      }),
+      ccOptions: CC_USERS.map((u) => {
+        const on = s.cc.includes(u.id);
+        return {
+          name: u.name,
+          email: u.email,
+          rowStyle: "display:flex;align-items:center;gap:10px;width:100%;padding:9px 11px;border:none;border-bottom:1px solid #f1f5f9;background:" + (on ? "#f0fdfa" : "#fff") + ";cursor:pointer",
+          checkStyle: on ? CHECK_ON.replace("cursor:pointer", "") : CHECK_OFF.replace("cursor:pointer", ""),
+          onToggle: () => this.setState((st) => ({ cc: on ? st.cc.filter((x) => x !== u.id) : st.cc.concat(u.id) })),
+        };
+      }),
+      subject: s.subject,
+      onSubject: (e) => this.setState({ subject: e.target.value }),
+      body: s.body,
+      onBody: (e) => this.setState({ body: e.target.value }),
+      summary: selected.length === 0
+        ? "Selecciona al menos un reportero para enviar."
+        : selected.length + " reportero(s) · " + actCount + " actividades pendientes · " + s.cc.length + " en copia",
+      sendLabel: selected.length ? "Enviar " + selected.length + " correos" : "Enviar correos",
+      sendStyle: "display:inline-flex;align-items:center;gap:8px;height:36px;padding:0 16px;border:none;border-radius:9px;font-size:13.5px;font-weight:600;" +
+        (selected.length ? "background:#0f766e;color:#fff;cursor:pointer" : "background:#e2e8f0;color:#94a3b8;cursor:not-allowed"),
+      send: () => { if (selected.length) this.setState({ sent: true }); },
+      sentTitle: "Correos enviados",
+      sentDetail: "Se notificó a " + selected.length + " reportero(s) con " + actCount + " actividades pendientes del periodo " + s.period + ". " + s.cc.length + " persona(s) recibieron copia.",
+    };
+  }
+}
+
+</script>
+</body>
+</html>

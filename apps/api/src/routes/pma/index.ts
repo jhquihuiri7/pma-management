@@ -5,6 +5,7 @@ import { pmaEvidencesRoutes, uploadPmaEvidence } from "./evidences.js";
 import { pmaFindingsRoutes } from "./findings.js";
 import { pmaPeriodComplianceRoutes } from "./periodCompliance.js";
 import { pmaNotificationsRoutes } from "./notifications.js";
+import { pmaPendingNotificationsRoutes } from "./pendingNotifications.js";
 import { pmaFormatsRoutes } from "./formats.js";
 import { pmaUsersRoutes } from "./users.js";
 import { pmaDownloadRoutes } from "./download.js";
@@ -17,6 +18,7 @@ export async function pmaRoutes(app: FastifyInstance) {
   await app.register(pmaPlansRoutes, { prefix: "/plans" });
   await app.register(pmaPlanItemsRoutes, { prefix: "/plans/:planId/items" });
   await app.register(pmaPeriodComplianceRoutes, { prefix: "/plans/:planId/period-compliance" });
+  await app.register(pmaPendingNotificationsRoutes, { prefix: "/plans/:planId/pending-notifications" });
   await app.register(pmaEvidencesRoutes, { prefix: "/evidences" });
   await app.register(pmaFindingsRoutes, { prefix: "/findings" });
   await app.register(pmaNotificationsRoutes, { prefix: "/notifications" });
