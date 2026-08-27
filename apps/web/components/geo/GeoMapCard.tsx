@@ -11,6 +11,7 @@ import {
   BriefcaseBusiness,
   Scale,
   Database,
+  Landmark,
   Calendar,
   Tag,
   ChevronRight,
@@ -23,7 +24,7 @@ import type { GeoMap } from "@/types/geo";
 import EditMapDialog from "@/components/geo/EditMapDialog";
 
 const CATEGORY_ICONS: Record<string, React.ElementType> = {
-  TreePine, Building2, Users, BriefcaseBusiness, Scale, Database,
+  TreePine, Building2, Users, BriefcaseBusiness, Scale, Database, Landmark,
 };
 
 const CATEGORY_GRADIENT: Record<string, string> = {
@@ -33,6 +34,7 @@ const CATEGORY_GRADIENT: Record<string, string> = {
   sociocultural: "from-rose-400 to-pink-600",
   "economico-productivo": "from-amber-400 to-yellow-600",
   "politico-institucional": "from-purple-400 to-violet-600",
+  "gestion-ambiental-institucional": "from-teal-400 to-emerald-600",
 };
 
 interface Props {

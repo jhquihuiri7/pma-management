@@ -2,7 +2,9 @@
 
 import { useEffect, useRef } from "react";
 import L from "leaflet";
+import "@maplibre/maplibre-gl-leaflet";
 import "leaflet/dist/leaflet.css";
+import "maplibre-gl/dist/maplibre-gl.css";
 import { BASEMAPS, COLOR_RAMPS } from "./gis-data";
 import type { Feature, Geometry, Position } from "geojson";
 import type { GisLayer, GisTool, RasterLayer, IdentifyInfo, FocusFeature } from "./types";
@@ -98,10 +100,27 @@ interface Props {
   previewGeometry?: Geometry | null;
 }
 
+/**
+ * Both basemap flavours land in `tilePane`, so the pane order that keeps
+ * orthophotos under vectors holds either way. The vector branch goes through
+ * MapLibre, which has no `bringToBack` — hence the narrowing at the call site
+ * rather than a duck-typed check.
+ */
+function createBasemapLayer(key: string): L.Layer {
+  const base = BASEMAPS[key];
+  if (base.kind === "vector") {
+    return L.maplibreGL({
+      style: base.style,
+      attributionControl: { customAttribution: base.attribution },
+    });
+  }
+  return L.tileLayer(base.url, { attribution: base.attribution, maxZoom: 19 });
+}
+
 export default function GisMap({ layers, rasterLayers, basemap, tool = "pan", initialCenter, initialZoom, onIdentify, onCoordChange, onViewportChange, onPointInspect, inspectPoint, focusFeature, onMapReady, onDrawGeometry, onDrawCancel, previewGeometry }: Props) {
   const mapRef = useRef<L.Map | null>(null);
   const containerRef = useRef<HTMLDivElement | null>(null);
-  const basemapRef = useRef<L.TileLayer | null>(null);
+  const basemapRef = useRef<L.Layer | null>(null);
   const layerRefs = useRef<Map<string, LayerRef>>(new Map());
   const rasterRefs = useRef<Map<string, L.TileLayer>>(new Map());
   const labelLayerRef = useRef<L.FeatureGroup | null>(null);
@@ -121,8 +140,7 @@ export default function GisMap({ layers, rasterLayers, basemap, tool = "pan", in
     });
     mapRef.current = map;
 
-    const base = BASEMAPS[basemap];
-    basemapRef.current = L.tileLayer(base.url, { attribution: base.attribution, maxZoom: 19 }).addTo(map);
+    basemapRef.current = createBasemapLayer(basemap).addTo(map);
 
     // Dedicated pane for raster tiles, between the basemap (tilePane, z=200) and
     // the vector overlays (overlayPane, z=400) — so orthophotos always sit under
@@ -158,9 +176,9 @@ export default function GisMap({ layers, rasterLayers, basemap, tool = "pan", in
     const map = mapRef.current;
     if (!map) return;
     if (basemapRef.current) map.removeLayer(basemapRef.current);
-    const base = BASEMAPS[basemap];
-    basemapRef.current = L.tileLayer(base.url, { attribution: base.attribution, maxZoom: 19 }).addTo(map);
-    if (basemapRef.current.bringToBack) basemapRef.current.bringToBack();
+    const layer = createBasemapLayer(basemap).addTo(map);
+    basemapRef.current = layer;
+    if (layer instanceof L.TileLayer) layer.bringToBack();
   }, [basemap]);
 
   // Reconcile raster (orthophoto) tile layers. Only 'processed' + visible layers

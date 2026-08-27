@@ -215,15 +215,17 @@ networks:
   # nothing.
   #
   # `external` because it is shared with a compose project that is not this one.
-  # Create it once, and attach the reports API to it:
+  # Create it once:
   #
   #   docker network create sigtar-previene-link
-  #   docker network connect sigtar-previene-link galapagos-previene-api
   #
-  # That second command is NOT durable: if the Previene project recreates its
-  # api container, the attachment is lost and this module goes into degraded
-  # mode until it is reattached. Declaring the network in that project's compose
-  # is what makes it survive.
+  # The other side is declared in that project's own compose (its `api` service
+  # lists `default` and this network), so the attachment survives a recreation
+  # of its container. It used to be a manual
+  # `docker network connect sigtar-previene-link galapagos-previene-api`, which
+  # is NOT durable: on 2026-08-21 the Previene project recreated its api, the
+  # attachment vanished, and this module served cached reports for six days
+  # before anyone noticed. Do not go back to the manual command.
   previene-link:
     external: true
     name: sigtar-previene-link

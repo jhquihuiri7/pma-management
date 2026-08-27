@@ -112,6 +112,19 @@ export const GEO_CATEGORIES: GeoCategory[] = [
     borderClass: "border-purple-200 hover:border-purple-400",
     accentClass: "bg-purple-100",
   },
+  {
+    id: "gestion-ambiental-institucional",
+    name: "Gestión Ambiental Institucional",
+    description: "Cartografía relacionada a proyectos institucionales que sustentan la gestión ambiental y regulatoria.",
+    thematics: [
+      "Proyectos institucionales",
+    ],
+    iconName: "Landmark",
+    bgClass: "bg-teal-50",
+    textClass: "text-teal-700",
+    borderClass: "border-teal-200 hover:border-teal-400",
+    accentClass: "bg-teal-100",
+  },
 ];
 
 export function getGeoCategory(categoryId: string) {

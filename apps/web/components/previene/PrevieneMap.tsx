@@ -3,7 +3,9 @@
 import { useEffect, useImperativeHandle, useMemo, useRef, forwardRef, useCallback } from "react";
 import type * as LeafletNS from "leaflet";
 import "leaflet/dist/leaflet.css";
+import "maplibre-gl/dist/maplibre-gl.css";
 import "./previene.css";
+import { OPENFREEMAP_ATTRIBUTION, OPENFREEMAP_STYLES } from "@/lib/basemaps";
 import { visualFor, isIncident, typeLabel, formatShort, type PrevieneReport } from "@/lib/previene";
 import { bucketByGrid, mergeNearby } from "@/lib/previene-cluster";
 
@@ -244,6 +246,9 @@ const PrevieneMap = forwardRef<PrevieneMapHandle, Props>(function PrevieneMap(
 
     (async () => {
       const L = (await import("leaflet")).default;
+      // Registers `L.maplibreGL`. Imported here rather than at module scope for
+      // the same reason as Leaflet: it reaches for the DOM on load.
+      await import("@maplibre/maplibre-gl-leaflet");
       if (disposed || !containerRef.current) return;
       leafletRef.current = L;
 
@@ -260,11 +265,15 @@ const PrevieneMap = forwardRef<PrevieneMapHandle, Props>(function PrevieneMap(
       mapRef.current = map;
       L.control.zoom({ position: "topleft" }).addTo(map);
 
-      L.tileLayer("https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}{r}.png", {
-        maxZoom: 17,
-        subdomains: "abcd",
-        attribution:
-          '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> &copy; <a href="https://carto.com/attributions">CARTO</a>',
+      // OpenFreeMap is vector, so the basemap is a MapLibre canvas sitting in
+      // Leaflet's tilePane — under the markers, which stay plain Leaflet. It
+      // overzooms past its own z14 ceiling to the map's 17 without blurring,
+      // which raster tiles could not do.
+      L.maplibreGL({
+        style: OPENFREEMAP_STYLES.light,
+        // The plugin forces MapLibre's own control off and hands this to
+        // Leaflet's instead, so the credit is rendered exactly once.
+        attributionControl: { customAttribution: OPENFREEMAP_ATTRIBUTION },
       }).addTo(map);
 
       groupRef.current = L.layerGroup().addTo(map);

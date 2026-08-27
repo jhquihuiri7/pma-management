@@ -1,3 +1,4 @@
+import { OPENFREEMAP_ATTRIBUTION, OPENFREEMAP_STYLES } from "@/lib/basemaps";
 import type { Basemap } from "./types";
 
 export const COLOR_RAMPS: Record<string, string[]> = {
@@ -11,12 +12,14 @@ export const COLOR_RAMPS: Record<string, string[]> = {
   categorical: ["#3f7c5f","#c46d27","#2c5481","#9d4636","#6e5a2c","#4a4458","#1f5a3f","#762817","#473918","#22a884"],
 };
 
+// The keys are persisted in saved workspaces, so they stay as they are even
+// though `light` and `dark` changed provider — see lib/basemaps.ts for why.
 export const BASEMAPS: Record<string, Basemap> = {
-  light: { name: "Claro", url: "https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}.png", attribution: "© OpenStreetMap, © CARTO" },
-  dark: { name: "Oscuro", url: "https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}.png", attribution: "© OpenStreetMap, © CARTO" },
-  satellite: { name: "Satelital", url: "https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}", attribution: "© Esri" },
-  topo: { name: "Topográfico", url: "https://{s}.tile.opentopomap.org/{z}/{x}/{y}.png", attribution: "© OpenTopoMap" },
-  osm: { name: "OpenStreetMap", url: "https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png", attribution: "© OpenStreetMap" },
+  light: { kind: "vector", name: "Claro", style: OPENFREEMAP_STYLES.light, attribution: OPENFREEMAP_ATTRIBUTION },
+  dark: { kind: "vector", name: "Oscuro", style: OPENFREEMAP_STYLES.dark, attribution: OPENFREEMAP_ATTRIBUTION },
+  satellite: { kind: "raster", name: "Satelital", url: "https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}", attribution: "© Esri" },
+  topo: { kind: "raster", name: "Topográfico", url: "https://{s}.tile.opentopomap.org/{z}/{x}/{y}.png", attribution: "© OpenTopoMap" },
+  osm: { kind: "raster", name: "OpenStreetMap", url: "https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png", attribution: "© OpenStreetMap" },
 };
 
 export const BASEMAP_PREVIEWS: Record<string, string> = {

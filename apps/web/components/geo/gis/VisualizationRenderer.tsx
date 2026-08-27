@@ -44,7 +44,7 @@ export default function VisualizationRenderer({ config, features, compact = fals
     if (!data.links.length) return <div className="empty">Sin flujos compatibles</div>;
     return (
       <div style={{ width: "100%", height }}>
-        <ResponsiveContainer>
+        <ResponsiveContainer width="100%" height={height}>
           <Sankey
             data={{ nodes: data.nodes, links: data.links }}
             nodePadding={18}
@@ -62,7 +62,7 @@ export default function VisualizationRenderer({ config, features, compact = fals
 
   if (data.kind === "scatter") return (
     <div style={{ width: "100%", height }}>
-      <ResponsiveContainer>
+      <ResponsiveContainer width="100%" height={height}>
         <ScatterChart margin={{ top: 10, right: 12, bottom: 10, left: compact ? -18 : 0 }}>
           <CartesianGrid stroke="var(--border)" strokeDasharray="3 3" />
           <XAxis type="number" dataKey="x" tick={common} />
@@ -77,7 +77,7 @@ export default function VisualizationRenderer({ config, features, compact = fals
 
   if (data.kind === "histogram") return (
     <div style={{ width: "100%", height }}>
-      <ResponsiveContainer>
+      <ResponsiveContainer width="100%" height={height}>
         <BarChart data={data.rows} margin={{ top: 8, right: 8, bottom: compact ? 28 : 45, left: compact ? -22 : 0 }}>
           <CartesianGrid stroke="var(--border)" vertical={false} />
           <XAxis dataKey="label" tick={common} angle={-25} textAnchor="end" interval="preserveStartEnd" />
@@ -93,7 +93,7 @@ export default function VisualizationRenderer({ config, features, compact = fals
 
   if (config.type === "donut") return (
     <div style={{ width: "100%", height }}>
-      <ResponsiveContainer>
+      <ResponsiveContainer width="100%" height={height}>
         <PieChart>
           <Pie data={data.rows} dataKey="value" nameKey="label" innerRadius="48%" outerRadius="76%" paddingAngle={1}>
             {data.rows.map((row, index) => <Cell key={row.label} fill={palette[index % palette.length]} />)}
@@ -109,7 +109,7 @@ export default function VisualizationRenderer({ config, features, compact = fals
     const Chart = config.type === "line" ? LineChart : AreaChart;
     return (
       <div style={{ width: "100%", height }}>
-        <ResponsiveContainer>
+        <ResponsiveContainer width="100%" height={height}>
           <Chart data={data.rows} margin={{ top: 8, right: 10, bottom: compact ? 25 : 35, left: compact ? -20 : 0 }}>
             <CartesianGrid stroke="var(--border)" strokeDasharray="3 3" />
             <XAxis dataKey="label" tick={common} angle={-20} textAnchor="end" interval="preserveStartEnd" />
@@ -128,7 +128,7 @@ export default function VisualizationRenderer({ config, features, compact = fals
   const horizontal = config.options.orientation === "horizontal";
   return (
     <div style={{ width: "100%", height }}>
-      <ResponsiveContainer>
+      <ResponsiveContainer width="100%" height={height}>
         <BarChart data={data.rows} layout={horizontal ? "vertical" : "horizontal"} margin={{ top: 8, right: 10, bottom: horizontal ? 5 : 35, left: horizontal ? 18 : -15 }}>
           <CartesianGrid stroke="var(--border)" strokeDasharray="3 3" />
           {horizontal ? <><XAxis type="number" tick={common} /><YAxis type="category" dataKey="label" tick={common} width={75} /></> : <><XAxis dataKey="label" tick={common} angle={-20} textAnchor="end" interval="preserveStartEnd" /><YAxis tick={common} /></>}

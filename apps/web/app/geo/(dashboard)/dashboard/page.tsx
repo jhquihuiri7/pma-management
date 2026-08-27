@@ -10,6 +10,7 @@ import {
   BriefcaseBusiness,
   Scale,
   Database,
+  Landmark,
   Search,
   Map,
   PanelsTopLeft,
@@ -24,7 +25,7 @@ import GeoMapCard from "@/components/geo/GeoMapCard";
 const ENABLE_GEO_MOCKS = process.env.NEXT_PUBLIC_ENABLE_GEO_MOCKS === "true";
 
 const CATEGORY_ICONS: Record<string, React.ElementType> = {
-  TreePine, Building2, Users, BriefcaseBusiness, Scale, Database,
+  TreePine, Building2, Users, BriefcaseBusiness, Scale, Database, Landmark,
 };
 
 const CATEGORY_GRADIENT: Record<string, string> = {
@@ -34,6 +35,7 @@ const CATEGORY_GRADIENT: Record<string, string> = {
   sociocultural: "from-rose-400 to-pink-600",
   "economico-productivo": "from-amber-400 to-yellow-600",
   "politico-institucional": "from-purple-400 to-violet-600",
+  "gestion-ambiental-institucional": "from-teal-400 to-emerald-600",
 };
 
 const CATEGORY_CARD_STYLES: Record<string, {
@@ -77,6 +79,12 @@ const CATEGORY_CARD_STYLES: Record<string, {
     inactive: "border-purple-200 hover:border-purple-400 bg-white hover:shadow-sm",
     activeTitle: "text-purple-800",
     count: "bg-purple-100 text-purple-700",
+  },
+  "gestion-ambiental-institucional": {
+    active: "border-teal-500 bg-teal-50 shadow-md",
+    inactive: "border-teal-200 hover:border-teal-400 bg-white hover:shadow-sm",
+    activeTitle: "text-teal-800",
+    count: "bg-teal-100 text-teal-700",
   },
 };
 

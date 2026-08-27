@@ -177,10 +177,40 @@ es `@postgres:5432/pma_db` — el DNS de Docker podría haberles dado la base
 equivocada y tumbar PMA, RGDP y GEO con ello. En la red dedicada solo está
 `galapagos-previene-api`, que no colisiona con nada.
 
-⚠️ **El `network connect` no es duradero.** Si el proyecto Galápagos Previene
-recrea su contenedor `api`, la conexión se pierde y este módulo vuelve a modo
-degradado hasta reconectarlo. Para que sobreviva hay que declarar la red en el
-compose de *ese* proyecto — está pendiente.
+✅ **Resuelto el 27 de agosto de 2026: la red está declarada en el compose de
+Galápagos Previene.** Su servicio `api` lista ahora `default` y `sigtar-link`
+(externa, `sigtar-previene-link`), así que la unión sobrevive a la recreación
+del contenedor. Comprobado con un `--force-recreate`: vuelve a las dos redes y
+`galapagos-previene-api` sigue resolviendo desde `pma-worker`.
+
+Cuidado con una trampa de Compose al tocar eso: en cuanto un servicio declara
+`networks`, deja de unirse a `default` de forma implícita. Si se omite
+`default` de la lista, la API pierde su propio `postgres` y no arranca.
+
+**Lo que pasó antes de arreglarlo, porque es el modo de fallo a reconocer.** El
+`docker network connect` a mano no era duradero, y se perdió: el 21 de agosto de
+2026 a las 14:22:45 UTC el proyecto Galápagos Previene recreó su contenedor
+`api`. El último sync correcto fue a las 14:22:31 — catorce segundos antes. A
+partir de ahí, seis días de `last_error = "No se pudo contactar la API de
+reportes (sin conexión)"` cada 120 s.
+
+El síntoma es engañoso: el módulo **no se cae, se congela**. Los endpoints de
+lectura salen del caché local, así que el visor sigue pintando marcadores, solo
+con el punto rojo y el aviso de datos cacheados. Lo que sí se rompe del todo son
+las evidencias, que se transmiten del upstream en vivo y devuelven 502. Al
+reconectar entraron de golpe los 5 reportes atrasados (8 → 13 reportes,
+15 → 31 evidencias, 3 → 18 tipos).
+
+Para diagnosticarlo, lo que lo dice en una línea:
+
+```bash
+docker network inspect sigtar-previene-link \
+  --format '{{range .Containers}}{{.Name}} {{end}}'
+# deben salir los tres: galapagos-previene-api pma-api pma-worker
+
+docker exec pma-worker getent hosts galapagos-previene-api
+# sin salida y exit 2 = no hay red compartida
+```
 
 **Rollback.** Está escrito y **ensayado** en
 `apps/api/src/db/migrations/rollback/0018_down.sql`: se ejecutó contra una base
@@ -252,6 +282,101 @@ ignora la cabecera y responde `200` con `transfer-encoding: chunked`
 propagará el `206`/`Content-Range` en cuanto el origen los devuelva, pero
 mientras tanto **el navegador debe descargar el vídeo completo antes de poder
 avanzar dentro de él**. La corrección va en el proyecto Galápagos Previene.
+
+---
+
+## Basemap: fuera de CARTO (27 de agosto de 2026)
+
+El mapa salía con **"API KEY REQUIRED" estampado sobre cada tesela**. No era un
+fallo del SIGTAR: CARTO dejó de servir `basemaps.cartocdn.com` sin clave. Y lo
+hace de la peor manera posible para quien depura, porque **no devuelve error**:
+
+```
+GET https://a.basemaps.cartocdn.com/light_all/15/8227/16466.png
+→ 200 · content-type: image/png · 21.386 bytes · con la marca en los pixeles
+```
+
+Para el código la carga es un éxito y Leaflet queda contento. Sólo lo detecta
+una persona mirando la pantalla, así que no hay alerta posible: el modo de fallo
+es visual, no programático.
+
+**Reemplazo: OpenFreeMap**, sin clave, sin cuenta y sin registro por dominio —
+no hay credencial que publicar en un bundle, filtrar ni caducar. Se probó contra
+la tesela de Puerto Baquerizo Moreno con `Referer` de dominio real, que es donde
+las alternativas "gratis" se caen: Stadia devuelve 200 desde `localhost` pero
+**401 desde un dominio**, y Protomaps hospedado responde `403 Missing key query
+param`. OpenFreeMap sirve 48 KB de tesela vectorial en z14, y sus tres
+fontstacks (`Noto Sans` Regular/Italic/Bold) y los sprites responden 200.
+
+Sus teselas son **vectoriales**, así que se pintan con MapLibre dentro del
+`tilePane` de Leaflet vía `@maplibre/maplibre-gl-leaflet`, no con `L.tileLayer`.
+Dos consecuencias que conviene saber:
+
+- El basemap **sobre-escala** por encima de su techo z14 hasta el z17 del visor
+  sin pixelarse, cosa que el ráster no hacía.
+- La atribución va en `attributionControl: { customAttribution }`, no en
+  `attribution`. El plugin apaga el control propio de MapLibre y empuja la
+  cadena al de Leaflet, de modo que el crédito se pinta una sola vez.
+
+Las URLs viven **en un único sitio**, `apps/web/lib/basemaps.ts`. Antes estaban
+escritas a mano en cada componente, y por eso hubo que cazar la marca de agua
+dos veces: en el visor de Previene y en el Geoportal. Lo que cambió:
+
+| Sitio | Antes | Ahora |
+|---|---|---|
+| `previene/PrevieneMap.tsx` | CARTO `light_all` | OpenFreeMap `positron` |
+| `geo/gis/gis-data.ts` → `light` | CARTO `light_all` | OpenFreeMap `positron` |
+| `geo/gis/gis-data.ts` → `dark` | CARTO `dark_all` | OpenFreeMap `dark` |
+
+Las claves de `BASEMAPS` (`light`, `dark`, …) **no cambian**: se guardan en los
+workspaces del Geoportal y renombrarlas habría invalidado los ya guardados. Los
+otros tres basemaps de GEO (Esri satelital, OpenTopoMap, OSM) siguen siendo
+ráster y no se tocaron; `Basemap` es ahora una unión discriminada por `kind`
+para que añadir uno vectorial no pueda entrar por la rama equivocada sin que el
+compilador lo diga.
+
+Nuevas dependencias en `apps/web`: `maplibre-gl` y
+`@maplibre/maplibre-gl-leaflet`. Como el `node_modules` va cocido en la imagen,
+**esto exige reconstruir `web`** — no basta con recrear el contenedor.
+
+### maplibre-gl se queda en v5. No subir a v6
+
+Se intentó primero con `maplibre-gl@6.6.0` y **el mapa salía en blanco**. La
+causa: v6 deriva la URL de su web worker desde `import.meta.url` en ejecución,
+y webpack la congela en build a la ruta del contenedor. En el navegador quedaba
+
+```js
+let t = "file:///app/node_modules/maplibre-gl/dist/maplibre-gl.mjs";
+if (!/^https?:/.test(t)) return "";   // file:// no pasa → sin URL de worker
+```
+
+Sin worker, MapLibre no tesela y no pinta nada. Lo peligroso del fallo es que
+**no lanza error ni pide un recurso que falle**: sólo un `console.warn`, así que
+parece un problema de estilos. Se localizó buscando ficheros `*worker*` en
+`.next/static` — no había ninguno — y leyendo la construcción de esa URL en el
+chunk servido.
+
+La v5 inlinea el worker y lo arranca desde un `Blob`, sin ninguna ruta que
+sobreviva del build al runtime (`grep -c import.meta.url` sobre su dist da 0).
+
+El pin vive en un `overrides` del **package.json de la raíz**:
+
+```json
+"overrides": { "maplibre-gl": "^5.24.0" }
+```
+
+Hace falta ahí y no sólo en `apps/web`, porque el peer del plugin
+(`^2.4.0 || … || ^6.0.0`) hacía que npm instalara una **segunda copia** en
+`node_modules/maplibre-gl` y el plugin resolvía contra ésa. Con el override el
+árbol queda en una sola copia deduplicada. Y ojo: añadir el override no basta si
+el lockfile ya tiene la entrada `peer: true` de la v6 — `npm install` no
+re-resuelve peers ya fijados y hay que quitar esas entradas para que lo haga.
+
+**Queda fuera a propósito:** `Visor Galapagos Previene (autónomo).html`, en la
+raíz del repositorio, todavía apunta a CARTO en `light_all` y `dark_all`. Es un
+canvas de diseño serializado (`x-dc`, 639 KB) del 6 de agosto, no código de la
+aplicación, y parchear un blob escapado a mano es la clase de edición que lo
+corrompe. Si hace falta, se regenera el canvas; no se edita.
 
 ---
 

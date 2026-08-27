@@ -79,11 +79,14 @@ export interface RasterLayer {
   workspaceSource?: WorkspaceLayerSource;
 }
 
-export interface Basemap {
-  name: string;
-  url: string;
-  attribution: string;
-}
+/**
+ * A basemap is either a raster XYZ template or a MapLibre vector style. The two
+ * take different code paths in GisMap, so the discriminant is what stops a new
+ * entry from silently taking the wrong one.
+ */
+export type Basemap =
+  | { kind: "raster"; name: string; url: string; attribution: string }
+  | { kind: "vector"; name: string; style: string; attribution: string };
 
 export interface SchemaColumn {
   key: string;
