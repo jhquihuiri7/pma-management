@@ -3,6 +3,7 @@ import { z } from "zod";
 import { authenticate, requireApp, requireRole } from "../../auth/middleware.js";
 import {
   MAX_BODY_LENGTH,
+  MAX_CC_RECIPIENTS,
   MAX_SUBJECT_LENGTH,
   getPendingByReporter,
   sendPendingNotifications,
@@ -18,7 +19,14 @@ const sendSchema = z
   .object({
     periodKey: z.string().trim().min(1).max(100),
     reporterIds: z.array(z.string().uuid()).min(1).max(200),
-    ccUserIds: z.array(z.string().uuid()).max(50).default([]),
+    // Free-typed addresses, not platform users. The shape is checked here only
+    // so the module gets bounded strings; `normalizeCcEmails` owns the real
+    // rule, and the cap is loose enough that duplicates are deduplicated rather
+    // than rejected.
+    ccEmails: z
+      .array(z.string().trim().max(254))
+      .max(MAX_CC_RECIPIENTS * 4)
+      .default([]),
     subject: z.string().trim().min(1).max(MAX_SUBJECT_LENGTH),
     // The operator writes this; an empty message is allowed — the table and the
     // link are the point of the email.

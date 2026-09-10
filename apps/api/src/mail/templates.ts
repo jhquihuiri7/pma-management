@@ -174,9 +174,12 @@ export function pendingActivitiesEmail(args: PendingActivitiesArgs): EmailConten
   const safeLink = escapeHtml(args.link);
   const subject = `Actividades pendientes ${args.planTitle} — ${args.periodKey}`;
   const head = `padding:10px 12px;border-bottom:2px solid #dbe7df;text-align:left;font-size:11px;font-weight:700;letter-spacing:.06em;text-transform:uppercase;color:#51665d;white-space:nowrap;`;
+  // The message carries its own greeting ("Estimado/a ..."), so the template
+  // only supplies one when the sender cleared the body — otherwise the reader
+  // would get two salutations stacked on top of each other.
   const messageBlock = args.message.trim()
     ? `<p style="margin:0 0 18px 0;font-size:15px;line-height:1.6;color:#243d34;white-space:pre-wrap;">${escapeHtml(args.message)}</p>`
-    : "";
+    : `<p style="margin:0 0 16px 0;font-size:16px;line-height:1.6;color:#243d34;">Hola ${escapeHtml(safeName)},</p>`;
 
   const html = `<!doctype html>
 <html lang="es">
@@ -201,7 +204,6 @@ export function pendingActivitiesEmail(args: PendingActivitiesArgs): EmailConten
             </tr>
             <tr>
               <td style="padding:30px 32px 0 32px;">
-                <p style="margin:0 0 16px 0;font-size:16px;line-height:1.6;color:#243d34;">Hola ${escapeHtml(safeName)},</p>
                 ${messageBlock}
               </td>
             </tr>
@@ -249,8 +251,7 @@ export function pendingActivitiesEmail(args: PendingActivitiesArgs): EmailConten
     .map((a) => `- ${a.itemCode} · ${a.medida} · ${a.direccion} · ${a.periodicidad} · límite ${a.limitMonth} · ${a.status}`)
     .join("\n");
   const text = [
-    `Hola ${safeName},`,
-    args.message.trim(),
+    args.message.trim() || `Hola ${safeName},`,
     `Actividades pendientes de ${args.planTitle} — periodo ${args.periodKey}:`,
     textRows,
     `Ver el plan: ${args.link}`,

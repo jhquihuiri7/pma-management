@@ -15,13 +15,12 @@ import { Dialog, DialogContent } from "@/components/ui/dialog";
 import { apiErrorMessage } from "@/lib/api-client";
 import { cn } from "@/lib/utils";
 import {
-  getCcCandidates,
   getPendingByReporter,
   sendPendingNotifications,
   type PendingNotificationsPayload,
   type PendingNotificationsResult,
 } from "@/app/pma/(dashboard)/plans/[id]/actions/notify-pending";
-import type { PendingActivityStatus, PendingReporter, User } from "@/types";
+import type { PendingActivityStatus, PendingReporter } from "@/types";
 
 interface NotifyPendingDialogProps {
   open: boolean;
@@ -52,8 +51,32 @@ function statusClasses(status: PendingActivityStatus): string {
   return "text-slate-600 bg-slate-200";
 }
 
+/** Mirrors `MAX_CC_RECIPIENTS` in the API. */
+const MAX_CC = 20;
+
+/**
+ * Same shape the API enforces in `normalizeCcEmails`, kept here only so a typo
+ * is caught before a round trip. The API validates again regardless — this is
+ * convenience, never the authority.
+ */
+const CC_EMAIL_PATTERN =
+  /^[^\s@,;:<>"'()\[\]\\]+@[A-Za-z0-9](?:[A-Za-z0-9-]*[A-Za-z0-9])?(?:\.[A-Za-z0-9](?:[A-Za-z0-9-]*[A-Za-z0-9])?)+$/;
+
 function defaultSubject(planTitle: string, periodKey: string): string {
   return `Actividades pendientes ${planTitle} — ${periodKey}`;
+}
+
+/**
+ * Prefilled message, editable like any other body. `{nombre}` is the one token
+ * the API expands, once per recipient, so a single body still greets each
+ * reporter by name — the dialog sends one email per reporter, not one to all.
+ */
+function defaultBody(planTitle: string): string {
+  return `Estimado/a {nombre}
+
+En atención a las actividades asignadas para el cumplimiento del Plan de Manejo Ambiental del Proyecto ${planTitle}, solicito su colaboración para la carga de las evidencias correspondientes; esto con el fin de mantener al día las obligaciones de nuestro permiso ambiental y evitar contingencias regulatorias. Agradecemos realizar la carga en un plazo máximo de 5 días hábiles.
+
+Quedamos a disposición ante cualquier inquietud sobre la documentación requerida.`;
 }
 
 export function NotifyPendingDialog({
@@ -68,14 +91,20 @@ export function NotifyPendingDialog({
   /** Reporters the operator turned OFF; everyone pending is selected by default. */
   const [deselected, setDeselected] = useState<Record<string, boolean>>({});
   const [expanded, setExpanded] = useState<Record<string, boolean>>({});
-  const [ccUsers, setCcUsers] = useState<User[]>([]);
-  const [ccIds, setCcIds] = useState<string[]>([]);
+  const [ccEmails, setCcEmails] = useState<string[]>([]);
+  /** What is in the input but not yet committed to a chip. */
+  const [ccDraft, setCcDraft] = useState("");
+  const [ccError, setCcError] = useState<string | null>(null);
   const [subject, setSubject] = useState("");
   const [body, setBody] = useState("");
   const [sending, setSending] = useState(false);
   const [result, setResult] = useState<PendingNotificationsResult | null>(null);
   /** Guards against a slow response for a period the operator already left. */
   const requestRef = useRef(0);
+  /** The default body needs the plan title, so it can only be written once the
+   *  first response lands — and only then, or switching period would discard
+   *  whatever the operator has already typed. */
+  const bodySeededRef = useRef(false);
 
   const load = useCallback(
     async (nextPeriodKey?: string) => {
@@ -89,6 +118,10 @@ export function NotifyPendingDialog({
         setDeselected({});
         setExpanded({});
         setSubject(defaultSubject(data.planTitle, data.periodKey));
+        if (!bodySeededRef.current) {
+          setBody(defaultBody(data.planTitle));
+          bodySeededRef.current = true;
+        }
         setLoadError(null);
       } catch (error) {
         if (requestRef.current !== requestId) return;
@@ -106,13 +139,11 @@ export function NotifyPendingDialog({
     if (!open) return;
     setResult(null);
     setBody("");
-    setCcIds([]);
+    bodySeededRef.current = false;
+    setCcEmails([]);
+    setCcDraft("");
+    setCcError(null);
     load();
-    getCcCandidates()
-      .then((users) => setCcUsers(Array.isArray(users) ? users : []))
-      .catch((error) =>
-        toast.error(apiErrorMessage(error, "No se pudieron cargar los usuarios para copia"))
-      );
   }, [open, load]);
 
   const reporters: PendingReporter[] = useMemo(
@@ -139,15 +170,61 @@ export function NotifyPendingDialog({
     );
   }
 
+  /**
+   * Folds raw input into the chip list, or returns null after flagging the
+   * first bad address. Pasting a whole "a@x.com, b@y.com" list is the common
+   * case, so any run of separators splits it.
+   */
+  function resolveCc(raw: string): string[] | null {
+    const candidates = raw.split(/[,;\s]+/).filter(Boolean);
+    const invalid = candidates.find(
+      (candidate) => candidate.length > 254 || !CC_EMAIL_PATTERN.test(candidate)
+    );
+    if (invalid) {
+      setCcError(`"${invalid}" no es un correo válido`);
+      return null;
+    }
+    const seen = new Set(ccEmails.map((email) => email.toLowerCase()));
+    const next = [...ccEmails];
+    for (const candidate of candidates) {
+      const key = candidate.toLowerCase();
+      if (seen.has(key)) continue;
+      seen.add(key);
+      next.push(candidate);
+    }
+    if (next.length > MAX_CC) {
+      setCcError(`No puedes poner en copia a más de ${MAX_CC} correos`);
+      return null;
+    }
+    return next;
+  }
+
+  function commitCcDraft(): boolean {
+    const next = resolveCc(ccDraft);
+    if (!next) return false;
+    setCcEmails(next);
+    setCcDraft("");
+    setCcError(null);
+    return true;
+  }
+
   async function handleSend() {
     if (!pending || !periodKey || selected.length === 0) return;
+    // An address typed but never confirmed with Enter would otherwise be
+    // silently dropped — the operator believes it was copied, and it wasn't.
+    const cc = resolveCc(ccDraft);
+    if (!cc) return;
+    setCcEmails(cc);
+    setCcDraft("");
+    setCcError(null);
+
     setSending(true);
     try {
       const sendResult = await sendPendingNotifications({
         planId,
         periodKey,
         reporterIds: selected.map((reporter) => reporter.reporterId),
-        ccUserIds: ccIds,
+        ccEmails: cc,
         subject,
         body,
       });
@@ -169,7 +246,7 @@ export function NotifyPendingDialog({
   const summary =
     selected.length === 0
       ? "Selecciona al menos un reportero para enviar."
-      : `${selected.length} reportero(s) · ${activityCount} actividades pendientes · ${ccIds.length} en copia`;
+      : `${selected.length} reportero(s) · ${activityCount} actividades pendientes · ${ccEmails.length} en copia`;
 
   const canSend = selected.length > 0 && !sending && subject.trim().length > 0;
 
@@ -399,77 +476,76 @@ export function NotifyPendingDialog({
               <div className="flex min-w-0 flex-col gap-[18px] bg-[#fbfdfd] px-6 py-5 md:min-h-0 md:overflow-y-auto">
                 <div>
                   <StepLabel>3 · Copia (CC)</StepLabel>
-                  {ccIds.length > 0 && (
+                  <p className="mt-2 text-[11.5px] leading-[1.5] text-slate-400">
+                    Escribe los correos que recibirán copia. No necesitan ser
+                    usuarios de la plataforma.
+                  </p>
+                  {ccEmails.length > 0 && (
                     <div className="mb-2 mt-2 flex flex-wrap gap-1.5">
-                      {ccIds.map((ccId) => {
-                        const user = ccUsers.find((candidate) => candidate.id === ccId);
-                        if (!user) return null;
-                        return (
-                          <span
-                            key={ccId}
-                            className="inline-flex items-center gap-1.5 rounded-full bg-teal-100 py-1 pl-2.5 pr-1.5 text-xs font-medium text-teal-700"
+                      {ccEmails.map((email) => (
+                        <span
+                          key={email.toLowerCase()}
+                          className="inline-flex max-w-full items-center gap-1.5 rounded-full bg-teal-100 py-1 pl-2.5 pr-1.5 text-xs font-medium text-teal-700"
+                        >
+                          <span className="truncate">{email}</span>
+                          <button
+                            type="button"
+                            aria-label={`Quitar ${email} de la copia`}
+                            onClick={() => {
+                              setCcEmails((prev) => prev.filter((item) => item !== email));
+                              setCcError(null);
+                            }}
+                            className="flex size-4 shrink-0 items-center justify-center rounded-full bg-teal-700/15 text-teal-700"
                           >
-                            {user.name}
-                            <button
-                              type="button"
-                              aria-label={`Quitar ${user.name} de la copia`}
-                              onClick={() =>
-                                setCcIds((prev) => prev.filter((id) => id !== ccId))
-                              }
-                              className="flex size-4 items-center justify-center rounded-full bg-teal-700/15 text-teal-700"
-                            >
-                              <X className="size-2.5 stroke-[3]" />
-                            </button>
-                          </span>
-                        );
-                      })}
+                            <X className="size-2.5 stroke-[3]" />
+                          </button>
+                        </span>
+                      ))}
                     </div>
                   )}
-                  <div
+                  <input
+                    type="email"
+                    inputMode="email"
+                    autoComplete="off"
+                    value={ccDraft}
+                    aria-label="Correo en copia"
+                    aria-invalid={ccError !== null}
+                    placeholder="correo@dominio.com"
+                    onChange={(event) => {
+                      setCcDraft(event.target.value);
+                      if (ccError) setCcError(null);
+                    }}
+                    onKeyDown={(event) => {
+                      if (event.key === "Enter" || event.key === "," || event.key === ";") {
+                        event.preventDefault();
+                        if (ccDraft.trim()) commitCcDraft();
+                        return;
+                      }
+                      // Backspace on an empty input pulls back the last chip,
+                      // the usual way these fields behave.
+                      if (event.key === "Backspace" && ccDraft === "" && ccEmails.length > 0) {
+                        event.preventDefault();
+                        setCcEmails((prev) => prev.slice(0, -1));
+                      }
+                    }}
+                    onBlur={() => {
+                      if (ccDraft.trim()) commitCcDraft();
+                    }}
                     className={cn(
-                      "max-h-[168px] overflow-y-auto overflow-x-hidden rounded-[10px] border border-slate-200 bg-white",
-                      ccIds.length === 0 && "mt-2"
+                      "h-[34px] w-full rounded-[9px] border bg-white px-[11px] text-[12.5px] text-slate-700 outline-none",
+                      ccEmails.length === 0 && "mt-2",
+                      ccError
+                        ? "border-red-300 focus-visible:border-red-500"
+                        : "border-slate-200 focus-visible:border-teal-600"
                     )}
-                  >
-                    {ccUsers.length === 0 ? (
-                      <p className="px-[11px] py-3 text-[11.5px] text-slate-400">
-                        No hay usuarios disponibles para copia.
-                      </p>
-                    ) : (
-                      ccUsers.map((user, index) => {
-                        const on = ccIds.includes(user.id);
-                        return (
-                          <button
-                            key={user.id}
-                            type="button"
-                            aria-pressed={on}
-                            onClick={() =>
-                              setCcIds((prev) =>
-                                on ? prev.filter((id) => id !== user.id) : [...prev, user.id]
-                              )
-                            }
-                            className={cn(
-                              "flex w-full items-center gap-2.5 px-[11px] py-[9px] text-left transition-colors",
-                              index < ccUsers.length - 1 && "border-b border-slate-100",
-                              on ? "bg-teal-50" : "bg-white hover:bg-slate-50"
-                            )}
-                          >
-                            <span className={cn(CHECK_BASE, on ? CHECK_ON : CHECK_OFF)}>
-                              <Check className="size-[11px] stroke-[3]" />
-                            </span>
-                            <span className="min-w-0 flex-1 overflow-hidden">
-                              <span className="block truncate text-[12.5px] font-medium text-slate-900">
-                                {user.name}
-                              </span>
-                              <span className="block truncate text-[11.5px] text-slate-400">
-                                {user.email}
-                              </span>
-                            </span>
-                          </button>
-                        );
-                      })
-                    )}
-                  </div>
+                  />
+                  {ccError ? (
+                    <p className="mt-1.5 text-[11px] leading-[1.5] text-red-600">{ccError}</p>
+                  ) : (
+                    <p className="mt-1.5 text-[11px] leading-[1.5] text-slate-400">
+                      Enter o coma para agregar · máximo {MAX_CC} correos
+                    </p>
+                  )}
                 </div>
 
                 <div className="flex min-h-0 flex-1 flex-col">
@@ -489,6 +565,12 @@ export function NotifyPendingDialog({
                     placeholder="Escribe el mensaje que acompañará el resumen…"
                     className="min-h-[120px] w-full flex-1 resize-y rounded-[9px] border border-slate-200 bg-white px-[11px] py-2.5 text-[12.5px] leading-[1.5] text-slate-700 outline-none focus-visible:border-teal-600"
                   />
+                  <p className="mt-1.5 text-[11px] leading-[1.5] text-slate-400">
+                    <code className="rounded bg-slate-100 px-1 py-px text-slate-600">
+                      {"{nombre}"}
+                    </code>{" "}
+                    se reemplaza por el nombre de cada reportero al enviar.
+                  </p>
                   <div className="mt-2.5 rounded-[10px] border border-dashed border-teal-200 bg-teal-50 px-3 py-2.5">
                     <p className="text-[11.5px] font-semibold text-teal-700">
                       Se adjunta automáticamente

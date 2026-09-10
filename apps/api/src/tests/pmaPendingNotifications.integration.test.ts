@@ -257,7 +257,7 @@ test(
               planId: ids.plan,
               periodKey: firstPeriod,
               reporterIds: [ids.reporterB],
-              ccUserIds: [],
+              ccEmails: [],
               subject: "Pendientes",
               body: "",
             },
@@ -276,7 +276,7 @@ test(
           planId: ids.plan,
           periodKey: firstPeriod,
           reporterIds: [ids.reporterA],
-          ccUserIds: [ids.ccUser],
+          ccEmails: ["Auditor@Externo.example", "auditor@externo.example"],
           subject: "Actividades pendientes",
           body: "Por favor cargar las evidencias.",
         },
@@ -300,26 +300,31 @@ test(
       assert.equal(auditRows[0].activityCount, 1);
       assert.equal(auditRows[0].periodKey, firstPeriod);
       assert.equal(auditRows[0].sentBy, ids.admin);
-      assert.deepEqual(auditRows[0].ccEmails, [`pending-cc-${ids.ccUser}@example.invalid`]);
+      // Deduplicated case-insensitively, first spelling kept.
+      assert.deepEqual(auditRows[0].ccEmails, ["Auditor@Externo.example"]);
       assert.ok(auditRows[0].errorMessage, "a failed delivery records why");
 
-      // A CC id that is not a real user is rejected before anything is sent.
-      await assert.rejects(
-        () =>
-          sendPendingNotifications(
-            {
-              planId: ids.plan,
-              periodKey: firstPeriod,
-              reporterIds: [ids.reporterA],
-              ccUserIds: [randomUUID()],
-              subject: "Pendientes",
-              body: "",
-            },
-            admin
-          ),
-        (error: unknown) =>
-          typeof error === "object" && error !== null && "statusCode" in error && error.statusCode === 400
-      );
+      // A malformed copy address is rejected before anything is sent, so a typo
+      // never turns into a silently uncopied recipient.
+      for (const bad of ["no-es-un-correo", "a@b", "victima@example.com, oculto@example.com"]) {
+        await assert.rejects(
+          () =>
+            sendPendingNotifications(
+              {
+                planId: ids.plan,
+                periodKey: firstPeriod,
+                reporterIds: [ids.reporterA],
+                ccEmails: [bad],
+                subject: "Pendientes",
+                body: "",
+              },
+              admin
+            ),
+          (error: unknown) =>
+            typeof error === "object" && error !== null && "statusCode" in error && error.statusCode === 400,
+          `"${bad}" debe rechazarse`
+        );
+      }
     } finally {
       await db.delete(pmaPendingNotificationLog).where(eq(pmaPendingNotificationLog.planId, ids.plan));
       await db.delete(pmaPlanAssignments).where(eq(pmaPlanAssignments.planId, ids.plan));

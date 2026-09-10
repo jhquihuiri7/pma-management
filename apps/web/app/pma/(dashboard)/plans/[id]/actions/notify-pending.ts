@@ -2,7 +2,6 @@ import { api } from "@/lib/api-client";
 import type {
   PendingNotificationsPayload,
   PendingNotificationsResult,
-  User,
 } from "@/types";
 
 /**
@@ -37,13 +36,14 @@ export interface SendPendingNotificationsInput {
   planId: string;
   periodKey: string;
   reporterIds: string[];
-  ccUserIds: string[];
+  /** Copy addresses typed by the operator; not restricted to platform users. */
+  ccEmails: string[];
   subject: string;
   body: string;
 }
 
 /**
- * One email per reporter, sequentially, `cc` to the selected users. Resolves
+ * One email per reporter, sequentially, `cc` to the typed addresses. Resolves
  * with the per-recipient outcome even when some deliveries failed — the caller
  * reports "se enviaron X de Y" rather than treating a partial batch as an error.
  *
@@ -63,8 +63,3 @@ export function sendPendingNotifications(
 
 /** ~4 s of SMTP budget per reporter, capped by the server's own limits. */
 const SEND_TIMEOUT_MS = 180_000;
-
-/** Everyone who can be put in copy: the plan-management user directory. */
-export function getCcCandidates(): Promise<User[]> {
-  return api.get<User[]>("/pma/users");
-}

@@ -12,7 +12,10 @@ import {
 } from "../modules/pma/planSchedule.js";
 import {
   MAX_BODY_LENGTH,
+  MAX_CC_RECIPIENTS,
   MAX_SUBJECT_LENGTH,
+  expandRecipientTokens,
+  normalizeCcEmails,
   sanitizeBody,
   sanitizeSubject,
 } from "../modules/pma/pendingNotificationsModule.js";
@@ -102,4 +105,51 @@ test("body sanitising keeps the operator's newlines and drops control characters
   assert.equal(sanitizeBody("texto\u200Bcon\u0000basura"), "textoconbasura");
   assert.equal(sanitizeBody("a".repeat(9000)).length, MAX_BODY_LENGTH);
   assert.equal(sanitizeBody("  \n  espacios  \n  "), "espacios");
+});
+
+test("the {nombre} token is expanded per recipient and nothing else is", () => {
+  const body = "Estimado/a {nombre}\n\nSaludos, {nombre}.";
+  assert.equal(expandRecipientTokens(body, "Ana Vera"), "Estimado/a Ana Vera\n\nSaludos, Ana Vera.");
+  // An unnamed user still gets a grammatical greeting rather than an empty one.
+  assert.equal(expandRecipientTokens("Estimado/a {nombre}", "   "), "Estimado/a reportero");
+  // Any other brace-looking text belongs to the operator and is left alone.
+  assert.equal(expandRecipientTokens("Plan {plan} de {NOMBRE}", "Ana"), "Plan {plan} de {NOMBRE}");
+});
+
+test("copy addresses are validated, trimmed and deduplicated", () => {
+  assert.deepEqual(normalizeCcEmails([]), []);
+  assert.deepEqual(normalizeCcEmails(["  ana@ejemplo.com  ", ""]), ["ana@ejemplo.com"]);
+  // Same mailbox, different casing: copied once, in the spelling first typed.
+  assert.deepEqual(
+    normalizeCcEmails(["Ana@Ejemplo.com", "ana@ejemplo.com", "luis@ejemplo.com"]),
+    ["Ana@Ejemplo.com", "luis@ejemplo.com"],
+  );
+  assert.deepEqual(
+    normalizeCcEmails(["a.b-c+tag@sub.dominio.gob.ec"]),
+    ["a.b-c+tag@sub.dominio.gob.ec"],
+  );
+});
+
+test("a copy address that could smuggle a second recipient or header is rejected", () => {
+  const rejected = [
+    "no-es-un-correo",
+    "sin-tld@dominio",
+    "espacio en@medio.com",
+    "uno@a.com, dos@b.com",
+    "uno@a.com; dos@b.com",
+    "Nombre <uno@a.com>",
+    "uno@a.com\nBcc: oculto@b.com",
+    `${"a".repeat(250)}@ejemplo.com`,
+  ];
+  for (const value of rejected) {
+    assert.throws(() => normalizeCcEmails([value]), /no es un correo válido/, `debe rechazar: ${value}`);
+  }
+});
+
+test("the copy list is capped after deduplication, not before", () => {
+  const dupes = Array.from({ length: MAX_CC_RECIPIENTS * 2 }, () => "ana@ejemplo.com");
+  assert.deepEqual(normalizeCcEmails(dupes), ["ana@ejemplo.com"]);
+
+  const distinct = Array.from({ length: MAX_CC_RECIPIENTS + 1 }, (_, i) => `u${i}@ejemplo.com`);
+  assert.throws(() => normalizeCcEmails(distinct), /más de 20 correos/);
 });

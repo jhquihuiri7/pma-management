@@ -74,6 +74,45 @@ export function sanitizeBody(value: string): string {
     .slice(0, MAX_BODY_LENGTH);
 }
 
+/** Cap on how many addresses one notification may copy, applied after dedupe. */
+export const MAX_CC_RECIPIENTS = 20;
+
+/**
+ * Deliberately narrower than the RFC: a single addr-spec, no display name, no
+ * quoted local part. Every character that could start a second address or a
+ * second header — whitespace, comma, semicolon, colon, angle brackets, quotes,
+ * parens, brackets, backslash — is excluded from the local part.
+ */
+const CC_EMAIL_PATTERN =
+  /^[^\s@,;:<>"'()\[\]\\]+@[A-Za-z0-9](?:[A-Za-z0-9-]*[A-Za-z0-9])?(?:\.[A-Za-z0-9](?:[A-Za-z0-9-]*[A-Za-z0-9])?)+$/;
+
+/**
+ * Copy addresses are typed by hand, which makes them the only operator
+ * keystrokes in this flow that reach an SMTP header — so they are validated,
+ * not escaped. A malformed address is rejected outright rather than dropped:
+ * silently skipping a typo would leave the operator believing someone received
+ * a copy that was never addressed to them.
+ */
+export function normalizeCcEmails(values: string[]): string[] {
+  const seen = new Set<string>();
+  const emails: string[] = [];
+  for (const value of values) {
+    const email = value.trim();
+    if (!email) continue;
+    if (email.length > 254 || !CC_EMAIL_PATTERN.test(email)) {
+      throw BadRequest(`"${email.slice(0, 80)}" no es un correo válido`);
+    }
+    const key = email.toLowerCase();
+    if (seen.has(key)) continue;
+    seen.add(key);
+    emails.push(email);
+  }
+  if (emails.length > MAX_CC_RECIPIENTS) {
+    throw BadRequest(`No puedes poner en copia a más de ${MAX_CC_RECIPIENTS} correos`);
+  }
+  return emails;
+}
+
 type PlanRow = typeof pmaPlans.$inferSelect;
 
 async function loadPlanForActor(planId: string, actor: Actor): Promise<PlanRow> {
@@ -310,10 +349,21 @@ export type SendPendingNotificationsInput = {
   planId: string;
   periodKey: string;
   reporterIds: string[];
-  ccUserIds: string[];
+  /** Free-typed copy addresses; need not belong to any platform user. */
+  ccEmails: string[];
   subject: string;
   body: string;
 };
+
+/**
+ * The body is written once but delivered once per reporter, so `{nombre}`
+ * stands in for whoever receives this copy. It is the only token expanded:
+ * anything else the operator types reaches the reader verbatim.
+ */
+export function expandRecipientTokens(body: string, reporterName: string): string {
+  const name = reporterName.trim() || "reportero";
+  return body.replaceAll("{nombre}", name);
+}
 
 function planLink(planId: string): string {
   return `${env.FRONTEND_ORIGIN.replace(/\/+$/, "")}/pma/plans/${planId}`;
@@ -321,8 +371,14 @@ function planLink(planId: string): string {
 
 /**
  * Sends one email per selected reporter — `to` is that reporter alone, `cc` the
- * selected users. Never one message addressed to everybody: the recipients are
- * being chased about their own overdue work, and each table is theirs only.
+ * addresses the operator typed. Never one message addressed to everybody: the
+ * recipients are being chased about their own overdue work, and each table is
+ * theirs only.
+ *
+ * Copy addresses are free text and need not be platform users, so a plan's
+ * pending table can leave the organisation. That is the point of the field —
+ * consultants and auditors are copied routinely — and the audit log records
+ * every address that received one.
  *
  * Delivery is sequential and a failure is contained to its recipient, so the
  * caller can report "se enviaron X de Y" instead of losing the whole batch to
@@ -356,17 +412,7 @@ export async function sendPendingNotifications(
   }
 
   const db = getDb();
-  const uniqueCcIds = [...new Set(input.ccUserIds)];
-  const ccUsers = uniqueCcIds.length
-    ? await db
-        .select({ id: users.id, email: users.email })
-        .from(users)
-        .where(inArray(users.id, uniqueCcIds))
-    : [];
-  if (ccUsers.length !== uniqueCcIds.length) {
-    throw BadRequest("Alguno de los usuarios en copia no existe");
-  }
-  const ccEmails = ccUsers.map((user) => user.email);
+  const ccEmails = normalizeCcEmails(input.ccEmails);
 
   const link = planLink(pending.planId);
   const mail = getMail();
@@ -378,7 +424,7 @@ export async function sendPendingNotifications(
       name: reporter.name,
       planTitle: pending.planTitle,
       periodKey: pending.periodKey,
-      message: body,
+      message: expandRecipientTokens(body, reporter.name),
       activities: reporter.activities,
       link,
     });
