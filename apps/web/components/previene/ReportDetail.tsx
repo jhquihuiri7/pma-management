@@ -55,8 +55,11 @@ export default function ReportDetail({ report, onClose }: Props) {
 
   return (
     <>
-      <aside className="previene-panel absolute inset-y-0 right-0 z-[700] flex w-[412px] max-w-full flex-col border-l border-slate-200 bg-white shadow-2xl">
-        <header className="flex flex-none items-start gap-3 border-b border-slate-200 px-[18px] py-4">
+      {/* A drawer where there is room for one, the whole pane where there is
+          not: on a phone the panel covers the map or the table it was opened
+          from, which is the only way the evidence is readable at all. */}
+      <aside className="previene-panel absolute inset-y-0 right-0 z-[700] flex w-full flex-col border-l border-slate-200 bg-white shadow-2xl sm:w-[412px] sm:max-w-full">
+        <header className="flex flex-none items-start gap-3 border-b border-slate-200 px-4 py-3.5 sm:px-[18px] sm:py-4">
           <span
             className="flex h-[34px] w-[34px] flex-none items-center justify-center"
             style={{
@@ -88,13 +91,13 @@ export default function ReportDetail({ report, onClose }: Props) {
             type="button"
             onClick={onClose}
             aria-label="Cerrar detalle"
-            className="flex h-7 w-7 flex-none items-center justify-center rounded-lg border border-slate-200 bg-slate-50 text-slate-500 hover:bg-slate-100"
+            className="flex h-9 w-9 flex-none items-center justify-center rounded-lg border border-slate-200 bg-slate-50 text-base text-slate-500 hover:bg-slate-100 sm:h-7 sm:w-7 sm:text-sm"
           >
             ×
           </button>
         </header>
 
-        <div className="flex-1 overflow-y-auto px-[18px] pb-6 pt-4">
+        <div className="flex-1 overflow-y-auto overscroll-contain px-4 pb-6 pt-4 sm:px-[18px]">
           <div className="mb-4 flex flex-col gap-0.5">
             <span className="text-[10px] font-semibold uppercase tracking-[0.09em] text-slate-400">Enviado</span>
             <span className="font-mono text-[12.5px] text-slate-800">{formatLong(report.submittedAt)}</span>
@@ -213,7 +216,7 @@ export default function ReportDetail({ report, onClose }: Props) {
           aria-modal="true"
           aria-label={lightbox.caption ?? "Evidencia"}
           onClick={() => setLightbox(null)}
-          className="fixed inset-0 z-[900] flex items-center justify-center bg-black/80 p-8"
+          className="fixed inset-0 z-[900] flex items-center justify-center bg-black/80 p-3 sm:p-8"
         >
           <div
             className="max-h-full w-full max-w-3xl overflow-hidden rounded-xl border border-white/10 bg-neutral-900"
@@ -226,7 +229,7 @@ export default function ReportDetail({ report, onClose }: Props) {
                 src={mediaUrl(lightbox.id)}
                 controls
                 autoPlay
-                className="max-h-[70vh] w-full bg-black"
+                className="max-h-[70dvh] w-full bg-black"
                 onError={() => {
                   markGone(lightbox.id);
                   setLightbox(null);
@@ -237,23 +240,25 @@ export default function ReportDetail({ report, onClose }: Props) {
               <img
                 src={mediaUrl(lightbox.id)}
                 alt={lightbox.caption ?? "Evidencia fotográfica"}
-                className="max-h-[70vh] w-full bg-black object-contain"
+                className="max-h-[70dvh] w-full bg-black object-contain"
                 onError={() => {
                   markGone(lightbox.id);
                   setLightbox(null);
                 }}
               />
             )}
-            <div className="flex items-center gap-3 border-t border-white/10 px-4 py-3">
-              <span className="flex-1 text-[12.5px] text-white/85">{lightbox.caption ?? "Evidencia"}</span>
-              <span className="font-mono text-[11px] text-white/40">
+            <div className="flex flex-wrap items-center gap-x-3 gap-y-1.5 border-t border-white/10 px-3 py-2.5 sm:flex-nowrap sm:px-4 sm:py-3">
+              <span className="min-w-0 flex-1 truncate text-[12.5px] text-white/85">
+                {lightbox.caption ?? "Evidencia"}
+              </span>
+              <span className="order-last w-full font-mono text-[11px] text-white/40 sm:order-none sm:w-auto">
                 {lightbox.width && lightbox.height ? `${lightbox.width} × ${lightbox.height} px` : ""}
                 {lightbox.fileSize ? ` · ${formatSize(lightbox.fileSize)}` : ""}
               </span>
               <button
                 type="button"
                 onClick={() => setLightbox(null)}
-                className="rounded-lg bg-white/10 px-3 py-1.5 text-[11.5px] text-white hover:bg-white/20"
+                className="flex-none rounded-lg bg-white/10 px-3 py-2 text-[11.5px] text-white hover:bg-white/20 sm:py-1.5"
               >
                 Cerrar
               </button>

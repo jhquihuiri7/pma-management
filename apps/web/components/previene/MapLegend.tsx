@@ -4,6 +4,7 @@ import { useState } from "react";
 import { ChevronDown, ChevronUp } from "lucide-react";
 
 import { INCIDENT_VISUAL, UNASSIGNED_VISUAL, visualForCode, type PrevieneEventType } from "@/lib/previene";
+import { COMPACT_QUERY, useMediaQuery } from "@/lib/use-media-query";
 
 /**
  * The legend is not decoration: colour alone cannot carry the type encoding, so
@@ -12,10 +13,16 @@ import { INCIDENT_VISUAL, UNASSIGNED_VISUAL, visualForCode, type PrevieneEventTy
  * accuracy halo, neither of which is guessable.
  *
  * It can be collapsed to a title bar when it covers the part of the map the
- * user is reading; the header stays visible so the way back is obvious.
+ * user is reading; the header stays visible so the way back is obvious. On a
+ * phone that collapse is the starting point: expanded, eleven rows of legend
+ * would sit on top of most of the map.
  */
 export default function MapLegend({ eventTypes }: { eventTypes: PrevieneEventType[] }) {
-  const [open, setOpen] = useState(true);
+  const compact = useMediaQuery(COMPACT_QUERY);
+  // null = the user has not decided, so the screen width does. A choice, once
+  // made, survives a rotation.
+  const [manual, setManual] = useState<boolean | null>(null);
+  const open = manual ?? !compact;
 
   const hasUnassigned = eventTypes.some(
     (t) => visualForCode(t.code).color === UNASSIGNED_VISUAL.color
@@ -23,13 +30,13 @@ export default function MapLegend({ eventTypes }: { eventTypes: PrevieneEventTyp
 
   return (
     <div
-      className={`pointer-events-auto rounded-xl border border-slate-200 bg-white/95 shadow-lg backdrop-blur ${
-        open ? "min-w-[186px] p-3.5" : "px-3 py-2"
+      className={`pointer-events-auto overflow-y-auto rounded-xl border border-slate-200 bg-white/95 shadow-lg backdrop-blur ${
+        open ? "max-h-[48vh] min-w-[186px] p-3.5 sm:max-h-none" : "px-3 py-2"
       }`}
     >
       <button
         type="button"
-        onClick={() => setOpen((v) => !v)}
+        onClick={() => setManual(!open)}
         aria-expanded={open}
         title={open ? "Colapsar leyenda" : "Expandir leyenda"}
         className={`flex w-full items-center justify-between gap-3 text-[10px] font-semibold uppercase tracking-[0.09em] text-slate-400 hover:text-slate-600 ${

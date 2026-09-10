@@ -22,20 +22,32 @@ interface Props {
   onReset: () => void;
 }
 
+/** Margin kept between a popover and the edges of the screen. */
+const POPOVER_MARGIN = 12;
+
 /** Anchor a popover to a trigger using measured coordinates. */
 function useAnchoredPopover() {
   const triggerRef = useRef<HTMLButtonElement | null>(null);
   const [open, setOpen] = useState(false);
-  const [position, setPosition] = useState({ top: 0, left: 0 });
+  const [position, setPosition] = useState({ top: 0, left: 0, width: 0 });
 
-  const toggle = (width: number) => {
+  /** `preferredWidth` is the desktop width; a narrower screen gets less. */
+  const toggle = (preferredWidth: number) => {
     const rect = triggerRef.current?.getBoundingClientRect();
     if (rect) {
+      // A phone is narrower than the popover was designed for, so the width is
+      // capped first and the placement solved for the width that will actually
+      // be used — otherwise the clamp below is computed against a box that does
+      // not fit and the panel still hangs off the right edge.
+      const width = Math.min(preferredWidth, window.innerWidth - POPOVER_MARGIN * 2);
       // position:fixed with measured coordinates — a popover laid out inside
       // the filter row gets clipped by its overflow, and this row scrolls.
       setPosition({
         top: Math.round(rect.bottom + 7),
-        left: Math.round(Math.min(rect.left, window.innerWidth - width - 12)),
+        left: Math.round(
+          Math.max(POPOVER_MARGIN, Math.min(rect.left, window.innerWidth - width - POPOVER_MARGIN))
+        ),
+        width,
       });
     }
     setOpen((value) => !value);
@@ -46,8 +58,19 @@ function useAnchoredPopover() {
     const onKey = (event: KeyboardEvent) => {
       if (event.key === "Escape") setOpen(false);
     };
+    // The coordinates are a measurement, not a binding: rotating the phone or
+    // resizing the window leaves the panel floating away from its trigger, and
+    // re-measuring from here cannot see the trigger's new place before layout
+    // settles. Closing is honest and costs one tap.
+    const onResize = () => setOpen(false);
     window.addEventListener("keydown", onKey);
-    return () => window.removeEventListener("keydown", onKey);
+    window.addEventListener("resize", onResize);
+    window.addEventListener("orientationchange", onResize);
+    return () => {
+      window.removeEventListener("keydown", onKey);
+      window.removeEventListener("resize", onResize);
+      window.removeEventListener("orientationchange", onResize);
+    };
   }, [open]);
 
   return { triggerRef, open, setOpen, position, toggle };
@@ -109,8 +132,12 @@ export default function PrevieneFilters({
       : "border-transparent bg-transparent text-slate-400";
 
   return (
-    <div className="flex flex-none items-center gap-3 border-b border-slate-200 bg-white px-5 py-2.5">
-      <div className="flex min-w-0 flex-1 items-center gap-2.5 overflow-x-auto pb-1 -mb-1">
+    <div className="flex flex-none flex-wrap items-center gap-x-3 gap-y-2 border-b border-slate-200 bg-white px-3 py-2 sm:px-5 sm:py-2.5 lg:flex-nowrap lg:gap-3">
+      {/* Below the split breakpoint the controls take the whole first line and
+          the counter with the reset button wrap under them — squeezing all of
+          it onto one line is what left the date filter half cut off on a
+          tablet. From `lg` up it is the single row it always was. */}
+      <div className="flex w-full min-w-0 items-center gap-2.5 overflow-x-auto pb-1 -mb-1 lg:w-auto lg:flex-1">
         {/* Event type — a searchable multi-select, not a chip row: the catalog
             is expected to grow and chips would push the row off screen. */}
         <div className="flex-none">
@@ -118,7 +145,7 @@ export default function PrevieneFilters({
             ref={typePopover.triggerRef}
             type="button"
             onClick={() => typePopover.toggle(266)}
-            className="flex h-8 items-center gap-2 whitespace-nowrap rounded-lg border border-slate-200 bg-white px-2.5 text-xs font-medium text-slate-800 hover:bg-slate-50"
+            className="flex h-9 items-center gap-2 whitespace-nowrap rounded-lg border border-slate-200 bg-white px-3 text-xs font-medium text-slate-800 hover:bg-slate-50 sm:h-8 sm:px-2.5"
           >
             <span className="flex items-center gap-0.5">
               {selectedTypes.slice(0, 4).map((type) => (
@@ -142,7 +169,7 @@ export default function PrevieneFilters({
             type="button"
             onClick={() => toggleKind("EVENT")}
             aria-pressed={filters.clases.has("EVENT")}
-            className={`flex items-center gap-1.5 rounded-full border px-2.5 py-1.5 text-xs font-medium ${chip(filters.clases.has("EVENT"))}`}
+            className={`flex items-center gap-1.5 whitespace-nowrap rounded-full border px-2.5 py-2 text-xs font-medium sm:py-1.5 ${chip(filters.clases.has("EVENT"))}`}
           >
             <span
               className="h-2.5 w-2.5 rounded-full border-2 border-slate-500"
@@ -155,7 +182,7 @@ export default function PrevieneFilters({
             type="button"
             onClick={() => toggleKind("INCIDENT")}
             aria-pressed={filters.clases.has("INCIDENT")}
-            className={`flex items-center gap-1.5 rounded-full border px-2.5 py-1.5 text-xs font-medium ${chip(filters.clases.has("INCIDENT"))}`}
+            className={`flex items-center gap-1.5 whitespace-nowrap rounded-full border px-2.5 py-2 text-xs font-medium sm:py-1.5 ${chip(filters.clases.has("INCIDENT"))}`}
           >
             <span
               className="h-2.5 w-2.5 rotate-45 rounded-[2px] bg-slate-500"
@@ -173,7 +200,7 @@ export default function PrevieneFilters({
             ref={datePopover.triggerRef}
             type="button"
             onClick={() => datePopover.toggle(262)}
-            className="flex h-8 items-center gap-2 whitespace-nowrap rounded-lg border border-slate-200 bg-white px-2.5 text-xs font-medium text-slate-800 hover:bg-slate-50"
+            className="flex h-9 items-center gap-2 whitespace-nowrap rounded-lg border border-slate-200 bg-white px-3 text-xs font-medium text-slate-800 hover:bg-slate-50 sm:h-8 sm:px-2.5"
           >
             <span className="opacity-60">🗓</span>
             <span>{dateSummary}</span>
@@ -192,7 +219,7 @@ export default function PrevieneFilters({
         onClick={onReset}
         title="Limpiar filtros y reencuadrar el mapa"
         aria-label="Limpiar filtros y reencuadrar el mapa"
-        className="flex h-8 w-8 flex-none items-center justify-center rounded-lg border border-slate-200 text-slate-400 hover:bg-slate-50 hover:text-slate-600"
+        className="flex h-9 w-9 flex-none items-center justify-center rounded-lg border border-slate-200 text-slate-400 hover:bg-slate-50 hover:text-slate-600 sm:h-8 sm:w-8"
       >
         ⟲
       </button>
@@ -202,14 +229,20 @@ export default function PrevieneFilters({
         <>
           <div className="fixed inset-0 z-[790]" onClick={() => typePopover.setOpen(false)} />
           <div
-            className="fixed z-[800] w-[266px] rounded-xl border border-slate-200 bg-white p-2.5 shadow-xl"
-            style={{ top: typePopover.position.top, left: typePopover.position.left }}
+            className="fixed z-[800] max-h-[calc(100dvh-5rem)] overflow-y-auto rounded-xl border border-slate-200 bg-white p-2.5 shadow-xl"
+            style={{
+              top: typePopover.position.top,
+              left: typePopover.position.left,
+              width: typePopover.position.width,
+            }}
           >
+            {/* 16px on touch: below that iOS zooms the page in on focus and the
+                user is left on a magnified, sideways-scrolling layout. */}
             <input
               value={query}
               onChange={(event) => setQuery(event.target.value)}
               placeholder="Buscar tipo…"
-              className="mb-2 w-full rounded-lg border border-slate-200 bg-slate-50 px-2.5 py-1.5 text-xs text-slate-800 outline-none focus:border-emerald-400"
+              className="mb-2 w-full rounded-lg border border-slate-200 bg-slate-50 px-2.5 py-2 text-base text-slate-800 outline-none focus:border-emerald-400 sm:py-1.5 sm:text-xs"
             />
             <div className="flex max-h-56 flex-col gap-0.5 overflow-y-auto">
               {matches.map((type) => {
@@ -219,7 +252,7 @@ export default function PrevieneFilters({
                     key={type.code}
                     type="button"
                     onClick={() => toggleType(type.code)}
-                    className={`flex w-full items-center gap-2.5 rounded-lg px-2 py-1.5 text-left text-[12.5px] text-slate-800 hover:bg-slate-50 ${
+                    className={`flex w-full items-center gap-2.5 rounded-lg px-2 py-2.5 text-left text-[12.5px] text-slate-800 hover:bg-slate-50 sm:py-1.5 ${
                       checked ? "bg-emerald-50" : ""
                     }`}
                   >
@@ -272,8 +305,12 @@ export default function PrevieneFilters({
         <>
           <div className="fixed inset-0 z-[790]" onClick={() => datePopover.setOpen(false)} />
           <div
-            className="fixed z-[800] w-[262px] rounded-xl border border-slate-200 bg-white p-3 shadow-xl"
-            style={{ top: datePopover.position.top, left: datePopover.position.left }}
+            className="fixed z-[800] max-h-[calc(100dvh-5rem)] overflow-y-auto rounded-xl border border-slate-200 bg-white p-3 shadow-xl"
+            style={{
+              top: datePopover.position.top,
+              left: datePopover.position.left,
+              width: datePopover.position.width,
+            }}
           >
             <label className="mb-2 flex flex-col gap-1 text-[10.5px] font-semibold uppercase tracking-[0.07em] text-slate-400">
               Desde
@@ -281,7 +318,7 @@ export default function PrevieneFilters({
                 type="date"
                 value={filters.desde}
                 onChange={(event) => onChange({ ...filters, desde: event.target.value })}
-                className="w-full rounded-lg border border-slate-200 bg-slate-50 px-2 py-1.5 font-mono text-[11.5px] text-slate-800"
+                className="w-full rounded-lg border border-slate-200 bg-slate-50 px-2 py-2 font-mono text-base text-slate-800 sm:py-1.5 sm:text-[11.5px]"
               />
             </label>
             <label className="flex flex-col gap-1 text-[10.5px] font-semibold uppercase tracking-[0.07em] text-slate-400">
@@ -290,7 +327,7 @@ export default function PrevieneFilters({
                 type="date"
                 value={filters.hasta}
                 onChange={(event) => onChange({ ...filters, hasta: event.target.value })}
-                className="w-full rounded-lg border border-slate-200 bg-slate-50 px-2 py-1.5 font-mono text-[11.5px] text-slate-800"
+                className="w-full rounded-lg border border-slate-200 bg-slate-50 px-2 py-2 font-mono text-base text-slate-800 sm:py-1.5 sm:text-[11.5px]"
               />
             </label>
             <div className="mt-2.5 flex gap-1.5 border-t border-slate-200 pt-2.5">
@@ -305,7 +342,7 @@ export default function PrevieneFilters({
                     hasta: now.toISOString().slice(0, 10),
                   });
                 }}
-                className="flex-1 rounded-lg border border-slate-200 px-2 py-1.5 text-[11.5px] text-slate-500 hover:bg-slate-50"
+                className="flex-1 rounded-lg border border-slate-200 px-2 py-2.5 text-[11.5px] text-slate-500 hover:bg-slate-50 sm:py-1.5"
               >
                 30 días
               </button>
@@ -315,14 +352,14 @@ export default function PrevieneFilters({
                   const year = new Date().getUTCFullYear();
                   onChange({ ...filters, desde: `${year}-01-01`, hasta: `${year}-12-31` });
                 }}
-                className="flex-1 rounded-lg border border-slate-200 px-2 py-1.5 text-[11.5px] text-slate-500 hover:bg-slate-50"
+                className="flex-1 rounded-lg border border-slate-200 px-2 py-2.5 text-[11.5px] text-slate-500 hover:bg-slate-50 sm:py-1.5"
               >
                 Año actual
               </button>
               <button
                 type="button"
                 onClick={() => onChange({ ...filters, ...DEFAULT_RANGE })}
-                className="flex-1 rounded-lg border border-slate-200 px-2 py-1.5 text-[11.5px] text-slate-500 hover:bg-slate-50"
+                className="flex-1 rounded-lg border border-slate-200 px-2 py-2.5 text-[11.5px] text-slate-500 hover:bg-slate-50 sm:py-1.5"
               >
                 Todo
               </button>

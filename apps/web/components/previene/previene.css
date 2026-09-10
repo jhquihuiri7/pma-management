@@ -37,3 +37,23 @@
 .previene-panel {
   animation: previene-slide-in 0.22s ease-out;
 }
+
+/* The shell must fill the screen exactly: the table scrolls inside it and the
+   map is absolutely positioned against it. On phones `100vh` is the height the
+   viewport has with the browser bars *retracted*, so it hides the bottom rows
+   under the address bar; `100dvh` is the height actually available and wins
+   wherever it is understood, with `100vh` left as the fallback. */
+.previene-shell {
+  height: 100vh;
+  height: 100dvh;
+}
+
+/* Leaflet sizes its touch targets for a mouse. Fingers get the recommended
+   minimum, and only on pointers that are actually coarse. */
+@media (pointer: coarse) {
+  .previene-map .leaflet-touch .leaflet-bar a {
+    width: 34px;
+    height: 34px;
+    line-height: 34px;
+  }
+}

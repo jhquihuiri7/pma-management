@@ -10,6 +10,8 @@ import PrevieneFilters, { DEFAULT_RANGE, type FilterState } from "@/components/p
 import ReportTable, { type SortDir, type SortKey } from "@/components/previene/ReportTable";
 import ReportDetail from "@/components/previene/ReportDetail";
 import MapLegend from "@/components/previene/MapLegend";
+import "@/components/previene/previene.css";
+import { SPLIT_VIEW_QUERY, useMediaQuery } from "@/lib/use-media-query";
 import type { PrevieneEventType, PrevieneReport, PrevieneStatus } from "@/lib/previene";
 
 type ViewMode = "split" | "map" | "table";
@@ -34,6 +36,12 @@ export default function PrevienePage() {
   const [syncing, setSyncing] = useState(false);
 
   const [view, setView] = useState<ViewMode>("split");
+  // Side by side needs room for both: the table's five columns alone ask for
+  // ~500px. Below that the split is not a smaller version of this screen, it is
+  // two unusable halves, so the narrow layout shows one pane at a time and the
+  // toggle drops to two options.
+  const splitAvailable = useMediaQuery(SPLIT_VIEW_QUERY);
+  const activeView: ViewMode = splitAvailable ? view : view === "split" ? "map" : view;
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [sortKey, setSortKey] = useState<SortKey>("fecha");
   const [sortDir, setSortDir] = useState<SortDir>("desc");
@@ -89,11 +97,12 @@ export default function PrevienePage() {
     // in the browser so ticking a box never costs a round trip.
   }, [load, filters.desde, filters.hasta]);
 
-  // Switching view mode resizes the map container; Leaflet needs to be told.
+  // Switching view mode — or crossing the breakpoint that decides it — resizes
+  // the map container; Leaflet needs to be told.
   useEffect(() => {
     const timer = setTimeout(() => mapRef.current?.invalidate(), 70);
     return () => clearTimeout(timer);
-  }, [view]);
+  }, [activeView]);
 
   const visible = useMemo(
     () =>
@@ -173,11 +182,28 @@ export default function PrevienePage() {
             ? "Sin sincronizaciones aún"
             : `API conectada · sincronizado hace ${status.ageMinutes} min`;
 
+  const viewOptions = splitAvailable
+    ? ([
+        ["split", "Mapa + tabla"],
+        ["map", "Solo mapa"],
+        ["table", "Solo tabla"],
+      ] as const)
+    : ([
+        ["map", "Mapa"],
+        ["table", "Tabla"],
+      ] as const);
+
   return (
-    <div className="flex h-screen flex-col bg-slate-100 text-slate-900">
-      <header className="flex h-[60px] flex-none items-center gap-5 border-b border-slate-200 bg-white px-5 py-3">
-        <Link href="/select-app" className="flex flex-none items-center gap-2.5" aria-label="Volver a aplicaciones">
-          <span className="flex h-[34px] w-[34px] items-center justify-center rounded-[10px] bg-emerald-600">
+    <div className="previene-shell flex flex-col bg-slate-100 text-slate-900">
+      {/* Narrow: brand and view toggle on one line, the connection status
+          wrapped onto a second one. Wide: the single 60px row it always was. */}
+      <header className="flex flex-none flex-wrap items-center gap-x-3 gap-y-1.5 border-b border-slate-200 bg-white px-3 py-2.5 sm:h-[60px] sm:flex-nowrap sm:gap-5 sm:px-5 sm:py-3">
+        <Link
+          href="/select-app"
+          className="flex min-w-0 flex-1 items-center gap-2.5 sm:flex-none"
+          aria-label="Volver a aplicaciones"
+        >
+          <span className="flex h-[34px] w-[34px] flex-none items-center justify-center rounded-[10px] bg-emerald-600">
             <svg width="19" height="19" viewBox="0 0 20 20" fill="none" aria-hidden>
               <path
                 d="M10 18s6-5.2 6-9.4A6 6 0 0 0 4 8.6C4 12.8 10 18 10 18Z"
@@ -188,13 +214,15 @@ export default function PrevienePage() {
               <circle cx="10" cy="8.4" r="2.1" fill="#fff" />
             </svg>
           </span>
-          <span className="flex flex-col gap-px">
-            <span className="text-[15px] font-semibold tracking-tight">Galápagos Previene</span>
-            <span className="text-[11.5px] text-slate-400">Visor de reportes ciudadanos</span>
+          <span className="flex min-w-0 flex-col gap-px">
+            <span className="truncate text-[14px] font-semibold tracking-tight sm:text-[15px]">
+              Galápagos Previene
+            </span>
+            <span className="hidden text-[11.5px] text-slate-400 sm:block">Visor de reportes ciudadanos</span>
           </span>
         </Link>
 
-        <div className="flex min-w-0 items-center gap-2 overflow-hidden rounded-full border border-slate-200 px-3 py-1.5 text-[11.5px] text-slate-500">
+        <div className="order-last flex w-full min-w-0 items-center gap-2 overflow-hidden rounded-full border border-slate-200 px-3 py-1.5 text-[11.5px] text-slate-500 sm:order-none sm:w-auto">
           <span
             className={`h-1.5 w-1.5 flex-none rounded-full ${degraded ? "bg-red-500" : "bg-emerald-500"}`}
             aria-hidden
@@ -202,21 +230,17 @@ export default function PrevienePage() {
           <span className="truncate">{statusLabel}</span>
         </div>
 
-        <div className="flex-1" />
+        <div className="hidden flex-1 sm:block" />
 
         <div className="flex flex-none items-center gap-1.5 rounded-[10px] border border-slate-200 bg-slate-50 p-1">
-          {([
-            ["split", "Mapa + tabla"],
-            ["map", "Solo mapa"],
-            ["table", "Solo tabla"],
-          ] as const).map(([mode, label]) => (
+          {viewOptions.map(([mode, label]) => (
             <button
               key={mode}
               type="button"
               onClick={() => setView(mode)}
-              aria-pressed={view === mode}
-              className={`rounded-md px-2.5 py-1.5 text-xs font-medium transition-colors ${
-                view === mode ? "bg-white text-emerald-700 shadow-sm" : "text-slate-500 hover:text-slate-700"
+              aria-pressed={activeView === mode}
+              className={`rounded-md px-3 py-2 text-xs font-medium transition-colors sm:px-2.5 sm:py-1.5 ${
+                activeView === mode ? "bg-white text-emerald-700 shadow-sm" : "text-slate-500 hover:text-slate-700"
               }`}
             >
               {label}
@@ -226,13 +250,15 @@ export default function PrevienePage() {
       </header>
 
       {degraded && (
-        <div className="flex flex-none items-center gap-3 border-b border-red-200 bg-red-50 px-5 py-2.5 text-[12.5px] text-red-800">
-          <span className="font-semibold">
+        <div className="flex flex-none flex-wrap items-center gap-x-3 gap-y-1.5 border-b border-red-200 bg-red-50 px-3 py-2.5 text-[12.5px] text-red-800 sm:flex-nowrap sm:px-5">
+          <span className="min-w-0 flex-1 font-semibold sm:flex-none">
             {loadError ?? (status?.configured === false
               ? "El módulo no tiene configurada la clave de la API de reportes."
               : "La API de reportes no responde.")}
           </span>
-          <span className="min-w-0 flex-1 truncate">
+          {/* Wide: one line, clipped. Narrow: the explanation wraps in full
+              rather than being cut to three words. */}
+          <span className="order-last w-full min-w-0 sm:order-none sm:w-auto sm:flex-1 sm:truncate">
             {status?.lastSuccessAt
               ? `Se muestran los últimos datos en caché · actualizados hace ${status.ageMinutes} min. Los medios nuevos no estarán disponibles hasta restablecer la conexión.`
               : "Todavía no hay datos en caché para mostrar."}
@@ -241,7 +267,7 @@ export default function PrevienePage() {
             type="button"
             onClick={() => void retry()}
             disabled={syncing}
-            className="flex-none rounded-lg bg-red-800 px-3 py-1.5 text-[11.5px] font-semibold text-white disabled:opacity-60"
+            className="flex-none rounded-lg bg-red-800 px-3 py-2 text-[11.5px] font-semibold text-white disabled:opacity-60 sm:py-1.5"
           >
             {syncing ? "Reintentando…" : "Reintentar"}
           </button>
@@ -258,10 +284,16 @@ export default function PrevienePage() {
         onReset={reset}
       />
 
-      <div className="relative flex min-h-0 flex-1">
+      {/* Column below the split breakpoint, row above it. Only one pane is ever
+          displayed in the column case, so its flex basis is always the whole
+          axis and the direction change needs no other adjustment. */}
+      <div className="relative flex min-h-0 flex-1 flex-col lg:flex-row">
         <div
-          className="relative min-w-0 border-r border-slate-200"
-          style={{ display: view === "table" ? "none" : "block", flex: view === "map" ? "1 1 100%" : "1 1 50%" }}
+          className="relative min-h-0 min-w-0 border-slate-200 lg:border-r"
+          style={{
+            display: activeView === "table" ? "none" : "block",
+            flex: activeView === "map" ? "1 1 100%" : "1 1 50%",
+          }}
         >
           <PrevieneMap
             ref={mapRef}
@@ -277,12 +309,14 @@ export default function PrevienePage() {
             <button
               type="button"
               onClick={() => mapRef.current?.fitAll()}
-              className="pointer-events-auto flex h-8 items-center gap-1.5 whitespace-nowrap rounded-lg border border-slate-200 bg-white px-2.5 text-[11.5px] font-medium text-slate-500 shadow-sm hover:bg-slate-50"
+              className="pointer-events-auto flex h-9 items-center gap-1.5 whitespace-nowrap rounded-lg border border-slate-200 bg-white px-3 text-[11.5px] font-medium text-slate-500 shadow-sm hover:bg-slate-50 sm:h-8 sm:px-2.5"
             >
               Ver todo
             </button>
+            {/* The coordinate readout is a desktop aid: on a phone it would eat
+                the width the map needs, and the position is the map itself. */}
             <div
-              className="pointer-events-auto flex items-center gap-2 rounded-lg border border-slate-200 bg-white px-2.5 py-1.5 shadow-sm"
+              className="pointer-events-auto hidden items-center gap-2 rounded-lg border border-slate-200 bg-white px-2.5 py-1.5 shadow-sm sm:flex"
               title="Centro del mapa y nivel de zoom"
             >
               <span className="font-mono text-[11px] text-slate-500">
@@ -292,13 +326,13 @@ export default function PrevienePage() {
             </div>
           </div>
 
-          <div className="pointer-events-none absolute bottom-3 left-3 z-[500]">
+          <div className="pointer-events-none absolute bottom-3 left-3 z-[500] max-w-[calc(100%-1.5rem)]">
             <MapLegend eventTypes={eventTypes} />
           </div>
 
           {!loading && visible.length === 0 && (
             <div className="absolute inset-0 z-[600] flex items-center justify-center bg-slate-100/70 backdrop-blur-[2px]">
-              <div className="max-w-[330px] rounded-2xl border border-slate-200 bg-white p-7 text-center shadow-xl">
+              <div className="mx-4 max-w-[330px] rounded-2xl border border-slate-200 bg-white p-5 text-center shadow-xl sm:p-7">
                 <div className="mb-2 text-sm font-semibold">Ningún reporte en este rango</div>
                 <p className="mb-4 text-[12.5px] leading-relaxed text-slate-500">
                   No hay reportes que cumplan los filtros de tipo, clase y fechas seleccionados.
@@ -322,10 +356,10 @@ export default function PrevienePage() {
         </div>
 
         <div
-          className="min-w-0 flex-col"
+          className="min-h-0 min-w-0 flex-col"
           style={{
-            display: view === "map" ? "none" : "flex",
-            flex: view === "table" ? "1 1 100%" : "1 1 50%",
+            display: activeView === "map" ? "none" : "flex",
+            flex: activeView === "table" ? "1 1 100%" : "1 1 50%",
           }}
         >
           <ReportTable
