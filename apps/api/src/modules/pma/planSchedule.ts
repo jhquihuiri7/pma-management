@@ -22,6 +22,11 @@ export type PlanScheduleInput = {
   startDate: string | null;
   createdAt: Date;
   reportPer: string;
+  /**
+   * Last month the plan is in force, as "YYYY-MM-DD". NULL leaves the calendar
+   * open-ended, which is how every plan behaved before 0028.
+   */
+  endDate?: string | null;
 };
 
 /** Reporting-period width in months. `report_per` is a 3-value pg enum. */
@@ -54,6 +59,19 @@ export function getBusinessMonthIndex(now = new Date()): number {
 
 function monthIndexOf(year: number, month: number): number {
   return year * 12 + month - 1;
+}
+
+/**
+ * Month index of a plan's end date, or null when it has none.
+ *
+ * The month containing the end date is *included*: a plan that stopped being in
+ * force on the 15th was in force for part of that month, and evidence already
+ * filed against it must not vanish because the day fell mid-month.
+ */
+export function getPlanEndIndex(plan: PlanScheduleInput): number | null {
+  const match = plan.endDate ? /^(\d{4})-(\d{2})-\d{2}$/.exec(plan.endDate) : null;
+  if (!match) return null;
+  return monthIndexOf(Number(match[1]), Number(match[2]));
 }
 
 export function monthKeyOf(index: number): string {
@@ -94,11 +112,22 @@ export type PlanCalendar = {
 
 export function getPlanCalendar(plan: PlanScheduleInput, now = new Date()): PlanCalendar {
   const originIndex = getPlanOriginIndex(plan);
-  const currentIndex = getBusinessMonthIndex(now);
+  // The plan's own end, when it has one, caps "now" for every purpose below.
+  // Clamping here rather than at each call site is deliberate: `currentIndex`
+  // and `currentBlockIndex` are what `getPlanPeriods`, the pending-activity
+  // notifications and the compliance grid all read, so an expired plan stops
+  // producing months and periods everywhere at once, and cannot stop in one
+  // place while still running in another.
+  const endIndex = getPlanEndIndex(plan);
+  const businessIndex = getBusinessMonthIndex(now);
+  const currentIndex = endIndex === null ? businessIndex : Math.min(businessIndex, endIndex);
   const blockSize = getBlockSize(plan.reportPer);
   // A plan whose start month is still in the future has no period in progress;
   // clamping to 0 keeps the first period visible with a zero count instead of
-  // producing a negative block index that matches nothing.
+  // producing a negative block index that matches nothing. The same clamp
+  // covers an end date inside the first block: the block it lands in is kept
+  // whole, so its period keeps the label its `pma_period_compliance` rows are
+  // stored under.
   const currentBlockIndex = Math.max(0, Math.floor((currentIndex - originIndex) / blockSize));
   return { originIndex, currentIndex, blockSize, currentBlockIndex };
 }

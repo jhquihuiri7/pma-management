@@ -52,10 +52,6 @@ const planCreateSchema = z.object({
   report_per: z.enum(["6 meses", "1 año", "2 años"]).default("6 meses"),
   tipo: z.preprocess(emptyToUndefined, z.enum(["Licencia", "Registro Ambiental", "N/A"]).optional()),
   fase: z.preprocess(emptyToUndefined, z.enum(["Planificación", "Construcción", "Operación", "Cierre"]).optional()),
-  enfoque: z.preprocess(
-    emptyToUndefined,
-    z.enum(["Prevenir impactos", "Controlar impactos", "Monitorear y optimizar", "Restaurar el ambiente"]).optional()
-  ),
   start_date: z.preprocess(emptyToUndefined, dateOnlySchema.optional()),
   visualization_url: z.preprocess(emptyToUndefined, httpUrlSchema.optional()),
   location: locationSchema.optional(),
@@ -71,10 +67,6 @@ const planUpdateSchema = z.object({
   report_per: z.enum(["6 meses", "1 año", "2 años"]).optional(),
   tipo: z.preprocess(emptyToNull, z.enum(["Licencia", "Registro Ambiental", "N/A"]).nullable().optional()),
   fase: z.preprocess(emptyToNull, z.enum(["Planificación", "Construcción", "Operación", "Cierre"]).nullable().optional()),
-  enfoque: z.preprocess(
-    emptyToNull,
-    z.enum(["Prevenir impactos", "Controlar impactos", "Monitorear y optimizar", "Restaurar el ambiente"]).nullable().optional()
-  ),
   start_date: z.preprocess(emptyToNull, dateOnlySchema.nullable().optional()),
   visualization_url: z.preprocess(emptyToNull, httpUrlSchema.nullable().optional()),
   location: locationSchema.nullable().optional(),
@@ -106,7 +98,7 @@ export async function rgdpPlansRoutes(app: FastifyInstance) {
     const u = req.user!;
     const plan = await createPlan(u.sub, {
       title: body.title, description: body.description, reportPer: body.report_per,
-      tipo: body.tipo, fase: body.fase, enfoque: body.enfoque,
+      tipo: body.tipo, fase: body.fase,
       startDate: body.start_date, visualizationUrl: body.visualization_url,
       location: body.location, ciiu: body.ciiu, zoneType: body.zoneType,
       coordinateFormat: body.coordinateFormat,
@@ -147,7 +139,7 @@ export async function rgdpPlansRoutes(app: FastifyInstance) {
     const body = planUpdateSchema.parse(req.body);
     return updatePlan(id, req.user!.sub, {
       title: body.title, description: body.description, reportPer: body.report_per,
-      tipo: body.tipo, fase: body.fase, enfoque: body.enfoque,
+      tipo: body.tipo, fase: body.fase,
       startDate: body.start_date, visualizationUrl: body.visualization_url,
       location: body.location, ciiu: body.ciiu, zoneType: body.zoneType,
       coordinateFormat: body.coordinateFormat,

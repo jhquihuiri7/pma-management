@@ -2,9 +2,11 @@ import assert from "node:assert/strict";
 import test from "node:test";
 
 import {
+  capToPlanEnd,
   createPeriodHelpers,
   getBusinessMonth,
   getItemRanges,
+  getPlanEndMonth,
   getPlanStartDate,
   getPlanPeriodsByMode,
 } from "../lib/planPeriods";
@@ -135,4 +137,75 @@ test("los periodos por bloque terminan en el bloque que contiene el mes actual",
   assert.equal(periods.at(-1)?.key, getPeriodLabel(getBusinessMonth()));
   // No clipped duplicate of the same block sneaks in.
   assert.equal(new Set(periods.map((p) => p.key)).size, periods.length);
+});
+
+// --- Fecha de fin: el calendario se detiene donde termina la vigencia -------
+
+/** Plan semestral iniciado hace `back` meses, opcionalmente ya vencido. */
+function endedPlan(back: number, endBack?: number) {
+  const today = getBusinessMonth();
+  const start = new Date(today.getFullYear(), today.getMonth() - back, 1);
+  const plan: { start_date: string; end_date?: string; createdAt: string; report_per: string } = {
+    start_date: dateOnly(start),
+    createdAt: `${dateOnly(start)}T00:00:00.000Z`,
+    report_per: "6 meses",
+  };
+  if (endBack !== undefined) {
+    const end = new Date(today.getFullYear(), today.getMonth() - endBack, 1);
+    // Día 15: el mes de la fecha de fin debe contar entero de todos modos.
+    plan.end_date = `${monthKey(end)}-15`;
+  }
+  return plan;
+}
+
+test("sin fecha de fin el tope sigue siendo el mes operativo", () => {
+  const plan = endedPlan(24);
+  assert.equal(getPlanEndMonth(plan), null);
+  const today = getBusinessMonth();
+  assert.equal(capToPlanEnd(today, plan).getTime(), today.getTime());
+});
+
+test("el tope del calendario es el mes de la fecha de fin, incluido", () => {
+  const plan = endedPlan(24, 6);
+  const today = getBusinessMonth();
+  const expected = new Date(today.getFullYear(), today.getMonth() - 6, 1);
+  assert.equal(capToPlanEnd(today, plan).getTime(), expected.getTime());
+  assert.equal(getPlanEndMonth(plan)!.getTime(), expected.getTime());
+});
+
+test("los rangos de un ítem no pasan de la fecha de fin", () => {
+  const plan = endedPlan(24, 6);
+  const endKey = monthKey(getPlanEndMonth(plan)!);
+  const months = getItemRanges(plan, "Mensual").flatMap((range) => range.monthKeys);
+
+  assert.ok(months.includes(endKey), "el mes de fin sigue visible");
+  assert.ok(months.every((key) => key <= endKey), `hay meses posteriores a ${endKey}`);
+  const selectable = getItemRanges(plan, "Mensual").flatMap((range) => range.selectableMonthKeys);
+  assert.ok(selectable.every((key) => key <= endKey), "se puede seleccionar un mes posterior al fin");
+});
+
+test("un plan vencido no muestra el mes siguiente de adelanto", () => {
+  const open = getItemRanges(endedPlan(24), "Mensual").flatMap((range) => range.monthKeys);
+  const today = monthKey(getBusinessMonth());
+  // El calendario abierto llega a hoy+1; el vencido se corta en su fin.
+  assert.ok(open.some((key) => key > today), "el plan vigente sí mira un mes adelante");
+});
+
+test("los periodos de reporte se cortan en la fecha de fin", () => {
+  const plan = endedPlan(24, 6);
+  const open = getPlanPeriodsByMode(endedPlan(24), "block").map((period) => period.key);
+  const ended = getPlanPeriodsByMode(plan, "block").map((period) => period.key);
+
+  assert.ok(ended.length > 0, "queda al menos un periodo");
+  assert.ok(ended.length < open.length, "se recortan periodos de la cola");
+  assert.deepEqual(open.slice(0, ended.length), ended, "solo se recorta la cola");
+});
+
+test("los periodos mensuales tampoco pasan de la fecha de fin", () => {
+  const plan = endedPlan(24, 6);
+  const endKey = monthKey(getPlanEndMonth(plan)!);
+  const keys = getPlanPeriodsByMode(plan, "monthly").map((period) => period.key);
+
+  assert.ok(keys.includes(endKey), "el mes de fin sigue siendo un periodo");
+  assert.ok(keys.every((key) => key <= endKey), `hay periodos posteriores a ${endKey}`);
 });

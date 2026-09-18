@@ -15,8 +15,8 @@ import {
 import { sql } from "drizzle-orm";
 import {
   pmaPlanTipoEnum,
+  pmaPlanEstadoEnum,
   planFaseEnum,
-  planEnfoqueEnum,
   planReporteEnum,
   zoneTypeEnum,
   evidenceValidationStatusEnum,
@@ -38,12 +38,28 @@ export const pmaPlans = pgTable(
     description: text("description").notNull().default(""),
     tipo: pmaPlanTipoEnum("tipo"),
     fase: planFaseEnum("fase"),
-    enfoque: planEnfoqueEnum("enfoque"),
+    // Label only, and deliberately so: no schedule, compliance figure, export
+    // or filter branches on it. Unlike `enfoque` — dropped in 0026 for being a
+    // field nobody read — being read by a person is the whole of its job.
+    estado: pmaPlanEstadoEnum("estado").notNull().default("Vigente"),
+    // Head of `pma_action_plan_activations`. Never written by `updatePlan`:
+    // every transition is stamped with its actor and motive in the same
+    // transaction that flips this flag, so it cannot stand without a reason
+    // behind it.
+    actionPlanActive: boolean("action_plan_active").notNull().default(false),
     reportPer: planReporteEnum("report_per").notNull(),
     // Required: it is the origin of every derived schedule and immutable after
     // creation, so a missing value would anchor the plan to its `created_at`
     // permanently. Migration 0024 backfilled and enforced this.
     startDate: date("start_date").notNull(),
+    // The month this falls in is the last one the plan's calendar shows: past
+    // it there are no months, no reporting periods, no chart columns and no
+    // month that accepts an evidence. NULL means the plan is open-ended, which
+    // is every plan in force and also the legacy rows marked 'Vencida' before
+    // 0028, which have no date to backfill. Set only on the transition to
+    // 'Vencida' and cleared on the way back to 'Vigente'; two CHECKs in 0028
+    // keep it at or after `start_date` and off any plan still 'Vigente'.
+    endDate: date("end_date"),
     visualizationUrl: text("visualization_url"),
     storagePath: text("storage_path"),
     location: jsonb("location"),
@@ -244,6 +260,38 @@ export const pmaPendingNotificationLog = pgTable(
   (t) => ({
     planPeriodIdx: index("pma_pending_notification_log_plan_period_idx").on(t.planId, t.periodKey),
     createdAtIdx: index("pma_pending_notification_log_created_at_idx").on(t.createdAt),
+  })
+);
+
+/**
+ * Audit trail for the Plan de Acción toggle. One row per transition —
+ * deactivations included — so the history reads as the whole cycle instead of
+ * only the state it ended in, and every row carries the motive that justified
+ * it. `pma_plans.action_plan_active` is this list's denormalized head and is
+ * written in the same transaction, so the two can never disagree.
+ */
+export const pmaActionPlanActivations = pgTable(
+  "pma_action_plan_activations",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    planId: uuid("plan_id")
+      .notNull()
+      .references(() => pmaPlans.id, { onDelete: "cascade" }),
+    /** True for an activation, false for a deactivation. */
+    active: boolean("active").notNull(),
+    reason: text("reason").notNull(),
+    // The actor may be deleted later; the denormalized name/email keep the
+    // record readable, which is the point of an audit row.
+    actorId: uuid("actor_id").references(() => users.id, { onDelete: "set null" }),
+    actorName: text("actor_name").notNull(),
+    actorEmail: text("actor_email").notNull(),
+    createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
+  },
+  (t) => ({
+    planCreatedAtIdx: index("pma_action_plan_activations_plan_created_at_idx").on(
+      t.planId,
+      t.createdAt
+    ),
   })
 );
 

@@ -27,6 +27,12 @@ type ActivityMonthInput = {
   startDate: string | null;
   createdAt: Date;
   periodicity: string;
+  /**
+   * PMA only, and only once a plan is 'Vencida': the last month it was in
+   * force. Undefined or null leaves the calendar open-ended. RGDP plans have
+   * no vigencia and never pass it.
+   */
+  endDate?: string | null;
   now?: Date;
 };
 
@@ -36,9 +42,12 @@ export function isActivityMonth(value: string): boolean {
 
 /** PMA accepts any month inside a reporting range, once that range has begun. */
 export function assertPmaActivityMonth(input: ActivityMonthInput): void {
-  const { targetIndex, originIndex, currentIndex } = getMonthIndexes(input);
+  const { targetIndex, originIndex, currentIndex, endIndex } = getMonthIndexes(input);
   const diff = targetIndex - originIndex;
   if (diff < 0) throw BadRequest("activityMonth cannot be before the plan start month");
+  // Checked before the range and future tests so an expired plan says so,
+  // instead of reporting a month inside its own past as "aún no ha iniciado".
+  assertNotAfterPlanEnd(targetIndex, endIndex);
 
   const interval = getInterval(input.periodicity);
   const rangeStart = originIndex + Math.floor(diff / interval) * interval;
@@ -54,9 +63,10 @@ export function assertPmaActivityMonth(input: ActivityMonthInput): void {
  * window to an arbitrary slice that the application calendar never exposes.
  */
 export function assertPmaPeriodStart(input: ActivityMonthInput): void {
-  const { targetIndex, originIndex, currentIndex } = getMonthIndexes(input);
+  const { targetIndex, originIndex, currentIndex, endIndex } = getMonthIndexes(input);
   const diff = targetIndex - originIndex;
   if (diff < 0) throw BadRequest("periodStart cannot be before the plan start month");
+  assertNotAfterPlanEnd(targetIndex, endIndex);
 
   const interval = getInterval(input.periodicity);
   if (diff % interval !== 0) {
@@ -82,6 +92,16 @@ export function assertRgdpActivityMonth(input: ActivityMonthInput): void {
   }
 }
 
+/**
+ * The month an end date falls in is the last one the plan accepts, not the
+ * first one it refuses: a plan that expired on the 15th was in force for part
+ * of that month, and the calendar shows it.
+ */
+function assertNotAfterPlanEnd(targetIndex: number, endIndex: number | null): void {
+  if (endIndex === null || targetIndex <= endIndex) return;
+  throw BadRequest("El mes es posterior a la fecha de fin del plan");
+}
+
 function getMonthIndexes(input: ActivityMonthInput) {
   const match = ACTIVITY_MONTH_PATTERN.exec(input.activityMonth);
   if (!match) throw BadRequest("activityMonth must use YYYY-MM format");
@@ -91,7 +111,9 @@ function getMonthIndexes(input: ActivityMonthInput) {
   const originIndex = start.year * 12 + start.month - 1;
   const now = monthParts(input.now ?? new Date());
   const currentIndex = now.year * 12 + now.month - 1;
-  return { targetIndex, originIndex, currentIndex };
+  const end = input.endDate ? /^(\d{4})-(\d{2})-\d{2}$/.exec(input.endDate) : null;
+  const endIndex = end ? Number(end[1]) * 12 + Number(end[2]) - 1 : null;
+  return { targetIndex, originIndex, currentIndex, endIndex };
 }
 
 function parsePlanStart(startDate: string | null, createdAt: Date): { year: number; month: number } {

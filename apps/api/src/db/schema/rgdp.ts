@@ -15,7 +15,6 @@ import { sql } from "drizzle-orm";
 import {
   planTipoEnum,
   planFaseEnum,
-  planEnfoqueEnum,
   planReporteEnum,
   zoneTypeEnum,
   evidenceValidationStatusEnum,
@@ -36,7 +35,6 @@ export const rgdpPlans = pgTable(
     description: text("description").notNull().default(""),
     tipo: planTipoEnum("tipo"),
     fase: planFaseEnum("fase"),
-    enfoque: planEnfoqueEnum("enfoque"),
     reportPer: planReporteEnum("report_per").notNull(),
     startDate: date("start_date"),
     visualizationUrl: text("visualization_url"),

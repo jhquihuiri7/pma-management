@@ -87,6 +87,7 @@ export async function createEvidence(_adminId: string, input: EvidenceCreateInpu
     assertPmaActivityMonth({
       activityMonth: input.activityMonth,
       startDate: planRow.startDate,
+      endDate: planRow.endDate,
       createdAt: planRow.createdAt,
       periodicity: planItem.periodicity,
     });
@@ -143,6 +144,7 @@ export async function createEvidence(_adminId: string, input: EvidenceCreateInpu
         assertPmaActivityMonth({
           activityMonth: input.activityMonth,
           startDate: freshPlan.startDate,
+          endDate: freshPlan.endDate,
           createdAt: freshPlan.createdAt,
           periodicity: freshItem.periodicity,
         });

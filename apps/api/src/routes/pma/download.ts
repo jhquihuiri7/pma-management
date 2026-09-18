@@ -58,6 +58,7 @@ export async function pmaDownloadRoutes(app: FastifyInstance) {
       .select({
         item: pmaPlanItems,
         planStartDate: pmaPlans.startDate,
+        planEndDate: pmaPlans.endDate,
         planCreatedAt: pmaPlans.createdAt,
       })
       .from(pmaPlanItems)
@@ -70,6 +71,7 @@ export async function pmaDownloadRoutes(app: FastifyInstance) {
     assertPmaPeriodStart({
       activityMonth: query.periodStart,
       startDate: itemResult.planStartDate,
+      endDate: itemResult.planEndDate,
       createdAt: itemResult.planCreatedAt,
       periodicity: item.periodicity,
     });

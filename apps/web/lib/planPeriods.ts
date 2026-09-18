@@ -2,6 +2,11 @@ import { parseDateOnly } from "@/lib/dateOnly";
 
 interface PlanLike {
   start_date?: string | null;
+  /**
+   * Last day the plan was in force ("YYYY-MM-DD"), or null/absent when it is
+   * still open-ended. Set only on PMA plans marked 'Vencida'.
+   */
+  end_date?: string | null;
   createdAt: string;
   report_per?: string;
 }
@@ -59,6 +64,32 @@ export function getPlanStartDate(plan: PlanLike): Date {
   const explicitStart = parseDateOnly(plan.start_date ?? "");
   if (explicitStart) return explicitStart;
   return getBusinessCalendarDate(new Date(plan.createdAt));
+}
+
+/**
+ * First day of the month a plan stopped being in force, or null when it has no
+ * end. The month containing the end date counts as in force: a plan that ended
+ * on the 15th ran for half of it, and the evidence filed against that month
+ * must not disappear because the day fell mid-month.
+ */
+export function getPlanEndMonth(plan: PlanLike): Date | null {
+  const end = parseDateOnly(plan.end_date ?? "");
+  if (!end) return null;
+  return new Date(end.getFullYear(), end.getMonth(), 1);
+}
+
+/**
+ * `month`, or the plan's last month in force when that comes first.
+ *
+ * Every visible span in this file is built by walking from the plan start up to
+ * some ceiling derived from today. Running each of those ceilings through here
+ * is what makes an expired plan stop everywhere at once — calendar grid, item
+ * ranges, reporting periods and the chart columns built from them — rather than
+ * stopping in whichever views remembered to check.
+ */
+export function capToPlanEnd(month: Date, plan: PlanLike): Date {
+  const end = getPlanEndMonth(plan);
+  return end !== null && end < month ? end : month;
 }
 
 /**
@@ -137,9 +168,14 @@ export function getItemRanges(plan: PlanLike, periodicity?: string): ItemRange[]
   const interval = getPeriodicityInterval(periodicity);
   const planStartDate = getPlanStartDate(plan);
   const origin = new Date(planStartDate.getFullYear(), planStartDate.getMonth(), 1);
-  const todayMonth = getBusinessMonth();
-  // Calendar shows up to today + 1 month (its range end is today + 2, exclusive).
-  const lastVisible = new Date(todayMonth.getFullYear(), todayMonth.getMonth() + 1, 1);
+  const todayMonth = capToPlanEnd(getBusinessMonth(), plan);
+  // Calendar shows up to today + 1 month (its range end is today + 2, exclusive),
+  // but never past the month the plan stopped being in force — an expired plan
+  // has no next month to look ahead to.
+  const lastVisible = capToPlanEnd(
+    new Date(todayMonth.getFullYear(), todayMonth.getMonth() + 1, 1),
+    plan,
+  );
   const single = interval >= 1200;
 
   const ranges: ItemRange[] = [];
@@ -266,7 +302,7 @@ export function getPlanPeriodsByMode(
   const { isBlockEnd, getPeriodLabel } = createPeriodHelpers(plan);
   const planStartDate = getPlanStartDate(plan);
 
-  const today = getBusinessMonth();
+  const today = capToPlanEnd(getBusinessMonth(), plan);
   const rangeStart = new Date(planStartDate.getFullYear(), planStartDate.getMonth(), 1);
   // Exclusive end: include the current month, never a future monthly period.
   const rangeEnd = new Date(today.getFullYear(), today.getMonth() + 1, 1);
@@ -301,7 +337,7 @@ export function getPlanPeriodsByMode(
 
 function getMonthlyPlanPeriods(plan: PlanLike): { key: string; label: string }[] {
   const planStartDate = getPlanStartDate(plan);
-  const today = getBusinessMonth();
+  const today = capToPlanEnd(getBusinessMonth(), plan);
   const rangeStart = new Date(planStartDate.getFullYear(), planStartDate.getMonth(), 1);
   const rangeEnd = new Date(today.getFullYear(), today.getMonth() + 1, 1);
 

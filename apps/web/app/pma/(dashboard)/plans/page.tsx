@@ -18,7 +18,7 @@ import {
 } from "@/components/ui/dialog";
 import { Plus, ArrowRight, Pencil, Map } from "lucide-react";
 import { toast } from "sonner";
-import { Plan, PMA_PLAN_TIPO_VALUES, PLAN_FASE_VALUES, PLAN_ENFOQUE_VALUES, PLAN_REPORTE_VALUES } from "@/types";
+import { Plan, PMA_PLAN_TIPO_VALUES, PLAN_FASE_VALUES, PLAN_REPORTE_VALUES, PMA_PLAN_ESTADO_VALUES } from "@/types";
 import { formatDateOnly } from "@/lib/dateOnly";
 
 export default function PlansPage() {
@@ -31,11 +31,11 @@ export default function PlansPage() {
   const [open, setOpen] = useState(false);
   const [editOpen, setEditOpen] = useState(false);
   const [editingPlan, setEditingPlan] = useState<Plan | null>(null);
-  const [form, setForm] = useState({ title: "", description: "", tipo: "", fase: "", enfoque: "", report_per: "6 meses", start_date: "", visualization_url: "" });
+  const [form, setForm] = useState({ title: "", description: "", tipo: "", fase: "", estado: "Vigente", report_per: "6 meses", start_date: "", end_date: "", visualization_url: "" });
   // `start_date` and `report_per` are deliberately absent: both are fixed at
   // creation (see the read-only fields in the edit dialog) and must never reach
   // PUT /pma/plans/:id, which rejects them outright.
-  const [editForm, setEditForm] = useState({ title: "", description: "", tipo: "", fase: "", enfoque: "", visualization_url: "" });
+  const [editForm, setEditForm] = useState({ title: "", description: "", tipo: "", fase: "", estado: "Vigente", end_date: "", visualization_url: "" });
   const plansLoadGenerationRef = useRef(0);
 
   async function loadPlans() {
@@ -64,7 +64,7 @@ export default function PlansPage() {
     onConfirmed: (created) => {
       plansLoadGenerationRef.current += 1;
       setPlans((current) => [created, ...current]);
-      setForm({ title: "", description: "", tipo: "", fase: "", enfoque: "", report_per: "6 meses", start_date: "", visualization_url: "" });
+      setForm({ title: "", description: "", tipo: "", fase: "", estado: "Vigente", report_per: "6 meses", start_date: "", end_date: "", visualization_url: "" });
       setOpen(false);
     },
   });
@@ -97,7 +97,10 @@ export default function PlansPage() {
       description: plan.description || "",
       tipo: plan.tipo || "",
       fase: plan.fase || "",
-      enfoque: plan.enfoque || "",
+      // El plan siempre trae estado (columna NOT NULL); el fallback existe
+      // porque `estado` es opcional en la interfaz Plan, compartida con RGDP.
+      estado: plan.estado ?? "Vigente",
+      end_date: plan.end_date || "",
       visualization_url: plan.visualization_url || "",
     });
     setEditOpen(true);
@@ -141,7 +144,7 @@ export default function PlansPage() {
               <Plus className="w-4 h-4 mr-2" />
               Crear Plan
             </DialogTrigger>
-            <DialogContent>
+            <DialogContent className="max-h-[90vh] overflow-y-auto">
               <DialogHeader>
                 <DialogTitle>Crear Nuevo Plan</DialogTitle>
               </DialogHeader>
@@ -197,16 +200,20 @@ export default function PlansPage() {
                   </select>
                 </div>
                 <div className="space-y-2">
-                  <Label htmlFor="enfoque">Enfoque clave</Label>
+                  <Label htmlFor="estado">Estado</Label>
                   <select
-                    id="enfoque"
+                    id="estado"
                     className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
-                    value={form.enfoque}
-                    onChange={(e) => setForm({ ...form, enfoque: e.target.value })}
-                    required
+                    value={form.estado}
+                    onChange={(e) =>
+                      setForm({
+                        ...form,
+                        estado: e.target.value,
+                        end_date: e.target.value === "Vencida" ? form.end_date : "",
+                      })
+                    }
                   >
-                    <option value="" disabled>Seleccionar enfoque...</option>
-                    {PLAN_ENFOQUE_VALUES.map(enfoque => <option key={enfoque} value={enfoque}>{enfoque}</option>)}
+                    {PMA_PLAN_ESTADO_VALUES.map(estado => <option key={estado} value={estado}>{estado}</option>)}
                   </select>
                 </div>
                 <div className="space-y-2">
@@ -234,6 +241,26 @@ export default function PlansPage() {
                     required
                   />
                 </div>
+                {/* Un plan puede nacer ya Vencida (se registra uno antiguo);
+                    entonces la fecha de fin es obligatoria igual que en la
+                    edición, y la API aplica la misma regla. */}
+                {form.estado === "Vencida" && (
+                  <div className="space-y-2">
+                    <Label htmlFor="end_date">Fecha de Fin</Label>
+                    <Input
+                      id="end_date"
+                      type="date"
+                      required
+                      min={form.start_date || undefined}
+                      value={form.end_date}
+                      onChange={(e) => setForm({ ...form, end_date: e.target.value })}
+                    />
+                    <p className="text-xs text-muted-foreground">
+                      Último día en que el plan estuvo vigente: el cronograma no
+                      muestra meses ni periodos después de ese mes.
+                    </p>
+                  </div>
+                )}
                 <div className="space-y-2">
                   <Label htmlFor="visualization_url">URL de Visualización (Opcional)</Label>
                   <Input
@@ -293,6 +320,11 @@ export default function PlansPage() {
                 <p className="line-clamp-2 min-h-10 text-sm leading-relaxed text-slate-500">
                   {plan.description || "Sin descripción"}
                 </p>
+                {plan.actionPlanActive && (
+                  <span className="w-fit rounded-full bg-slate-800 px-2.5 py-0.5 text-xs font-medium text-white">
+                    Plan de Acción activo
+                  </span>
+                )}
                 <div className="space-y-1.5">
                   {plan.tipo && (
                     <div className="flex items-center justify-between">
@@ -310,14 +342,16 @@ export default function PlansPage() {
                       </span>
                     </div>
                   )}
-                  {plan.enfoque && (
-                    <div className="flex items-center justify-between">
-                      <span className="text-xs text-slate-400">Enfoque:</span>
-                      <span className="rounded-full bg-emerald-50 px-2 py-0.5 text-xs font-medium text-emerald-700">
-                        {plan.enfoque}
-                      </span>
-                    </div>
-                  )}
+                  <div className="flex items-center justify-between">
+                    <span className="text-xs text-slate-400">Estado:</span>
+                    <span className={`rounded-full px-2 py-0.5 text-xs font-medium ${
+                      (plan.estado ?? "Vigente") === "Vencida"
+                        ? "bg-amber-100 text-amber-700"
+                        : "bg-emerald-50 text-emerald-700"
+                    }`}>
+                      {plan.estado ?? "Vigente"}
+                    </span>
+                  </div>
                   <div className="flex items-center justify-between">
                     <span className="text-xs text-slate-400">Reporte:</span>
                     <span className="rounded-full bg-slate-100 px-2 py-0.5 text-xs font-medium text-slate-700">
@@ -329,6 +363,14 @@ export default function PlansPage() {
                       <span className="text-xs text-slate-400">Fecha inicio:</span>
                       <span className="rounded-full bg-slate-100 px-2 py-0.5 text-xs font-medium text-slate-700">
                         {formatDateOnly(plan.start_date)}
+                      </span>
+                    </div>
+                  )}
+                  {plan.end_date && (
+                    <div className="flex items-center justify-between">
+                      <span className="text-xs text-slate-400">Fecha fin:</span>
+                      <span className="rounded-full bg-red-50 px-2 py-0.5 text-xs font-medium text-red-700">
+                        {formatDateOnly(plan.end_date)}
                       </span>
                     </div>
                   )}
@@ -379,7 +421,7 @@ export default function PlansPage() {
 
       {/* Edit Plan Dialog */}
       <Dialog open={editOpen} onOpenChange={setEditOpen}>
-        <DialogContent>
+        <DialogContent className="max-h-[90vh] overflow-y-auto">
           <DialogHeader>
             <DialogTitle>Editar Plan</DialogTitle>
           </DialogHeader>
@@ -435,18 +477,44 @@ export default function PlansPage() {
               </select>
             </div>
             <div className="space-y-2">
-              <Label htmlFor="edit-enfoque">Enfoque clave</Label>
+              <Label htmlFor="edit-estado">Estado</Label>
               <select
-                id="edit-enfoque"
+                id="edit-estado"
                 className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
-                value={editForm.enfoque}
-                onChange={(e) => setEditForm({ ...editForm, enfoque: e.target.value })}
-                required
+                value={editForm.estado}
+                onChange={(e) =>
+                  setEditForm({
+                    ...editForm,
+                    estado: e.target.value,
+                    // Volver a Vigente vacía la fecha: un plan en vigencia no
+                    // lleva fin, y la API rechaza el par contradictorio.
+                    end_date: e.target.value === "Vencida" ? editForm.end_date : "",
+                  })
+                }
               >
-                <option value="" disabled>Seleccionar enfoque...</option>
-                {PLAN_ENFOQUE_VALUES.map(enfoque => <option key={enfoque} value={enfoque}>{enfoque}</option>)}
+                {PMA_PLAN_ESTADO_VALUES.map(estado => <option key={estado} value={estado}>{estado}</option>)}
               </select>
             </div>
+            {/* Solo con Vencida: la fecha es obligatoria porque marca hasta
+                dónde llega el cronograma del plan. Pasar de nuevo a Vigente la
+                borra, y el campo desaparece. */}
+            {editForm.estado === "Vencida" && (
+              <div className="space-y-2">
+                <Label htmlFor="edit-end_date">Fecha de Fin</Label>
+                <Input
+                  id="edit-end_date"
+                  type="date"
+                  required
+                  min={editingPlan?.start_date ?? undefined}
+                  value={editForm.end_date}
+                  onChange={(e) => setEditForm({ ...editForm, end_date: e.target.value })}
+                />
+                <p className="text-xs text-muted-foreground">
+                  Último día en que el plan estuvo vigente. Después de este mes
+                  el cronograma y los gráficos no muestran más meses ni periodos.
+                </p>
+              </div>
+            )}
             {/* Periodo de reporte: solo lectura. Junto con la fecha de inicio
                 define la rejilla de periodos, y cambiarlo invalida de golpe
                 todas las claves de cumplimiento del plan (ninguna etiqueta

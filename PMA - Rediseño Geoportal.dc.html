@@ -320,7 +320,6 @@
               <p style="margin:0 0 14px;font-size:12px;line-height:1.5;color:#64748b">{{ pl.desc }}</p>
               <div style="display:flex;flex-direction:column;gap:7px;padding-bottom:13px;border-bottom:1px solid #f1f5f9">
                 <div style="display:flex;align-items:center;justify-content:space-between"><span style="font-size:11px;color:#94a3b8">Tipo</span><span style="font-size:11px;font-weight:500;color:#475569;background:#f1f5f9;padding:2px 8px;border-radius:999px">{{ pl.type }}</span></div>
-                <div style="display:flex;align-items:center;justify-content:space-between"><span style="font-size:11px;color:#94a3b8">Enfoque</span><span style="font-size:11px;font-weight:500;color:#0f766e;background:#ccfbf1;padding:2px 8px;border-radius:999px">{{ pl.focus }}</span></div>
                 <div style="display:flex;align-items:center;justify-content:space-between"><span style="font-size:11px;color:#94a3b8">Reporte</span><span style="font-size:11px;font-weight:500;color:#475569;background:#f1f5f9;padding:2px 8px;border-radius:999px">{{ pl.freq }}</span></div>
                 <div style="display:flex;align-items:center;justify-content:space-between"><span style="font-size:11px;color:#94a3b8">Fecha inicio</span><span style="font-size:11px;font-weight:500;color:#475569">{{ pl.start }}</span></div>
               </div>
@@ -562,9 +561,9 @@ const PLAN_DATA = [
 ];
 
 const PLANS = [
-  ["PMA Muelle de Cabotaje Puerto Ayora", "Medidas de prevención, monitoreo y contingencia para la operación del muelle de cabotaje en Puerto Ayora.", "Operación", "Licencia", "Controlar impactos", "6 meses", "01/03/2024", 28, "linear-gradient(to bottom right,#2dd4bf,#0d9488)"],
-  ["PMA Relleno Sanitario Santa Cruz", "Gestión de lixiviados, cobertura de celdas y control de vectores en el relleno sanitario cantonal.", "Operación", "Registro", "Mitigar impactos", "1 año", "15/08/2023", 19, "linear-gradient(to bottom right,#4ade80,#059669)"],
-  ["PMA Vía Baltra – Puerto Ayora", "Manejo ambiental del mantenimiento vial, control de polvo y protección de fauna en el corredor vial.", "Construcción", "Licencia", "Prevenir impactos", "3 meses", "10/01/2026", 15, "linear-gradient(to bottom right,#38bdf8,#0369a1)"],
+  ["PMA Muelle de Cabotaje Puerto Ayora", "Medidas de prevención, monitoreo y contingencia para la operación del muelle de cabotaje en Puerto Ayora.", "Operación", "Licencia", "6 meses", "01/03/2024", 28, "linear-gradient(to bottom right,#2dd4bf,#0d9488)"],
+  ["PMA Relleno Sanitario Santa Cruz", "Gestión de lixiviados, cobertura de celdas y control de vectores en el relleno sanitario cantonal.", "Operación", "Registro", "1 año", "15/08/2023", 19, "linear-gradient(to bottom right,#4ade80,#059669)"],
+  ["PMA Vía Baltra – Puerto Ayora", "Manejo ambiental del mantenimiento vial, control de polvo y protección de fauna en el corredor vial.", "Construcción", "Licencia", "3 meses", "10/01/2026", 15, "linear-gradient(to bottom right,#38bdf8,#0369a1)"],
 ];
 
 const PHASES = [
@@ -681,8 +680,8 @@ class Component extends DCLogic {
         };
       }),
 
-      plans: PLANS.map(([name, desc, phase, type, focus, freq, start, count, grad]) => ({
-        name, desc, phase, type, focus, freq, start,
+      plans: PLANS.map(([name, desc, phase, type, freq, start, count, grad]) => ({
+        name, desc, phase, type, freq, start,
         itemsLabel: count + " ítems",
         coverStyle: "height:84px;background:" + grad + ";position:relative;display:flex;align-items:center;justify-content:center",
         onOpen: () => this.setState({ screen: "detail" }),

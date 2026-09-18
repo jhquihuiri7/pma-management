@@ -107,7 +107,12 @@ async function assertPlanItems(
 ) {
   const uniqueIds = [...new Set(planItemIds)];
   const [plan] = await tx
-    .select({ reportPer: pmaPlans.reportPer, startDate: pmaPlans.startDate, createdAt: pmaPlans.createdAt })
+    .select({
+      reportPer: pmaPlans.reportPer,
+      startDate: pmaPlans.startDate,
+      endDate: pmaPlans.endDate,
+      createdAt: pmaPlans.createdAt,
+    })
     .from(pmaPlans)
     .where(eq(pmaPlans.id, planId))
     .limit(1);
@@ -138,9 +143,17 @@ function monthLabelEs(monthIndex: number): string {
  * the web UI so the client-supplied `periodKey` matches byte-for-byte. `now` is
  * injectable for deterministic testing. Throws for unsupported report periods or
  * plans that have not started yet.
+ *
+ * An `endDate` caps how far the set runs: an expired plan enables no period
+ * that begins after the month it ended in, so grading one is refused the same
+ * way grading a period that has not started yet is. The block the end date
+ * falls *inside* is still enabled and still spelled as the whole block
+ * ("mar-ago 2026" even when the plan ended in June), because that spelling is
+ * the primary key its `pma_period_compliance` rows are already stored under —
+ * clipping the label to the end month would strand every grade in it.
  */
 export function enabledPeriodKeys(
-  plan: { reportPer: string; startDate: string | null; createdAt: Date },
+  plan: { reportPer: string; startDate: string | null; endDate?: string | null; createdAt: Date },
   now: Date = new Date(),
 ): Set<string> {
   const blockSize = plan.reportPer === "2 años" ? 24 : plan.reportPer === "1 año" ? 12 : plan.reportPer === "6 meses" ? 6 : 0;
@@ -152,9 +165,13 @@ export function enabledPeriodKeys(
   const current = businessMonth(now);
   const currentDiff = (current.year - origin.year) * 12 + current.month - origin.month;
   if (currentDiff < 0) throw BadRequest("El período del plan aún no ha iniciado");
+  const end = plan.endDate ? /^([0-9]{4})-([0-9]{2})-[0-9]{2}$/.exec(plan.endDate) : null;
+  const lastDiff = end
+    ? Math.min(currentDiff, (Number(end[1]) - origin.year) * 12 + Number(end[2]) - origin.month)
+    : currentDiff;
 
   const valid = new Set<string>();
-  for (let block = 0; block <= Math.floor(currentDiff / blockSize); block++) {
+  for (let block = 0; block <= Math.floor(lastDiff / blockSize); block++) {
     const startDate = new Date(Date.UTC(origin.year, origin.month - 1 + block * blockSize, 1));
     const endDate = new Date(Date.UTC(origin.year, origin.month - 1 + (block + 1) * blockSize - 1, 1));
     const startLabel = monthLabelEs(startDate.getUTCMonth());
@@ -167,7 +184,7 @@ export function enabledPeriodKeys(
 }
 
 function assertPeriodKey(
-  plan: { reportPer: string; startDate: string | null; createdAt: Date },
+  plan: { reportPer: string; startDate: string | null; endDate?: string | null; createdAt: Date },
   periodKey: string,
 ): void {
   if (!enabledPeriodKeys(plan).has(periodKey)) {

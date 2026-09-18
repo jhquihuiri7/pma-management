@@ -18,7 +18,6 @@ export type PlanCreateInput = {
   reportPer: "6 meses" | "1 año" | "2 años";
   tipo?: "Licencia" | "Registro Ambiental" | "N/A";
   fase?: "Planificación" | "Construcción" | "Operación" | "Cierre";
-  enfoque?: "Prevenir impactos" | "Controlar impactos" | "Monitorear y optimizar" | "Restaurar el ambiente";
   startDate?: string;
   visualizationUrl?: string;
   location?: unknown;
@@ -34,7 +33,6 @@ export type PlanUpdateInput = Partial<
     PlanCreateInput,
     | "tipo"
     | "fase"
-    | "enfoque"
     | "startDate"
     | "visualizationUrl"
     | "zoneType"
@@ -43,7 +41,6 @@ export type PlanUpdateInput = Partial<
 > & {
   tipo?: PlanCreateInput["tipo"] | null;
   fase?: PlanCreateInput["fase"] | null;
-  enfoque?: PlanCreateInput["enfoque"] | null;
   startDate?: string | null;
   visualizationUrl?: string | null;
   zoneType?: PlanCreateInput["zoneType"] | null;
@@ -61,7 +58,6 @@ export async function createPlan(actorId: string, input: PlanCreateInput) {
         description: input.description ?? "",
         tipo: input.tipo,
         fase: input.fase,
-        enfoque: input.enfoque,
         reportPer: input.reportPer,
         startDate: input.startDate ?? null,
         visualizationUrl: input.visualizationUrl ?? null,

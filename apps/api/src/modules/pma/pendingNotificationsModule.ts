@@ -328,6 +328,10 @@ export async function getPendingByReporter(
     startDate: plan.startDate,
     createdAt: plan.createdAt,
     reportPer: plan.reportPer,
+    // An expired plan stops owing activities: without this the dialog would go
+    // on claiming periods that begin after the plan ended, and the reminder
+    // emails would chase reporters for months the calendar no longer shows.
+    endDate: plan.endDate,
   });
   const { occurrences, reporters } = await collectPendingOccurrences(plan, calendar);
   const periods = buildPeriodCounts(calendar, occurrences);

@@ -32,7 +32,6 @@ export function toRgdpPlanApi(row: PlanRow): Plan {
     description: row.description,
     tipo: row.tipo ?? undefined,
     fase: row.fase ?? undefined,
-    enfoque: row.enfoque ?? undefined,
     report_per: row.reportPer,
     start_date: toDateOnly(row.startDate),
     visualization_url: row.visualizationUrl,

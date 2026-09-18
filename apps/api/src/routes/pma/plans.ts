@@ -3,7 +3,7 @@ import { z } from "zod";
 // Taken from the pg enum rather than @pma/types, as in evidences.ts: that
 // package ships raw TypeScript, so only `import type` is safe from it. This
 // also pins the accepted categories to the column.
-import { pmaPlanTipoEnum } from "../../db/schema/enums.js";
+import { pmaPlanEstadoEnum, pmaPlanTipoEnum } from "../../db/schema/enums.js";
 import { authenticate, requireRole, requireApp } from "../../auth/middleware.js";
 import { BadRequest, Forbidden } from "../../lib/errors.js";
 import {
@@ -28,10 +28,7 @@ export const planCreateSchema = z.object({
   report_per: z.enum(["6 meses", "1 año", "2 años"]).default("6 meses"),
   tipo: z.preprocess(emptyToUndefined, z.enum(pmaPlanTipoEnum.enumValues).optional()),
   fase: z.preprocess(emptyToUndefined, z.enum(["Planificación", "Construcción", "Operación", "Cierre"]).optional()),
-  enfoque: z.preprocess(
-    emptyToUndefined,
-    z.enum(["Prevenir impactos", "Controlar impactos", "Monitorear y optimizar", "Restaurar el ambiente"]).optional(),
-  ),
+  estado: z.preprocess(emptyToUndefined, z.enum(pmaPlanEstadoEnum.enumValues).optional()),
   // Required, and immutable afterwards (see assertScheduleFieldsNotEdited): it
   // is the origin of the whole schedule, so leaving it out would anchor the plan
   // to its creation timestamp with no way to correct it later.
@@ -41,6 +38,16 @@ export const planCreateSchema = z.object({
       .string({ required_error: "La fecha de inicio es obligatoria: define el cronograma del plan y no se puede cambiar después de crearlo" })
       .regex(/^\d{4}-(0[1-9]|1[0-2])-(0[1-9]|[12]\d|3[01])$/)
       .refine(isRealDate, "Fecha inválida"),
+  ),
+  // Accepted on creation so a plan entered straight as 'Vencida' can carry its
+  // date. `plansModule` decides whether it is required or forbidden, from the
+  // `estado` this request resolves to.
+  end_date: z.preprocess(
+    emptyToNull,
+    z
+      .string()
+      .regex(/^\d{4}-(0[1-9]|1[0-2])-(0[1-9]|[12]\d|3[01])$/, "Fecha inválida")
+      .refine(isRealDate, "Fecha inválida").nullable().optional(),
   ),
   visualization_url: z.preprocess(
     emptyToUndefined,
@@ -53,15 +60,27 @@ export const planUpdateSchema = z.object({
   description: z.string().max(20_000).optional(),
   tipo: z.preprocess(emptyToNull, z.enum(pmaPlanTipoEnum.enumValues).nullable().optional()),
   fase: z.preprocess(emptyToNull, z.enum(["Planificación", "Construcción", "Operación", "Cierre"]).nullable().optional()),
-  enfoque: z.preprocess(
-    emptyToNull,
-    z.enum(["Prevenir impactos", "Controlar impactos", "Monitorear y optimizar", "Restaurar el ambiente"]).nullable().optional(),
-  ),
+  // Not nullable, unlike `tipo` and `fase`: the column is NOT NULL, so an
+  // empty value means "no lo estoy cambiando" and never "bórralo".
+  estado: z.preprocess(emptyToUndefined, z.enum(pmaPlanEstadoEnum.enumValues).optional()),
   // `start_date` is absent on purpose. It is the origin of every derived
   // schedule — reporting-period blocks, item evidence ranges, deadline months
   // and the months that accept an upload — so moving it after creation
   // silently reshapes the plan's calendar and strands the compliance rows keyed
   // to the old grid. It is set once, at creation.
+  //
+  // `end_date` is editable, unlike its counterpart: it only trims or extends
+  // the tail of the calendar, leaving the origin — and therefore every period
+  // key and storage folder — exactly where it was. Sending it explicitly as
+  // null is how a plan returning to 'Vigente' clears it, so the field is
+  // nullable rather than merely optional.
+  end_date: z.preprocess(
+    emptyToNull,
+    z
+      .string()
+      .regex(/^\d{4}-(0[1-9]|1[0-2])-(0[1-9]|[12]\d|3[01])$/, "Fecha inválida")
+      .refine(isRealDate, "Fecha inválida").nullable().optional(),
+  ),
   visualization_url: z.preprocess(
     emptyToNull,
     z.string().url().refine(isHttpUrl, "Solo se permiten URLs HTTP(S)").nullable().optional(),
@@ -106,6 +125,28 @@ export function assertScheduleFieldsNotEdited(body: unknown): void {
   );
 }
 
+/**
+ * Refuse an attempt to flip the Plan de Acción through a plan update.
+ *
+ * The flag is the head of `pma_action_plan_activations`, and its own endpoint
+ * writes the transition's motive and actor in the same transaction that flips
+ * it. Setting it from here would leave the plan activated with nobody's name
+ * and no reason on record. Both spellings are named because `toApi` serializes
+ * the camelCase one, so a client echoing back the plan it just read would
+ * otherwise have the key stripped in silence.
+ *
+ * Exported so the refusal is testable without standing up auth and a database.
+ */
+const ACTION_PLAN_FIELDS = ["action_plan_active", "actionPlanActive"];
+
+export function assertActionPlanNotEdited(body: unknown): void {
+  if (!body || typeof body !== "object") return;
+  if (!ACTION_PLAN_FIELDS.some((field) => field in body)) return;
+  throw BadRequest(
+    "El plan de acción no se activa desde la edición del plan: usa su propia acción, que exige un motivo y deja registro de quién lo cambió",
+  );
+}
+
 export async function pmaPlansRoutes(app: FastifyInstance) {
   app.addHook("preHandler", authenticate);
   app.addHook("preHandler", requireApp("pma"));
@@ -126,8 +167,9 @@ export async function pmaPlansRoutes(app: FastifyInstance) {
       reportPer: body.report_per,
       tipo: body.tipo,
       fase: body.fase,
-      enfoque: body.enfoque,
+      estado: body.estado,
       startDate: body.start_date,
+      endDate: body.end_date,
       visualizationUrl: body.visualization_url,
     });
     reply.status(201);
@@ -159,6 +201,7 @@ export async function pmaPlansRoutes(app: FastifyInstance) {
   app.put("/:id", { preHandler: requireRole("ADMIN", "VIEWER") }, async (req) => {
     const { id } = idParamsSchema.parse(req.params);
     assertScheduleFieldsNotEdited(req.body);
+    assertActionPlanNotEdited(req.body);
     const body = planUpdateSchema.parse(req.body);
     const u = req.user!;
     // ADMINs pass through; non-admins (e.g. VIEWER) must be assigned to the plan.
@@ -168,7 +211,8 @@ export async function pmaPlansRoutes(app: FastifyInstance) {
       description: body.description,
       tipo: body.tipo,
       fase: body.fase,
-      enfoque: body.enfoque,
+      estado: body.estado,
+      endDate: body.end_date,
       visualizationUrl: body.visualization_url,
     });
   });

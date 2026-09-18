@@ -18,18 +18,17 @@ export const pmaPlanTipoEnum = pgEnum("pma_plan_tipo", [
   "No Aplica",
 ]);
 
+// Whether the instrument behind the plan is still in force. Declared by hand:
+// a PMA carries no expiry date in this system, so nothing can derive the value
+// and an administrator states it. Kept PMA-only for the same reason
+// `pma_plan_tipo` is — RGDP's permits are not classified this way.
+export const pmaPlanEstadoEnum = pgEnum("pma_plan_estado", ["Vigente", "Vencida"]);
+
 export const planFaseEnum = pgEnum("plan_fase", [
   "Planificación",
   "Construcción",
   "Operación",
   "Cierre",
-]);
-
-export const planEnfoqueEnum = pgEnum("plan_enfoque", [
-  "Prevenir impactos",
-  "Controlar impactos",
-  "Monitorear y optimizar",
-  "Restaurar el ambiente",
 ]);
 
 export const planReporteEnum = pgEnum("plan_reporte", ["6 meses", "1 año", "2 años"]);

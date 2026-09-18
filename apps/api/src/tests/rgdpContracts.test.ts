@@ -27,7 +27,6 @@ test("RGDP serializers expose snake_case fields and numeric JSON values", () => 
     description: "Descripción",
     tipo: "Licencia",
     fase: "Operación",
-    enfoque: "Controlar impactos",
     reportPer: "1 año",
     startDate: "2026-01-15",
     visualizationUrl: "https://example.test/map",

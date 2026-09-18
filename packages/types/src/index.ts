@@ -37,11 +37,19 @@ export const PMA_PLAN_TIPO_VALUES = [
 ] as const;
 export type PmaPlanTipo = typeof PMA_PLAN_TIPO_VALUES[number];
 
+/**
+ * Whether the instrument behind a PMA plan is still in force. Declared by an
+ * administrator rather than derived — nothing computes it from a date — but no
+ * longer only a label: 'Vencida' requires an `end_date`, and that date is where
+ * the plan's calendar, reporting periods and charts stop. PMA-only, like
+ * `PMA_PLAN_TIPO_VALUES` — RGDP plans have no equivalent and the API rejects
+ * the field on RGDP routes.
+ */
+export const PMA_PLAN_ESTADO_VALUES = ["Vigente", "Vencida"] as const;
+export type PmaPlanEstado = typeof PMA_PLAN_ESTADO_VALUES[number];
+
 export const PLAN_FASE_VALUES = ["Planificación", "Construcción", "Operación", "Cierre"] as const;
 export type PlanFase = typeof PLAN_FASE_VALUES[number];
-
-export const PLAN_ENFOQUE_VALUES = ["Prevenir impactos", "Controlar impactos", "Monitorear y optimizar", "Restaurar el ambiente"] as const;
-export type PlanEnfoque = typeof PLAN_ENFOQUE_VALUES[number];
 
 export interface Plan {
   id: string;
@@ -51,9 +59,23 @@ export interface Plan {
   description: string;
   tipo?: PlanTipo | PmaPlanTipo | null;
   fase?: PlanFase | null;
-  enfoque?: PlanEnfoque | null;
+  /** PMA only. Absent on RGDP plans, which have no vigencia. */
+  estado?: PmaPlanEstado;
+  /**
+   * PMA only. Read-only here: it is flipped by
+   * `POST /pma/plans/:planId/action-plan`, never by a plan update, so that no
+   * transition exists without its `PmaActionPlanActivation` row.
+   */
+  actionPlanActive?: boolean;
   report_per: PlanReporte;
   start_date?: string | null;
+  /**
+   * PMA only. Last day the plan was in force, set with `estado: "Vencida"` and
+   * cleared on the way back to "Vigente". Non-null caps the calendar: no month,
+   * reporting period or chart column past the month it falls in — that month
+   * included, since the plan was in force for part of it.
+   */
+  end_date?: string | null;
   visualization_url?: string | null;
   storagePath?: string | null;
   driveFolderId?: string;
@@ -339,4 +361,36 @@ export interface PendingNotificationsResult {
   ccCount: number;
   periodKey: string;
   failures: PendingNotificationFailure[];
+}
+
+/**
+ * One transition of a plan's Plan de Acción. Activations and deactivations are
+ * both recorded, so a plan's history is the whole cycle and not just its
+ * current state.
+ */
+export interface PmaActionPlanActivation {
+  id: string;
+  planId: string;
+  /** True for an activation, false for a deactivation. */
+  active: boolean;
+  reason: string;
+  actorId: string | null;
+  actorName: string;
+  actorEmail: string;
+  createdAt: string;
+}
+
+/** Payload of `GET /pma/plans/:planId/action-plan`. */
+export interface PmaActionPlanPayload {
+  planId: string;
+  active: boolean;
+  /** Newest transition first. */
+  activations: PmaActionPlanActivation[];
+}
+
+/** Payload of `POST /pma/plans/:planId/action-plan`. */
+export interface PmaActionPlanResult {
+  ok: true;
+  active: boolean;
+  activation: PmaActionPlanActivation;
 }

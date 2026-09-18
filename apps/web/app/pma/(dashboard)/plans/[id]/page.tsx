@@ -32,7 +32,7 @@ import {
   DialogTitle,
   DialogTrigger,
 } from "@/components/ui/dialog";
-import { Upload, ExternalLink, Trash2, Plus, Users, CheckCircle2, AlertTriangle, XCircle, Pencil, Download, FileSpreadsheet, OctagonAlert, ArrowLeft, ArrowUp, ArrowDown, ArrowUpDown, ChevronLeft, ChevronRight, Mail } from "lucide-react";
+import { Upload, ExternalLink, Trash2, Plus, Users, CheckCircle2, AlertTriangle, XCircle, Pencil, Download, FileSpreadsheet, OctagonAlert, ArrowLeft, ArrowUp, ArrowDown, ArrowUpDown, ChevronLeft, ChevronRight, Mail, ClipboardList } from "lucide-react";
 import { toast } from "sonner";
 import {
   Plan,
@@ -61,8 +61,14 @@ import {
   canonicalOption,
 } from "@/lib/planItemConstants";
 import { NotifyPendingDialog } from "@/components/pma/NotifyPendingDialog";
+import { ActionPlanDialog } from "@/components/pma/ActionPlanDialog";
+import {
+  setActionPlan,
+  type SetActionPlanInput,
+} from "@/app/pma/(dashboard)/plans/[id]/actions/action-plan";
 import { parseExcelFile, ParsedItemRow } from "@/lib/excelImport";
 import {
+  capToPlanEnd,
   createPeriodHelpers,
   getBusinessMonth,
   getItemRanges,
@@ -100,6 +106,10 @@ type ItemSortKey =
   | "observation";
 
 type ItemSort = { key: ItemSortKey; dir: "asc" | "desc" };
+
+// Orden inicial al abrir el plan: item de menor a mayor. El usuario puede
+// cambiarlo o quitarlo desde las cabeceras, pero nunca parte del orden del API.
+const DEFAULT_ITEM_SORT: ItemSort = { key: "item", dir: "asc" };
 
 // `numeric` keeps item codes in human order: "10" after "2", not after "1".
 const ITEM_COLLATOR = new Intl.Collator("es", { numeric: true, sensitivity: "base" });
@@ -300,13 +310,14 @@ export default function PlanDetailPage() {
   const [savingFinding, setSavingFinding] = useState(false);
   const [deletePlanOpen, setDeletePlanOpen] = useState(false);
   const [notifyPendingOpen, setNotifyPendingOpen] = useState(false);
+  const [actionPlanDialogOpen, setActionPlanDialogOpen] = useState(false);
   const [deletingPlan, setDeletingPlan] = useState(false);
   const [manualEvidenceOpen, setManualEvidenceOpen] = useState(false);
   const [manualEvidenceForm, setManualEvidenceForm] = useState(emptyManualEvidenceForm);
   const [uploadingManualEvidence, setUploadingManualEvidence] = useState(false);
   const [loadError, setLoadError] = useState<string | null>(null);
   const [mutationPending, setMutationPending] = useState(false);
-  const [itemSort, setItemSort] = useState<ItemSort | null>(null);
+  const [itemSort, setItemSort] = useState<ItemSort | null>(DEFAULT_ITEM_SORT);
   // Año visible del Cronograma; null = año actual (o el último en rango).
   const [cronoYear, setCronoYear] = useState<number | null>(null);
   const mutationPendingRef = useRef(false);
@@ -419,6 +430,30 @@ export default function PlanDetailPage() {
       router.push("/pma/plans");
     }, "Error al eliminar el plan");
     setDeletingPlan(false);
+  }
+
+  /**
+   * Toggles the Plan de Acción. The dialog owns the motivo and the history;
+   * this side owns the mutation so the toggle shares the page's single-flight
+   * guard, and re-reads the plan instead of patching the flag by hand — the
+   * server is the authority on what the transition left behind.
+   */
+  async function handleToggleActionPlan(input: SetActionPlanInput): Promise<boolean> {
+    const confirmed = await runMutation(async () => {
+      requireOkReceipt(
+        await setActionPlan(id, input),
+        "El servidor no confirmó el cambio del Plan de Acción"
+      );
+      await loadPlan();
+      toast.success(
+        input.active ? "Plan de Acción activado" : "Plan de Acción desactivado"
+      );
+      return true;
+    }, "Error al cambiar el Plan de Acción");
+    // `runMutation` resolves undefined both when it dropped the call and when
+    // it swallowed the error, and it has already told the operator in either
+    // case — the dialog only needs to know it must not clear the motivo.
+    return confirmed === true;
   }
 
   async function handleAssignViewer(viewerId: string) {
@@ -1153,13 +1188,23 @@ export default function PlanDetailPage() {
               <div className="mt-4 flex flex-wrap gap-2">
                 {plan.tipo && <span className="rounded-full bg-white/20 px-3 py-1 text-xs font-medium text-white">{plan.tipo}</span>}
                 {plan.fase && <span className="rounded-full bg-white/20 px-3 py-1 text-xs font-medium text-white">{plan.fase}</span>}
-                {plan.enfoque && <span className="rounded-full bg-white/20 px-3 py-1 text-xs font-medium text-white">{plan.enfoque}</span>}
+                {/* "Vencida" no puede leerse como una etiqueta neutra más entre las de arriba. */}
+                {plan.estado && (
+                  <span className={`rounded-full px-3 py-1 text-xs font-medium text-white ${plan.estado === "Vencida" ? "bg-red-500/90" : "bg-white/20"}`}>
+                    {plan.estado}
+                  </span>
+                )}
                 <span className="rounded-full bg-white/20 px-3 py-1 text-xs font-medium text-white">
                   Creado el {new Date(plan.createdAt).toLocaleDateString()}
                 </span>
               </div>
             </div>
-            <div className="flex shrink-0 gap-2">
+            <div className="flex shrink-0 items-center gap-2">
+              {plan.actionPlanActive && (
+                <span className="rounded-full bg-amber-300/90 px-3 py-1 text-xs font-semibold text-amber-950">
+                  Plan de Acción activo
+                </span>
+              )}
               {canEdit && (
                 <Button
                   size="sm"
@@ -1168,6 +1213,16 @@ export default function PlanDetailPage() {
                 >
                   <Mail className="w-4 h-4 mr-2" />
                   Notificar pendientes
+                </Button>
+              )}
+              {canEdit && (
+                <Button
+                  size="sm"
+                  className="rounded-lg border border-white/40 bg-white text-teal-700 shadow-lg hover:bg-teal-50 hover:text-teal-800"
+                  onClick={() => setActionPlanDialogOpen(true)}
+                >
+                  <ClipboardList className="w-4 h-4 mr-2" />
+                  {plan.actionPlanActive ? "Desactivar Plan de Acción" : "Activar Plan de Acción"}
                 </Button>
               )}
               {isAdmin && (
@@ -1771,11 +1826,20 @@ export default function PlanDetailPage() {
           valid:   { bg: "#dcfce7", color: "#166534", border: "#86efac", label: "✓“" },
         };
 
-        const todayMonth = getBusinessMonth();
+        // Capped at the month the plan stopped being in force, so an expired
+        // plan's grid ends where its vigencia did instead of marching on to the
+        // current month. `capToPlanEnd` is a no-op while `end_date` is empty.
+        const todayMonth = capToPlanEnd(getBusinessMonth(), p);
 
         const planStart = getPlanStartDate(p);
         const rangeStart = new Date(planStart.getFullYear(), planStart.getMonth(), 1);
-        const rangeEnd = new Date(todayMonth.getFullYear(), todayMonth.getMonth() + 2, 1);
+        // Exclusive: normally one month past today, so the grid shows the month
+        // ahead. An expired plan has no month ahead, so the cap applies to the
+        // last *included* month rather than to this bound.
+        const rangeEnd = new Date(
+          capToPlanEnd(new Date(todayMonth.getFullYear(), todayMonth.getMonth() + 1, 1), p),
+        );
+        rangeEnd.setMonth(rangeEnd.getMonth() + 1);
 
         const months: Date[] = [];
         const cur = new Date(rangeStart);
@@ -3374,6 +3438,16 @@ export default function PlanDetailPage() {
         onOpenChange={setNotifyPendingOpen}
         planId={id}
       />
+
+      {canEdit && (
+        <ActionPlanDialog
+          open={actionPlanDialogOpen}
+          onOpenChange={setActionPlanDialogOpen}
+          planId={id}
+          active={plan.actionPlanActive === true}
+          onConfirm={handleToggleActionPlan}
+        />
+      )}
 
       {/* Delete Plan Confirmation Dialog */}
       <Dialog open={deletePlanOpen} onOpenChange={setDeletePlanOpen}>
