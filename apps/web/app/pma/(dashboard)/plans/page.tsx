@@ -18,7 +18,7 @@ import {
 } from "@/components/ui/dialog";
 import { Plus, ArrowRight, Pencil, Map } from "lucide-react";
 import { toast } from "sonner";
-import { Plan, PLAN_TIPO_VALUES, PLAN_FASE_VALUES, PLAN_ENFOQUE_VALUES, PLAN_REPORTE_VALUES } from "@/types";
+import { Plan, PMA_PLAN_TIPO_VALUES, PLAN_FASE_VALUES, PLAN_ENFOQUE_VALUES, PLAN_REPORTE_VALUES } from "@/types";
 import { formatDateOnly } from "@/lib/dateOnly";
 
 export default function PlansPage() {
@@ -180,7 +180,7 @@ export default function PlansPage() {
                     required
                   >
                     <option value="" disabled>Seleccionar tipo...</option>
-                    {PLAN_TIPO_VALUES.map(tipo => <option key={tipo} value={tipo}>{tipo}</option>)}
+                    {PMA_PLAN_TIPO_VALUES.map(tipo => <option key={tipo} value={tipo}>{tipo}</option>)}
                   </select>
                 </div>
                 <div className="space-y-2">
@@ -418,7 +418,7 @@ export default function PlansPage() {
                 required
               >
                 <option value="" disabled>Seleccionar tipo...</option>
-                {PLAN_TIPO_VALUES.map(tipo => <option key={tipo} value={tipo}>{tipo}</option>)}
+                {PMA_PLAN_TIPO_VALUES.map(tipo => <option key={tipo} value={tipo}>{tipo}</option>)}
               </select>
             </div>
             <div className="space-y-2">

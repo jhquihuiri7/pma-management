@@ -18,8 +18,24 @@ export interface User {
 export const PLAN_REPORTE_VALUES = ["6 meses", "1 año", "2 años"] as const;
 export type PlanReporte = typeof PLAN_REPORTE_VALUES[number];
 
+/** RGDP's permit categories. PMA uses `PMA_PLAN_TIPO_VALUES` instead. */
 export const PLAN_TIPO_VALUES = ["Licencia", "Registro Ambiental","N/A"] as const;
 export type PlanTipo = typeof PLAN_TIPO_VALUES[number];
+
+/**
+ * PMA's permit categories, which diverged from RGDP's in migration 0025. Each
+ * one names the instrument of regularización ambiental in full — "Licencia
+ * Ambiental", not the bare "Licencia", which did not say which licence — and
+ * the opt-out reads "No Aplica" rather than the abbreviation "N/A", so the
+ * stored value matches the category as the regulation names it.
+ */
+export const PMA_PLAN_TIPO_VALUES = [
+  "Licencia Ambiental",
+  "Registro Ambiental",
+  "Certificado Ambiental",
+  "No Aplica",
+] as const;
+export type PmaPlanTipo = typeof PMA_PLAN_TIPO_VALUES[number];
 
 export const PLAN_FASE_VALUES = ["Planificación", "Construcción", "Operación", "Cierre"] as const;
 export type PlanFase = typeof PLAN_FASE_VALUES[number];
@@ -33,7 +49,7 @@ export interface Plan {
   createdBy?: string | null;
   title: string;
   description: string;
-  tipo?: PlanTipo | null;
+  tipo?: PlanTipo | PmaPlanTipo | null;
   fase?: PlanFase | null;
   enfoque?: PlanEnfoque | null;
   report_per: PlanReporte;

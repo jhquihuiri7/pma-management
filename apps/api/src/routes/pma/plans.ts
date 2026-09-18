@@ -1,5 +1,9 @@
 import type { FastifyInstance } from "fastify";
 import { z } from "zod";
+// Taken from the pg enum rather than @pma/types, as in evidences.ts: that
+// package ships raw TypeScript, so only `import type` is safe from it. This
+// also pins the accepted categories to the column.
+import { pmaPlanTipoEnum } from "../../db/schema/enums.js";
 import { authenticate, requireRole, requireApp } from "../../auth/middleware.js";
 import { BadRequest, Forbidden } from "../../lib/errors.js";
 import {
@@ -22,7 +26,7 @@ export const planCreateSchema = z.object({
   title: z.string().trim().min(1).max(300),
   description: z.string().max(20_000).optional(),
   report_per: z.enum(["6 meses", "1 año", "2 años"]).default("6 meses"),
-  tipo: z.preprocess(emptyToUndefined, z.enum(["Licencia", "Registro Ambiental", "N/A"]).optional()),
+  tipo: z.preprocess(emptyToUndefined, z.enum(pmaPlanTipoEnum.enumValues).optional()),
   fase: z.preprocess(emptyToUndefined, z.enum(["Planificación", "Construcción", "Operación", "Cierre"]).optional()),
   enfoque: z.preprocess(
     emptyToUndefined,
@@ -47,7 +51,7 @@ export const planCreateSchema = z.object({
 export const planUpdateSchema = z.object({
   title: z.string().trim().min(1).max(300).optional(),
   description: z.string().max(20_000).optional(),
-  tipo: z.preprocess(emptyToNull, z.enum(["Licencia", "Registro Ambiental", "N/A"]).nullable().optional()),
+  tipo: z.preprocess(emptyToNull, z.enum(pmaPlanTipoEnum.enumValues).nullable().optional()),
   fase: z.preprocess(emptyToNull, z.enum(["Planificación", "Construcción", "Operación", "Cierre"]).nullable().optional()),
   enfoque: z.preprocess(
     emptyToNull,

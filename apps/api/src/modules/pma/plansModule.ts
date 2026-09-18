@@ -6,6 +6,7 @@ import {
   pmaItemAssignments,
   pmaPlanItems,
 } from "../../db/schema/pma.js";
+import type { PmaPlanTipo } from "@pma/types";
 import { Forbidden, NotFound } from "../../lib/errors.js";
 import { assertAssignableUser } from "../shared/assignmentPolicy.js";
 import { enqueueEvidenceCleanupForPlan } from "../shared/storageCleanup.js";
@@ -15,7 +16,7 @@ export type PlanCreateInput = {
   title: string;
   description?: string;
   reportPer: "6 meses" | "1 año" | "2 años";
-  tipo?: "Licencia" | "Registro Ambiental" | "N/A";
+  tipo?: PmaPlanTipo;
   fase?: "Planificación" | "Construcción" | "Operación" | "Cierre";
   enfoque?: "Prevenir impactos" | "Controlar impactos" | "Monitorear y optimizar" | "Restaurar el ambiente";
   /** Required: origin of every derived schedule, and immutable once created. */

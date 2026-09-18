@@ -14,7 +14,7 @@ import {
 } from "drizzle-orm/pg-core";
 import { sql } from "drizzle-orm";
 import {
-  planTipoEnum,
+  pmaPlanTipoEnum,
   planFaseEnum,
   planEnfoqueEnum,
   planReporteEnum,
@@ -36,7 +36,7 @@ export const pmaPlans = pgTable(
     createdBy: uuid("created_by").references(() => users.id, { onDelete: "set null" }),
     title: text("title").notNull(),
     description: text("description").notNull().default(""),
-    tipo: planTipoEnum("tipo"),
+    tipo: pmaPlanTipoEnum("tipo"),
     fase: planFaseEnum("fase"),
     enfoque: planEnfoqueEnum("enfoque"),
     reportPer: planReporteEnum("report_per").notNull(),

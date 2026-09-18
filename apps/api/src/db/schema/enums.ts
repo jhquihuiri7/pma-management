@@ -4,7 +4,19 @@ export const userRoleEnum = pgEnum("user_role", ["ADMIN", "REPORTER", "VIEWER"])
 
 export const appKeyEnum = pgEnum("app_key", ["pma", "rgdp", "geo", "previene"]);
 
+// RGDP's permit categories. PMA moved off this type in migration 0025, so it
+// now backs `rgdp_plans.tipo` alone.
 export const planTipoEnum = pgEnum("plan_tipo", ["Licencia", "Registro Ambiental", "N/A"]);
+
+// PMA's own categories: each names the instrument in full, "Certificado
+// Ambiental" was missing entirely, and the opt-out spells out "No Aplica".
+// Kept apart from `plan_tipo` so RGDP's stored values are untouched.
+export const pmaPlanTipoEnum = pgEnum("pma_plan_tipo", [
+  "Licencia Ambiental",
+  "Registro Ambiental",
+  "Certificado Ambiental",
+  "No Aplica",
+]);
 
 export const planFaseEnum = pgEnum("plan_fase", [
   "Planificación",

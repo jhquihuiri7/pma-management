@@ -68,7 +68,7 @@ test("the guard leaves every other update untouched", () => {
   for (const body of [
     { title: "T" },
     { description: "", visualization_url: null },
-    { tipo: "Licencia", fase: "Operación" },
+    { tipo: "Licencia Ambiental", fase: "Operación" },
     {},
     undefined,
     null,
