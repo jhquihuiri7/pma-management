@@ -9,7 +9,7 @@ import type { GeoLayerVisualization } from "@pma/types/geo";
 import {
   PanelLeft, PanelRight, Table2, Info, Ruler, ZoomIn, ZoomOut, Home,
   Search, Download, Upload, X, AlignLeft, Maximize, Minimize, ArrowLeft,
-  MousePointer, MapPin, FileDown, FileUp,
+  MousePointer, MapPin, FileDown, FileUp, LogIn,
 } from "lucide-react";
 import { toast } from "sonner";
 import { api, apiErrorMessage } from "@/lib/api-client";
@@ -121,7 +121,7 @@ function defaultStyleFor(geometry: GisGeometry, index = 0): LayerStyle {
   };
 }
 
-export default function GisEditor({ geoMap, mapId, mapTitle, backHref, initialCenter, initialZoom, canEdit = false, canDelete = false, canAppendFeatures = false, mode = "persisted-map" }: {
+export default function GisEditor({ geoMap, mapId, mapTitle, backHref, initialCenter, initialZoom, canEdit = false, canDelete = false, canAppendFeatures = false, signedIn = true, loginHref = "/login", mode = "persisted-map" }: {
   geoMap?: GeoMap;
   mapId?: string;
   mapTitle?: string;
@@ -134,6 +134,12 @@ export default function GisEditor({ geoMap, mapId, mapTitle, backHref, initialCe
   canEdit?: boolean;
   canDelete?: boolean;
   canAppendFeatures?: boolean;
+  // The shell covers the sidebar that normally offers "Iniciar sesión", and the
+  // Geoportal is public: without this, an expired session looks exactly like a
+  // map that simply has no edit controls. Say so instead of going silently
+  // read-only.
+  signedIn?: boolean;
+  loginHref?: string;
   mode?: "persisted-map" | "workspace";
 }) {
   const isWorkspace = mode === "workspace";
@@ -1129,6 +1135,15 @@ export default function GisEditor({ geoMap, mapId, mapTitle, backHref, initialCe
           </button>
           {canMutate && (
             <button className="tb-btn primary" onClick={() => setShowUpload(true)}><Upload size={14} /> Agregar capa</button>
+          )}
+          {!signedIn && (
+            <a
+              className="tb-btn session-cta"
+              href={loginHref}
+              data-tip="Tu sesión expiró o no has iniciado sesión: vuelve a entrar para editar el mapa"
+            >
+              <LogIn size={14} /> Iniciar sesión para editar
+            </a>
           )}
         </div>
       </div>

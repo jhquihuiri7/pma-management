@@ -139,6 +139,20 @@
 .gis-shell .tb-btn.primary { background: var(--primary); color: var(--primary-fg); }
 .gis-shell .tb-btn.primary:hover { background: oklch(0.28 0 0); }
 
+/* Shown in place of the edit controls when there is no session: the shell hides
+   the sidebar's own login link, so this is the only hint the Geoportal gives
+   that it is read-only because nobody is signed in. */
+.gis-shell .tb-btn.session-cta {
+  border-color: var(--data-amber);
+  color: var(--data-amber);
+  font-weight: 600;
+  text-decoration: none;
+  white-space: nowrap;
+}
+.gis-shell .tb-btn.session-cta:hover {
+  background: color-mix(in srgb, var(--data-amber) 12%, var(--background));
+}
+
 .gis-shell .tb-spacer { flex: 1; }
 
 .gis-shell .search {

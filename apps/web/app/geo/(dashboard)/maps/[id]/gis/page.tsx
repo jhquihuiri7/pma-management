@@ -26,6 +26,11 @@ export default function GisEditorPage() {
   const canEdit = user?.role === "ADMIN" || user?.apps.includes("geo") === true;
   const canDelete = user?.role?.toUpperCase() === "ADMIN";
   const canAppendFeatures = user?.role === "ADMIN" || (user?.role === "REPORTER" && user?.apps.includes("geo") === true);
+  // The editor covers the whole viewport, sidebar included, so a session that
+  // lapsed while the tab was open is indistinguishable from a map without edit
+  // controls. Hand the editor enough to say so and offer the way back.
+  const signedIn = status === "authenticated" && !!user;
+  const loginHref = `/login?next=${encodeURIComponent(`/geo/maps/${id}/gis`)}`;
   const [geoMap, setGeoMap] = useState<GeoMap | null>(null);
   const [loaded, setLoaded] = useState(false);
   const [loadError, setLoadError] = useState<string | null>(null);
@@ -94,6 +99,8 @@ export default function GisEditorPage() {
       canEdit={canEdit}
       canDelete={canDelete}
       canAppendFeatures={canAppendFeatures}
+      signedIn={signedIn}
+      loginHref={loginHref}
     />
   );
 }
