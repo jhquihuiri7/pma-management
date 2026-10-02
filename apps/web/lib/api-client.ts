@@ -307,13 +307,30 @@ async function tryRefresh(): Promise<boolean> {
 }
 
 /**
+ * Auth endpoints that must never trigger the refresh-and-retry below:
+ * /auth/refresh is what tryRefresh() calls itself, and login/logout answer 401
+ * on their own terms. Everything else under /auth — /auth/me above all — has to
+ * renew like any other call. Excluding the whole /auth/ prefix used to log
+ * people out 15 minutes after login (the access cookie's lifetime) while their
+ * refresh cookie was still valid for days: /auth/me returned 401, AuthProvider
+ * read that as "anonymous", and on the public /geo routes nothing redirected to
+ * the login page — the Geoportal just went silently read-only.
+ */
+const NO_REFRESH_PATHS = ["/auth/login", "/auth/refresh", "/auth/logout"];
+
+function skipsRefresh(url: string): boolean {
+  const path = url.split(/[?#]/, 1)[0].replace(/\/+$/, "");
+  return NO_REFRESH_PATHS.some((endpoint) => path.endsWith(endpoint));
+}
+
+/**
  * Raw-response compatibility API. Network/timeout/abort failures throw a typed
  * ApiError; HTTP failures are returned so legacy callers can inspect `res.ok`.
  */
 export async function apiFetch(input: string, init: ApiFetchInit = {}): Promise<Response> {
   const url = apiUrl(input);
   let res = await fetchWithTimeout(url, { credentials: "include", ...init });
-  if (res.status === 401 && !url.includes("/auth/")) {
+  if (res.status === 401 && !skipsRefresh(url)) {
     await res.body?.cancel().catch(() => undefined);
     const refreshed = await tryRefresh();
     if (refreshed) {

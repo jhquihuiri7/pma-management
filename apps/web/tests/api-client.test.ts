@@ -68,6 +68,68 @@ test("parsea respuestas con sufijo de sintaxis estructurada +json (geo+json)", a
   }
 });
 
+test("/auth/me renueva el token y reintenta en vez de darse por anónimo", async () => {
+  // El access token dura 15 minutos; el refresh, 7 días. Si /auth/me no renueva,
+  // AuthProvider marca la sesión como anónima y el Geoportal (ruta pública, sin
+  // redirección al login) se queda en solo lectura: desaparece "Agregar capa".
+  const originalFetch = globalThis.fetch;
+  const calls: string[] = [];
+  globalThis.fetch = async (input) => {
+    const url = String(input);
+    calls.push(url);
+    if (url.endsWith("/auth/refresh")) {
+      return new Response(JSON.stringify({ ok: true }), {
+        status: 200,
+        headers: { "content-type": "application/json" },
+      });
+    }
+    const first = calls.filter((c) => c.endsWith("/auth/me")).length === 1;
+    return first
+      ? new Response(JSON.stringify({ message: "Missing token" }), {
+        status: 401,
+        headers: { "content-type": "application/json" },
+      })
+      : new Response(JSON.stringify({ user: { sub: "u1" } }), {
+        status: 200,
+        headers: { "content-type": "application/json" },
+      });
+  };
+
+  try {
+    const result = await api.get<{ user: { sub: string } }>("/auth/me");
+    assert.equal(result.user.sub, "u1");
+    assert.deepEqual(calls.map((c) => c.replace(/^.*(\/auth\/.*)$/, "$1")), [
+      "/auth/me",
+      "/auth/refresh",
+      "/auth/me",
+    ]);
+  } finally {
+    globalThis.fetch = originalFetch;
+  }
+});
+
+test("login, refresh y logout nunca disparan la renovación en bucle", async () => {
+  const originalFetch = globalThis.fetch;
+  for (const endpoint of ["/auth/login", "/auth/refresh", "/auth/logout"]) {
+    const calls: string[] = [];
+    globalThis.fetch = async (input) => {
+      calls.push(String(input));
+      return new Response(JSON.stringify({ message: "Credenciales inválidas" }), {
+        status: 401,
+        headers: { "content-type": "application/json" },
+      });
+    };
+
+    try {
+      const response = await apiFetch(endpoint, { method: "POST" });
+      assert.equal(response.status, 401);
+      assert.equal(calls.length, 1, `${endpoint} no debe reintentar tras renovar`);
+    } finally {
+      globalThis.fetch = originalFetch;
+    }
+  }
+});
+
 test("normaliza timeout y cancelación sin confundirlos con éxito HTTP", async () => {
   const originalFetch = globalThis.fetch;
   globalThis.fetch = (_input, init) => new Promise<Response>((_resolve, reject) => {
