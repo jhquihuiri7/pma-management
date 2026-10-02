@@ -405,7 +405,7 @@ export const auth = {
       !response.user.adminId ||
       !["ADMIN", "REPORTER", "VIEWER"].includes(response.user.role) ||
       !Array.isArray(response.user.apps) ||
-      response.user.apps.some((app) => !["pma", "rgdp", "geo", "previene"].includes(app))
+      response.user.apps.some((app) => !["pma", "rgdp", "geo", "previene", "pg2030"].includes(app))
     ) {
       throw new ApiError(200, "El servidor devolvió una sesión inválida", response, "invalid_response");
     }
@@ -432,6 +432,6 @@ export const auth = {
     name: string;
     role: "ADMIN" | "REPORTER" | "VIEWER";
     adminId: string;
-    apps: Array<"pma" | "rgdp" | "geo" | "previene">;
+    apps: Array<"pma" | "rgdp" | "geo" | "previene" | "pg2030">;
   } }>("/auth/me"),
 };

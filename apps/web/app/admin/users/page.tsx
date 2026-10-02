@@ -34,16 +34,17 @@ import { Plus, Trash2, Send, Pencil, X } from "lucide-react";
 import { toast } from "sonner";
 import { User } from "@/types";
 
-type AppKey = "pma" | "rgdp" | "geo" | "previene";
+type AppKey = "pma" | "rgdp" | "geo" | "previene" | "pg2030";
 
 const APP_LABELS: Record<AppKey, string> = {
   pma: "PMA",
   rgdp: "RGDP",
   geo: "Geoportal",
   previene: "Previene",
+  pg2030: "PG2030",
 };
 
-const ALL_APPS: AppKey[] = ["pma", "rgdp", "geo", "previene"];
+const ALL_APPS: AppKey[] = ["pma", "rgdp", "geo", "previene", "pg2030"];
 
 const emptyForm = {
   name: "",

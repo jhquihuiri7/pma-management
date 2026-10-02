@@ -4,7 +4,7 @@ import { useRouter } from "next/navigation";
 import { useEffect } from "react";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
-import { Leaf, Shield, LogOut, Map, Users, Siren } from "lucide-react";
+import { Leaf, Shield, LogOut, Map, Users, Siren, Target } from "lucide-react";
 import { useAuth } from "@/lib/auth-context";
 
 const SUBSYSTEM_APPS = [
@@ -47,6 +47,16 @@ const SUBSYSTEM_APPS = [
     color: "text-emerald-600",
     border: "border-emerald-200 hover:border-emerald-400",
     bg: "hover:bg-emerald-50",
+  },
+  {
+    key: "pg2030",
+    label: "PG2030",
+    description: "Seguimiento al Plan Galápagos 2030.",
+    href: "/pg2030/dashboard",
+    icon: Target,
+    color: "text-indigo-600",
+    border: "border-indigo-200 hover:border-indigo-400",
+    bg: "hover:bg-indigo-50",
   },
 ] as const;
 

@@ -2,7 +2,7 @@ import { pgEnum } from "drizzle-orm/pg-core";
 
 export const userRoleEnum = pgEnum("user_role", ["ADMIN", "REPORTER", "VIEWER"]);
 
-export const appKeyEnum = pgEnum("app_key", ["pma", "rgdp", "geo", "previene"]);
+export const appKeyEnum = pgEnum("app_key", ["pma", "rgdp", "geo", "previene", "pg2030"]);
 
 // RGDP's permit categories. PMA moved off this type in migration 0025, so it
 // now backs `rgdp_plans.tipo` alone.

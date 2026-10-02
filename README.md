@@ -1,6 +1,6 @@
 # PMA Management
 
-Sistema de gestión ambiental (PMA, RGDP, GEO, Galápagos Previene) construido como
+Sistema de gestión ambiental (PMA, RGDP, GEO, Galápagos Previene, PG2030) construido como
 monorepo con Next.js y Fastify.
 
 ## Arquitectura
