@@ -11,7 +11,8 @@ reescritura confirmó otras 14 correcciones, también incorporadas.
 **desplegada en producción** desde el 12 de octubre de 2026 (migraciones 0031 y
 0032 aplicadas a `pma-postgres`; respaldo previo en
 `~/Documentos/pma_db-backup-20261012-140115-pre-pg2030-fase1.sql`).
-Las fases 2 y 3 están implementadas y probadas (migración 0033), **sin desplegar**.
+Las fases 2 y 3 (migración 0033) están **desplegadas** desde el mismo día; respaldo
+previo en `~/Documentos/pma_db-backup-20261012-143201-pre-pg2030-fases2y3.sql`.
 
 Fuentes usadas para este plan:
 
@@ -658,13 +659,13 @@ abrirlo. La técnica se elige en la fase 6 (§12).
      `scripts/pg2030/generate-catalog-migration.mjs`);
    - pantallas de catálogo e instituciones;
    - vínculo usuario ↔ institución.
-2. **Planificación** ✅ (implementada, sin desplegar):
+2. **Planificación** ✅ (desplegada el 12 de octubre de 2026):
    - apertura de años, convocatoria anual, primer corte habilitado y carga
      inicial;
    - metas institucionales, con sus reglas de edición;
    - elección de proyectos;
    - declaración "sin acciones vinculadas".
-3. **Reporte mensual y cortes** ✅ (implementada, sin desplegar):
+3. **Reporte mensual y cortes** ✅ (desplegada el 12 de octubre de 2026):
    - grilla mensual y aviso de acumulado;
    - bloqueo en la API;
    - reapertura y bitácora;
