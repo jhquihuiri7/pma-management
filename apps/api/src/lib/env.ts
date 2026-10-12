@@ -62,6 +62,18 @@ const schema = z.object({
   // than the whole transfer — a long video must not be cut off mid-download.
   PREVIENE_MEDIA_TIMEOUT_MS: z.coerce.number().int().positive().default(30_000),
 
+  // PG2030 background jobs (AI classification). Off by default: dev and prod
+  // share one database, so a dev stack must never run code under development
+  // against it. docker-compose.yml turns it on for the production worker only.
+  PG2030_JOBS_ENABLED: z.preprocess((v) => v === true || v === "true" || v === "1", z.boolean()),
+  // NVIDIA's OpenAI-compatible endpoint. The key never reaches the browser:
+  // only the worker calls the model.
+  NVIDIA_API_KEY: z.string().default(""),
+  NVIDIA_BASE_URL: z.string().default("https://integrate.api.nvidia.com/v1"),
+  NVIDIA_MODEL: z.string().default("deepseek-ai/deepseek-v4.1-flash"),
+  PG2030_IA_TIMEOUT_MS: z.coerce.number().int().positive().default(60_000),
+  PG2030_IA_MAX_TOKENS: z.coerce.number().int().positive().default(2_048),
+
   SMTP_HOST: z.string().optional(),
   SMTP_PORT: z.coerce.number().int().positive().default(587),
   SMTP_USER: z.string().optional(),
@@ -77,6 +89,12 @@ if (!parsed.success) {
 }
 
 export const env = parsed.data;
+
+// Not fatal: without a key the classification requests wait in the queue and
+// are answered once the key is configured.
+if (env.PG2030_JOBS_ENABLED && !env.NVIDIA_API_KEY) {
+  console.warn("WARNING: PG2030_JOBS_ENABLED is on but NVIDIA_API_KEY is not set — PG2030 goals will stay \"Analizando…\".");
+}
 
 // Fail-fast in production against insecure defaults. The dev fallbacks below are
 // publicly known (committed in this file), so booting prod with them would let

@@ -232,6 +232,13 @@
       "when": 1787900000000,
       "tag": "0033_pg2030_planificacion_reporte",
       "breakpoints": true
+    },
+    {
+      "idx": 34,
+      "version": "7",
+      "when": 1788000000000,
+      "tag": "0034_pg2030_clasificacion",
+      "breakpoints": true
     }
   ]
 }

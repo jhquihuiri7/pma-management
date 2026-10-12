@@ -608,9 +608,38 @@ export interface Pg2030MetaInstitucional {
     fisicoEjecutado: number;
     presupuestoDevengado: number;
   };
+  /** AI classification in force (plan §8): read-only, nobody edits it. */
+  clasificacion: Pg2030Clasificacion;
   creadoPorNombre: string;
   createdAt: string;
   updatedAt: string;
+}
+
+export const PG2030_CONTRIBUCION_VALUES = [
+  "Contribución directa",
+  "Contribución complementaria",
+  "Alineación relativa",
+  "Sin alineación",
+] as const;
+export type Pg2030Contribucion = typeof PG2030_CONTRIBUCION_VALUES[number];
+
+export const PG2030_TIPO_INVERSION_VALUES = [
+  "Adquisición de bienes",
+  "Bienes-servicios",
+  "Estudios",
+  "Obras",
+  "Servicios",
+  "Contratación de personal",
+  "Sin datos",
+] as const;
+export type Pg2030TipoInversion = typeof PG2030_TIPO_INVERSION_VALUES[number];
+
+export interface Pg2030Clasificacion {
+  /** "analizando" while queued; "pendiente_clasificacion" when the model never gave a valid answer. */
+  estado: "analizando" | "clasificada" | "pendiente_clasificacion";
+  contribucion: string | null;
+  tipoInversion: string | null;
+  actualizadaAt: string | null;
 }
 
 /** Payload of `GET /pg2030/metas?anio=&institucionId=`. */

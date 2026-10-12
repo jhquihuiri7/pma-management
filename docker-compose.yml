@@ -167,6 +167,12 @@ services:
       PREVIENE_API_BASE_URL: ${PREVIENE_API_BASE_URL:-http://galapagos-previene-api:8080}
       PREVIENE_API_KEY: ${PREVIENE_API_KEY:-}
       PREVIENE_SYNC_INTERVAL_MS: ${PREVIENE_SYNC_INTERVAL_MS:-120000}
+      # PG2030: only the production worker classifies goals with the AI. The
+      # key stays in .env and never reaches the API or the browser; without it
+      # the requests wait in the queue.
+      PG2030_JOBS_ENABLED: "true"
+      NVIDIA_API_KEY: ${NVIDIA_API_KEY:-}
+      NVIDIA_MODEL: ${NVIDIA_MODEL:-deepseek-ai/deepseek-v4.1-flash}
     networks:
       - default
       - previene-link

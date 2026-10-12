@@ -355,3 +355,40 @@ export const pg2030Bitacora = pgTable(
     corteIdx: index("pg2030_bitacora_corte_idx").on(t.anio, t.trimestre, t.institucionId),
   })
 );
+
+// ---------------------------------------------------------------------------
+// Phase 4 (migration 0034): AI classification requests. Never deleted when
+// processed: a cutoff's report uses the latest one created before its deadline.
+// ---------------------------------------------------------------------------
+
+export type Pg2030EstadoClasificacion = "pendiente" | "clasificada" | "sin_clasificar";
+
+export const pg2030Clasificaciones = pgTable(
+  "pg2030_clasificaciones",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    metaId: uuid("meta_id")
+      .notNull()
+      .references(() => pg2030MetasInstitucionales.id, { onDelete: "cascade" }),
+    huella: text("huella").notNull(),
+    metaTexto: text("meta_texto").notNull(),
+    contexto: text("contexto").notNull(),
+    estado: text("estado").$type<Pg2030EstadoClasificacion>().notNull().default("pendiente"),
+    contribucion: text("contribucion"),
+    tipoInversion: text("tipo_inversion"),
+    respuestaContribucion: text("respuesta_contribucion"),
+    respuestaInversion: text("respuesta_inversion"),
+    intentos: integer("intentos").notNull().default(0),
+    respuestasInvalidas: integer("respuestas_invalidas").notNull().default(0),
+    modelo: text("modelo"),
+    availableAt: timestamp("available_at", { withTimezone: true }).defaultNow().notNull(),
+    lockedAt: timestamp("locked_at", { withTimezone: true }),
+    lastError: text("last_error"),
+    createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
+    procesadaAt: timestamp("procesada_at", { withTimezone: true }),
+  },
+  (t) => ({
+    metaIdx: index("pg2030_clasificaciones_meta_idx").on(t.metaId, t.createdAt),
+    pendientesIdx: index("pg2030_clasificaciones_pendientes_idx").on(t.availableAt).where(sql`${t.estado} = 'pendiente'`),
+  })
+);

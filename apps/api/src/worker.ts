@@ -22,6 +22,7 @@ import { processPendingMail } from "./modules/shared/mailOutbox.js";
 import { runPrevieneSync } from "./modules/previene/syncModule.js";
 import { isPrevieneConfigured } from "./modules/previene/client.js";
 import { closeMail } from "./mail/index.js";
+import { encolarFaltantes, procesarClasificaciones } from "./modules/pg2030/clasificacionModule.js";
 import { closeDb } from "./db/client.js";
 
 const STORAGE_CLEANUP_INTERVAL_MS = 30_000;
@@ -31,10 +32,13 @@ let cleanupTimer: NodeJS.Timeout | undefined;
 let mailTimer: NodeJS.Timeout | undefined;
 let rasterReconcileTimer: NodeJS.Timeout | undefined;
 let previeneTimer: NodeJS.Timeout | undefined;
+let pg2030Timer: NodeJS.Timeout | undefined;
 let cleanupPromise: Promise<void> | null = null;
 let mailPromise: Promise<void> | null = null;
 let rasterReconcilePromise: Promise<void> | null = null;
 let previenePromise: Promise<void> | null = null;
+let pg2030Promise: Promise<void> | null = null;
+const PG2030_CLASIFICACION_INTERVAL_MS = 20_000;
 let shuttingDown = false;
 
 async function drainStorageCleanup(): Promise<void> {
@@ -99,6 +103,26 @@ async function syncPreviene(): Promise<void> {
     }
   })().finally(() => { previenePromise = null; });
   return previenePromise;
+}
+
+/**
+ * PG2030: classify institutional goals with the AI (plan §8). Goals written
+ * before phase 4 get their first request here; then pending requests are
+ * answered a few at a time. The API only queues; the model is called here.
+ */
+async function drainPg2030Clasificaciones(): Promise<void> {
+  if (pg2030Promise) return pg2030Promise;
+  pg2030Promise = (async () => {
+    const encoladas = await encolarFaltantes();
+    const r = await procesarClasificaciones();
+    if (encoladas > 0 || r.clasificadas > 0 || r.reintentos > 0 || r.sinClasificar > 0 || r.erroresProveedor > 0) {
+      console.log(
+        `[worker] pg2030 clasificación: ${encoladas} encoladas, ${r.clasificadas} clasificadas, ` +
+          `${r.reintentos} por reintentar, ${r.sinClasificar} sin clasificar, ${r.erroresProveedor} errores del proveedor`,
+      );
+    }
+  })().finally(() => { pg2030Promise = null; });
+  return pg2030Promise;
 }
 
 /**
@@ -183,6 +207,18 @@ async function main() {
     console.warn("[worker] previene sync disabled — PREVIENE_API_KEY is not set");
   }
 
+  // Off by default: dev shares the production database (see lib/env.ts).
+  if (env.PG2030_JOBS_ENABLED) {
+    await drainPg2030Clasificaciones().catch((err) => console.error("[worker] initial pg2030 classification failed:", err));
+    pg2030Timer = setInterval(() => {
+      void drainPg2030Clasificaciones().catch((err) => console.error("[worker] pg2030 classification failed:", err));
+    }, PG2030_CLASIFICACION_INTERVAL_MS);
+    pg2030Timer.unref();
+    console.log(`[worker] pg2030 classification every ${PG2030_CLASIFICACION_INTERVAL_MS / 1000}s`);
+  } else {
+    console.warn("[worker] pg2030 jobs disabled — PG2030_JOBS_ENABLED is not set");
+  }
+
   console.log(`[worker] listening on "${RASTER_QUEUE}" (batchSize=${env.WORKER_CONCURRENCY})`);
 }
 
@@ -194,9 +230,10 @@ async function shutdown(signal: string) {
   if (mailTimer) clearInterval(mailTimer);
   if (rasterReconcileTimer) clearInterval(rasterReconcileTimer);
   if (previeneTimer) clearInterval(previeneTimer);
+  if (pg2030Timer) clearInterval(pg2030Timer);
   await stopBoss().catch((error) => console.error("[worker] failed to stop pg-boss:", error));
   await Promise.allSettled(
-    [cleanupPromise, mailPromise, rasterReconcilePromise, previenePromise].filter(Boolean) as Promise<void>[]
+    [cleanupPromise, mailPromise, rasterReconcilePromise, previenePromise, pg2030Promise].filter(Boolean) as Promise<void>[]
   );
   await closeMail().catch((error) => console.error("[worker] failed to close SMTP:", error));
   await closeDb().catch((error) => console.error("[worker] failed to close database pool:", error));

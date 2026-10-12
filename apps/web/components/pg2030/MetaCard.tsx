@@ -4,7 +4,37 @@ import { CalendarRange, Check, Lock, Pencil, Trash2 } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { MESES_CORTOS, formatNumero, formatUsd } from "@/lib/pg2030";
-import type { Pg2030MetaInstitucional } from "@/types";
+import type { Pg2030Clasificacion, Pg2030MetaInstitucional } from "@/types";
+
+/**
+ * The AI's classification (plan §8). Read-only for everyone: it is shown,
+ * never edited, and nobody can ask for it to be redone.
+ */
+export function ClasificacionBadges({ clasificacion }: { clasificacion: Pg2030Clasificacion }) {
+  const title = "Clasificación automática con IA según el Plan Galápagos 2030";
+  if (clasificacion.estado === "analizando") {
+    return <Badge variant="outline" className="border-sky-200 bg-sky-50 text-sky-700" title={title}>Analizando…</Badge>;
+  }
+  return (
+    <>
+      {clasificacion.contribucion && (
+        <Badge variant="outline" className="border-violet-200 bg-violet-50 text-violet-700" title={title}>
+          {clasificacion.contribucion}
+        </Badge>
+      )}
+      {clasificacion.tipoInversion && (
+        <Badge variant="outline" className="border-violet-200 bg-violet-50 text-violet-700" title={title}>
+          Inversión: {clasificacion.tipoInversion}
+        </Badge>
+      )}
+      {clasificacion.estado === "pendiente_clasificacion" && (
+        <Badge variant="outline" className="border-amber-200 bg-amber-50 text-amber-700" title={title}>
+          Pendiente de clasificación
+        </Badge>
+      )}
+    </>
+  );
+}
 
 /**
  * One institutional goal: what was planned and what was executed, month by
@@ -64,6 +94,7 @@ export default function MetaCard({
           <div className="mt-1 flex flex-wrap gap-1.5">
             <Badge variant="outline">{meta.unidadMedida}</Badge>
             {meta.fuenteFinanciamiento && <Badge variant="secondary">{meta.fuenteFinanciamiento}</Badge>}
+            <ClasificacionBadges clasificacion={meta.clasificacion} />
           </div>
         </div>
         {puedeEditar && (

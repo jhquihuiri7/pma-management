@@ -20,6 +20,7 @@ import type {
 } from "@pma/types";
 import { BadRequest, NotFound } from "../../lib/errors.js";
 import { lockAndAssertActor } from "../shared/transactionalActor.js";
+import { encolarMetasDeMetaPlan } from "./clasificacionModule.js";
 
 type ProyectoRow = typeof pg2030Proyectos.$inferSelect;
 type ConflictoRow = typeof pg2030ConflictosImportacion.$inferSelect;
@@ -321,6 +322,8 @@ export async function updateMetaPlan(
         cuantificable: pg2030MetasPlan.cuantificable,
       });
     if (!updated) throw NotFound("Meta del Plan no encontrada");
+    // The Plan goal's text is the model's `meta`: its institutional goals are re-queued.
+    if (patch.texto !== undefined) await encolarMetasDeMetaPlan(tx, id);
     return updated;
   });
 }

@@ -10,6 +10,7 @@ import {
   pg2030UsuarioInstitucion,
 } from "../../db/schema/pg2030.js";
 import type {
+  Pg2030Clasificacion,
   Pg2030FuenteFinanciamiento,
   Pg2030InstitucionTipo,
   Pg2030MetaInstitucional,
@@ -38,6 +39,7 @@ import {
   type Pg2030Writer,
 } from "./shared.js";
 import { registrarBitacora, type Clock } from "./aniosModule.js";
+import { clasificacionActual, encolarClasificacion, solicitudesDe } from "./clasificacionModule.js";
 
 type MetaRow = typeof pg2030MetasInstitucionales.$inferSelect;
 type MesRow = typeof pg2030MetaMeses.$inferSelect;
@@ -112,7 +114,14 @@ type Refs = {
   proyecto: { id: string; codigo: string; nombre: string; metaPlanCodigo: string };
 };
 
-function toMeta(meta: MetaRow, meses: MesRow[], refs: Refs, ctx: Contexto, caller: Caller): Pg2030MetaInstitucional {
+function toMeta(
+  meta: MetaRow,
+  meses: MesRow[],
+  refs: Refs,
+  ctx: Contexto,
+  caller: Caller,
+  clasificacion: Pg2030Clasificacion,
+): Pg2030MetaInstitucional {
   const ordered = [...meses].sort((a, b) => a.mes - b.mes);
   const sum = (pick: (m: MesRow) => string | null) => ordered.reduce((acc, m) => acc + Number(pick(m) ?? 0), 0);
   return {
@@ -135,6 +144,7 @@ function toMeta(meta: MetaRow, meses: MesRow[], refs: Refs, ctx: Contexto, calle
       fisicoEjecutado: fisico(sum((m) => m.fisicoEjecutado)),
       presupuestoDevengado: dinero(sum((m) => m.presupuestoDevengado)),
     },
+    clasificacion,
     creadoPorNombre: meta.creadoPorNombre,
     createdAt: meta.createdAt.toISOString(),
     updatedAt: meta.updatedAt.toISOString(),
@@ -144,22 +154,21 @@ function toMeta(meta: MetaRow, meses: MesRow[], refs: Refs, ctx: Contexto, calle
 async function loadRefs(db: any, metas: MetaRow[]): Promise<Map<string, Refs>> {
   const out = new Map<string, Refs>();
   if (metas.length === 0) return out;
-  const [instituciones, proyectos] = await Promise.all([
-    db
-      .select({ id: pg2030Instituciones.id, nombre: pg2030Instituciones.nombre, sigla: pg2030Instituciones.sigla })
-      .from(pg2030Instituciones)
-      .where(inArray(pg2030Instituciones.id, [...new Set(metas.map((m) => m.institucionId))])),
-    db
-      .select({
-        id: pg2030Proyectos.id,
-        codigo: pg2030Proyectos.codigo,
-        nombre: pg2030Proyectos.nombre,
-        metaPlanCodigo: pg2030MetasPlan.codigo,
-      })
-      .from(pg2030Proyectos)
-      .innerJoin(pg2030MetasPlan, eq(pg2030MetasPlan.id, pg2030Proyectos.metaPlanId))
-      .where(inArray(pg2030Proyectos.id, [...new Set(metas.map((m) => m.proyectoId))])),
-  ]);
+  // Sequential: `db` may be a transaction (see mapMeta).
+  const instituciones = await db
+    .select({ id: pg2030Instituciones.id, nombre: pg2030Instituciones.nombre, sigla: pg2030Instituciones.sigla })
+    .from(pg2030Instituciones)
+    .where(inArray(pg2030Instituciones.id, [...new Set(metas.map((m) => m.institucionId))]));
+  const proyectos = await db
+    .select({
+      id: pg2030Proyectos.id,
+      codigo: pg2030Proyectos.codigo,
+      nombre: pg2030Proyectos.nombre,
+      metaPlanCodigo: pg2030MetasPlan.codigo,
+    })
+    .from(pg2030Proyectos)
+    .innerJoin(pg2030MetasPlan, eq(pg2030MetasPlan.id, pg2030Proyectos.metaPlanId))
+    .where(inArray(pg2030Proyectos.id, [...new Set(metas.map((m) => m.proyectoId))]));
   const instBy = new Map<string, Refs["institucion"]>(instituciones.map((i: Refs["institucion"]) => [i.id, i]));
   const proyBy = new Map<string, Refs["proyecto"]>(proyectos.map((p: Refs["proyecto"]) => [p.id, p]));
   for (const meta of metas) {
@@ -181,8 +190,11 @@ async function loadMeses(db: any, metaIds: string[]): Promise<Map<string, MesRow
 }
 
 async function mapMeta(db: any, meta: MetaRow, ctx: Contexto, caller: Caller): Promise<Pg2030MetaInstitucional> {
-  const [refs, meses] = await Promise.all([loadRefs(db, [meta]), loadMeses(db, [meta.id])]);
-  return toMeta(meta, meses.get(meta.id) ?? [], refs.get(meta.id)!, ctx, caller);
+  // Sequential: `db` is usually a transaction, and one client can't run queries concurrently.
+  const refs = await loadRefs(db, [meta]);
+  const meses = await loadMeses(db, [meta.id]);
+  const solicitudes = await solicitudesDe(db, [meta.id]);
+  return toMeta(meta, meses.get(meta.id) ?? [], refs.get(meta.id)!, ctx, caller, clasificacionActual(solicitudes.get(meta.id)));
 }
 
 function callerOf(writer: Pg2030Writer): Caller {
@@ -236,9 +248,10 @@ export async function listMetas(
     .orderBy(asc(pg2030MetasInstitucionales.createdAt));
 
   const ctx: Contexto = { cfg: toAnioCortes(anioRow), reaperturas: await reaperturasHasta(db, anio, target), now };
-  const [refs, meses] = await Promise.all([loadRefs(db, metas), loadMeses(db, metas.map((m) => m.id))]);
+  const ids = metas.map((m) => m.id);
+  const [refs, meses, solicitudes] = await Promise.all([loadRefs(db, metas), loadMeses(db, ids), solicitudesDe(db, ids)]);
   const metasOut = metas
-    .map((m) => toMeta(m, meses.get(m.id) ?? [], refs.get(m.id)!, ctx, caller))
+    .map((m) => toMeta(m, meses.get(m.id) ?? [], refs.get(m.id)!, ctx, caller, clasificacionActual(solicitudes.get(m.id))))
     .sort((a, b) => a.proyecto.codigo.localeCompare(b.proyecto.codigo) || a.createdAt.localeCompare(b.createdAt));
 
   return {
@@ -358,6 +371,7 @@ export async function createMeta(
       fisicoPlanificado: String(plan.get(mes)?.fisico ?? 0),
       presupuestoPlanificado: String(plan.get(mes)?.presupuesto ?? 0),
     })));
+    await encolarClasificacion(tx, meta.id);
     return mapMeta(tx, meta, ctx, callerOf(writer));
   });
 }
@@ -442,6 +456,7 @@ export async function updateMeta(
         usuario: writer,
       });
     }
+    await encolarClasificacion(tx, id);
     return mapMeta(tx, updated, ctx, callerOf(writer));
   });
 }
@@ -584,6 +599,8 @@ export async function reportarMes(
       },
       despues: next,
     }]);
+    // Milestones and notes are part of the model's input.
+    await encolarClasificacion(tx, id);
 
     return {
       meta: await mapMeta(tx, meta, ctx, callerOf(writer)),
