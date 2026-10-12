@@ -103,3 +103,15 @@ export function parseDecimal(value: string): number | null {
   const n = Number(normalized);
   return Number.isFinite(n) && n >= 0 ? n : null;
 }
+
+const PCT = new Intl.NumberFormat("es-EC", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+
+/** A 0–1 fraction as "59,69 %" (plan §9.8); null reads "No aplica". A no-break space keeps "%" on the number's line. */
+export function formatPct(fraccion: number | null | undefined, vacio = "No aplica"): string {
+  return fraccion === null || fraccion === undefined ? vacio : `${PCT.format(fraccion * 100)}\u00a0%`;
+}
+
+/** "3 de 4": counts always carry their total (plan §9.8). */
+export function deTotal(n: number, total: number): string {
+  return `${n} de ${total}`;
+}

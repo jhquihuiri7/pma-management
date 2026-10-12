@@ -684,3 +684,112 @@ export interface Pg2030BitacoraEntrada {
   usuarioNombre: string;
   createdAt: string;
 }
+
+// PG2030 phase 5: dashboard (plan §9, §10). Fractions run 0–1.
+
+export type Pg2030Semaforo = "verde" | "amarillo" | "rojo" | "sin_avance";
+export type Pg2030Coherencia = "coherente" | "sin_financiamiento" | "incoherencia_brecha" | "no_aplica";
+export type Pg2030EstadoReporte = "cumplio" | "parcial" | "no_cumplio" | "no_obligada";
+
+/** Labels and colors defined once, in the API (plan §12), and sent with the data. */
+export interface Pg2030Leyenda {
+  semaforo: Record<Pg2030Semaforo, { label: string; color: string }>;
+  coherencia: Record<Pg2030Coherencia, { label: string; color: string }>;
+  contribucion: Array<{ key: string; label: string; color: string }>;
+  serie: { planificado: string; devengado: string };
+}
+
+export interface Pg2030Avance {
+  valor: number | null;
+  semaforo: Pg2030Semaforo | null;
+}
+
+export interface Pg2030Dinero {
+  planificado: number;
+  /** min(accrued, planned) per goal: what the percentages use. */
+  computable: number;
+  /** Accrued as reported, uncapped (informative). */
+  devengado: number;
+  avance: number | null;
+  semaforo: Pg2030Semaforo | null;
+  metas: number;
+}
+
+export interface Pg2030DashboardMeta {
+  id: string;
+  nombre: string;
+  unidadMedida: string;
+  proyectoCodigo: string;
+  ejeCodigo: string;
+  fuenteFinanciamiento: string | null;
+  aReportar: boolean;
+  reportada: boolean;
+  /** Counts in charts 4–8: a goal to report that was reported. */
+  cuenta: boolean;
+  fisico: { planificado: number; ejecutado: number; avance: number | null; semaforo: Pg2030Semaforo | null; estado: "calculable" | "sin_programacion" | "ejecutado_sin_programacion" };
+  presupuesto: { planificado: number; devengado: number; computable: number; avance: number | null; semaforo: Pg2030Semaforo | null; estado: "calculable" | "no_aplica" | "devengado_sin_programacion" };
+  clasificacion: Pg2030Clasificacion;
+}
+
+export interface Pg2030DashboardInstitucion {
+  institucion: Pg2030InstitucionRef & { tipo: Pg2030InstitucionTipo };
+  aReportar: number;
+  reportadas: number;
+  cumplimiento: number | null;
+  estadoReporte: Pg2030EstadoReporte;
+  fisico: Pg2030Avance;
+  presupuesto: Pg2030Avance & { sinPresupuesto: boolean };
+  coherencia: Pg2030Coherencia;
+  /** Whether it appears in charts 5 and 7 (it has goals that count). */
+  cuenta: boolean;
+  metas: Pg2030DashboardMeta[];
+}
+
+/** Payload of `GET /pg2030/dashboard`. */
+export interface Pg2030Dashboard {
+  anio: Pg2030Anio | null;
+  corte: {
+    trimestre: Pg2030Trimestre;
+    habilitado: boolean;
+    estado: Pg2030EstadoCorte;
+    /** Last month counted: the quarter's end, or the last finished month while it is open. */
+    hasta: number;
+    enCurso: boolean;
+  } | null;
+  leyenda: Pg2030Leyenda;
+  resumenPlan: Pg2030CatalogoResumen;
+  ejes: Array<{ id: string; codigo: string; nombre: string }>;
+  planificacion: {
+    convocadas: number;
+    conMetas: number;
+    sinAcciones: number;
+    sinRespuesta: number;
+    institucionesSinRespuesta: Pg2030InstitucionRef[];
+    metas: number;
+    metasConPresupuesto: number;
+  };
+  cumplimiento: {
+    obligadas: number;
+    cumplio: number;
+    parcial: number;
+    noCumplio: number;
+    aReportar: number;
+    reportadas: number;
+  };
+  alineacion: {
+    categorias: string[];
+    porEje: Array<{ eje: { id: string; codigo: string; nombre: string }; total: number; porCategoria: Record<string, number> }>;
+  };
+  avanceFisico: Pg2030Avance;
+  presupuesto: {
+    total: Pg2030Dinero;
+    porFuente: Array<{ fuente: string; dinero: Pg2030Dinero }>;
+    metasAReportarConPresupuesto: number;
+    metasConPresupuestoReportadas: number;
+    presupuestoSinReporte: { planificado: number; proporcion: number | null };
+    institucionesPorSemaforo: Record<Pg2030Semaforo | "sin_presupuesto", number>;
+  };
+  coherenciaConteo: Record<Pg2030Coherencia, number>;
+  inversion: Array<{ tipo: string; total: Pg2030Dinero; porFuente: Array<{ fuente: string; dinero: Pg2030Dinero }> }>;
+  instituciones: Pg2030DashboardInstitucion[];
+}
