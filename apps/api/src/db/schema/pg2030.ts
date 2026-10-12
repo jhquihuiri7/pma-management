@@ -4,13 +4,18 @@ import {
   text,
   timestamp,
   integer,
+  smallint,
   boolean,
   numeric,
+  date,
+  jsonb,
   index,
   uniqueIndex,
+  primaryKey,
 } from "drizzle-orm/pg-core";
 import { sql } from "drizzle-orm";
 import {
+  pg2030FuenteFinanciamientoEnum,
   pg2030InstitucionTipoEnum,
   pg2030PresupuestoEstadoEnum,
   pg2030ProyectoTipoEnum,
@@ -195,5 +200,158 @@ export const pg2030UsuarioInstitucion = pgTable(
   },
   (t) => ({
     institucionIdx: index("pg2030_usuario_institucion_institucion_idx").on(t.institucionId),
+  })
+);
+
+// ---------------------------------------------------------------------------
+// Phases 2 and 3 (migration 0033): years, goals, monthly plan and execution.
+// Locking is never stored: modules/pg2030/cortes.ts derives it on every write.
+// ---------------------------------------------------------------------------
+
+/** A fiscal year the administrator opened. Years are never closed. */
+export const pg2030Anios = pgTable("pg2030_anios", {
+  anio: integer("anio").primaryKey(),
+  /** Cutoffs before this one are "no habilitados"; their months travel with it. */
+  primerCorte: smallint("primer_corte").notNull(),
+  /** Initial-load deadline (end of that day, Galápagos), or null when there is none. */
+  fechaLimiteCarga: date("fecha_limite_carga"),
+  abiertoPor: uuid("abierto_por").references(() => users.id, { onDelete: "set null" }),
+  abiertoPorNombre: text("abierto_por_nombre").notNull(),
+  createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
+  updatedAt: timestamp("updated_at", { withTimezone: true }).defaultNow().notNull(),
+});
+
+/** Institutions called to plan in a year. */
+export const pg2030Convocatorias = pgTable(
+  "pg2030_convocatorias",
+  {
+    anio: integer("anio").notNull().references(() => pg2030Anios.anio, { onDelete: "cascade" }),
+    institucionId: uuid("institucion_id")
+      .notNull()
+      .references(() => pg2030Instituciones.id, { onDelete: "cascade" }),
+    createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
+  },
+  (t) => ({
+    pk: primaryKey({ name: "pg2030_convocatorias_pk", columns: [t.anio, t.institucionId] }),
+  })
+);
+
+/** "No actions linked to the Plan this year". Exclusive with having goals. */
+export const pg2030SinAcciones = pgTable(
+  "pg2030_sin_acciones",
+  {
+    anio: integer("anio").notNull().references(() => pg2030Anios.anio, { onDelete: "cascade" }),
+    institucionId: uuid("institucion_id")
+      .notNull()
+      .references(() => pg2030Instituciones.id, { onDelete: "restrict" }),
+    declaradoPor: uuid("declarado_por").references(() => users.id, { onDelete: "set null" }),
+    declaradoPorNombre: text("declarado_por_nombre").notNull(),
+    createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
+  },
+  (t) => ({
+    pk: primaryKey({ name: "pg2030_sin_acciones_pk", columns: [t.anio, t.institucionId] }),
+  })
+);
+
+/** What an institution sets out to do on one project in one year. */
+export const pg2030MetasInstitucionales = pgTable(
+  "pg2030_metas_institucionales",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    anio: integer("anio").notNull().references(() => pg2030Anios.anio, { onDelete: "restrict" }),
+    institucionId: uuid("institucion_id")
+      .notNull()
+      .references(() => pg2030Instituciones.id, { onDelete: "restrict" }),
+    proyectoId: uuid("proyecto_id")
+      .notNull()
+      .references(() => pg2030Proyectos.id, { onDelete: "restrict" }),
+    nombre: text("nombre").notNull(),
+    descripcion: text("descripcion"),
+    unidadMedida: text("unidad_medida").notNull(),
+    fuenteFinanciamiento: pg2030FuenteFinanciamientoEnum("fuente_financiamiento"),
+    beneficiariosDirectos: text("beneficiarios_directos"),
+    personalTecnico: text("personal_tecnico"),
+    responsablesInternos: text("responsables_internos"),
+    entidadesCoordinacion: text("entidades_coordinacion"),
+    creadoPor: uuid("creado_por").references(() => users.id, { onDelete: "set null" }),
+    creadoPorNombre: text("creado_por_nombre").notNull(),
+    createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
+    updatedAt: timestamp("updated_at", { withTimezone: true }).defaultNow().notNull(),
+  },
+  (t) => ({
+    anioInstitucionIdx: index("pg2030_metas_institucionales_anio_institucion_idx").on(t.anio, t.institucionId),
+    proyectoIdx: index("pg2030_metas_institucionales_proyecto_idx").on(t.proyectoId),
+  })
+);
+
+/**
+ * One row per goal and month: the plan and, once saved, the execution. A month
+ * is reported exactly when `reportadoAt` is set (CHECK in 0033).
+ */
+export const pg2030MetaMeses = pgTable(
+  "pg2030_meta_meses",
+  {
+    metaId: uuid("meta_id")
+      .notNull()
+      .references(() => pg2030MetasInstitucionales.id, { onDelete: "cascade" }),
+    mes: smallint("mes").notNull(),
+    fisicoPlanificado: numeric("fisico_planificado", { precision: 18, scale: 4 }).notNull().default("0"),
+    presupuestoPlanificado: numeric("presupuesto_planificado", { precision: 14, scale: 2 }).notNull().default("0"),
+    fisicoEjecutado: numeric("fisico_ejecutado", { precision: 18, scale: 4 }),
+    presupuestoDevengado: numeric("presupuesto_devengado", { precision: 14, scale: 2 }),
+    hitosAlcanzados: text("hitos_alcanzados"),
+    observaciones: text("observaciones"),
+    reportadoAt: timestamp("reportado_at", { withTimezone: true }),
+    reportadoPor: uuid("reportado_por").references(() => users.id, { onDelete: "set null" }),
+    reportadoPorNombre: text("reportado_por_nombre"),
+    updatedAt: timestamp("updated_at", { withTimezone: true }).defaultNow().notNull(),
+  },
+  (t) => ({
+    pk: primaryKey({ name: "pg2030_meta_meses_pk", columns: [t.metaId, t.mes] }),
+  })
+);
+
+/** A closed cutoff reopened for one institution until a new deadline. */
+export const pg2030Reaperturas = pgTable(
+  "pg2030_reaperturas",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    anio: integer("anio").notNull().references(() => pg2030Anios.anio, { onDelete: "cascade" }),
+    trimestre: smallint("trimestre").notNull(),
+    institucionId: uuid("institucion_id")
+      .notNull()
+      .references(() => pg2030Instituciones.id, { onDelete: "restrict" }),
+    fechaLimite: date("fecha_limite").notNull(),
+    motivo: text("motivo").notNull(),
+    creadoPor: uuid("creado_por").references(() => users.id, { onDelete: "set null" }),
+    creadoPorNombre: text("creado_por_nombre").notNull(),
+    createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
+  },
+  (t) => ({
+    corteIdx: index("pg2030_reaperturas_corte_idx").on(t.anio, t.trimestre, t.institucionId),
+  })
+);
+
+export type Pg2030BitacoraAccion = "reapertura" | "mes_modificado" | "meta_modificada" | "meta_eliminada";
+
+/** Every reopening, and who changed what after a cutoff had closed. */
+export const pg2030Bitacora = pgTable(
+  "pg2030_bitacora",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    anio: integer("anio").notNull().references(() => pg2030Anios.anio, { onDelete: "cascade" }),
+    trimestre: smallint("trimestre").notNull(),
+    institucionId: uuid("institucion_id")
+      .notNull()
+      .references(() => pg2030Instituciones.id, { onDelete: "restrict" }),
+    metaId: uuid("meta_id").references(() => pg2030MetasInstitucionales.id, { onDelete: "set null" }),
+    accion: text("accion").$type<Pg2030BitacoraAccion>().notNull(),
+    detalle: jsonb("detalle").$type<Record<string, unknown>>().notNull().default({}),
+    usuarioId: uuid("usuario_id").references(() => users.id, { onDelete: "set null" }),
+    usuarioNombre: text("usuario_nombre").notNull(),
+    createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
+  },
+  (t) => ({
+    corteIdx: index("pg2030_bitacora_corte_idx").on(t.anio, t.trimestre, t.institucionId),
   })
 );

@@ -54,3 +54,52 @@ export const PG2030_CAMPO_LABELS: Record<string, string> = {
   hito_2023: "Hito 2023",
   hito_2030: "Hito 2030",
 };
+
+export const MESES_CORTOS = ["Ene", "Feb", "Mar", "Abr", "May", "Jun", "Jul", "Ago", "Sep", "Oct", "Nov", "Dic"];
+export const MESES_LARGOS = [
+  "enero", "febrero", "marzo", "abril", "mayo", "junio",
+  "julio", "agosto", "septiembre", "octubre", "noviembre", "diciembre",
+];
+
+const NUM = new Intl.NumberFormat("es-EC", { maximumFractionDigits: 4 });
+
+/** Physical progress: up to 4 decimals, es-EC separators. */
+export function formatNumero(value: number | null | undefined): string {
+  return value === null || value === undefined ? "—" : NUM.format(value);
+}
+
+/** "2026-11-30" → "30/11/2026". */
+export function formatFecha(fecha: string | null | undefined): string {
+  if (!fecha) return "—";
+  const [y, m, d] = fecha.slice(0, 10).split("-");
+  return `${d}/${m}/${y}`;
+}
+
+export const ESTADO_CORTE: Record<string, { label: string; className: string }> = {
+  no_habilitado: { label: "No habilitado", className: "border-slate-200 bg-slate-50 text-slate-500" },
+  abierto: { label: "Abierto", className: "border-green-300 bg-green-50 text-green-700" },
+  en_carga: { label: "En carga inicial", className: "border-sky-300 bg-sky-50 text-sky-700" },
+  cerrado: { label: "Cerrado", className: "border-slate-300 bg-slate-100 text-slate-700" },
+};
+
+export const ESTADO_INSTITUCION: Record<string, { label: string; className: string }> = {
+  con_metas: { label: "Con metas", className: "border-green-300 bg-green-50 text-green-700" },
+  sin_acciones: { label: "Sin acciones vinculadas", className: "border-slate-300 bg-slate-50 text-slate-600" },
+  sin_respuesta: { label: "Sin respuesta", className: "border-amber-300 bg-amber-50 text-amber-700" },
+  no_convocada: { label: "No convocada", className: "border-slate-200 bg-white text-slate-400" },
+};
+
+/** The same rule the API applies (plan §6): executed with nothing planned, or at twice the plan. */
+export function pareceAcumulado(planificado: number, ejecutado: number): boolean {
+  if (ejecutado <= 0) return false;
+  if (planificado <= 0) return true;
+  return ejecutado >= 2 * planificado;
+}
+
+/** Parse a decimal typed with either "," or "." ("1.234,5" is not accepted: no thousands separators). */
+export function parseDecimal(value: string): number | null {
+  const normalized = value.trim().replace(",", ".");
+  if (normalized === "") return 0;
+  const n = Number(normalized);
+  return Number.isFinite(n) && n >= 0 ? n : null;
+}

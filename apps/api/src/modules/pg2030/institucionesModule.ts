@@ -1,11 +1,17 @@
 import { and, asc, eq, ne, sql } from "drizzle-orm";
 import { getDb } from "../../db/client.js";
 import { users } from "../../db/schema/shared.js";
-import { pg2030Instituciones, pg2030UsuarioInstitucion } from "../../db/schema/pg2030.js";
+import {
+  pg2030Anios,
+  pg2030Convocatorias,
+  pg2030Instituciones,
+  pg2030UsuarioInstitucion,
+} from "../../db/schema/pg2030.js";
 import type { Pg2030Institucion, Pg2030InstitucionTipo, Pg2030Me } from "@pma/types";
 import type { AccessTokenClaims } from "../../auth/jwt.js";
 import { Conflict, NotFound } from "../../lib/errors.js";
 import { lockAndAssertActor } from "../shared/transactionalActor.js";
+import { FOREIGN_KEY_VIOLATION, UNIQUE_VIOLATION, pgErrorCode } from "./shared.js";
 
 type InstitucionRow = typeof pg2030Instituciones.$inferSelect;
 
@@ -28,17 +34,6 @@ function toInstitucion(row: InstitucionRow, usuarios: Pg2030Institucion["usuario
     usuarios,
   };
 }
-
-/** Postgres error code, whether thrown raw or wrapped in DrizzleQueryError's `cause`. */
-function pgErrorCode(error: unknown): string | undefined {
-  const own = (error as { code?: unknown })?.code;
-  if (typeof own === "string") return own;
-  const cause = (error as { cause?: { code?: unknown } })?.cause?.code;
-  return typeof cause === "string" ? cause : undefined;
-}
-
-const UNIQUE_VIOLATION = "23505";
-const FOREIGN_KEY_VIOLATION = "23503";
 
 /**
  * Refuse a sigla another institution already uses, compared case-insensitively
@@ -103,6 +98,12 @@ export async function createInstitucion(actorId: string, input: InstitucionInput
         .insert(pg2030Instituciones)
         .values({ nombre: input.nombre, sigla: input.sigla, tipo: input.tipo, activa: input.activa ?? true })
         .returning();
+      // A new institution is called in the most recent open year only (§4);
+      // earlier years are marked by hand if needed.
+      const [latest] = await tx.select({ anio: sql<number | null>`max(${pg2030Anios.anio})` }).from(pg2030Anios);
+      if (latest?.anio != null && row.activa) {
+        await tx.insert(pg2030Convocatorias).values({ anio: latest.anio, institucionId: row.id }).onConflictDoNothing();
+      }
       return toInstitucion(row, []);
     }),
   );

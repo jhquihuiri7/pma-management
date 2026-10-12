@@ -3,15 +3,17 @@
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { useAuth } from "@/lib/auth-context";
-import { LayoutDashboard, LogOut, ArrowLeft, BookOpen, Building2 } from "lucide-react";
+import { LayoutDashboard, LogOut, ArrowLeft, BookOpen, Building2, CalendarRange, ClipboardList } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Separator } from "@/components/ui/separator";
 
 const allLinks = [
   { href: "/pg2030/dashboard", label: "Panel Principal", icon: LayoutDashboard, roles: ["ADMIN", "REPORTER", "VIEWER"] },
+  { href: "/pg2030/metas", label: "Planificación y reporte", icon: ClipboardList, roles: ["ADMIN", "REPORTER", "VIEWER"] },
   { href: "/pg2030/catalogo", label: "Catálogo del Plan", icon: BookOpen, roles: ["ADMIN", "REPORTER", "VIEWER"] },
   // A reporter only deals with their own institution, shown on the dashboard.
   { href: "/pg2030/instituciones", label: "Instituciones", icon: Building2, roles: ["ADMIN", "VIEWER"] },
+  { href: "/pg2030/anios", label: "Años y cortes", icon: CalendarRange, roles: ["ADMIN", "VIEWER"] },
 ];
 
 export default function SidebarPG2030() {

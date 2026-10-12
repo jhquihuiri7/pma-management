@@ -530,3 +530,128 @@ export interface Pg2030Me {
    */
   puedeEscribir: boolean;
 }
+
+// PG2030 phases 2 and 3: years, cutoffs, institutional goals and monthly report.
+
+export const PG2030_FUENTE_FINANCIAMIENTO_VALUES = ["Corriente", "Inversión", "Cooperación"] as const;
+export type Pg2030FuenteFinanciamiento = typeof PG2030_FUENTE_FINANCIAMIENTO_VALUES[number];
+
+export type Pg2030Trimestre = 1 | 2 | 3 | 4;
+export type Pg2030EstadoCorte = "no_habilitado" | "abierto" | "en_carga" | "cerrado";
+
+export interface Pg2030Corte {
+  trimestre: Pg2030Trimestre;
+  habilitado: boolean;
+  /** Last day to complete it, before any initial load or reopening. */
+  plazoBase: string;
+  /** Last day for everyone: the base one, or the load deadline when in the load. */
+  plazoCierre: string;
+  enCarga: boolean;
+  estado: Pg2030EstadoCorte;
+}
+
+export interface Pg2030Anio {
+  anio: number;
+  primerCorte: Pg2030Trimestre;
+  fechaLimiteCarga: string | null;
+  abiertoPorNombre: string;
+  createdAt: string;
+  cortes: Pg2030Corte[];
+}
+
+export type Pg2030EstadoInstitucionAnio = "con_metas" | "sin_acciones" | "sin_respuesta" | "no_convocada";
+
+/** One institution's standing in a year (cuadro 2 of the dashboard). */
+export interface Pg2030InstitucionAnio {
+  institucion: Pg2030InstitucionRef & { tipo: Pg2030InstitucionTipo; activa: boolean };
+  convocada: boolean;
+  metas: number;
+  sinAcciones: { declaradoPorNombre: string; createdAt: string } | null;
+  estado: Pg2030EstadoInstitucionAnio;
+}
+
+export interface Pg2030MetaMes {
+  mes: number;
+  fisicoPlanificado: number;
+  presupuestoPlanificado: number;
+  /** Null until the month is reported; a reported month may carry 0. */
+  fisicoEjecutado: number | null;
+  presupuestoDevengado: number | null;
+  hitosAlcanzados: string | null;
+  observaciones: string | null;
+  reportadoAt: string | null;
+  reportadoPorNombre: string | null;
+  bloqueado: boolean;
+  /** What the caller may do with this month right now. */
+  puedePlanificar: boolean;
+  puedeReportar: boolean;
+}
+
+export interface Pg2030MetaInstitucional {
+  id: string;
+  anio: number;
+  institucion: Pg2030InstitucionRef;
+  proyecto: { id: string; codigo: string; nombre: string; metaPlanCodigo: string };
+  nombre: string;
+  descripcion: string | null;
+  unidadMedida: string;
+  fuenteFinanciamiento: Pg2030FuenteFinanciamiento | null;
+  beneficiariosDirectos: string | null;
+  personalTecnico: string | null;
+  responsablesInternos: string | null;
+  entidadesCoordinacion: string | null;
+  meses: Pg2030MetaMes[];
+  /** Sums of the twelve months; an unreported month counts as 0. */
+  totales: {
+    fisicoPlanificado: number;
+    presupuestoPlanificado: number;
+    fisicoEjecutado: number;
+    presupuestoDevengado: number;
+  };
+  creadoPorNombre: string;
+  createdAt: string;
+  updatedAt: string;
+}
+
+/** Payload of `GET /pg2030/metas?anio=&institucionId=`. */
+export interface Pg2030MetasPayload {
+  anio: Pg2030Anio;
+  institucion: (Pg2030InstitucionRef & { tipo: Pg2030InstitucionTipo; activa: boolean }) | null;
+  sinAcciones: { declaradoPorNombre: string; createdAt: string } | null;
+  /** Whether the caller can create goals or change the declaration for this institution. */
+  puedeEditar: boolean;
+  metas: Pg2030MetaInstitucional[];
+}
+
+/** Payload of `PUT /pg2030/metas/:id/meses/:mes/ejecucion`. */
+export interface Pg2030ReporteResultado {
+  meta: Pg2030MetaInstitucional;
+  /** The month looks cumulative (executed with nothing planned, or at twice the plan). */
+  avisoAcumulado: boolean;
+}
+
+export interface Pg2030Reapertura {
+  id: string;
+  anio: number;
+  trimestre: Pg2030Trimestre;
+  institucion: Pg2030InstitucionRef;
+  fechaLimite: string;
+  motivo: string;
+  creadoPorNombre: string;
+  createdAt: string;
+  vigente: boolean;
+}
+
+export type Pg2030BitacoraAccion = "reapertura" | "mes_modificado" | "meta_modificada" | "meta_eliminada";
+
+export interface Pg2030BitacoraEntrada {
+  id: string;
+  anio: number;
+  trimestre: Pg2030Trimestre;
+  institucion: Pg2030InstitucionRef;
+  metaId: string | null;
+  accion: Pg2030BitacoraAccion;
+  detalle: Record<string, unknown>;
+  usuarioNombre: string;
+  createdAt: string;
+}

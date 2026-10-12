@@ -101,6 +101,42 @@ test(
         assert.equal(unknownLevel.statusCode, 400);
       });
 
+      await t.test("years and goals: roles and validation at the HTTP layer", async () => {
+        const abrir = await app.inject({
+          method: "POST",
+          url: "/pg2030/anios",
+          headers: auth(reporterJwt),
+          payload: { anio: 2099, primerCorte: 1 },
+        });
+        assert.equal(abrir.statusCode, 403, "only an administrator opens a year");
+
+        const corto = await app.inject({
+          method: "POST",
+          url: "/pg2030/metas",
+          headers: auth(adminJwt),
+          payload: {
+            anio: 2099,
+            institucionId: randomUUID(),
+            proyectoId: randomUUID(),
+            nombre: "x",
+            unidadMedida: "u",
+            planificacion: [{ mes: 1, fisico: 1, presupuesto: 0 }],
+          },
+        });
+        assert.equal(corto.statusCode, 400, "the plan carries all twelve months");
+
+        const negativo = await app.inject({
+          method: "PUT",
+          url: `/pg2030/metas/${randomUUID()}/meses/5/ejecucion`,
+          headers: auth(adminJwt),
+          payload: { fisicoEjecutado: -1, presupuestoDevengado: 0 },
+        });
+        assert.equal(negativo.statusCode, 400);
+
+        const sinAnio = await app.inject({ method: "GET", url: "/pg2030/metas?anio=2099", headers: auth(adminJwt) });
+        assert.equal(sinAnio.statusCode, 404, "a year that was never opened");
+      });
+
       await t.test("/me reports a reporter without an institution as unable to write", async () => {
         const me = (await app.inject({ method: "GET", url: "/pg2030/me", headers: auth(reporterJwt) })).json() as Pg2030Me;
         assert.equal(me.role, "REPORTER");

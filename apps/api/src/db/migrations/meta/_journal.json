@@ -225,6 +225,13 @@
       "when": 1787800000000,
       "tag": "0032_pg2030_catalog_data",
       "breakpoints": true
+    },
+    {
+      "idx": 33,
+      "version": "7",
+      "when": 1787900000000,
+      "tag": "0033_pg2030_planificacion_reporte",
+      "breakpoints": true
     }
   ]
 }

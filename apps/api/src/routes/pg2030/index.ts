@@ -1,8 +1,10 @@
 import type { FastifyInstance } from "fastify";
 import { authenticate, requireApp } from "../../auth/middleware.js";
 import { getPg2030Me } from "../../modules/pg2030/institucionesModule.js";
+import { pg2030AniosRoutes } from "./anios.js";
 import { pg2030CatalogoRoutes } from "./catalogo.js";
 import { pg2030InstitucionesRoutes } from "./instituciones.js";
+import { pg2030MetasRoutes } from "./metas.js";
 
 /**
  * PG2030 routes — seguimiento al Plan Galápagos 2030.
@@ -19,4 +21,6 @@ export async function pg2030Routes(app: FastifyInstance) {
 
   await app.register(pg2030CatalogoRoutes, { prefix: "/catalogo" });
   await app.register(pg2030InstitucionesRoutes, { prefix: "/instituciones" });
+  await app.register(pg2030AniosRoutes, { prefix: "/anios" });
+  await app.register(pg2030MetasRoutes, { prefix: "/metas" });
 }

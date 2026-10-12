@@ -90,3 +90,10 @@ export const pg2030PresupuestoEstadoEnum = pgEnum("pg2030_presupuesto_estado", [
 ]);
 
 export const pg2030InstitucionTipoEnum = pgEnum("pg2030_institucion_tipo", ["Ejecutivo", "GAD", "Otro"]);
+
+// PG2030 institutional goals (migration 0033).
+export const pg2030FuenteFinanciamientoEnum = pgEnum("pg2030_fuente_financiamiento", [
+  "Corriente",
+  "Inversión",
+  "Cooperación",
+]);
