@@ -3,17 +3,21 @@
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { useAuth } from "@/lib/auth-context";
-import { LayoutDashboard, LogOut, ArrowLeft } from "lucide-react";
+import { LayoutDashboard, LogOut, ArrowLeft, BookOpen, Building2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Separator } from "@/components/ui/separator";
 
-const links = [
-  { href: "/pg2030/dashboard", label: "Panel Principal", icon: LayoutDashboard },
+const allLinks = [
+  { href: "/pg2030/dashboard", label: "Panel Principal", icon: LayoutDashboard, roles: ["ADMIN", "REPORTER", "VIEWER"] },
+  { href: "/pg2030/catalogo", label: "Catálogo del Plan", icon: BookOpen, roles: ["ADMIN", "REPORTER", "VIEWER"] },
+  // A reporter only deals with their own institution, shown on the dashboard.
+  { href: "/pg2030/instituciones", label: "Instituciones", icon: Building2, roles: ["ADMIN", "VIEWER"] },
 ];
 
 export default function SidebarPG2030() {
   const pathname = usePathname();
   const { user: session, logout, logoutPending } = useAuth();
+  const links = allLinks.filter((link) => session && link.roles.includes(session.role));
 
   return (
     <aside className="w-64 h-screen bg-white border-r border-slate-200 flex flex-col fixed left-0 top-0">

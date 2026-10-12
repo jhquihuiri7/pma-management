@@ -32,7 +32,7 @@ import {
 import { Badge } from "@/components/ui/badge";
 import { Plus, Trash2, Send, Pencil, X } from "lucide-react";
 import { toast } from "sonner";
-import { User } from "@/types";
+import { User, type Pg2030Institucion } from "@/types";
 
 type AppKey = "pma" | "rgdp" | "geo" | "previene" | "pg2030";
 
@@ -53,7 +53,13 @@ const emptyForm = {
   position: "",
   role: "REPORTER" as "ADMIN" | "REPORTER" | "VIEWER",
   apps: [] as AppKey[],
+  pg2030InstitucionId: "",
 };
+
+/** A PG2030 reporter reports for one institution; no other role carries one. */
+function needsPg2030Institucion(role: string, apps: readonly string[]) {
+  return role === "REPORTER" && apps.includes("pg2030");
+}
 
 export default function AdminUsersPage() {
   const { user: session } = useAuth();
@@ -67,7 +73,9 @@ export default function AdminUsersPage() {
     unit: "",
     position: "",
     role: "REPORTER" as "ADMIN" | "REPORTER" | "VIEWER",
+    pg2030InstitucionId: "",
   });
+  const [pg2030Instituciones, setPg2030Instituciones] = useState<Pg2030Institucion[]>([]);
   const [pendingAction, setPendingAction] = useState<string | null>(null);
   const pendingActionRef = useRef(false);
 
@@ -92,7 +100,15 @@ export default function AdminUsersPage() {
     }
   }
 
-  useEffect(() => { loadUsers(); }, []);
+  async function loadPg2030Instituciones() {
+    try {
+      setPg2030Instituciones(await api.get<Pg2030Institucion[]>("/pg2030/instituciones"));
+    } catch (error) {
+      toast.error(apiErrorMessage(error, "No se pudieron cargar las instituciones de PG2030"));
+    }
+  }
+
+  useEffect(() => { loadUsers(); loadPg2030Instituciones(); }, []);
 
   function toggleApp(app: AppKey) {
     setForm((f) => ({
@@ -113,6 +129,9 @@ export default function AdminUsersPage() {
           unit: form.unit || undefined,
           position: form.position || undefined,
           apps: form.role === "ADMIN" ? [] : form.apps,
+          pg2030InstitucionId: needsPg2030Institucion(form.role, form.apps)
+            ? form.pg2030InstitucionId || undefined
+            : undefined,
         });
         const saved = requirePersistedEntity<{ id: string; invitation: unknown }>(
           response,
@@ -137,6 +156,11 @@ export default function AdminUsersPage() {
   async function handleEdit(e: React.FormEvent) {
     e.preventDefault();
     if (!editUser) return;
+    // Sent only when it changed and still applies: a role change away from
+    // REPORTER drops the institution on the server by itself.
+    const institucionChanged =
+      needsPg2030Institucion(editForm.role, editUser.apps ?? []) &&
+      editForm.pg2030InstitucionId !== (editUser.pg2030Institucion?.id ?? "");
     await withActionLock(`edit:${editUser.id}`, async () => {
       setLoading(true);
       try {
@@ -146,6 +170,7 @@ export default function AdminUsersPage() {
             unit: editForm.unit || null,
             position: editForm.position || null,
             role: editForm.role,
+            ...(institucionChanged ? { pg2030InstitucionId: editForm.pg2030InstitucionId || null } : {}),
           }),
           "El servidor no confirmó la actualización del usuario"
         );
@@ -223,7 +248,35 @@ export default function AdminUsersPage() {
       unit: user.unit || "",
       position: user.position || "",
       role: user.role,
+      pg2030InstitucionId: user.pg2030Institucion?.id ?? "",
     });
+  }
+
+  const institucionesActivas = pg2030Instituciones.filter((i) => i.activa);
+
+  // A render function, not a component: declared inside the page, a component
+  // would be a new type on every render and remount the <select> mid-edit.
+  function renderPg2030InstitucionSelect({ id, value, required, onChange }: {
+    id: string;
+    value: string;
+    required: boolean;
+    onChange: (value: string) => void;
+  }) {
+    return (
+      <div className="space-y-2">
+        <Label htmlFor={id}>Institución en PG2030</Label>
+        <select id={id} required={required} value={value} onChange={(e) => onChange(e.target.value)}
+          className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm">
+          <option value="">{required ? "Elige la institución…" : "Sin institución"}</option>
+          {institucionesActivas.map((i) => (
+            <option key={i.id} value={i.id}>{i.sigla} — {i.nombre}</option>
+          ))}
+        </select>
+        <p className="text-xs text-muted-foreground">
+          El reportero planifica y reporta solo por esta institución.
+        </p>
+      </div>
+    );
   }
 
   const admins = users.filter((u) => u.role === "ADMIN");
@@ -248,19 +301,27 @@ export default function AdminUsersPage() {
     const unassigned = ALL_APPS.filter((a) => !assigned.includes(a));
     return (
       <div className="flex flex-wrap gap-1">
-        {assigned.map((a) => (
-          <Badge
-            key={a}
-            variant="secondary"
-            className={`text-xs flex items-center gap-1 group ${pendingAction ? "pointer-events-none opacity-50" : "cursor-pointer hover:bg-red-100 hover:text-red-700"}`}
-            aria-disabled={pendingAction !== null}
-            onClick={() => { if (!pendingAction) void handleUnassignApp(user.id, a); }}
-            title={`Quitar de ${APP_LABELS[a]}`}
-          >
-            {APP_LABELS[a]}
-            <X className="w-2.5 h-2.5 opacity-0 group-hover:opacity-100" />
-          </Badge>
-        ))}
+        {assigned.map((a) => {
+          // A PG2030 reporter shows the institution they report for, or that they lack one.
+          const pg2030Reporter = a === "pg2030" && user.role === "REPORTER";
+          const sinInstitucion = pg2030Reporter && !user.pg2030Institucion;
+          return (
+            <Badge
+              key={a}
+              variant="secondary"
+              className={`text-xs flex items-center gap-1 group ${sinInstitucion ? "bg-amber-100 text-amber-800" : ""} ${pendingAction ? "pointer-events-none opacity-50" : "cursor-pointer hover:bg-red-100 hover:text-red-700"}`}
+              aria-disabled={pendingAction !== null}
+              onClick={() => { if (!pendingAction) void handleUnassignApp(user.id, a); }}
+              title={sinInstitucion
+                ? "Reportero de PG2030 sin institución: asígnala editando el usuario. Clic para quitar PG2030"
+                : `Quitar de ${APP_LABELS[a]}`}
+            >
+              {APP_LABELS[a]}
+              {pg2030Reporter && (user.pg2030Institucion ? ` · ${user.pg2030Institucion.sigla}` : " · sin institución")}
+              <X className="w-2.5 h-2.5 opacity-0 group-hover:opacity-100" />
+            </Badge>
+          );
+        })}
         {unassigned.map((a) => (
           <Badge
             key={a}
@@ -420,6 +481,15 @@ export default function AdminUsersPage() {
                 </div>
               )}
 
+              {needsPg2030Institucion(form.role, form.apps) && (
+                renderPg2030InstitucionSelect({
+                  id: "pg2030-institucion",
+                  required: true,
+                  value: form.pg2030InstitucionId,
+                  onChange: (value) => setForm({ ...form, pg2030InstitucionId: value }),
+                })
+              )}
+
               <Button type="submit" className="w-full" disabled={loading || pendingAction !== null}>
                 {loading ? "Creando..." : "Crear Usuario"}
               </Button>
@@ -516,6 +586,14 @@ export default function AdminUsersPage() {
                   onChange={(e) => setEditForm({ ...editForm, position: e.target.value })} />
               </div>
             </div>
+            {editUser && needsPg2030Institucion(editForm.role, editUser.apps ?? []) && (
+              renderPg2030InstitucionSelect({
+                id: "edit-pg2030-institucion",
+                required: false,
+                value: editForm.pg2030InstitucionId,
+                onChange: (value) => setEditForm({ ...editForm, pg2030InstitucionId: value }),
+              })
+            )}
             <Button type="submit" className="w-full" disabled={loading || pendingAction !== null}>
               {loading ? "Guardando..." : "Guardar Cambios"}
             </Button>

@@ -13,6 +13,8 @@ export interface User {
   unit?: string | null;
   position?: string | null;
   createdAt: string;
+  /** Management lists only: the REPORTER's PG2030 institution, if any. */
+  pg2030Institucion?: Pg2030InstitucionRef | null;
 }
 
 export const PLAN_REPORTE_VALUES = ["6 meses", "1 año", "2 años"] as const;
@@ -393,4 +395,138 @@ export interface PmaActionPlanResult {
   ok: true;
   active: boolean;
   activation: PmaActionPlanActivation;
+}
+
+// ---------------------------------------------------------------------------
+// PG2030 — seguimiento al Plan Galápagos 2030
+// ---------------------------------------------------------------------------
+
+export const PG2030_PROYECTO_TIPO_VALUES = ["Acción", "Proyecto"] as const;
+export type Pg2030ProyectoTipo = typeof PG2030_PROYECTO_TIPO_VALUES[number];
+
+export const PG2030_PRESUPUESTO_ESTADO_VALUES = [
+  "Monto",
+  "SPI",
+  "No disponible",
+  "A definirse en la LISS",
+  "Sin dato",
+] as const;
+export type Pg2030PresupuestoEstado = typeof PG2030_PRESUPUESTO_ESTADO_VALUES[number];
+
+export const PG2030_INSTITUCION_TIPO_VALUES = ["Ejecutivo", "GAD", "Otro"] as const;
+export type Pg2030InstitucionTipo = typeof PG2030_INSTITUCION_TIPO_VALUES[number];
+
+/** A project field that differed between rows of the imported matrix. */
+export interface Pg2030Conflicto {
+  id: string;
+  campo: string;
+  valorUsado: string | null;
+  valoresAlternativos: string[];
+  revisado: boolean;
+  revisadoPorNombre: string | null;
+  revisadoAt: string | null;
+}
+
+export interface Pg2030Proyecto {
+  id: string;
+  codigo: string;
+  nombre: string;
+  tipo: Pg2030ProyectoTipo;
+  plazo: string | null;
+  presupuestoEstado: Pg2030PresupuestoEstado;
+  /** Present exactly when `presupuestoEstado` is "Monto". */
+  presupuestoReferencial: number | null;
+  tipoEntidadResponsable: string | null;
+  responsablesPlan: string | null;
+  entidadesEjecutoras: string | null;
+  hito2023: string | null;
+  hito2030: string | null;
+  conflictos: Pg2030Conflicto[];
+}
+
+export interface Pg2030MetaPlan {
+  id: string;
+  codigo: string;
+  texto: string;
+  cuantificable: boolean;
+  proyectos: Pg2030Proyecto[];
+}
+
+export interface Pg2030Estrategia {
+  id: string;
+  codigo: string;
+  texto: string;
+  metas: Pg2030MetaPlan[];
+}
+
+export interface Pg2030Politica {
+  id: string;
+  codigo: string;
+  texto: string;
+  estrategias: Pg2030Estrategia[];
+}
+
+export interface Pg2030Objetivo {
+  id: string;
+  codigo: string;
+  texto: string;
+  politicas: Pg2030Politica[];
+}
+
+export interface Pg2030Eje {
+  id: string;
+  codigo: string;
+  nombre: string;
+  orden: number;
+  objetivos: Pg2030Objetivo[];
+}
+
+/** Cuadro 1 of the dashboard: what the plan contains. */
+export interface Pg2030CatalogoResumen {
+  ejes: number;
+  objetivos: number;
+  politicas: number;
+  estrategias: number;
+  metas: number;
+  metasCuantificables: number;
+  proyectos: number;
+  /** Distinct milestone texts, counted from the catalog (decision D4). */
+  hitos2030: number;
+  presupuesto: {
+    proyectosConMonto: number;
+    total: number;
+    porEstado: Record<Pg2030PresupuestoEstado, number>;
+  };
+  conflictosPendientes: number;
+}
+
+/** Payload of `GET /pg2030/catalogo`. */
+export interface Pg2030Catalogo {
+  resumen: Pg2030CatalogoResumen;
+  ejes: Pg2030Eje[];
+}
+
+export interface Pg2030InstitucionRef {
+  id: string;
+  nombre: string;
+  sigla: string;
+}
+
+export interface Pg2030Institucion extends Pg2030InstitucionRef {
+  tipo: Pg2030InstitucionTipo;
+  activa: boolean;
+  createdAt: string;
+  updatedAt: string;
+  usuarios: Array<{ id: string; name: string; email: string }>;
+}
+
+/** Payload of `GET /pg2030/me`. */
+export interface Pg2030Me {
+  role: UserRole;
+  institucion: (Pg2030InstitucionRef & { tipo: Pg2030InstitucionTipo; activa: boolean }) | null;
+  /**
+   * Whether this user can write PG2030 data. A REPORTER without an
+   * institution cannot, and the web shows them a notice instead.
+   */
+  puedeEscribir: boolean;
 }

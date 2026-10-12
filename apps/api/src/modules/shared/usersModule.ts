@@ -21,6 +21,12 @@ import { hashRefreshToken } from "../../auth/jwt.js";
 import type { UserRole } from "@pma/types";
 import { enqueueMail } from "./mailOutbox.js";
 import { lockAndAssertActor, lockAndAssertGlobalAdmin } from "./transactionalActor.js";
+import {
+  assertCanHaveInstitucion,
+  clearUsuarioInstitucion,
+  getInstitucionesByUser,
+  setUsuarioInstitucion,
+} from "../pg2030/usuarioInstitucion.js";
 
 // API-side AppKey: legacy keys are normalized at the API boundary and never
 // reach Postgres. The Drizzle enum only contains the canonical keys.
@@ -37,6 +43,8 @@ export type CreateUserGlobalInput = {
   unit?: string;
   position?: string;
   apps?: AppKey[];
+  /** Required for a REPORTER created with PG2030 access, forbidden otherwise. */
+  pg2030InstitucionId?: string;
 };
 
 function createSetPasswordToken() {
@@ -87,20 +95,26 @@ async function revokeSubsystemState(db: any, userId: string, app: AppKey): Promi
       .update(rgdpEvidences)
       .set({ validatedBy: null })
       .where(eq(rgdpEvidences.validatedBy, userId));
+    return;
+  }
+
+  if (app === "pg2030") {
+    await clearUsuarioInstitucion(db, userId);
   }
 }
 
 /**
  * Plan and item grants encode role-specific capabilities. Discard them on
  * every actual role transition so a formerly valid grant cannot acquire a new
- * meaning under the replacement role. App memberships and GEO state remain
- * untouched.
+ * meaning under the replacement role. A PG2030 institution only exists for a
+ * REPORTER, so it goes too. App memberships and GEO state remain untouched.
  */
 async function revokeRoleBoundAssignments(db: any, userId: string): Promise<void> {
   await db.delete(pmaItemAssignments).where(eq(pmaItemAssignments.userId, userId));
   await db.delete(pmaPlanAssignments).where(eq(pmaPlanAssignments.userId, userId));
   await db.delete(rgdpItemAssignments).where(eq(rgdpItemAssignments.userId, userId));
   await db.delete(rgdpPlanAssignments).where(eq(rgdpPlanAssignments.userId, userId));
+  await clearUsuarioInstitucion(db, userId);
 }
 
 async function insertSetPasswordToken(db: any, userId: string) {
@@ -139,7 +153,7 @@ export async function createUserGlobal(requesterId: string, input: CreateUserGlo
   const db = getDb();
   const normalizedEmail = input.email.trim().toLowerCase();
   return db.transaction(async (tx) => {
-    await lockAndAssertGlobalAdmin(tx, requesterId);
+    const actor = await lockAndAssertGlobalAdmin(tx, requesterId);
     const existingRows = await tx.select().from(users).where(eq(users.email, normalizedEmail)).limit(1);
     const existing = existingRows[0] ?? null;
     if (existing) throw Conflict("Ya existe un usuario con ese correo");
@@ -161,6 +175,15 @@ export async function createUserGlobal(requesterId: string, input: CreateUserGlo
       await tx.insert(userApps).values({ userId: row.id, appKey }).onConflictDoNothing();
     }
 
+    // A PG2030 reporter reports for an institution; creating one without it
+    // would leave an account that can log in but never write.
+    if (input.pg2030InstitucionId !== undefined) {
+      assertCanHaveInstitucion(input.role, assignedApps);
+      await setUsuarioInstitucion(tx, { userId: row.id, institucionId: input.pg2030InstitucionId, actor });
+    } else if (input.role === "REPORTER" && assignedApps.includes("pg2030")) {
+      throw BadRequest("Elige la institución del reportero en PG2030");
+    }
+
     const operationId = await queueInvitation(tx, row.id, normalizedEmail, input.name);
 
     return {
@@ -176,12 +199,19 @@ export async function createUserGlobal(requesterId: string, input: CreateUserGlo
 
 export async function updateManagedUser(
   userId: string,
-  updates: { name?: string; unit?: string | null; position?: string | null; role?: ManagedRole },
+  updates: {
+    name?: string;
+    unit?: string | null;
+    position?: string | null;
+    role?: ManagedRole;
+    /** PG2030 institution: a uuid sets it, null removes it, absent leaves it. */
+    pg2030InstitucionId?: string | null;
+  },
   requesterId: string,
 ) {
   const db = getDb();
   return db.transaction(async (tx) => {
-    await lockAndAssertGlobalAdmin(tx, requesterId);
+    const actor = await lockAndAssertGlobalAdmin(tx, requesterId);
     const rows = await tx.select().from(users).where(eq(users.id, userId)).limit(1).for("update");
     const u = rows[0];
     if (!u) throw NotFound("Usuario no encontrado");
@@ -208,6 +238,15 @@ export async function updateManagedUser(
       updatedAt: new Date(),
     }).where(eq(users.id, userId)).returning({ id: users.id });
     if (changed.length !== 1) throw NotFound("Usuario no encontrado");
+
+    // After the role transition above, which already dropped any old link, so
+    // a VIEWER promoted to REPORTER can get their institution in one request.
+    if (updates.pg2030InstitucionId === null) {
+      await clearUsuarioInstitucion(tx, userId);
+    } else if (updates.pg2030InstitucionId !== undefined) {
+      assertCanHaveInstitucion(updates.role ?? u.role, await getUserAppsFrom(tx, userId));
+      await setUsuarioInstitucion(tx, { userId, institucionId: updates.pg2030InstitucionId, actor });
+    }
     return { ok: true as const, id: userId };
   });
 }
@@ -334,6 +373,11 @@ export async function listManagedUsers(app?: AppKey) {
     list.push(a.appKey as AppKey);
     byUser.set(a.userId, list);
   }
-  const out = rows.map((r) => ({ ...r, apps: byUser.get(r.id) ?? [] }));
+  const instituciones = await getInstitucionesByUser(db, rows.map((r) => r.id));
+  const out = rows.map((r) => ({
+    ...r,
+    apps: byUser.get(r.id) ?? [],
+    pg2030Institucion: instituciones.get(r.id) ?? null,
+  }));
   return app ? out.filter((u) => u.apps.includes(app)) : out;
 }

@@ -68,7 +68,8 @@ function apiUrl(input: string): string {
     input.startsWith("/pma/") ||
     input.startsWith("/rgdp/") ||
     input.startsWith("/geo/") ||
-    input.startsWith("/previene/")
+    input.startsWith("/previene/") ||
+    input.startsWith("/pg2030/")
   ) {
     return `${BASE_URL}${input}`;
   }

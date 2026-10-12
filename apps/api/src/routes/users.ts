@@ -27,6 +27,7 @@ const createSchema = z.object({
   unit: z.string().trim().max(200).optional(),
   position: z.string().trim().max(200).optional(),
   apps: z.array(z.enum(["pma", "rgdp", "geo", "previene", "pg2030"])).max(5).optional(),
+  pg2030InstitucionId: z.string().uuid().optional(),
 }).strict();
 
 const updateSchema = z.object({
@@ -34,6 +35,7 @@ const updateSchema = z.object({
   unit: z.string().trim().max(200).nullable().optional(),
   position: z.string().trim().max(200).nullable().optional(),
   role: z.enum(["ADMIN", "REPORTER", "VIEWER"]).optional(),
+  pg2030InstitucionId: z.string().uuid().nullable().optional(),
 }).strict().refine((body) => Object.keys(body).length > 0, "Se requiere al menos un cambio");
 
 const assignAppSchema = z.object({
@@ -58,6 +60,7 @@ export async function usersRoutes(app: FastifyInstance) {
       unit: body.unit,
       position: body.position,
       apps: body.apps,
+      pg2030InstitucionId: body.pg2030InstitucionId,
     });
   });
 

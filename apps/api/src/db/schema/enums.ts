@@ -75,3 +75,18 @@ export const itemAssignmentCategoryEnum = pgEnum("item_assignment_category", [
 ]);
 
 export const formatFunctionalityEnum = pgEnum("format_functionality", ["descargar_anexos"]);
+
+// PG2030 catalog (migration 0031).
+export const pg2030ProyectoTipoEnum = pgEnum("pg2030_proyecto_tipo", ["Acción", "Proyecto"]);
+
+// A referential budget is either an amount or one of the four reasons the plan
+// gives for not having one; the reason is kept so the summary can name it.
+export const pg2030PresupuestoEstadoEnum = pgEnum("pg2030_presupuesto_estado", [
+  "Monto",
+  "SPI",
+  "No disponible",
+  "A definirse en la LISS",
+  "Sin dato",
+]);
+
+export const pg2030InstitucionTipoEnum = pgEnum("pg2030_institucion_tipo", ["Ejecutivo", "GAD", "Otro"]);

@@ -4,3 +4,4 @@ export * from "./pma.js";
 export * from "./rgdp.js";
 export * from "./geo.js";
 export * from "./previene.js";
+export * from "./pg2030.js";
