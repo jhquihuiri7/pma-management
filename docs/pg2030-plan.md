@@ -13,6 +13,10 @@ reescritura confirmó otras 14 correcciones, también incorporadas.
 `~/Documentos/pma_db-backup-20261012-140115-pre-pg2030-fase1.sql`).
 Las fases 2 y 3 (migración 0033) están **desplegadas** desde el mismo día; respaldo
 previo en `~/Documentos/pma_db-backup-20261012-143201-pre-pg2030-fases2y3.sql`.
+Las fases 4 y 5 (migración 0034) también están **desplegadas** desde ese día;
+respaldo previo en `~/Documentos/pma_db-backup-20261012-151151-pre-pg2030-fases4y5.sql`.
+Falta `NVIDIA_API_KEY` en el `.env` de producción: hasta que se agregue (y se
+recree el worker), las metas quedan "Analizando…" en la cola.
 
 Fuentes usadas para este plan:
 
@@ -671,9 +675,11 @@ abrirlo. La técnica se elige en la fase 6 (§12).
    - reapertura y bitácora;
    - prueba unitaria del límite de plazo, incluido el T4 (31 de enero del año
      siguiente).
-4. **IA de clasificación:** cola en base de datos, worker, reintentos e
+4. **IA de clasificación** ✅ (desplegada el 12 de octubre de 2026, sin clave
+   de NVIDIA todavía): cola en base de datos, worker, reintentos e
    interpretación de respuestas.
-5. **Dashboard:** los 8 cuadros y el detalle por institución.
+5. **Dashboard** ✅ (desplegado el 12 de octubre de 2026): los 8 cuadros y el
+   detalle por institución.
 6. **Informe Word:**
    - plantilla derivada del T1, ficha del corte y textos globales;
    - gráficos;
