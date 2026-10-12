@@ -4,7 +4,7 @@ import { useRouter } from "next/navigation";
 import { useEffect } from "react";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
-import { Leaf, Shield, LogOut, Map, Users, Siren, Target } from "lucide-react";
+import { Leaf, Shield, LogOut, Map, Users, Siren, Target, Home } from "lucide-react";
 import { useAuth } from "@/lib/auth-context";
 
 const SUBSYSTEM_APPS = [
@@ -57,6 +57,16 @@ const SUBSYSTEM_APPS = [
     color: "text-indigo-600",
     border: "border-indigo-200 hover:border-indigo-400",
     bg: "hover:bg-indigo-50",
+  },
+  {
+    key: "plan_familiar",
+    label: "Plan Familiar de Emergencia",
+    description: "Consulta los planes registrados por las familias de Galápagos.",
+    href: "/plan-familiar/resultados",
+    icon: Home,
+    color: "text-cyan-700",
+    border: "border-cyan-200 hover:border-cyan-400",
+    bg: "hover:bg-cyan-50",
   },
 ] as const;
 

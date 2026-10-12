@@ -7,6 +7,7 @@ import { Readable } from "node:stream";
 import type { StorageProvider } from "../storage/index.js";
 import {
   buildEvidencePath,
+  buildFamilyPlanPdfPath,
   buildFormatPath,
   persistFileAndRecord,
   StorageUploadTooLargeError,
@@ -55,6 +56,14 @@ test("evidence and format paths are UUID-namespaced", () => {
     buildFormatPath({ subsystem: "pma", formatId: "format-a", fileName: "formato.xlsx" }),
     buildFormatPath({ subsystem: "pma", formatId: "format-b", fileName: "formato.xlsx" })
   );
+});
+
+test("family plan PDFs use an immutable UUID-only storage path", () => {
+  assert.equal(
+    buildFamilyPlanPdfPath("3f89d6bc-2d6d-4ec9-867e-d3d4da565aa1"),
+    "PLAN_FAMILIAR/3f89d6bc-2d6d-4ec9-867e-d3d4da565aa1/plan.pdf",
+  );
+  assert.throws(() => buildFamilyPlanPdfPath("../../otro"), /Invalid family plan id/);
 });
 
 test("storage path components stay within 255 UTF-8 bytes with stable collision-resistant suffixes", () => {

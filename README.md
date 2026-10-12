@@ -1,6 +1,6 @@
 # PMA Management
 
-Sistema de gestión ambiental (PMA, RGDP, GEO, Galápagos Previene, PG2030) construido como
+Sistema de gestión ambiental (PMA, RGDP, GEO, Galápagos Previene, PG2030 y Plan Familiar de Emergencia) construido como
 monorepo con Next.js y Fastify.
 
 ## Arquitectura
@@ -143,6 +143,17 @@ npm run seed:admin:env -w apps/api
 
 Los demás usuarios se crean desde el panel de administración (`/admin/users`),
 que también genera la invitación para establecer contraseña.
+
+### Plan Familiar de Emergencia
+
+- `/plan-familiar` es el formulario público y no requiere iniciar sesión.
+- `/plan-familiar/resultados` requiere sesión y acceso al módulo `plan_familiar`;
+  los administradores tienen acceso implícito.
+- Cada envío crea una copia PDF inmutable en el almacenamiento configurado. La
+  descarga pública usa un token individual conservado solamente en el navegador
+  que realizó el envío; la consulta institucional permanece protegida.
+- La migración `0030_plan_familiar_module.sql` crea el almacenamiento de datos y
+  añade el módulo al catálogo de aplicaciones. No importa registros del prototipo.
 
 ---
 

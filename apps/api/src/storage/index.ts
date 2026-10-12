@@ -177,6 +177,15 @@ export function buildFormatPath(args: {
   return `${args.subsystem.toUpperCase()}/_formats/${safePathSegment(args.formatId, "format")}/${safeFileName(args.fileName)}`;
 }
 
+/** Storage path for the immutable PDF produced by a public family-plan submission. */
+export function buildFamilyPlanPdfPath(planId: string): string {
+  const cleanId = planId.toLowerCase();
+  if (!/^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/.test(cleanId)) {
+    throw new TypeError("Invalid family plan id");
+  }
+  return `PLAN_FAMILIAR/${cleanId}/plan.pdf`;
+}
+
 /**
  * Persist a file and its database record as one observable operation.
  *

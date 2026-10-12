@@ -1,5 +1,80 @@
 export type UserRole = 'ADMIN' | 'REPORTER' | 'VIEWER';
-export type AppKey = "pma" | "rgdp" | "geo" | "previene" | "pg2030";
+export type AppKey = "pma" | "rgdp" | "geo" | "previene" | "pg2030" | "plan_familiar";
+
+export type FamilyPlanPriority = "Alta" | "Media" | "Baja";
+export type FamilyPlanMoment = "Antes" | "Durante" | "Después";
+export type FamilyPlanMapLayer = "Mapa" | "Satélite";
+
+export interface FamilyEmergencyPlan {
+  submissionId: string;
+  family: string;
+  island: "San Cristóbal" | "Santa Cruz" | "Isabela" | "Floreana" | "Otra";
+  sector: string;
+  address: string;
+  date: string;
+  phone: string;
+  altPhone: string;
+  contact: string;
+  contactPhone: string;
+  meeting: string;
+  noSignal: string;
+  reviewDate: string;
+  updater: string;
+  members: Array<{
+    name: string;
+    age: number;
+    relation: string;
+    phone: string;
+    support: string;
+    role: string;
+  }>;
+  pets: Array<{ name: string; keeper: string; needs: string }>;
+  risks: Array<{
+    type: string;
+    effect: string;
+    prevention: string;
+    first: string;
+    priority: FamilyPlanPriority;
+  }>;
+  routes: Array<{ situation: string; route: string; point: string; notice: string }>;
+  sketch: string;
+  reference: string;
+  location: {
+    lat: number;
+    lng: number;
+    snapshot: string;
+    layer: FamilyPlanMapLayer;
+  } | null;
+  resources: Array<{
+    item: string;
+    status: "Sí" | "No";
+    amount: string;
+    location: string;
+    pending: string;
+  }>;
+  usefulPhones: string;
+  actions: Array<{
+    moment: FamilyPlanMoment;
+    action: string;
+    person: string;
+    date: string;
+    done: boolean;
+  }>;
+  practice: { date: string; exercise: string; improvement: string; person: string };
+  participants: string;
+  consent: true;
+}
+
+export interface FamilyPlanListItem {
+  id: string;
+  code: string;
+  createdAt: string;
+  family: string;
+  island: string;
+  sector: string;
+  phone: string;
+  membersCount: number;
+}
 
 export interface User {
   id: string;

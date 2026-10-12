@@ -38,7 +38,11 @@ function isTokenPath(pathname: string) {
 
 // Sections browsable without a session. The Geoportal is public in read-only
 // mode; edit/delete/add controls are gated client-side and on the API by role.
-const PUBLIC_PATHS = ["/geo"];
+const PUBLIC_PREFIX_PATHS = ["/geo"];
+
+// Exact public pages. Keep the results subtree protected: using the prefix
+// matcher for /plan-familiar would also expose /plan-familiar/resultados.
+const PUBLIC_EXACT_PATHS = ["/plan-familiar"];
 
 function matchesPrefix(pathname: string, prefixes: string[]) {
   return prefixes.some((p) => pathname === p || pathname.startsWith(`${p}/`));
@@ -49,7 +53,7 @@ function isAuthPath(pathname: string) {
 }
 
 function isPublicPath(pathname: string) {
-  return matchesPrefix(pathname, PUBLIC_PATHS);
+  return PUBLIC_EXACT_PATHS.includes(pathname) || matchesPrefix(pathname, PUBLIC_PREFIX_PATHS);
 }
 
 export default function middleware(req: NextRequest) {

@@ -13,6 +13,7 @@ import { rgdpRoutes } from "./routes/rgdp/index.js";
 import { geoRoutes } from "./routes/geo/index.js";
 import { previeneRoutes } from "./routes/previene/index.js";
 import { pg2030Routes } from "./routes/pg2030/index.js";
+import { planFamiliarRoutes } from "./routes/planFamiliar/index.js";
 import { closeDb } from "./db/client.js";
 import { stopBoss } from "./jobs/boss.js";
 import { getDb } from "./db/client.js";
@@ -81,6 +82,9 @@ async function start() {
   await app.register(geoRoutes, { prefix: "/geo" });
   await app.register(previeneRoutes, { prefix: "/previene" });
   await app.register(pg2030Routes, { prefix: "/pg2030" });
+  // Mixed surface: public submissions/download receipts and protected results.
+  // Each protected route declares its own auth chain inside the module.
+  await app.register(planFamiliarRoutes, { prefix: "/plan-familiar" });
 
   let shuttingDown = false;
   const shutdown = async (signal: string) => {
