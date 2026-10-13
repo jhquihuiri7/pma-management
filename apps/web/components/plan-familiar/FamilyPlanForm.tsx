@@ -1,237 +1,38 @@
-"use client";
-
-import { useRef, useState } from "react";
-import Link from "next/link";
-import { CheckCircle2, ChevronLeft, ChevronRight, Download, Home, LockKeyhole, Plus, ShieldCheck, Trash2, Upload } from "lucide-react";
-import { api, apiErrorMessage, checkedApiFetch } from "@/lib/api-client";
-import LocationPicker from "./LocationPicker";
-import { emptyFamilyPlan, FAMILY_PLAN_ISLANDS, FAMILY_PLAN_STEPS, type ClientFamilyPlan } from "./model";
-
-type Receipt = { id: string; code: string; createdAt: string };
-
-const RISK_TYPES = ["Sismo", "Tsunami", "Incendio", "Inundación", "Deslizamiento", "Erupción volcánica", "Otro"];
-const RELATIONS = ["Responsable del hogar", "Pareja", "Hija / hijo", "Madre / padre", "Otro familiar", "Otra persona"];
-const ROLES = ["Guiar y apoyar", "Llevar la mochila", "Cerrar servicios si es seguro", "Cuidar mascotas", "Verificar que todos estén presentes", "Recibir apoyo", "Otro rol acordado"];
-
-export default function FamilyPlanForm() {
-  const [plan, setPlan] = useState<ClientFamilyPlan>(() => emptyFamilyPlan());
-  const [downloadToken, setDownloadToken] = useState("");
-  const [step, setStep] = useState(-1);
-  const [receipt, setReceipt] = useState<Receipt | null>(null);
-  const [error, setError] = useState("");
-  const [busy, setBusy] = useState(false);
-  const [pdfBusy, setPdfBusy] = useState(false);
-  const top = useRef<HTMLDivElement>(null);
-
-  function start() {
-    const today = new Date().toLocaleDateString("en-CA");
-    setPlan({ ...emptyFamilyPlan(), submissionId: crypto.randomUUID(), date: today });
-    setDownloadToken(crypto.randomUUID());
-    setStep(0);
-    setReceipt(null);
-    setError("");
-  }
-
-  function field<K extends keyof ClientFamilyPlan>(key: K, value: ClientFamilyPlan[K]) {
-    setPlan((current) => ({ ...current, [key]: value }));
-    setError("");
-  }
-
-  function updateRow(key: "members" | "pets" | "risks" | "routes" | "resources" | "actions", index: number, patch: Record<string, unknown>) {
-    setPlan((current) => ({
-      ...current,
-      [key]: (current[key] as Array<Record<string, unknown>>).map((row, rowIndex) => rowIndex === index ? { ...row, ...patch } : row),
-    } as ClientFamilyPlan));
-    setError("");
-  }
-
-  function removeRow(key: "members" | "pets" | "risks" | "actions", index: number) {
-    setPlan((current) => ({ ...current, [key]: current[key].filter((_, rowIndex) => rowIndex !== index) } as ClientFamilyPlan));
-  }
-
-  function validate(currentStep: number): string | null {
-    if (currentStep === 0) {
-      if (![plan.family, plan.island, plan.sector, plan.address, plan.date, plan.phone, plan.contact, plan.contactPhone, plan.meeting, plan.noSignal, plan.updater].every((value) => String(value).trim())) {
-        return "Completa todos los campos obligatorios de datos y acuerdos.";
-      }
-      if (plan.phone.trim().length < 7 || plan.contactPhone.trim().length < 7) return "Revisa los números de teléfono.";
-    }
-    if (currentStep === 1 && plan.members.some((member) => !member.name || !member.relation || !member.role)) {
-      return "Completa el nombre, relación y rol de cada integrante.";
-    }
-    if (currentStep === 1 && plan.pets.some((pet) => !pet.name || !pet.keeper || !pet.needs)) {
-      return "Completa todos los datos de las mascotas agregadas.";
-    }
-    if (currentStep === 2 && plan.risks.some((risk) => !risk.type || !risk.effect || !risk.prevention || !risk.first)) {
-      return "Completa la preparación de cada riesgo.";
-    }
-    if (currentStep === 3 && plan.routes.some((route) => !route.route || !route.point || !route.notice)) {
-      return "Completa la ruta, punto seguro y forma de aviso de cada situación.";
-    }
-    if (currentStep === 6) {
-      const actions = plan.actions.filter((action) => action.action.trim());
-      if (actions.length === 0) return "Anota al menos una acción concreta.";
-      if (actions.some((action) => !action.person.trim())) return "Indica quién se responsabiliza de cada acción escrita.";
-    }
-    if (currentStep === 7 && !plan.participants.trim()) return "Indica los nombres de quienes participaron.";
-    return null;
-  }
-
-  function go(next: number) {
-    if (next === step + 1 && step >= 0 && step < 8) {
-      const issue = validate(step);
-      if (issue) {
-        setError(issue);
-        return;
-      }
-    }
-    setError("");
-    setStep(next);
-    top.current?.scrollIntoView({ behavior: "smooth", block: "start" });
-  }
-
-  async function loadSketch(file?: File) {
-    if (!file) return;
-    if (!["image/jpeg", "image/png", "image/webp"].includes(file.type)) {
-      setError("Selecciona una imagen JPG, PNG o WebP.");
-      return;
-    }
-    if (file.size > 12_000_000) {
-      setError("La imagen debe pesar menos de 12 MB.");
-      return;
-    }
-    try {
-      const bitmap = await createImageBitmap(file);
-      const canvas = document.createElement("canvas");
-      const scale = Math.min(1, 1400 / Math.max(bitmap.width, bitmap.height));
-      canvas.width = Math.round(bitmap.width * scale);
-      canvas.height = Math.round(bitmap.height * scale);
-      const context = canvas.getContext("2d");
-      if (!context) throw new Error("Canvas unavailable");
-      context.fillStyle = "white";
-      context.fillRect(0, 0, canvas.width, canvas.height);
-      context.drawImage(bitmap, 0, 0, canvas.width, canvas.height);
-      bitmap.close();
-      const value = canvas.toDataURL("image/jpeg", 0.75);
-      if (value.length > 1_500_000) throw new Error("La imagen sigue siendo demasiado grande; reduce sus dimensiones.");
-      field("sketch", value);
-    } catch (uploadError) {
-      setError(uploadError instanceof Error ? uploadError.message : "No se pudo procesar la imagen.");
-    }
-  }
-
-  async function submit() {
-    for (let index = 0; index < 8; index += 1) {
-      const issue = validate(index);
-      if (issue) {
-        setStep(index);
-        setError(issue);
-        return;
-      }
-    }
-    if (!plan.consent) {
-      setError("Confirma la autorización para registrar el plan.");
-      return;
-    }
-    setBusy(true);
-    setError("");
-    try {
-      const saved = await api.post<Receipt>("/plan-familiar/public/plans", { ...plan, consent: true, downloadToken });
-      if (!saved?.id || !saved?.code) throw new Error("El servidor no confirmó el registro.");
-      setReceipt(saved);
-    } catch (submitError) {
-      setError(apiErrorMessage(submitError, "No fue posible registrar el plan. Tus respuestas siguen en pantalla."));
-    } finally {
-      setBusy(false);
-    }
-  }
-
-  async function downloadPdf() {
-    if (!receipt) return;
-    setPdfBusy(true);
-    setError("");
-    try {
-      const response = await checkedApiFetch(`/plan-familiar/public/plans/${receipt.id}/pdf`, {
-        headers: { Authorization: `Bearer ${downloadToken}` },
-        timeoutMs: 60_000,
-      });
-      const url = URL.createObjectURL(await response.blob());
-      const anchor = document.createElement("a");
-      anchor.href = url;
-      anchor.download = `Plan_Familiar_${receipt.code}.pdf`;
-      anchor.click();
-      setTimeout(() => URL.revokeObjectURL(url), 5_000);
-    } catch (downloadError) {
-      setError(apiErrorMessage(downloadError, "No se pudo descargar el PDF."));
-    } finally {
-      setPdfBusy(false);
-    }
-  }
-
-  const input = (label: string, key: keyof ClientFamilyPlan, required = false, type = "text", placeholder = "") => (
-    <label className="pf-field"><span>{label}{required && " *"}</span><input type={type} value={String(plan[key] ?? "")} placeholder={placeholder} maxLength={type === "tel" ? 30 : 500} onChange={(event) => field(key, event.target.value as never)} /></label>
-  );
-
-  if (step === -1) {
-    return (
-      <div className="pf-public" ref={top}>
-        <header className="pf-header"><Link href="/plan-familiar" className="pf-brand"><span><ShieldCheck /></span><div><strong>Familias preparadas</strong><small>GALÁPAGOS · CGREG / DGTAR</small></div></Link><Link href="/plan-familiar/resultados" className="pf-admin-link"><LockKeyhole size={16} /> Resultados</Link></header>
-        <main className="pf-hero">
-          <section><p className="pf-eyebrow">LA RESILIENCIA COMIENZA EN EL HOGAR</p><h1>Un plan para cuidar a quienes más quieres.</h1><p>Conversen, acuerden rutas y responsabilidades, registren sus recursos y descarguen una copia para practicar en familia.</p><button type="button" className="pf-button pf-button-primary" onClick={start}>Crear nuestro plan <ChevronRight size={18} /></button></section>
-          <aside><Home size={72} /><h2>Prepararnos hoy.<br />Cuidarnos siempre.</h2><ul><li>Ocho pasos guiados</li><li>Mapa y croquis opcionales</li><li>PDF familiar descargable</li></ul></aside>
-        </main>
-        <section className="pf-intro"><div><b>01</b><h3>Conversen</h3><p>Identifiquen necesidades y riesgos.</p></div><div><b>02</b><h3>Acuerden</h3><p>Definan rutas, contactos y tareas.</p></div><div><b>03</b><h3>Practiquen</h3><p>Descarguen el plan y ensayen juntos.</p></div></section>
-        <section className="pf-privacy"><LockKeyhole /><p>Al enviar, las respuestas y una copia PDF se guardarán en SIGTAR para seguimiento institucional. Otras familias no pueden consultar su plan.</p></section>
-      </div>
-    );
-  }
-
-  if (receipt) {
-    return (
-      <div className="pf-public" ref={top}>
-        <header className="pf-header"><span className="pf-brand"><span><ShieldCheck /></span><div><strong>Familias preparadas</strong><small>GALÁPAGOS · CGREG / DGTAR</small></div></span></header>
-        <main className="pf-success"><CheckCircle2 size={64} /><p className="pf-eyebrow">PLAN REGISTRADO</p><h1>Su familia dio un paso importante.</h1><p>Guarden el código y descarguen el plan antes de cerrar esta página.</p><div className="pf-receipt"><span>Código de registro</span><strong>{receipt.code}</strong><small>{new Date(receipt.createdAt).toLocaleString("es-EC")}</small></div><button type="button" className="pf-button pf-button-primary" onClick={downloadPdf} disabled={pdfBusy}><Download size={18} /> {pdfBusy ? "Descargando…" : "Descargar nuestro plan en PDF"}</button>{error && <div className="pf-error">{error}</div>}<button type="button" className="pf-link-button" onClick={start}>Crear otro plan</button></main>
-      </div>
-    );
-  }
-
-  return (
-    <div className="pf-public" ref={top}>
-      <header className="pf-header"><button type="button" className="pf-brand pf-brand-button" onClick={() => go(-1)}><span><ShieldCheck /></span><div><strong>Familias preparadas</strong><small>GALÁPAGOS · CGREG / DGTAR</small></div></button><Link href="/plan-familiar/resultados" className="pf-admin-link"><LockKeyhole size={16} /> Resultados</Link></header>
-      <main className="pf-workspace">
-        <aside className="pf-steps"><p className="pf-eyebrow">NUESTRO PLAN FAMILIAR</p><h2>Un acuerdo.<br />Ocho pasos.</h2><nav>{FAMILY_PLAN_STEPS.map((name, index) => <button type="button" key={name} className={step === index ? "active" : ""} onClick={() => go(index)}><span>{index + 1}</span>{name}</button>)}<button type="button" className={step === 8 ? "active" : ""} onClick={() => go(8)}><span>9</span>Revisar y enviar</button></nav></aside>
-        <section className="pf-form-area">
-          <div className="pf-progress-copy"><span>{step < 8 ? `PASO ${step + 1} DE 8` : "REVISIÓN FINAL"}</span><span>{Math.round(((step + 1) / 9) * 100)}%</span></div><div className="pf-progress"><span style={{ width: `${((step + 1) / 9) * 100}%` }} /></div>
-          <h1>{FAMILY_PLAN_STEPS[step] ?? "Revisen su plan"}</h1>
-
-          {step === 0 && <><div className="pf-grid">{input("Nombre de la familia o responsable", "family", true, "text", "Ej.: Familia Bautista")}<label className="pf-field"><span>Isla *</span><select value={plan.island} onChange={(event) => field("island", event.target.value as ClientFamilyPlan["island"])}>{FAMILY_PLAN_ISLANDS.map((island) => <option key={island}>{island}</option>)}</select></label>{input("Fecha de elaboración", "date", true, "date")}{input("Dirección completa", "address", true)}{input("Barrio, sector o comunidad", "sector", true)}{input("Teléfono principal", "phone", true, "tel")}{input("Teléfono alternativo", "altPhone", false, "tel")}{input("Contacto fuera de la zona", "contact", true)}{input("Teléfono del contacto", "contactPhone", true, "tel")}{input("Punto de encuentro", "meeting", true)}{input("Si no hay señal, contactaremos a…", "noSignal", true)}{input("Fecha de revisión", "reviewDate", false, "date")}{input("Responsable de actualizar", "updater", true)}</div></>}
-
-          {step === 1 && <><h3 className="pf-section-title">Integrantes</h3>{plan.members.map((member, index) => <article className="pf-entry" key={index}><div className="pf-entry-head"><strong>Integrante {index + 1}</strong>{plan.members.length > 1 && <button type="button" onClick={() => removeRow("members", index)}><Trash2 size={16} /></button>}</div><div className="pf-grid"><label className="pf-field"><span>Nombre y apellido *</span><input value={member.name} onChange={(event) => updateRow("members", index, { name: event.target.value })} /></label><label className="pf-field"><span>Edad *</span><input type="number" min="0" max="120" value={member.age} onChange={(event) => updateRow("members", index, { age: Number(event.target.value) })} /></label><label className="pf-field"><span>Relación *</span><select value={member.relation} onChange={(event) => updateRow("members", index, { relation: event.target.value })}><option value="">Seleccionar</option>{RELATIONS.map((value) => <option key={value}>{value}</option>)}</select></label><label className="pf-field"><span>Teléfono</span><input value={member.phone} onChange={(event) => updateRow("members", index, { phone: event.target.value })} /></label><label className="pf-field"><span>Apoyos requeridos</span><input value={member.support} placeholder="Medicina, movilidad, cuidado…" onChange={(event) => updateRow("members", index, { support: event.target.value })} /></label><label className="pf-field"><span>Rol *</span><select value={member.role} onChange={(event) => updateRow("members", index, { role: event.target.value })}><option value="">Seleccionar</option>{ROLES.map((value) => <option key={value}>{value}</option>)}</select></label></div></article>)}{plan.members.length < 30 && <button type="button" className="pf-add" onClick={() => field("members", [...plan.members, { name: "", age: 0, relation: "", phone: "", support: "", role: "" }])}><Plus size={17} /> Agregar integrante</button>}<h3 className="pf-section-title">Mascotas o animales</h3>{plan.pets.map((pet, index) => <article className="pf-entry" key={index}><div className="pf-entry-head"><strong>Mascota {index + 1}</strong><button type="button" onClick={() => removeRow("pets", index)}><Trash2 size={16} /></button></div><div className="pf-grid"><label className="pf-field"><span>Nombre o tipo *</span><input value={pet.name} onChange={(event) => updateRow("pets", index, { name: event.target.value })} /></label><label className="pf-field"><span>Responsable *</span><input value={pet.keeper} onChange={(event) => updateRow("pets", index, { keeper: event.target.value })} /></label><label className="pf-field"><span>Qué necesita llevar *</span><input value={pet.needs} onChange={(event) => updateRow("pets", index, { needs: event.target.value })} /></label></div></article>)}{plan.pets.length < 15 && <button type="button" className="pf-add" onClick={() => field("pets", [...plan.pets, { name: "", keeper: "", needs: "" }])}><Plus size={17} /> Agregar mascota</button>}</>}
-
-          {step === 2 && <>{plan.risks.map((risk, index) => <article className="pf-entry" key={index}><div className="pf-entry-head"><strong>Riesgo {index + 1}</strong>{plan.risks.length > 1 && <button type="button" onClick={() => removeRow("risks", index)}><Trash2 size={16} /></button>}</div><div className="pf-grid"><label className="pf-field"><span>Riesgo *</span><select value={risk.type} onChange={(event) => updateRow("risks", index, { type: event.target.value })}><option value="">Seleccionar</option>{RISK_TYPES.map((value) => <option key={value}>{value}</option>)}</select></label><label className="pf-field"><span>Prioridad</span><select value={risk.priority} onChange={(event) => updateRow("risks", index, { priority: event.target.value })}>{["Alta", "Media", "Baja"].map((value) => <option key={value}>{value}</option>)}</select></label><label className="pf-field"><span>¿Qué puede pasar? *</span><textarea value={risk.effect} onChange={(event) => updateRow("risks", index, { effect: event.target.value })} /></label><label className="pf-field"><span>¿Cómo lo reduciremos? *</span><textarea value={risk.prevention} onChange={(event) => updateRow("risks", index, { prevention: event.target.value })} /></label><label className="pf-field pf-span-2"><span>Primer paso si ocurre *</span><input value={risk.first} onChange={(event) => updateRow("risks", index, { first: event.target.value })} /></label></div></article>)}{plan.risks.length < 3 && <button type="button" className="pf-add" onClick={() => field("risks", [...plan.risks, { type: "", effect: "", prevention: "", first: "", priority: "Media" }])}><Plus size={17} /> Agregar riesgo</button>}</>}
-
-          {step === 3 && <>{plan.routes.map((route, index) => <article className="pf-entry" key={route.situation}><h3>{route.situation}</h3><div className="pf-grid"><label className="pf-field"><span>Ruta o salida segura *</span><input value={route.route} onChange={(event) => updateRow("routes", index, { route: event.target.value })} /></label><label className="pf-field"><span>Punto de encuentro *</span><input value={route.point} onChange={(event) => updateRow("routes", index, { point: event.target.value })} /></label><label className="pf-field pf-span-2"><span>Quién avisa y cómo *</span><input value={route.notice} onChange={(event) => updateRow("routes", index, { notice: event.target.value })} /></label></div></article>)}</>}
-
-          {step === 4 && <><LocationPicker value={plan.location} onChange={(value) => field("location", value)} /><h3 className="pf-section-title">Croquis de la vivienda</h3><label className="pf-upload"><Upload size={32} /><strong>Sube una foto o imagen del croquis</strong><span>JPG, PNG o WebP · hasta 12 MB</span><input type="file" accept="image/jpeg,image/png,image/webp" onChange={(event) => void loadSketch(event.target.files?.[0])} /></label>{plan.sketch && <div className="pf-sketch">
-            {/* The preview is a local data URL; Next Image cannot optimize it. */}
-            {/* eslint-disable-next-line @next/next/no-img-element */}
-            <img src={plan.sketch} alt="Croquis familiar" />
-            <button type="button" className="pf-link-button" onClick={() => field("sketch", "")}>Quitar imagen</button>
-          </div>}{input("Referencia cercana", "reference", false, "text", "Calle, edificio o lugar conocido")}</>}
-
-          {step === 5 && <><div className="pf-resource-list">{plan.resources.map((resource, index) => <article className="pf-resource" key={resource.item}><strong>{resource.item}</strong><label><span>¿Disponible?</span><select value={resource.status} onChange={(event) => updateRow("resources", index, { status: event.target.value })}><option>Sí</option><option>No</option></select></label><label><span>Cantidad o fecha</span><input value={resource.amount} onChange={(event) => updateRow("resources", index, { amount: event.target.value })} /></label><label><span>Dónde está</span><input value={resource.location} onChange={(event) => updateRow("resources", index, { location: event.target.value })} /></label><label><span>Pendiente</span><input value={resource.pending} onChange={(event) => updateRow("resources", index, { pending: event.target.value })} /></label></article>)}</div>{input("Teléfonos útiles", "usefulPhones", false, "text", "ECU 911, familiares, vecinos…")}</>}
-
-          {step === 6 && <>{plan.actions.map((action, index) => <article className="pf-entry" key={index}><div className="pf-entry-head"><strong>Acción {index + 1}</strong>{plan.actions.length > 6 && <button type="button" onClick={() => removeRow("actions", index)}><Trash2 size={16} /></button>}</div><div className="pf-grid"><label className="pf-field"><span>Momento</span><select value={action.moment} onChange={(event) => updateRow("actions", index, { moment: event.target.value })}>{["Antes", "Durante", "Después"].map((value) => <option key={value}>{value}</option>)}</select></label><label className="pf-field"><span>Acción</span><input value={action.action} onChange={(event) => updateRow("actions", index, { action: event.target.value })} /></label><label className="pf-field"><span>Responsable</span><input value={action.person} onChange={(event) => updateRow("actions", index, { person: event.target.value })} /></label><label className="pf-field"><span>Fecha</span><input type="date" value={action.date} onChange={(event) => updateRow("actions", index, { date: event.target.value })} /></label><label className="pf-check"><input type="checkbox" checked={action.done} onChange={(event) => updateRow("actions", index, { done: event.target.checked })} /> Acción lista</label></div></article>)}{plan.actions.length < 20 && <button type="button" className="pf-add" onClick={() => field("actions", [...plan.actions, { moment: "Antes", action: "", person: "", date: "", done: false }])}><Plus size={17} /> Agregar acción</button>}</>}
-
-          {step === 7 && <><div className="pf-grid"><label className="pf-field"><span>Fecha de práctica</span><input type="date" value={plan.practice.date} onChange={(event) => field("practice", { ...plan.practice, date: event.target.value })} /></label><label className="pf-field"><span>Qué ensayamos</span><input value={plan.practice.exercise} onChange={(event) => field("practice", { ...plan.practice, exercise: event.target.value })} /></label><label className="pf-field"><span>Qué mejoraremos</span><input value={plan.practice.improvement} onChange={(event) => field("practice", { ...plan.practice, improvement: event.target.value })} /></label><label className="pf-field"><span>Quién lo hará</span><input value={plan.practice.person} onChange={(event) => field("practice", { ...plan.practice, person: event.target.value })} /></label></div>{input("Nombres de quienes participaron", "participants", true)}</>}
-
-          {step === 8 && <><div className="pf-review"><div><span>Familia</span><strong>{plan.family}</strong></div><div><span>Ubicación</span><strong>{plan.island} · {plan.sector}</strong></div><div><span>Integrantes</span><strong>{plan.members.length}</strong></div><div><span>Riesgos</span><strong>{plan.risks.map((risk) => risk.type).join(", ")}</strong></div><div><span>Punto de encuentro</span><strong>{plan.meeting}</strong></div><div><span>Mapa y croquis</span><strong>{plan.location ? "Coordenadas incluidas" : "Sin coordenadas"} · {plan.sketch ? "Croquis incluido" : "Sin croquis"}</strong></div></div><div className="pf-consent"><LockKeyhole /><div><h3>Registro de participación y copia del plan</h3><p>Se guardarán los datos del formulario, la ubicación si fue agregada y una copia PDF. Solo el personal de SIGTAR autorizado para este módulo podrá consultar los resultados.</p><label className="pf-check"><input type="checkbox" checked={plan.consent} onChange={(event) => field("consent", event.target.checked)} /> Autorizo el registro de las respuestas y la copia del plan para esta finalidad.</label></div></div></>}
-
-          {error && <div className="pf-error" role="alert">{error}</div>}
-          <div className="pf-form-actions"><button type="button" className="pf-button pf-button-secondary" disabled={busy} onClick={() => go(step === 0 ? -1 : step - 1)}><ChevronLeft size={17} /> {step === 0 ? "Inicio" : "Anterior"}</button>{step < 8 ? <button type="button" className="pf-button pf-button-primary" onClick={() => go(step + 1)}>Continuar <ChevronRight size={17} /></button> : <button type="button" className="pf-button pf-button-primary" disabled={!plan.consent || busy} onClick={() => void submit()}>{busy ? "Guardando…" : "Guardar plan y generar PDF"}</button>}</div>
-          <p className="pf-session-note">Las respuestas se guardan únicamente al enviar. Mantén esta página abierta mientras completas el plan.</p>
-        </section>
-      </main>
-    </div>
-  );
+'use client';
+/* eslint-disable @typescript-eslint/no-explicit-any, @next/next/no-img-element */
+import {useState,useRef} from 'react';import {ShieldCheck,ChevronRight,ChevronLeft,Plus,Trash2,Download,CheckCircle2,Users,FileCheck,LockKeyhole,Upload} from 'lucide-react';import {emptyPlan,steps,planSchema} from './model';
+import LocationMap from './LocationPicker';
+const tips=['Empiecen por lo más importante: quiénes son, dónde viven y cómo se comunicarán.','Incluyan a quienes viven, pasan mucho tiempo o dependen del hogar. Escriban un nombre por fila y marquen los apoyos requeridos.','Identifiquen los tres riesgos que más pueden afectar a su familia o vivienda. No hace falta llenar todo: escojan los riesgos que realmente aplican.','Dibujen y acuerden una salida clara. Siempre tengan una alternativa. Para cada emergencia definan a dónde ir, cómo salir y quién avisa.','Un dibujo simple puede orientar mucho más rápido que una explicación. Usen la leyenda y agreguen calles, referencias y el punto de encuentro.','Revisen lo que ya tienen y anoten dónde está. No es necesario comprar todo de una vez. Marquen lo disponible y prioricen lo pendiente.','Conviertan las ideas en tareas pequeñas, con una persona responsable. Anoten acciones realistas: empiecen por las de prioridad alta y pónganles una fecha.','Un plan funciona cuando se conversa y se ensaya. Después de un simulacro anoten una mejora sencilla. Actualicen el plan si cambia la vivienda, un teléfono, una persona o una necesidad.'];
+const riskTypes=['Sismo','Inundación','Incendio','Tsunami','Deslizamiento','Caída de ceniza','Vendaval','Accidente','Otro'];
+export default function PlanApp(){
+ const [p,setP]=useState<any>(emptyPlan);const [step,setStep]=useState(-1);const [visited,setVisited]=useState<number[]>([]);const [busy,setBusy]=useState(false);const [error,setError]=useState('');const [issues,setIssues]=useState<any[]>([]);const [saved,setSaved]=useState<any>(null);const [pdfBusy,setPdfBusy]=useState(false);const top=useRef<HTMLDivElement>(null);
+ function field(key:string,value:any){setP((x:any)=>({...x,[key]:value}));setError('');}
+ function row(key:string,index:number,k:string,v:any){setP((x:any)=>({...x,[key]:x[key].map((r:any,i:number)=>i===index?{...r,[k]:v}:r)}));}
+ function add(key:string,value:any){field(key,[...p[key],value]);}function remove(key:string,i:number){field(key,p[key].filter((_:any,n:number)=>n!==i));}
+ function go(n:number){if(n===step+1&&step>=0&&step<8){const groups=[['family','sector','address','date','phone','contact','contactPhone','meeting','noSignal','updater'],['members','pets'],['risks'],['routes'],['sketch','reference','location'],['resources'],['actions'],['practice','participants']];const r=planSchema.safeParse({...p,id:p.id||crypto.randomUUID(),consent:true});if(!r.success){const current=r.error.issues.filter(i=>groups[step].includes(String(i.path[0]))).map(i=>({path:i.path.join('.'),message:i.message}));if(current.length){setIssues(current);setError('Completa los campos requeridos de este paso.');return;}}}setVisited(v=>Array.from(new Set([...v,step])));setStep(n);setError('');setIssues([]);top.current?.scrollIntoView({behavior:'smooth',block:'start'});}
+ function input(label:string,key:string,type='text',required=false,placeholder=''){return <label className="field"><span>{label}{required&&<b> *</b>}</span><input type={type} value={p[key]} onChange={e=>field(key,e.target.value)} placeholder={placeholder} required={required} maxLength={type==='tel'?30:500}/></label>;}
+ function rowInput(label:string,key:string,i:number,k:string,type='text',hint=''){return <label className="field"><span>{label}</span><input type={type} min={type==='number'?0:undefined} max={type==='number'?120:undefined} maxLength={500} value={p[key][i][k]} onChange={e=>row(key,i,k,type==='number'?Number(e.target.value):e.target.value)} placeholder={hint}/></label>;}
+ function rowSelect(label:string,key:string,i:number,k:string,options:string[]){return <label className="field"><span>{label}</span><select value={p[key][i][k]} onChange={e=>row(key,i,k,e.target.value)}><option value="">Seleccionar</option>{options.map(x=><option key={x}>{x}</option>)}</select></label>;}
+ function rowChoice(label:string,key:string,i:number,k:string,options:string[]){const id=key+'-'+i+'-'+k;return <label className="field"><span>{label}</span><input list={id} maxLength={500} value={p[key][i][k]} onChange={e=>row(key,i,k,e.target.value)} placeholder="Selecciona una sugerencia o escribe tu respuesta"/><datalist id={id}>{options.map(x=><option value={x} key={x}/>)}</datalist></label>;}
+ function supports(i:number){const selected=p.members[i].support.split(', ').filter(Boolean);return <fieldset className="field support-options"><legend>Apoyos requeridos</legend>{['Medicina','Movilidad','Cuidado','Comunicación'].map(s=><label className="check" key={s}><input type="checkbox" checked={selected.includes(s)} onChange={e=>row('members',i,'support',(e.target.checked?[...selected,s]:selected.filter((x:string)=>x!==s)).join(', '))}/>{s}</label>)}<small>Sin marcar: no requiere estos apoyos.</small></fieldset>;}
+ async function image(file?:File){if(!file)return;if(!['image/jpeg','image/png','image/webp'].includes(file.type)){setError('Selecciona una imagen JPG, PNG o WebP.');return;}if(file.size>12000000){setError('La imagen debe pesar menos de 12 MB.');return;}try{const bitmap=await createImageBitmap(file);const canvas=document.createElement('canvas');const scale=Math.min(1,1400/Math.max(bitmap.width,bitmap.height));canvas.width=bitmap.width*scale;canvas.height=bitmap.height*scale;const ctx=canvas.getContext('2d')!;ctx.fillStyle='#fff';ctx.fillRect(0,0,canvas.width,canvas.height);ctx.drawImage(bitmap,0,0,canvas.width,canvas.height);bitmap.close();const data=canvas.toDataURL('image/jpeg',0.75);if(data.length>1500000){setError('Reduce el tamaño del croquis antes de subirlo.');return;}field('sketch',data);}catch{setError('No se pudo abrir la imagen. Prueba con otra.');}}
+ async function submit(){setBusy(true);setError('');setIssues([]);try{const payload={...p,id:p.id||crypto.randomUUID(),downloadToken:p.downloadToken||crypto.randomUUID()};setP(payload);const {id,...fields}=payload;const res=await fetch('/api-proxy/plan-familiar/public/plans',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({...fields,submissionId:id})});const data:any=await res.json();if(!res.ok){setIssues(data.issues||data.details?.issues||[]);throw Error(data.error||data.message||'No se pudo registrar el plan.');}setSaved({...data,token:payload.downloadToken});}catch(e:any){setError(e.message||'No hay conexión. Tus respuestas siguen en pantalla.');}finally{setBusy(false);}}
+ async function download(){setPdfBusy(true);setError('');try{const r=await fetch('/api-proxy/plan-familiar/public/plans/'+saved.id+'/pdf',{headers:{Authorization:'Bearer '+saved.token}});if(!r.ok)throw Error('No se pudo descargar. Intenta nuevamente.');const url=URL.createObjectURL(await r.blob());const a=document.createElement('a');a.href=url;a.download='Plan_Familiar_'+saved.id.slice(0,8)+'.pdf';a.click();setTimeout(()=>URL.revokeObjectURL(url),5000);}catch(e:any){setError(e.message);}finally{setPdfBusy(false);}}
+ function issueLabel(path:string){const names:any={family:'Familia',date:'Fecha',sector:'Sector',address:'Dirección',phone:'Teléfono',contact:'Contacto',contactPhone:'Teléfono de contacto',meeting:'Punto de encuentro',noSignal:'Acuerdo sin señal',updater:'Responsable de actualizar',members:'Integrantes',pets:'Mascotas',risks:'Riesgos',routes:'Rutas',resources:'Recursos',actions:'Acciones',participants:'Participantes',consent:'Autorización',name:'Nombre',age:'Edad',relation:'Relación',role:'Rol',keeper:'Responsable',needs:'Recursos',type:'Tipo de riesgo',effect:'Posible afectación',prevention:'Prevención',first:'Primer paso',route:'Ruta segura',alternative:'Salida alternativa',point:'Punto de encuentro',notice:'Quién avisa',action:'Acción',person:'Responsable'};return path.split('.').map(x=>/^\d+$/.test(x)?String(Number(x)+1):names[x]||x).join(' · ');} const note=<div className="note"><ShieldCheck size={19}/><span>Escuchen fuentes oficiales y sigan las indicaciones de las autoridades. Ante una emergencia, ECU 911: <strong>9-1-1.</strong></span></div>;
+ return <div ref={top}><header><a className="brand" href="/plan-familiar"><span className="brand-icon"><ShieldCheck size={26}/></span><span><strong>Familias preparadas</strong><small>GALÁPAGOS · CGREG / DGTAR</small></span></a><a className="admin-link" href="/plan-familiar/resultados"><LockKeyhole size={15}/> Administración</a></header>
+ {step===-1?<><section className="hero"><div className="hero-copy"><div className="eyebrow"><span/> LA RESILIENCIA COMIENZA EN EL HOGAR</div><h1>Un plan para<br/>cuidar a quienes<br/><em>más quieres.</em></h1><p>Formato sencillo para conversar, acordar y practicar en familia. Llénenlo juntos, guárdenlo en un lugar visible y practiquen al menos una vez al año.</p><button className="primary" onClick={()=>{field('id',crypto.randomUUID());go(0);}}>Crear nuestro plan <ChevronRight size={19}/></button><a className="text-btn pdf-model-link" href="/modelo-plan-familiar.pdf" target="_blank" rel="noopener">Ver ejemplo del formato PDF</a><div className="hero-meta"><span><FileCheck size={16}/> PDF con anexo ilustrado</span><span><Users size={16}/> Completen en familia</span></div></div><figure className="hero-photo"><img src="/puerto-baquerizo.jpg" alt="Malecón y bahía de Puerto Baquerizo Moreno, San Cristóbal"/><div className="photo-shade"/><figcaption><span>GALÁPAGOS · NUESTRO HOGAR</span><strong>Prepararnos hoy.<br/>Cuidarnos siempre.</strong></figcaption><div className="photo-tag"><ShieldCheck size={18}/> Familias preparadas</div></figure></section><section className="intro-strip"><div><span className="number">01</span><h3>Conversen</h3><p>Identifiquen necesidades y riesgos.</p></div><div><span className="number">02</span><h3>Acuerden</h3><p>Definan rutas, contactos y tareas.</p></div><div><span className="number">03</span><h3>Guarden y practiquen</h3><p>Descarguen el PDF y ensayen el plan.</p></div></section><section className="privacy-inline"><LockKeyhole size={21}/><p>Al enviar, sus respuestas y una copia PDF se guardan para la administración de esta aplicación. Las otras familias no pueden consultar su plan. Eviten incluir diagnósticos o datos que no sean necesarios.</p></section></>
+ :saved?<main className="success"><CheckCircle2 size={60}/><div className="eyebrow">PLAN REGISTRADO</div><h1>Su familia dio<br/>un paso importante.</h1><p>Las respuestas y una copia PDF quedaron guardadas. Descarguen su plan, compártanlo en casa y practiquen la salida.</p><div className="receipt"><span>Código de registro</span><strong>{saved.id.slice(0,8).toUpperCase()}</strong><small>{new Date(saved.createdAt).toLocaleString('es-EC')}</small></div><button className="primary" onClick={download} disabled={pdfBusy}><Download size={19}/>{pdfBusy?'Descargando…':'Descargar nuestro plan en PDF'}</button><p className="muted">Descarguen antes de cerrar esta página. La administración conserva la copia.</p>{error&&<div role="alert" className="error">{error}</div>}{note}<button className="text-btn" onClick={()=>{setP(emptyPlan());setSaved(null);setVisited([]);setStep(-1);}}>Crear otro plan</button></main>
+ :<main className="workspace"><aside><div className="eyebrow">NUESTRO PLAN FAMILIAR</div><h2>Un acuerdo.<br/>Ocho pasos.</h2><nav aria-label="Pasos del formulario">{steps.map((name,i)=><button key={name} className={step===i?'step active':'step'} onClick={()=>go(i)} aria-current={step===i?'step':undefined}><span>{visited.includes(i)?<CheckCircle2 size={16}/>:String(i+1).padStart(2,'0')}</span>{name}</button>)}<button className={step===8?'step active':'step'} onClick={()=>go(8)}><span><FileCheck size={16}/></span>Revisar y enviar</button></nav><div className="side-help"><ShieldCheck size={22}/><strong>Háganlo en familia.</strong><p>Usen acuerdos claros que todos puedan recordar.</p></div></aside><section className="form-area"><div className="form-top"><span>{step<8?'PASO '+(step+1)+' DE 8':'ÚLTIMA REVISIÓN'}</span><span>{step<8?Math.round(step/8*100)+'% recorrido':'Listos para registrar'}</span></div><div className="progress"><div style={{width:(step+1)/9*100+'%'}}/></div><h1>{steps[step]||'Revisen su plan'}</h1><p className="lead">{tips[step]||'Comprueben los acuerdos antes de guardar el plan y generar su PDF.'}</p>
+ <div className="form-content">
+ {step===0&&<><div className="grid">{input('Nombre de la familia o persona responsable','family','text',true,'Ej.: Familia Bautista')}{input('Fecha de elaboración','date','date',true)}{input('Dirección completa de la vivienda','address','text',true)}{input('Barrio, sector, ciudad o comunidad','sector','text',true)}{input('Teléfono principal','phone','tel',true)}{input('Teléfono alternativo','altPhone','tel')}{input('Persona de contacto fuera de la zona','contact','text',true)}{input('Teléfono de esa persona','contactPhone','tel',true)}</div><div className="section-label">ACUERDO FAMILIAR RÁPIDO</div><div className="grid">{input('Si nos separamos: nos encontraremos en…','meeting','text',true)}{input('Si no hay señal: enviaremos mensaje de texto a…','noSignal','text',true)}</div><div className="note"><ShieldCheck size={19}/><span><strong>Si hay una alerta:</strong> escucharemos fuentes oficiales y seguiremos las indicaciones.</span></div><div className="section-label">REVISIÓN DEL PLAN</div><div className="grid">{input('Fecha de revisión del plan','reviewDate','date')}{input('Responsable de actualizarlo','updater','text',true)}</div></>}
+ {step===1&&<>{p.members.map((m:any,i:number)=><div className="entry" key={i}><div className="entry-head"><h3>Integrante {i+1}</h3>{p.members.length>1&&<button className="delete" aria-label={'Eliminar integrante '+(i+1)} onClick={()=>remove('members',i)}><Trash2 size={16}/></button>}</div><div className="grid">{rowInput('Nombre y apellido *','members',i,'name')}{rowInput('Edad *','members',i,'age','number')}{rowChoice('Relación *','members',i,'relation',['Responsable del hogar','Pareja','Hija / hijo','Madre / padre','Otro familiar','Otra persona'])}{rowInput('Teléfono (si tiene)','members',i,'phone','tel')}{supports(i)}{rowChoice('Rol *','members',i,'role',['Guiar y apoyar a otras personas','Llevar la mochila','Cerrar servicios si es seguro','Cuidar mascotas','Verificar que todos estén presentes','Recibir apoyo / seguir al cuidador','Otro rol acordado'])}</div></div>)}{p.members.length<30&&<button className="add-btn" onClick={()=>add('members',{name:'',age:0,relation:'',phone:'',support:'',role:''})}><Plus size={17}/> Agregar integrante</button>}<div className="note">Roles sugeridos: guía a niñas, niños o adultos mayores; lleva mochila; cierra servicios si es seguro; cuida mascotas; verifica que todos estén presentes. Elijan roles posibles y sustitutos.</div><div className="section-label">MASCOTAS O ANIMALES A CONSIDERAR</div>{p.pets.map((m:any,i:number)=><div className="entry" key={i}><div className="entry-head"><h3>Mascota {i+1}</h3><button className="delete" onClick={()=>remove('pets',i)} aria-label="Eliminar mascota"><Trash2 size={16}/></button></div><div className="grid">{rowInput('Nombre o tipo de animal *','pets',i,'name')}{rowInput('Quién se encarga *','pets',i,'keeper')}{rowInput('Qué necesita llevar *','pets',i,'needs','text','Correa, agua, alimento, transportadora…')}</div></div>)}{p.pets.length<15&&<button className="add-btn" onClick={()=>add('pets',{name:'',keeper:'',needs:''})}><Plus size={17}/> Agregar mascota</button>}</>}
+ {step===2&&<>{p.risks.map((r:any,i:number)=><div className="entry" key={i}><div className="entry-head"><h3>Riesgo {i+1}</h3>{p.risks.length>1&&<button className="delete" aria-label="Eliminar riesgo" onClick={()=>remove('risks',i)}><Trash2 size={16}/></button>}</div><div className="grid">{rowChoice('Riesgo *','risks',i,'type',riskTypes)}{rowSelect('Prioridad *','risks',i,'priority',['Alta','Media','Baja'])}{rowInput('¿Qué puede pasar? *','risks',i,'effect')}{rowInput('¿Qué haremos para reducirlo? *','risks',i,'prevention')}{rowInput('Primer paso si ocurre *','risks',i,'first')}</div></div>)}{p.risks.length<3&&<button className="add-btn" onClick={()=>add('risks',{type:'',effect:'',prevention:'',first:'',priority:'Media'})}><Plus size={17}/> Agregar riesgo ({p.risks.length}/3)</button>}</>}
+ {step===3&&<>{p.routes.map((r:any,i:number)=><div className="entry" key={i}><div className="entry-head"><h3>{r.situation}</h3></div><div className="grid">{rowInput('Ruta o salida segura *','routes',i,'route')}{rowInput('Punto de encuentro *','routes',i,'point')}{rowInput('Quién avisa y cómo *','routes',i,'notice')}</div></div>)}<div className="section-label">REGLAS SIMPLES QUE TODOS CONOCEN</div><div className="note"><span><strong>Antes de salir:</strong> tomamos la mochila y solo lo imprescindible.<br/><strong>Al evacuar:</strong> no usamos ascensores. Ayudamos sin ponernos en riesgo.<br/><strong>Al llegar al punto seguro:</strong> pasamos lista. No regresamos hasta que sea seguro.</span></div></>}
+ {step===4&&<><LocationMap value={p.location} onChange={value=>field('location',value)}/><div className="section-label">CROQUIS DE LA VIVIENDA</div><label className="upload"><Upload size={34}/><strong>Sube una foto o imagen de tu croquis</strong><span>JPG, PNG o WebP · hasta 12 MB</span><input type="file" accept="image/jpeg,image/png,image/webp" onChange={e=>image(e.target.files?.[0])}/></label>{p.sketch?<div className="sketch-preview"><img src={p.sketch} alt="Croquis familiar"/><button className="text-btn" onClick={()=>field('sketch','')}>Quitar imagen</button></div>:<div className="note">Pueden dibujarlo en papel y tomarle una foto. Si lo agregan después, el PDF dejará un espacio para dibujarlo.</div>}{input('Referencia cercana','reference','text',false,'Calle, edificio o lugar conocido')}<div className="legend"><h3>Qué debe mostrar el dibujo</h3><p>→ Ruta de salida · ★ Punto de encuentro · ▲ Zona de peligro · ● Extintor o botiquín · □ Llave de gas, agua o energía.</p></div></>}
+ {step===5&&<>{p.resources.map((r:any,i:number)=><div className="entry compact" key={i}><div className="entry-head"><h3>{r.item}</h3></div><div className="grid">{rowSelect('¿Lo tenemos?','resources',i,'status',['Sí','No'])}{rowInput('Cantidad o fecha','resources',i,'amount')}{rowInput('Dónde está guardado','resources',i,'location')}{rowInput('Pendiente','resources',i,'pending')}</div></div>)}{input('Teléfonos útiles','usefulPhones','text',false,'Salud, bomberos, vecinos o familiares…')}<div className="note">Revisen agua, alimentos y medicamentos cada seis meses. ECU 911: 9-1-1.</div></>}
+ {step===6&&<>{p.actions.map((a:any,i:number)=><div className="entry" key={i}><div className="entry-head"><h3>{a.moment} · Acción {i+1}</h3>{p.actions.length>6&&<button className="delete" aria-label="Eliminar acción" onClick={()=>remove('actions',i)}><Trash2 size={16}/></button>}</div><div className="grid">{rowSelect('Momento','actions',i,'moment',['Antes','Durante','Después'])}{rowInput('Acción concreta','actions',i,'action','text',a.moment==='Antes'?'Ej.: asegurar objetos pesados / revisar mochila':a.moment==='Durante'?'Ej.: evacuar por la ruta acordada':'Ej.: comunicarnos y registrar daños sin exponernos')}{rowInput('Responsable','actions',i,'person')}{rowInput('Fecha','actions',i,'date','date')}</div><label className="check"><input type="checkbox" checked={a.done} onChange={e=>row('actions',i,'done',e.target.checked)}/> Esta acción ya está lista</label></div>)}{p.actions.length<20&&<button className="add-btn" onClick={()=>add('actions',{moment:'Antes',action:'',person:'',date:'',done:false})}><Plus size={17}/> Agregar acción</button>}</>}
+ {step===7&&<><div className="grid">{['date','exercise','improvement','person'].map((key,i)=><label className="field" key={key}><span>{['Fecha de práctica','Qué ensayamos','Qué mejoraremos','Quién lo hará'][i]}</span><input type={i===0?'date':'text'} maxLength={500} value={p.practice[key]} onChange={e=>field('practice',{...p.practice,[key]:e.target.value})}/></label>)}</div><div className="section-label">COMPROMISO FAMILIAR</div><div className="note">Conversamos este plan, sabemos dónde está guardado y nos comprometemos a practicarlo.</div>{input('Firma o nombres de quienes participaron','participants','text',true)}</>}
+ {step===8&&<><div className="review-card"><div><span>Familia</span><strong>{p.family||'Pendiente'}</strong></div><div><span>Barrio, sector, ciudad o comunidad</span><strong>{p.sector||'Sector pendiente'}</strong></div><div><span>Integrantes</span><strong>{p.members.length}</strong></div><div><span>Riesgos priorizados</span><strong>{p.risks.map((r:any)=>r.type).filter(Boolean).join(', ')||'Pendiente'}</strong></div><div><span>Punto de encuentro</span><strong>{p.meeting||'Pendiente'}</strong></div>{p.location&&<div><span>Coordenadas de la vivienda</span><strong>{p.location.lat.toFixed(6)}, {p.location.lng.toFixed(6)}{p.location.snapshot?' · Mapa incluido':''}</strong></div>}<div><span>Croquis</span><strong>{p.sketch?'Imagen incluida':'Espacio para dibujar en el PDF'}</strong></div></div><div className="section-label">REVISAR CADA BLOQUE</div><div className="review-steps">{steps.map((x,i)=><button onClick={()=>go(i)} key={x}>{i+1}. {x}<ChevronRight size={16}/></button>)}</div><div className="consent"><LockKeyhole size={23}/><h3>Registro de participación y copia del plan</h3><p>Al enviar, se guardarán la fecha, familia, ubicación, teléfono, número de integrantes, todas las respuestas, la ubicación y el mapa si los agregas, y una copia PDF. La administración de esta aplicación podrá consultarlos para el seguimiento de la preparación familiar. Otras familias no tendrán acceso.</p><p>Registra solo información necesaria y confirma que quienes participan conocen este registro. Para solicitar una corrección o retiro del plan, contacta a la DGTAR del CGREG indicando el código de registro.</p><label className="check"><input type="checkbox" checked={p.consent} onChange={e=>field('consent',e.target.checked)}/> Autorizo el registro de las respuestas y la copia del plan para esta finalidad.</label></div></>}
+ </div>{error&&<div role="alert" className="error"><strong>{error}</strong>{issues.length>0&&<ul>{issues.slice(0,12).map((x,i)=><li key={i}>{issueLabel(x.path)}: {x.message==='Required'?'Completa este campo.':x.message}</li>)}</ul>}</div>}<div className="form-bottom"><button className="secondary" onClick={()=>go(step===0?-1:step-1)} disabled={busy}><ChevronLeft size={17}/> {step===0?'Inicio':'Anterior'}</button>{step<8?<button className="primary" onClick={()=>go(step+1)}>Continuar <ChevronRight size={17}/></button>:<button className="primary" disabled={!p.consent||busy} onClick={submit}>{busy?'Guardando plan…':'Guardar plan y generar PDF'}<FileCheck size={18}/></button>}</div><p className="session-note">Las respuestas se guardan al enviar. Mantén esta página abierta mientras completas el plan.</p></section></main>}
+ <footer><span>CGREG · Dirección de Gestión del Territorio, Ambiente y Riesgos</span><span>Conversen. Acuerden. Practiquen.</span></footer></div>;
 }

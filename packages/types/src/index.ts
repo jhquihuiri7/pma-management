@@ -8,7 +8,7 @@ export type FamilyPlanMapLayer = "Mapa" | "Satélite";
 export interface FamilyEmergencyPlan {
   submissionId: string;
   family: string;
-  island: "San Cristóbal" | "Santa Cruz" | "Isabela" | "Floreana" | "Otra";
+  island: string;
   sector: string;
   address: string;
   date: string;

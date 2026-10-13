@@ -1,73 +1,20 @@
-import type { FamilyEmergencyPlan } from "@pma/types";
-
-export type ClientFamilyPlan = Omit<FamilyEmergencyPlan, "submissionId" | "consent"> & {
-  submissionId: string;
-  consent: boolean;
-};
-
-export const FAMILY_PLAN_STEPS = [
-  "Datos y acuerdos principales",
-  "Nuestra familia y sus apoyos",
-  "Riesgos que debemos preparar",
-  "Rutas y puntos seguros",
-  "Croquis y ubicación",
-  "Mochila y recursos",
-  "Acciones familiares",
-  "Práctica y actualización",
-] as const;
-
-export const FAMILY_PLAN_ISLANDS = ["San Cristóbal", "Santa Cruz", "Isabela", "Floreana", "Otra"] as const;
-
-export const RESOURCE_NAMES = [
-  "Agua y alimentos no perecibles",
-  "Linterna y pilas",
-  "Radio o cargador portátil",
-  "Botiquín y medicinas personales",
-  "Documentos protegidos o copias",
-  "Mascarillas, silbato y abrigo",
-  "Llaves y dinero en efectivo",
-  "Artículos para bebé, adulto mayor o mascota",
-  "Otro recurso importante",
-] as const;
-
-export function emptyFamilyPlan(): ClientFamilyPlan {
-  return {
-    submissionId: "",
-    family: "",
-    island: "San Cristóbal",
-    sector: "",
-    address: "",
-    date: "",
-    phone: "",
-    altPhone: "",
-    contact: "",
-    contactPhone: "",
-    meeting: "",
-    noSignal: "",
-    reviewDate: "",
-    updater: "",
-    members: [{ name: "", age: 0, relation: "", phone: "", support: "", role: "" }],
-    pets: [],
-    risks: [{ type: "", effect: "", prevention: "", first: "", priority: "Alta" }],
-    routes: [
-      { situation: "Sismo", route: "", point: "", notice: "" },
-      { situation: "Inundación o lluvia intensa", route: "", point: "", notice: "" },
-      { situation: "Incendio u otra emergencia", route: "", point: "", notice: "" },
-    ],
-    sketch: "",
-    reference: "",
-    location: null,
-    resources: RESOURCE_NAMES.map((item) => ({ item, status: "No", amount: "", location: "", pending: "" })),
-    usefulPhones: "",
-    actions: (["Antes", "Antes", "Durante", "Durante", "Después", "Después"] as const).map((moment) => ({
-      moment,
-      action: "",
-      person: "",
-      date: "",
-      done: false,
-    })),
-    practice: { date: "", exercise: "", improvement: "", person: "" },
-    participants: "",
-    consent: false,
-  };
-}
+import {z} from 'zod';
+/* eslint-disable @typescript-eslint/no-explicit-any */
+z.setErrorMap((issue)=>{if(issue.code==='too_small')return {message:issue.type==='string'?'Completa este campo.':issue.type==='array'?'Agrega al menos '+issue.minimum+' elemento.':'Ingresa un valor igual o mayor a '+issue.minimum+'.'};if(issue.code==='too_big')return {message:'No superes el límite de '+issue.maximum+'.'};if(issue.code==='invalid_enum_value')return {message:'Selecciona una opción.'};if(issue.code==='invalid_string')return {message:'Revisa el formato de este campo.'};if(issue.code==='invalid_literal')return {message:'Confirma la autorización para registrar el plan.'};return {message:'Completa o revisa este campo.'};});
+const text=z.string().trim().max(500);const required=text.min(1,'Completa este campo');
+export const planSchema=z.object({
+ id:z.string().uuid(),family:required,island:text.default(''),sector:required,address:required,date:z.string().regex(/^\d{4}-\d{2}-\d{2}$/),phone:z.string().trim().min(7).max(30),altPhone:text,
+ contact:required,contactPhone:z.string().trim().min(7).max(30),meeting:required,noSignal:required,reviewDate:text,updater:required,
+ members:z.array(z.object({name:required,age:z.coerce.number().int().min(0).max(120),relation:required,phone:text,support:text,role:required})).min(1).max(30),
+ pets:z.array(z.object({name:required,keeper:required,needs:required})).max(15),
+ risks:z.array(z.object({type:required,effect:required,prevention:required,first:required,priority:z.enum(['Alta','Media','Baja'])})).min(1).max(3),
+ routes:z.array(z.object({situation:required,route:required,point:required,notice:required})).length(3),
+ sketch:z.string().max(1500000).refine(v=>v===''||/^data:image\/jpeg;base64,[A-Za-z0-9+/=]+$/.test(v),'Usa una imagen JPEG'),reference:text,location:z.object({lat:z.number().min(-90).max(90),lng:z.number().min(-180).max(180),snapshot:z.string().max(1500000).refine(v=>v===''||/^data:image\/jpeg;base64,[A-Za-z0-9+/=]+$/.test(v),'Usa una imagen JPEG'),layer:z.enum(['Mapa','Satélite'])}).nullable().default(null),
+ resources:z.array(z.object({item:required,status:z.enum(['Sí','No']),amount:text,location:text,pending:text})).length(9),usefulPhones:text,
+ actions:z.array(z.object({moment:z.enum(['Antes','Durante','Después']),action:text,person:text,date:text,done:z.boolean()})).min(6).max(20),
+ practice:z.object({date:text,exercise:text,improvement:text,person:text}),participants:required,consent:z.literal(true)
+}).superRefine((p,ctx)=>{if(!p.actions.some(a=>a.action))ctx.addIssue({code:'custom',path:['actions',0,'action'],message:'Anota al menos una acción concreta.'});p.actions.forEach((a,i)=>{if(a.action&&!a.person)ctx.addIssue({code:'custom',path:['actions',i,'person'],message:'Indica quién se responsabiliza de esta acción.'});if(!a.action&&(a.person||a.date||a.done))ctx.addIssue({code:'custom',path:['actions',i,'action'],message:'Describe la acción de esta fila.'});});});
+export type Plan=z.infer<typeof planSchema>;
+export const steps=['Datos y acuerdos principales','Nuestra familia y sus apoyos','Riesgos que debemos preparar','Rutas, puntos seguros y comunicación','Croquis de nuestra vivienda y alrededores','Mochila y recursos disponibles','Acciones familiares antes, durante y después','Práctica y actualización'];
+export const resourceNames=['Agua y alimentos no perecibles','Linterna y pilas','Radio o cargador portátil','Botiquín y medicinas personales','Documentos protegidos o copias','Mascarillas, silbato y abrigo','Llaves y dinero en efectivo','Artículos para bebé, adulto mayor o mascota','Otro recurso importante'];
+export function emptyPlan(){return {id:'',family:'',island:'',sector:'',address:'',date:new Date().toISOString().slice(0,10),phone:'',altPhone:'',contact:'',contactPhone:'',meeting:'',noSignal:'',reviewDate:'',updater:'',members:[{name:'',age:0,relation:'',phone:'',support:'',role:''}],pets:[],risks:[{type:'',effect:'',prevention:'',first:'',priority:'Alta'}],routes:[{situation:'Sismo',route:'',point:'',notice:''},{situation:'Inundación o lluvia intensa',route:'',point:'',notice:''},{situation:'Incendio u otra emergencia',route:'',point:'',notice:''}],sketch:'',reference:'',location:null,resources:resourceNames.map(item=>({item,status:'No',amount:'',location:'',pending:''})),usefulPhones:'',actions:['Antes','Antes','Durante','Durante','Después','Después'].map(moment=>({moment,action:'',person:'',date:'',done:false})),practice:{date:'',exercise:'',improvement:'',person:''},participants:'',consent:false} as any;}

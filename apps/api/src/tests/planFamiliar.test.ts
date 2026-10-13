@@ -54,9 +54,9 @@ test("family plan schema accepts the complete eight-section contract", () => {
   assert.equal(familyEmergencyPlanSchema.parse(validPlan()).family, "Familia de prueba");
 });
 
-test("family plan schema rejects missing island and orphan action responsibility", () => {
+test("family plan schema preserves the canonical optional island and rejects orphan action responsibility", () => {
   const missingIsland = { ...validPlan(), island: "" };
-  assert.equal(familyEmergencyPlanSchema.safeParse(missingIsland).success, false);
+  assert.equal(familyEmergencyPlanSchema.safeParse(missingIsland).success, true);
 
   const orphan = validPlan();
   orphan.actions[1] = { ...orphan.actions[1], person: "Alguien" };

@@ -1,5 +1,5 @@
 import type { FastifyInstance, FastifyReply, FastifyRequest } from "fastify";
-import { createHash, randomUUID, timingSafeEqual } from "node:crypto";
+import { createHash, timingSafeEqual } from "node:crypto";
 import { isDeepStrictEqual } from "node:util";
 import { and, desc, eq, gte, ilike, lte, or, sql, type SQL } from "drizzle-orm";
 import { z } from "zod";
@@ -128,7 +128,9 @@ export async function planFamiliarRoutes(app: FastifyInstance) {
       windowMs: DAY_MS,
     });
 
-    const id = randomUUID();
+    // The canonical form creates this UUID when the family starts the plan;
+    // keeping it as the record id preserves its receipt and retry semantics.
+    const id = plan.submissionId;
     const createdAt = new Date();
     const pdfStoragePath = buildFamilyPlanPdfPath(id);
     const pdf = await createFamilyPlanPdf(plan, id, createdAt);

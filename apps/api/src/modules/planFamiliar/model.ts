@@ -30,7 +30,7 @@ export const FAMILY_PLAN_RESOURCE_NAMES = [
 export const familyEmergencyPlanSchema = z.object({
   submissionId: z.string().uuid(),
   family: requiredText,
-  island: z.enum(FAMILY_PLAN_ISLANDS),
+  island: optionalText.default(""),
   sector: requiredText,
   address: requiredText,
   date: z.string().regex(/^\d{4}-\d{2}-\d{2}$/),
