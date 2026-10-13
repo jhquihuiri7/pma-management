@@ -10,9 +10,10 @@ import { familyEmergencyPlans } from "../../db/schema/planFamiliar.js";
 import { env } from "../../lib/env.js";
 import { Conflict, Forbidden, NotFound } from "../../lib/errors.js";
 import {
-  FAMILY_PLAN_ISLANDS,
   familyEmergencyDownloadTokenSchema,
   familyEmergencyPlanSchema,
+  familyPlanListQuerySchema,
+  type FamilyPlanListQuery,
 } from "../../modules/planFamiliar/model.js";
 import { createFamilyPlanPdf } from "../../modules/planFamiliar/pdf.js";
 import { persistDurableFileAndRecord } from "../../modules/shared/durableFilePersistence.js";
@@ -22,14 +23,6 @@ const CONSENT_VERSION = "2026-10-v1";
 const DAY_MS = 24 * 60 * 60 * 1_000;
 const protectedAccess = [authenticate, requireApp("plan_familiar")];
 const idParamsSchema = z.object({ id: z.string().uuid() }).strict();
-const listQuerySchema = z.object({
-  page: z.coerce.number().int().min(1).default(1),
-  pageSize: z.coerce.number().int().min(1).max(100).default(50),
-  search: z.string().trim().max(100).optional(),
-  island: z.enum(FAMILY_PLAN_ISLANDS).optional(),
-  from: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).optional(),
-  to: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).optional(),
-}).strict();
 
 function digest(value: string): string {
   return createHash("sha256").update(value).digest("hex");
@@ -61,7 +54,7 @@ function sourceHash(request: FastifyRequest): string {
   return digest(`${env.JWT_ACCESS_SECRET}:family-plan:${request.ip}`);
 }
 
-function queryConditions(query: z.infer<typeof listQuerySchema>): SQL[] {
+function queryConditions(query: FamilyPlanListQuery): SQL[] {
   const conditions: SQL[] = [eq(familyEmergencyPlans.status, "active")];
   if (query.island) conditions.push(eq(familyEmergencyPlans.island, query.island));
   if (query.search) {
@@ -201,7 +194,7 @@ export async function planFamiliarRoutes(app: FastifyInstance) {
   });
 
   app.get("/plans", { preHandler: protectedAccess }, async (request) => {
-    const query = listQuerySchema.parse(request.query);
+    const query = familyPlanListQuerySchema.parse(request.query);
     const where = and(...queryConditions(query));
     const db = getDb();
     const [rows, [totals]] = await Promise.all([
@@ -230,7 +223,7 @@ export async function planFamiliarRoutes(app: FastifyInstance) {
   });
 
   app.get("/stats", { preHandler: protectedAccess }, async (request) => {
-    const query = listQuerySchema.parse(request.query);
+    const query = familyPlanListQuerySchema.parse(request.query);
     const where = and(...queryConditions(query));
     const db = getDb();
     const [[totals], byIsland] = await Promise.all([
@@ -278,7 +271,7 @@ export async function planFamiliarRoutes(app: FastifyInstance) {
   app.get("/export.csv", {
     preHandler: [...protectedAccess, requireRole("ADMIN")],
   }, async (request, reply) => {
-    const query = listQuerySchema.parse(request.query);
+    const query = familyPlanListQuerySchema.parse(request.query);
     const rows = await getDb().select({
       id: familyEmergencyPlans.id,
       createdAt: familyEmergencyPlans.createdAt,

@@ -129,4 +129,20 @@ export const familyEmergencyDownloadTokenSchema = z.object({
   downloadToken: z.string().uuid(),
 }).passthrough();
 
+// The results page builds its query with URLSearchParams, which sends every
+// filter: "Todos los registros" arrives as `island=`, and `.optional()` alone
+// only accepts a missing key, so the empty string was a 400 ValidationError.
+const blankAsMissing = (value: unknown) => (value === "" ? undefined : value);
+const isoDate = z.string().regex(/^\d{4}-\d{2}-\d{2}$/);
+
+export const familyPlanListQuerySchema = z.object({
+  page: z.coerce.number().int().min(1).default(1),
+  pageSize: z.coerce.number().int().min(1).max(100).default(50),
+  search: z.string().trim().max(100).optional(),
+  island: z.preprocess(blankAsMissing, z.enum(FAMILY_PLAN_ISLANDS).optional()),
+  from: z.preprocess(blankAsMissing, isoDate.optional()),
+  to: z.preprocess(blankAsMissing, isoDate.optional()),
+}).strict();
+
 export type FamilyEmergencyPlanInput = z.infer<typeof familyEmergencyPlanSchema>;
+export type FamilyPlanListQuery = z.infer<typeof familyPlanListQuerySchema>;

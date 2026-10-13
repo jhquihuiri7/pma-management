@@ -4,6 +4,7 @@ import { PDFDocument } from "pdf-lib";
 import {
   FAMILY_PLAN_RESOURCE_NAMES,
   familyEmergencyPlanSchema,
+  familyPlanListQuerySchema,
   type FamilyEmergencyPlanInput,
 } from "../modules/planFamiliar/model.js";
 import { createFamilyPlanPdf } from "../modules/planFamiliar/pdf.js";
@@ -61,6 +62,15 @@ test("family plan schema preserves the canonical optional island and rejects orp
   const orphan = validPlan();
   orphan.actions[1] = { ...orphan.actions[1], person: "Alguien" };
   assert.equal(familyEmergencyPlanSchema.safeParse(orphan).success, false);
+});
+
+test("family plan list query treats empty filters as missing", () => {
+  // Exactly what the results page sends with "Todos los registros" selected.
+  const query = familyPlanListQuerySchema.parse({ search: "", island: "", page: "1", pageSize: "50" });
+  assert.equal(query.island, undefined);
+  assert.equal(query.page, 1);
+  assert.equal(familyPlanListQuerySchema.parse({ island: "Isabela", from: "", to: "" }).island, "Isabela");
+  assert.equal(familyPlanListQuerySchema.safeParse({ island: "Galápagos" }).success, false);
 });
 
 test("family plan PDF contains all sections across multiple pages", async () => {
