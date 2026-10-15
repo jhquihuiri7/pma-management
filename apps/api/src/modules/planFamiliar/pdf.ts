@@ -188,7 +188,7 @@ export async function createFamilyPlanPdf(p:FamilyEmergencyPlanInput,_id:string,
 
  heading(pg,'NUESTRA FAMILIA Y SUS APOYOS',M,186,CW);card(pg,M,200,CW,115);
  const num=(i:number):Cell=>(cx,top,w,h)=>{shape(pg,rr(cx,top,w,h),{fill:C.navy});say(pg,String(i+1),cx,top,w,h,{size:6.5,font:xb,color:C.white,align:'center'});};
- table(pg,M+5,205,[{head:'#',w:14,align:'center'},{head:'Nombre y apellido',w:128},{head:'Edad',w:26,align:'center'},{head:'Relación',w:68},{head:'Teléfono',w:66},{head:'Apoyos requeridos (medicina, movilidad, cuidado, comunicación)',w:150},{head:'Rol',w:93}],
+ table(pg,M+5,205,[{head:'#',w:14,align:'center'},{head:'Nombre y apellido',w:128},{head:'Edad',w:26,align:'center'},{head:'Relación',w:68},{head:'Teléfono',w:66},{head:'Apoyos requeridos (medicina, movilidad, cuidado)',w:150},{head:'Rol',w:93}],
   listRows(p.members,6,'Nuestra familia y sus apoyos · integrantes adicionales',(m,i)=>'Integrante '+(i+1)+': '+m.name+' | Edad: '+m.age+' | Relación: '+m.relation+' | Teléfono: '+(m.phone||'-')+' | Apoyos: '+(m.support||'Ninguno')+' | Rol: '+m.role,
    (m,i)=>[num(i),m?.name??'',m?String(m.age):'',m?.relation??'',m?.phone??'',m?(m.support||'Ninguno'):'',m?.role??'']),15,(r,c)=>'Integrante '+(r+1)+' · '+['','Nombre y apellido','Edad','Relación','Teléfono','Apoyos requeridos','Rol'][c]);
 
