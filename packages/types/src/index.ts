@@ -18,8 +18,6 @@ export interface FamilyEmergencyPlan {
   contactPhone: string;
   meeting: string;
   noSignal: string;
-  reviewDate: string;
-  updater: string;
   members: Array<{
     name: string;
     age: number;
@@ -50,18 +48,15 @@ export interface FamilyEmergencyPlan {
     status: "Sí" | "No";
     amount: string;
     location: string;
-    pending: string;
   }>;
   usefulPhones: string;
   actions: Array<{
     moment: FamilyPlanMoment;
     action: string;
     person: string;
-    date: string;
-    done: boolean;
   }>;
-  practice: { date: string; exercise: string; improvement: string; person: string };
-  participants: string;
+  practice: { date: string; exercise: string; person: string };
+  signature: string;
   consent: true;
 }
 

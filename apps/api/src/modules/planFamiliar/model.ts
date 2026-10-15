@@ -1,11 +1,12 @@
 import { z } from "zod";
 
 const optionalText = z.string().trim().max(500);
-const requiredText = optionalText.min(1, "Completa este campo");
+const requiredText = optionalText.min(1, "Completen este campo");
 const jpegDataUrl = z.string().max(1_500_000).refine(
   (value) => value === "" || /^data:image\/jpeg;base64,[A-Za-z0-9+/=]+$/.test(value),
   "La imagen debe ser JPEG",
 );
+const pngDataUrl = z.string().max(300_000).regex(/^data:image\/png;base64,[A-Za-z0-9+/=]+$/, "La firma debe ser PNG");
 
 export const FAMILY_PLAN_ISLANDS = [
   "San Cristóbal",
@@ -30,7 +31,7 @@ export const FAMILY_PLAN_RESOURCE_NAMES = [
 export const familyEmergencyPlanSchema = z.object({
   submissionId: z.string().uuid(),
   family: requiredText,
-  island: optionalText.default(""),
+  island: z.enum(FAMILY_PLAN_ISLANDS),
   sector: requiredText,
   address: requiredText,
   date: z.string().regex(/^\d{4}-\d{2}-\d{2}$/),
@@ -40,8 +41,6 @@ export const familyEmergencyPlanSchema = z.object({
   contactPhone: z.string().trim().min(7).max(30),
   meeting: requiredText,
   noSignal: requiredText,
-  reviewDate: z.string().regex(/^$|^\d{4}-\d{2}-\d{2}$/),
-  updater: requiredText,
   members: z.array(z.object({
     name: requiredText,
     age: z.coerce.number().int().min(0).max(120),
@@ -62,12 +61,13 @@ export const familyEmergencyPlanSchema = z.object({
     first: requiredText,
     priority: z.enum(["Alta", "Media", "Baja"]),
   }).strict()).min(1).max(3),
+  // Sismo, Tsunami, Inundación o lluvia intensa, Incendio u otra emergencia.
   routes: z.array(z.object({
     situation: requiredText,
     route: requiredText,
     point: requiredText,
     notice: requiredText,
-  }).strict()).length(3),
+  }).strict()).length(4),
   sketch: jpegDataUrl,
   reference: optionalText,
   location: z.object({
@@ -81,30 +81,30 @@ export const familyEmergencyPlanSchema = z.object({
     status: z.enum(["Sí", "No"]),
     amount: optionalText,
     location: optionalText,
-    pending: optionalText,
   }).strict()).length(FAMILY_PLAN_RESOURCE_NAMES.length),
   usefulPhones: optionalText,
   actions: z.array(z.object({
     moment: z.enum(["Antes", "Durante", "Después"]),
     action: optionalText,
     person: optionalText,
-    date: z.string().regex(/^$|^\d{4}-\d{2}-\d{2}$/),
-    done: z.boolean(),
   }).strict()).min(6).max(20),
+  // The next drill; what to improve is handwritten on the printed plan after it.
   practice: z.object({
     date: z.string().regex(/^$|^\d{4}-\d{2}-\d{2}$/),
     exercise: optionalText,
-    improvement: optionalText,
     person: optionalText,
   }).strict(),
-  participants: requiredText,
+  signature: pngDataUrl,
   consent: z.literal(true),
 }).strict().superRefine((plan, context) => {
+  // Responsibilities go to the household members registered in the plan.
+  const isMember = (name: string) => plan.members.some((member) => member.name === name);
+  const notMember = "Elijan a uno de los integrantes registrados";
   if (!plan.actions.some((action) => action.action)) {
     context.addIssue({
       code: z.ZodIssueCode.custom,
       path: ["actions", 0, "action"],
-      message: "Anota al menos una acción concreta",
+      message: "Anoten al menos una acción concreta",
     });
   }
   plan.actions.forEach((action, index) => {
@@ -112,17 +112,28 @@ export const familyEmergencyPlanSchema = z.object({
       context.addIssue({
         code: z.ZodIssueCode.custom,
         path: ["actions", index, "person"],
-        message: "Indica quién se responsabiliza de esta acción",
+        message: "Indiquen quién se responsabiliza de esta acción",
       });
     }
-    if (!action.action && (action.person || action.date || action.done)) {
+    if (!action.action && action.person) {
       context.addIssue({
         code: z.ZodIssueCode.custom,
         path: ["actions", index, "action"],
-        message: "Describe la acción de esta fila",
+        message: "Describan esta acción",
       });
     }
+    if (action.person && !isMember(action.person)) {
+      context.addIssue({ code: z.ZodIssueCode.custom, path: ["actions", index, "person"], message: notMember });
+    }
   });
+  plan.pets.forEach((pet, index) => {
+    if (!isMember(pet.keeper)) {
+      context.addIssue({ code: z.ZodIssueCode.custom, path: ["pets", index, "keeper"], message: notMember });
+    }
+  });
+  if (plan.practice.person && !isMember(plan.practice.person)) {
+    context.addIssue({ code: z.ZodIssueCode.custom, path: ["practice", "person"], message: notMember });
+  }
 });
 
 export const familyEmergencyDownloadTokenSchema = z.object({

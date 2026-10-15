@@ -19,7 +19,7 @@ import { createFamilyPlanPdf } from "../../modules/planFamiliar/pdf.js";
 import { persistDurableFileAndRecord } from "../../modules/shared/durableFilePersistence.js";
 import { buildFamilyPlanPdfPath, getStorage } from "../../storage/index.js";
 
-const CONSENT_VERSION = "2026-10-v1";
+const CONSENT_VERSION = "2026-10-v2";
 const DAY_MS = 24 * 60 * 60 * 1_000;
 const protectedAccess = [authenticate, requireApp("plan_familiar")];
 const idParamsSchema = z.object({ id: z.string().uuid() }).strict();
@@ -108,7 +108,7 @@ export async function planFamiliarRoutes(app: FastifyInstance) {
       if (sameDigest(existing.downloadHash, downloadHash) && isDeepStrictEqual(existing.planJson, plan)) {
         return { id: existing.id, code: existing.id.slice(0, 8).toUpperCase(), createdAt: existing.createdAt.toISOString() };
       }
-      throw Conflict("Este envío ya fue registrado; inicia un plan nuevo para modificarlo");
+      throw Conflict("Este envío ya fue registrado; inicien un plan nuevo para modificarlo");
     }
 
     await enforceAuthRateLimit({
