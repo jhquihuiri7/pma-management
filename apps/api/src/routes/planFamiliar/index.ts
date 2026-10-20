@@ -4,6 +4,7 @@ import { isDeepStrictEqual } from "node:util";
 import { and, desc, eq, gte, ilike, lte, or, sql, type SQL } from "drizzle-orm";
 import { z } from "zod";
 import { authenticate, requireApp, requireRole } from "../../auth/middleware.js";
+import { assertPublicWriteOrigin } from "../../auth/publicOrigin.js";
 import { enforceAuthRateLimit } from "../../auth/rateLimit.js";
 import { getDb } from "../../db/client.js";
 import { familyEmergencyPlans } from "../../db/schema/planFamiliar.js";
@@ -31,23 +32,6 @@ function digest(value: string): string {
 function sameDigest(left: string, right: string): boolean {
   if (!/^[a-f0-9]{64}$/.test(left) || !/^[a-f0-9]{64}$/.test(right)) return false;
   return timingSafeEqual(Buffer.from(left, "hex"), Buffer.from(right, "hex"));
-}
-
-function acceptedOrigins(): Set<string> {
-  const configured = new URL(env.FRONTEND_ORIGIN);
-  const values = new Set([configured.origin]);
-  if (env.NODE_ENV === "development") {
-    const alternate = configured.hostname === "localhost" ? "127.0.0.1" : "localhost";
-    values.add(`${configured.protocol}//${alternate}${configured.port ? `:${configured.port}` : ""}`);
-  }
-  return values;
-}
-
-function assertPublicWriteOrigin(request: FastifyRequest): void {
-  const origin = request.headers.origin;
-  if (!origin || !acceptedOrigins().has(origin)) {
-    throw Forbidden("Origen no autorizado");
-  }
 }
 
 function sourceHash(request: FastifyRequest): string {

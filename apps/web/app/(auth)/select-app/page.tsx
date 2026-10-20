@@ -4,7 +4,7 @@ import { useRouter } from "next/navigation";
 import { useEffect } from "react";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
-import { Leaf, Shield, LogOut, Map, Users, Siren, Target, Home } from "lucide-react";
+import { Leaf, Shield, LogOut, Map, Users, Siren, Target, Home, LifeBuoy } from "lucide-react";
 import { useAuth } from "@/lib/auth-context";
 
 const SUBSYSTEM_APPS = [
@@ -20,8 +20,8 @@ const SUBSYSTEM_APPS = [
   },
   {
     key: "rgdp",
-    label: "Gestión de Riesgos",
-    description: "Seguimiento de planes, usuarios y evidencias de riesgo.",
+    label: "Registro Generador de Desechos Peligrosos",
+    description: "Planes, generación de residuos peligrosos y evidencias de los generadores.",
     href: "/rgdp/dashboard",
     icon: Shield,
     color: "text-blue-600",
@@ -67,6 +67,16 @@ const SUBSYSTEM_APPS = [
     color: "text-cyan-700",
     border: "border-cyan-200 hover:border-cyan-400",
     bg: "hover:bg-cyan-50",
+  },
+  {
+    key: "riesgos",
+    label: "Gestión de Riesgos",
+    description: "Recursos institucionales y delegados para el COE Provincial y el Comité Territorial.",
+    href: "/riesgos/admin",
+    icon: LifeBuoy,
+    color: "text-orange-600",
+    border: "border-orange-200 hover:border-orange-400",
+    bg: "hover:bg-orange-50",
   },
 ] as const;
 

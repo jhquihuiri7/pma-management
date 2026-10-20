@@ -6,3 +6,4 @@ export * from "./geo.js";
 export * from "./previene.js";
 export * from "./pg2030.js";
 export * from "./planFamiliar.js";
+export * from "./riesgos.js";

@@ -13,11 +13,11 @@ import {
 } from "../modules/shared/usersModule.js";
 import { NotFound } from "../lib/errors.js";
 
-const VALID_APPS: AppKey[] = ["pma", "rgdp", "geo", "previene", "pg2030", "plan_familiar"];
+const VALID_APPS: AppKey[] = ["pma", "rgdp", "geo", "previene", "pg2030", "plan_familiar", "riesgos"];
 const idParamsSchema = z.object({ id: z.string().uuid() }).strict();
 const appParamsSchema = z.object({
   id: z.string().uuid(),
-  appKey: z.enum(["pma", "rgdp", "geo", "previene", "pg2030", "plan_familiar"]),
+  appKey: z.enum(["pma", "rgdp", "geo", "previene", "pg2030", "plan_familiar", "riesgos"]),
 }).strict();
 
 const createSchema = z.object({
@@ -26,7 +26,7 @@ const createSchema = z.object({
   role: z.enum(["ADMIN", "REPORTER", "VIEWER"]),
   unit: z.string().trim().max(200).optional(),
   position: z.string().trim().max(200).optional(),
-  apps: z.array(z.enum(["pma", "rgdp", "geo", "previene", "pg2030", "plan_familiar"])).max(6).optional(),
+  apps: z.array(z.enum(["pma", "rgdp", "geo", "previene", "pg2030", "plan_familiar", "riesgos"])).max(7).optional(),
   pg2030InstitucionId: z.string().uuid().optional(),
 }).strict();
 
@@ -39,7 +39,7 @@ const updateSchema = z.object({
 }).strict().refine((body) => Object.keys(body).length > 0, "Se requiere al menos un cambio");
 
 const assignAppSchema = z.object({
-  appKey: z.enum(["pma", "rgdp", "geo", "previene", "pg2030", "plan_familiar"]),
+  appKey: z.enum(["pma", "rgdp", "geo", "previene", "pg2030", "plan_familiar", "riesgos"]),
 }).strict();
 
 export async function usersRoutes(app: FastifyInstance) {

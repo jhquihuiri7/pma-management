@@ -2,7 +2,7 @@ import { pgEnum } from "drizzle-orm/pg-core";
 
 export const userRoleEnum = pgEnum("user_role", ["ADMIN", "REPORTER", "VIEWER"]);
 
-export const appKeyEnum = pgEnum("app_key", ["pma", "rgdp", "geo", "previene", "pg2030", "plan_familiar"]);
+export const appKeyEnum = pgEnum("app_key", ["pma", "rgdp", "geo", "previene", "pg2030", "plan_familiar", "riesgos"]);
 
 // RGDP's permit categories. PMA moved off this type in migration 0025, so it
 // now backs `rgdp_plans.tipo` alone.
@@ -97,3 +97,21 @@ export const pg2030FuenteFinanciamientoEnum = pgEnum("pg2030_fuente_financiamien
   "Inversión",
   "Cooperación",
 ]);
+
+// Gestión de Riesgos (migration 0035).
+export const riesgosIslaEnum = pgEnum("riesgos_isla", ["San Cristóbal", "Santa Cruz", "Isabela", "Floreana", "Baltra"]);
+
+export const riesgosInstitucionTipoEnum = pgEnum("riesgos_institucion_tipo", ["Público", "Privado", "ONG", "Otro"]);
+
+export const riesgosRecursoTipoEnum = pgEnum("riesgos_recurso_tipo", [
+  "Talento humano",
+  "Vehículos",
+  "Maquinaria y equipos",
+  "Infraestructura",
+  "Comunicaciones",
+  "Logística",
+]);
+
+export const riesgosDisponibilidadEnum = pgEnum("riesgos_disponibilidad", ["Inmediata", "Condicionada", "No disponible"]);
+
+export const riesgosEstadoEnum = pgEnum("riesgos_estado", ["pendiente", "validado", "excluido"]);

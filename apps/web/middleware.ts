@@ -41,8 +41,9 @@ function isTokenPath(pathname: string) {
 const PUBLIC_PREFIX_PATHS = ["/geo"];
 
 // Exact public pages. Keep the results subtree protected: using the prefix
-// matcher for /plan-familiar would also expose /plan-familiar/resultados.
-const PUBLIC_EXACT_PATHS = ["/plan-familiar"];
+// matcher for /plan-familiar would also expose /plan-familiar/resultados, and
+// for /riesgos it would expose /riesgos/admin. Only the two forms are open.
+const PUBLIC_EXACT_PATHS = ["/plan-familiar", "/riesgos", "/riesgos/recursos", "/riesgos/delegados"];
 
 function matchesPrefix(pathname: string, prefixes: string[]) {
   return prefixes.some((p) => pathname === p || pathname.startsWith(`${p}/`));
