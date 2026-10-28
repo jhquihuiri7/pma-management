@@ -880,7 +880,6 @@ export type RiesgosRecursoTipo =
   | "Comunicaciones"
   | "Logística";
 export type RiesgosDisponibilidad = "Inmediata" | "Condicionada" | "No disponible";
-export type RiesgosEstado = "pendiente" | "validado" | "excluido";
 
 /** A type-specific field of a resource, stored in its `detalles`. */
 export interface RiesgosCampoDetalle {
@@ -914,10 +913,10 @@ export interface RiesgosDelegado extends RiesgosContacto {
   documento: string;
 }
 
+/** A resource as the form sends it. Its island is the ficha's: one ficha, one island. */
 export interface RiesgosRecursoEntrada {
   tipo: RiesgosRecursoTipo;
   nombre: string;
-  isla: RiesgosIsla;
   ubicacion: string;
   unidad: string;
   cantidadExistente: number;
@@ -974,8 +973,13 @@ export interface RiesgosRecurso extends RiesgosRecursoEntrada {
   id: string;
   fichaId: string;
   institucionNombre: string;
-  estado: RiesgosEstado;
-  /** What the resource adds to the matrix: validated and owned, else 0. */
+  isla: RiesgosIsla;
+  /**
+   * False when the same institution declared this asset again in a later
+   * ficha: only the most recent declaration counts.
+   */
+  vigente: boolean;
+  /** What the resource adds to the matrix: its mobilizable quantity when owned and in force, else 0. */
   movilizableConsolidado: number;
 }
 
@@ -988,10 +992,8 @@ export interface RiesgosFichaResumen {
   institucionTipo: RiesgosInstitucionTipo;
   mesaGrupo: string;
   isla: RiesgosIsla;
-  estado: RiesgosEstado;
   recursos: number;
   createdAt: string;
-  revisadoAt: string | null;
 }
 
 export interface RiesgosFicha extends RiesgosFichaResumen {
@@ -999,8 +1001,6 @@ export interface RiesgosFicha extends RiesgosFichaResumen {
   alterno: RiesgosContacto;
   brechas: string;
   observaciones: string;
-  notaRevision: string;
-  revisadoPorNombre: string | null;
   detalleRecursos: RiesgosRecurso[];
 }
 
@@ -1018,8 +1018,8 @@ export interface RiesgosDelegacion {
 }
 
 /**
- * Mobilizable capacity of validated, owned resources. Quantities are only
- * added up within one type and one unit: people and litres never share a sum.
+ * Mobilizable capacity of owned resources in force. Quantities are only added
+ * up within one type and one unit: people and litres never share a sum.
  */
 export interface RiesgosCapacidadFila {
   tipo: RiesgosRecursoTipo;
@@ -1032,9 +1032,8 @@ export interface RiesgosCapacidadFila {
 export interface RiesgosResumen {
   instituciones: number;
   fichas: number;
-  fichasPendientes: number;
-  fichasValidadas: number;
-  recursosValidados: number;
+  /** Declarations in force, owned or not. */
+  recursos: number;
   delegaciones: number;
   capacidad: RiesgosCapacidadFila[];
   porTipo: Array<{ tipo: RiesgosRecursoTipo; recursos: number }>;

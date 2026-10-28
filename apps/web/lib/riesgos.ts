@@ -3,7 +3,7 @@
 import { useEffect, useState } from "react";
 import * as XLSX from "xlsx";
 import { ApiError, api, apiErrorMessage } from "@/lib/api-client";
-import type { RiesgosCampoInvalido, RiesgosCatalogos, RiesgosEstado, RiesgosTabla } from "@/types";
+import type { RiesgosCampoInvalido, RiesgosCatalogos, RiesgosTabla } from "@/types";
 
 /** The module's lists (`GET /riesgos/public/catalogos`), shared by every tab. */
 export function useRiesgosCatalogos() {
@@ -54,25 +54,6 @@ export function erroresDeCampos(error: unknown): Record<string, string> | null {
 export const correoValido = (value: string) => /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(value.trim());
 export const telefonoValido = (value: string) => /^\d{7,15}$/.test(value);
 export const soloDigitos = (value: string) => value.replace(/\D/g, "").slice(0, 15);
-
-export const ETIQUETA_ESTADO: Record<RiesgosEstado, string> = {
-  pendiente: "Pendiente",
-  validado: "Validada",
-  excluido: "Excluida",
-};
-
-/** The same states, said of a resource. */
-export const ETIQUETA_ESTADO_RECURSO: Record<RiesgosEstado, string> = {
-  pendiente: "Pendiente",
-  validado: "Validado",
-  excluido: "Excluido",
-};
-
-export const CLASE_ESTADO: Record<RiesgosEstado, string> = {
-  pendiente: "bg-amber-100 text-amber-800",
-  validado: "bg-emerald-100 text-emerald-800",
-  excluido: "bg-slate-200 text-slate-700",
-};
 
 const fecha = new Intl.DateTimeFormat("es-EC", { timeZone: "Pacific/Galapagos", dateStyle: "medium" });
 

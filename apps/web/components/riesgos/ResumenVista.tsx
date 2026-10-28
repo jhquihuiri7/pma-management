@@ -24,16 +24,15 @@ export default function ResumenVista({ catalogos }: { catalogos: RiesgosCatalogo
   if (!resumen) return <Skeleton className="h-80 w-full" />;
 
   const indicadores = [
-    { etiqueta: "Instituciones registradas", valor: resumen.instituciones, nota: `${resumen.fichas} fichas recibidas` },
-    { etiqueta: "Fichas pendientes", valor: resumen.fichasPendientes, nota: "Por revisar" },
-    { etiqueta: "Fichas validadas", valor: resumen.fichasValidadas, nota: "Cuentan en la matriz" },
-    { etiqueta: "Recursos validados", valor: resumen.recursosValidados, nota: "Incluye referencias no titulares" },
+    { etiqueta: "Instituciones registradas", valor: resumen.instituciones, nota: "Con al menos una ficha" },
+    { etiqueta: "Fichas recibidas", valor: resumen.fichas, nota: "Cuentan desde que se envían" },
+    { etiqueta: "Recursos declarados", valor: resumen.recursos, nota: "Incluye referencias no titulares" },
     { etiqueta: "Delegaciones al COE", valor: resumen.delegaciones, nota: "Designaciones recibidas" },
   ];
 
   return (
     <div className="space-y-6">
-      <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-5">
+      <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
         {indicadores.map((i) => (
           <Card key={i.etiqueta}>
             <CardContent className="pt-1">
@@ -47,15 +46,16 @@ export default function ResumenVista({ catalogos }: { catalogos: RiesgosCatalogo
 
       <Card>
         <CardHeader>
-          <CardTitle>Capacidad movilizable validada</CardTitle>
+          <CardTitle>Capacidad movilizable</CardTitle>
           <p className="text-xs text-muted-foreground">
-            Solo recursos de fichas validadas y de titularidad de la institución. Las cantidades se suman dentro de un
-            mismo tipo y unidad de medida: personas, vehículos o litros nunca comparten un total.
+            Solo recursos de titularidad de la institución. Si una institución declara el mismo recurso en otra ficha,
+            cuenta la declaración más reciente. Las cantidades se suman dentro de un mismo tipo y unidad de medida:
+            personas, vehículos o litros nunca comparten un total.
           </p>
         </CardHeader>
         <CardContent className="overflow-x-auto">
           {resumen.capacidad.length === 0 ? (
-            <p className="text-sm text-muted-foreground">Aún no hay recursos validados.</p>
+            <p className="text-sm text-muted-foreground">Aún no hay recursos registrados.</p>
           ) : (
             <table className="w-full text-sm">
               <thead>
@@ -87,7 +87,7 @@ export default function ResumenVista({ catalogos }: { catalogos: RiesgosCatalogo
 
       <div className="grid gap-4 lg:grid-cols-2">
         <Card>
-          <CardHeader><CardTitle>Recursos validados por tipo</CardTitle></CardHeader>
+          <CardHeader><CardTitle>Recursos movilizables por tipo</CardTitle></CardHeader>
           <CardContent className="space-y-2">
             {resumen.porTipo.map((fila) => (
               <div key={fila.tipo} className="flex justify-between border-b pb-2 text-sm last:border-0">
@@ -97,10 +97,10 @@ export default function ResumenVista({ catalogos }: { catalogos: RiesgosCatalogo
           </CardContent>
         </Card>
         <Card>
-          <CardHeader><CardTitle>Recursos validados por institución</CardTitle></CardHeader>
+          <CardHeader><CardTitle>Recursos movilizables por institución</CardTitle></CardHeader>
           <CardContent className="space-y-2">
             {resumen.porInstitucion.length === 0 ? (
-              <p className="text-sm text-muted-foreground">Sin recursos validados.</p>
+              <p className="text-sm text-muted-foreground">Sin recursos registrados.</p>
             ) : resumen.porInstitucion.map((fila) => (
               <div key={fila.institucionNombre} className="flex justify-between gap-3 border-b pb-2 text-sm last:border-0">
                 <span>{fila.institucionNombre}</span><span className="font-semibold tabular-nums">{fila.recursos}</span>

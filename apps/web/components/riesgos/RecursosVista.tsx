@@ -3,7 +3,6 @@
 import { useEffect, useMemo, useState } from "react";
 import { Search } from "lucide-react";
 import { api, apiErrorMessage } from "@/lib/api-client";
-import { CLASE_ESTADO, ETIQUETA_ESTADO_RECURSO } from "@/lib/riesgos";
 import { Card, CardContent } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Skeleton } from "@/components/ui/skeleton";
@@ -12,11 +11,11 @@ import BotonesExportar from "./BotonesExportar";
 import { selectClass } from "./campos";
 import type { RiesgosCatalogos, RiesgosFichaResumen, RiesgosRecurso } from "@/types";
 
-type Filtros = { isla: string; tipo: string; institucion: string; estado: string; q: string };
+type Filtros = { isla: string; tipo: string; institucion: string; q: string };
 
 /** The provincial matrix: every declared resource, filtered on the server. */
 export default function RecursosVista({ catalogos }: { catalogos: RiesgosCatalogos }) {
-  const [filtros, setFiltros] = useState<Filtros>({ isla: "", tipo: "", institucion: "", estado: "", q: "" });
+  const [filtros, setFiltros] = useState<Filtros>({ isla: "", tipo: "", institucion: "", q: "" });
   const [busqueda, setBusqueda] = useState("");
   const [recursos, setRecursos] = useState<RiesgosRecurso[] | null>(null);
   const [instituciones, setInstituciones] = useState<Array<[string, string]>>([]);
@@ -62,7 +61,6 @@ export default function RecursosVista({ catalogos }: { catalogos: RiesgosCatalog
         {filtro("isla", "Todas las islas", catalogos.islas.map((i) => [i, i]))}
         {filtro("tipo", "Todos los tipos", catalogos.tiposRecurso.map((t) => [t, t]))}
         {filtro("institucion", "Todas las instituciones", instituciones)}
-        {filtro("estado", "Todos los estados", (["pendiente", "validado", "excluido"] as const).map((e) => [e, ETIQUETA_ESTADO_RECURSO[e]]))}
         <div className="relative min-w-48 flex-1">
           <Search className="pointer-events-none absolute top-2 left-2.5 size-4 text-muted-foreground" />
           <Input aria-label="Buscar recurso o institución" placeholder="Buscar recurso o institución" className="pl-8"
@@ -87,17 +85,17 @@ export default function RecursosVista({ catalogos }: { catalogos: RiesgosCatalog
                   <TableHead className="text-right">Existente</TableHead>
                   <TableHead className="text-right">Operativo</TableHead>
                   <TableHead className="text-right">Movilizable</TableHead>
-                  <TableHead>Estado</TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
                 {recursos.length === 0 ? (
-                  <TableRow><TableCell colSpan={8} className="py-8 text-center text-muted-foreground">No hay recursos con estos filtros.</TableCell></TableRow>
+                  <TableRow><TableCell colSpan={7} className="py-8 text-center text-muted-foreground">No hay recursos con estos filtros.</TableCell></TableRow>
                 ) : recursos.map((r) => (
-                  <TableRow key={r.id}>
+                  <TableRow key={r.id} className={r.vigente ? undefined : "text-muted-foreground"}>
                     <TableCell>
                       <span className="font-medium">{r.nombre}</span>
                       <span className="block text-xs text-muted-foreground">{r.ubicacion} · {r.unidad}{r.esTitular ? "" : " · no titular"}</span>
+                      {!r.vigente && <span className="block text-xs text-amber-700">Reemplazado por una ficha posterior</span>}
                     </TableCell>
                     <TableCell className="whitespace-normal">{r.institucionNombre}</TableCell>
                     <TableCell>{r.isla}</TableCell>
@@ -108,9 +106,6 @@ export default function RecursosVista({ catalogos }: { catalogos: RiesgosCatalog
                       <span className="font-semibold">{r.movilizableConsolidado}</span>
                       <span className="block text-xs text-muted-foreground">declarado: {r.cantidadMovilizable}</span>
                     </TableCell>
-                    <TableCell>
-                      <span className={`rounded-full px-2 py-0.5 text-xs font-medium ${CLASE_ESTADO[r.estado]}`}>{ETIQUETA_ESTADO_RECURSO[r.estado]}</span>
-                    </TableCell>
                   </TableRow>
                 ))}
               </TableBody>
@@ -119,8 +114,8 @@ export default function RecursosVista({ catalogos }: { catalogos: RiesgosCatalog
         </Card>
       )}
       <p className="text-xs text-muted-foreground">
-        Movilizable consolidado = cantidad declarada de recursos validados y de titularidad institucional. Compare
-        cantidades solo dentro de un mismo tipo y unidad.
+        Movilizable consolidado = cantidad declarada por la institución titular en su declaración más reciente del
+        recurso. Compare cantidades solo dentro de un mismo tipo y unidad.
       </p>
     </div>
   );

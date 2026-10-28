@@ -1,43 +1,31 @@
 "use client";
 
-import { useCallback, useEffect, useState } from "react";
+import { useEffect, useState } from "react";
 import { toast } from "sonner";
-import { Check, CircleSlash, RotateCcw } from "lucide-react";
-import { api, apiErrorMessage, requirePersistedEntity } from "@/lib/api-client";
-import { CLASE_ESTADO, ETIQUETA_ESTADO, formatoFecha } from "@/lib/riesgos";
-import { Button } from "@/components/ui/button";
+import { api, apiErrorMessage } from "@/lib/api-client";
+import { formatoFecha } from "@/lib/riesgos";
 import { Card, CardContent } from "@/components/ui/card";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
-import { selectClass, textareaClass } from "./campos";
-import type { RiesgosCatalogos, RiesgosEstado, RiesgosFicha, RiesgosFichaResumen } from "@/types";
+import type { RiesgosCatalogos, RiesgosFicha, RiesgosFichaResumen } from "@/types";
 
-/** Institutional fichas waiting for, or past, the coordinator's review. */
-export default function FichasVista({ catalogos, esAdmin }: { catalogos: RiesgosCatalogos; esAdmin: boolean }) {
-  const [estado, setEstado] = useState("");
+/** Every institutional ficha, as submitted: they count without a review step. */
+export default function FichasVista({ catalogos }: { catalogos: RiesgosCatalogos }) {
   const [fichas, setFichas] = useState<RiesgosFichaResumen[] | null>(null);
   const [abierta, setAbierta] = useState<string | null>(null);
 
-  const cargar = useCallback(async () => {
-    try {
-      setFichas(await api.get<RiesgosFichaResumen[]>(`/riesgos/fichas${estado ? `?estado=${estado}` : ""}`));
-    } catch (err) {
-      toast.error(apiErrorMessage(err, "No se pudieron cargar las fichas"));
-    }
-  }, [estado]);
-
-  useEffect(() => { void cargar(); }, [cargar]);
+  useEffect(() => {
+    let cancelled = false;
+    api.get<RiesgosFichaResumen[]>("/riesgos/fichas")
+      .then((data) => { if (!cancelled) setFichas(data); })
+      .catch((err) => toast.error(apiErrorMessage(err, "No se pudieron cargar las fichas")));
+    return () => { cancelled = true; };
+  }, []);
 
   return (
     <div className="space-y-4">
-      <div className="flex flex-wrap items-center gap-2">
-        <select aria-label="Filtrar por estado" className={`${selectClass} sm:w-56`} value={estado} onChange={(e) => setEstado(e.target.value)}>
-          <option value="">Todas las fichas</option>
-          {(["pendiente", "validado", "excluido"] as const).map((e) => <option key={e} value={e}>{ETIQUETA_ESTADO[e]}s</option>)}
-        </select>
-        {fichas && <span className="text-sm text-muted-foreground">{fichas.length} fichas</span>}
-      </div>
+      {fichas && <p className="text-sm text-muted-foreground">{fichas.length} fichas recibidas</p>}
 
       {!fichas ? <Skeleton className="h-64 w-full" /> : (
         <Card>
@@ -51,12 +39,11 @@ export default function FichasVista({ catalogos, esAdmin }: { catalogos: Riesgos
                   <TableHead>Mesa o grupo</TableHead>
                   <TableHead className="text-right">Recursos</TableHead>
                   <TableHead>Recibida</TableHead>
-                  <TableHead>Estado</TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
                 {fichas.length === 0 ? (
-                  <TableRow><TableCell colSpan={7} className="py-8 text-center text-muted-foreground">Aún no hay fichas registradas.</TableCell></TableRow>
+                  <TableRow><TableCell colSpan={6} className="py-8 text-center text-muted-foreground">Aún no hay fichas registradas.</TableCell></TableRow>
                 ) : fichas.map((f) => (
                   <TableRow key={f.id} className="cursor-pointer" onClick={() => setAbierta(f.id)}>
                     <TableCell className="font-mono text-xs">{f.codigo}</TableCell>
@@ -65,7 +52,6 @@ export default function FichasVista({ catalogos, esAdmin }: { catalogos: Riesgos
                     <TableCell className="max-w-64 truncate" title={f.mesaGrupo}>{f.mesaGrupo}</TableCell>
                     <TableCell className="text-right tabular-nums">{f.recursos}</TableCell>
                     <TableCell>{formatoFecha(f.createdAt)}</TableCell>
-                    <TableCell><span className={`rounded-full px-2 py-0.5 text-xs font-medium ${CLASE_ESTADO[f.estado]}`}>{ETIQUETA_ESTADO[f.estado]}</span></TableCell>
                   </TableRow>
                 ))}
               </TableBody>
@@ -76,56 +62,23 @@ export default function FichasVista({ catalogos, esAdmin }: { catalogos: Riesgos
 
       <Dialog open={abierta !== null} onOpenChange={(open) => !open && setAbierta(null)}>
         <DialogContent className="max-h-[90vh] overflow-y-auto sm:max-w-3xl">
-          {abierta && (
-            <DetalleFicha
-              id={abierta}
-              catalogos={catalogos}
-              esAdmin={esAdmin}
-              onRevisada={() => { setAbierta(null); void cargar(); }}
-            />
-          )}
+          {abierta && <DetalleFicha id={abierta} catalogos={catalogos} />}
         </DialogContent>
       </Dialog>
     </div>
   );
 }
 
-function DetalleFicha({
-  id,
-  catalogos,
-  esAdmin,
-  onRevisada,
-}: {
-  id: string;
-  catalogos: RiesgosCatalogos;
-  esAdmin: boolean;
-  onRevisada: () => void;
-}) {
+function DetalleFicha({ id, catalogos }: { id: string; catalogos: RiesgosCatalogos }) {
   const [ficha, setFicha] = useState<RiesgosFicha | null>(null);
-  const [nota, setNota] = useState("");
-  const [pendiente, setPendiente] = useState(false);
 
   useEffect(() => {
     let cancelled = false;
     api.get<RiesgosFicha>(`/riesgos/fichas/${id}`)
-      .then((data) => { if (!cancelled) { setFicha(data); setNota(data.notaRevision); } })
+      .then((data) => { if (!cancelled) setFicha(data); })
       .catch((err) => toast.error(apiErrorMessage(err, "No se pudo cargar la ficha")));
     return () => { cancelled = true; };
   }, [id]);
-
-  async function revisar(estado: RiesgosEstado) {
-    setPendiente(true);
-    try {
-      const revisada = await api.put<RiesgosFicha>(`/riesgos/fichas/${id}/revision`, { estado, nota });
-      requirePersistedEntity(revisada, "El servidor no confirmó la revisión");
-      toast.success(`Ficha de ${revisada.institucionNombre}: ${ETIQUETA_ESTADO[estado].toLowerCase()}`);
-      onRevisada();
-    } catch (err) {
-      toast.error(apiErrorMessage(err, "No se pudo guardar la revisión"));
-    } finally {
-      setPendiente(false);
-    }
-  }
 
   if (!ficha) return <Skeleton className="h-64 w-full" />;
 
@@ -142,7 +95,6 @@ function DetalleFicha({
       <DialogHeader>
         <p className="text-xs font-semibold tracking-widest text-teal-700">FICHA {ficha.codigo}</p>
         <DialogTitle className="text-lg">{ficha.institucionNombre}</DialogTitle>
-        <span className={`w-fit rounded-full px-2 py-0.5 text-xs font-medium ${CLASE_ESTADO[ficha.estado]}`}>{ETIQUETA_ESTADO[ficha.estado]}</span>
       </DialogHeader>
 
       <dl className="grid gap-4 text-sm sm:grid-cols-2">
@@ -161,11 +113,14 @@ function DetalleFicha({
           return (
             <div key={r.id} className="rounded-lg border border-slate-200 p-3 text-sm">
               <p className="font-medium">{r.nombre}</p>
-              <p className="text-xs text-muted-foreground">{r.tipo} · {r.isla} · {r.ubicacion}</p>
+              <p className="text-xs text-muted-foreground">{r.tipo} · {r.ubicacion}</p>
               <p className="mt-1">
                 {r.cantidadExistente} existentes · {r.cantidadOperativa} operativos · <strong>{r.cantidadMovilizable} movilizables</strong> ({r.unidad})
               </p>
               <p className="text-xs text-muted-foreground">{r.esTitular ? "Titular" : "Referencia no titular"} · {r.disponibilidad}</p>
+              {!r.vigente && (
+                <p className="text-xs text-amber-700">La institución lo declaró de nuevo en una ficha posterior; cuenta esa declaración.</p>
+              )}
               {Object.entries(r.detalles).map(([clave, valor]) => (
                 <p key={clave} className="text-xs text-muted-foreground">{etiquetas.get(clave) ?? clave}: {valor}</p>
               ))}
@@ -179,33 +134,6 @@ function DetalleFicha({
         <div><dt className="text-xs text-muted-foreground">Brechas</dt><dd className="whitespace-pre-line">{ficha.brechas || "Sin brechas declaradas"}</dd></div>
         <div><dt className="text-xs text-muted-foreground">Observaciones</dt><dd className="whitespace-pre-line">{ficha.observaciones || "Sin observaciones"}</dd></div>
       </dl>
-
-      {ficha.revisadoAt && (
-        <p className="text-xs text-muted-foreground">
-          Última revisión: {formatoFecha(ficha.revisadoAt)}{ficha.revisadoPorNombre ? ` por ${ficha.revisadoPorNombre}` : ""}
-        </p>
-      )}
-
-      {esAdmin ? (
-        <div className="space-y-3 border-t pt-4">
-          <label htmlFor="nota-revision" className="text-sm font-medium">Nota de revisión</label>
-          <textarea id="nota-revision" className={textareaClass} value={nota} maxLength={1000}
-            placeholder="Motivo de la validación o de la exclusión" onChange={(e) => setNota(e.target.value)} />
-          <div className="flex flex-wrap justify-end gap-2">
-            <Button type="button" variant="outline" disabled={pendiente} onClick={() => revisar("excluido")}>
-              <CircleSlash /> Excluir ficha
-            </Button>
-            <Button type="button" variant="outline" disabled={pendiente} onClick={() => revisar("pendiente")}>
-              <RotateCcw /> Dejar pendiente
-            </Button>
-            <Button type="button" disabled={pendiente} onClick={() => revisar("validado")}>
-              <Check /> Validar ficha
-            </Button>
-          </div>
-        </div>
-      ) : ficha.notaRevision ? (
-        <p className="border-t pt-4 text-sm"><span className="text-muted-foreground">Nota de revisión:</span> {ficha.notaRevision}</p>
-      ) : null}
     </>
   );
 }

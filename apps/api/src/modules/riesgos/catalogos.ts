@@ -46,8 +46,6 @@ export const TIPOS_RECURSO = [
 
 export const DISPONIBILIDADES = ["Inmediata", "Condicionada", "No disponible"] as const satisfies readonly RiesgosDisponibilidad[];
 
-export const ESTADOS = ["pendiente", "validado", "excluido"] as const;
-
 export const MAX_RECURSOS = 50;
 
 /** Fields each resource type asks for on top of the common ones. */

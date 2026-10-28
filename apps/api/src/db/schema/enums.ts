@@ -113,5 +113,3 @@ export const riesgosRecursoTipoEnum = pgEnum("riesgos_recurso_tipo", [
 ]);
 
 export const riesgosDisponibilidadEnum = pgEnum("riesgos_disponibilidad", ["Inmediata", "Condicionada", "No disponible"]);
-
-export const riesgosEstadoEnum = pgEnum("riesgos_estado", ["pendiente", "validado", "excluido"]);

@@ -1,6 +1,6 @@
 import type { FastifyInstance } from "fastify";
 import { z } from "zod";
-import { authenticate, requireApp, requireRole } from "../../auth/middleware.js";
+import { authenticate, requireApp } from "../../auth/middleware.js";
 import { assertPublicWriteOrigin } from "../../auth/publicOrigin.js";
 import { enforceAuthRateLimit } from "../../auth/rateLimit.js";
 import { BadRequest } from "../../lib/errors.js";
@@ -14,7 +14,6 @@ import {
   obtenerFicha,
   reciboFicha,
   resumen,
-  revisarFicha,
 } from "../../modules/riesgos/fichasModule.js";
 import {
   camposInvalidos,
@@ -22,9 +21,7 @@ import {
   delegacionSchema,
   fichaSchema,
   filtrosDelegacionesSchema,
-  filtrosFichasSchema,
   filtrosRecursosSchema,
-  revisionSchema,
 } from "../../modules/riesgos/modelo.js";
 
 const DAY_MS = 24 * 60 * 60 * 1_000;
@@ -42,8 +39,8 @@ function validarFormulario<S extends z.ZodTypeAny>(schema: S, body: unknown): z.
 /**
  * Gestión de Riesgos. Mixed surface, like Plan Familiar: the two forms under
  * /public are open to any institution; everything else needs a session with
- * access to the module. Exports are open to every role with that access;
- * reviewing a ficha is for administrators.
+ * access to the module, and every role with that access can export. What an
+ * institution submits counts at once: there is no review step.
  */
 export async function riesgosRoutes(app: FastifyInstance) {
   const conAcceso = [authenticate, requireApp("riesgos")];
@@ -104,20 +101,11 @@ export async function riesgosRoutes(app: FastifyInstance) {
   app.get("/recursos", { preHandler: conAcceso }, async (request) =>
     listarRecursos(filtrosRecursosSchema.parse(request.query)));
 
-  app.get("/fichas", { preHandler: conAcceso }, async (request) =>
-    listarFichas(filtrosFichasSchema.parse(request.query)));
+  app.get("/fichas", { preHandler: conAcceso }, async () => listarFichas());
 
   app.get("/fichas/:id", { preHandler: conAcceso }, async (request) => {
     const { id } = idParamsSchema.parse(request.params);
     return obtenerFicha(id);
-  });
-
-  app.put("/fichas/:id/revision", { preHandler: [...conAcceso, requireRole("ADMIN")] }, async (request) => {
-    const { id } = idParamsSchema.parse(request.params);
-    const input = revisionSchema.parse(request.body);
-    const ficha = await revisarFicha(id, input, request.user!.sub);
-    request.log.info({ fichaId: id, estado: input.estado }, "riesgos ficha reviewed");
-    return ficha;
   });
 
   app.get("/delegaciones", { preHandler: conAcceso }, async (request) =>

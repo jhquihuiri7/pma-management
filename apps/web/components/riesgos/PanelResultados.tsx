@@ -73,7 +73,7 @@ export default function PanelResultados() {
       <div role="tabpanel" id={`panel-${vista}`} aria-labelledby={`vista-${vista}`}>
         {vista === "resumen" && <ResumenVista catalogos={catalogos} />}
         {vista === "recursos" && <RecursosVista catalogos={catalogos} />}
-        {vista === "fichas" && <FichasVista catalogos={catalogos} esAdmin={user.role === "ADMIN"} />}
+        {vista === "fichas" && <FichasVista catalogos={catalogos} />}
         {vista === "delegados" && <DelegadosVista catalogos={catalogos} />}
       </div>
     </div>

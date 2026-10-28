@@ -11,6 +11,7 @@ import {
   telefonoValido,
   useRiesgosCatalogos,
 } from "@/lib/riesgos";
+import { CAMPOS_CANTIDAD, leerCantidad, reglasCantidades, type CampoCantidad } from "@/lib/riesgosReglas";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
@@ -51,6 +52,9 @@ const UNIDAD_SUGERIDA: Record<RiesgosRecursoTipo, string> = {
   "Logística": "unidades",
 };
 
+/** Fields the quantity rules relate; a change to one re-checks them all. */
+const CAMPOS_RELACIONADOS = [...CAMPOS_CANTIDAD, "esTitular", "disponibilidad"] as const;
+
 const contactoVacio = (): RiesgosContacto => ({ nombre: "", cargo: "", correo: "", telefono: "" });
 
 const valoresIniciales = (): Valores => ({
@@ -65,10 +69,9 @@ const valoresIniciales = (): Valores => ({
   observaciones: "",
 });
 
-const recursoVacio = (isla: RiesgosIsla): RiesgosRecursoEntrada => ({
+const recursoVacio = (): RiesgosRecursoEntrada => ({
   tipo: "Talento humano",
   nombre: "",
-  isla,
   ubicacion: "",
   unidad: UNIDAD_SUGERIDA["Talento humano"],
   cantidadExistente: 0,
@@ -110,15 +113,8 @@ function validarPaso(paso: number, v: Valores, recursos: RiesgosRecursoEntrada[]
       if (r.nombre.trim().length < 2) errores[campo("nombre")] = "Ingrese el nombre del recurso.";
       if (r.ubicacion.trim().length < 2) errores[campo("ubicacion")] = "Ingrese la ubicación.";
       if (r.unidad.trim().length < 2) errores[campo("unidad")] = "Ingrese la unidad de medida.";
-      if (r.cantidadOperativa > r.cantidadExistente) errores[campo("cantidadOperativa")] = "No puede superar la cantidad existente.";
-      if (r.cantidadMovilizable > r.cantidadOperativa) errores[campo("cantidadMovilizable")] = "No puede superar la cantidad operativa.";
-      if (!r.esTitular && r.cantidadMovilizable > 0) {
-        errores[campo("cantidadMovilizable")] = "Solo la institución titular puede reportar cantidad movilizable.";
-      }
-      if (r.disponibilidad === "No disponible" && r.cantidadMovilizable > 0) {
-        errores[campo("disponibilidad")] = "Cambie la disponibilidad o indique cero movilizable.";
-      }
-      const clave = [r.tipo, r.nombre, r.isla, r.ubicacion].map(normalizar).join("|");
+      for (const [nombre, mensaje] of Object.entries(reglasCantidades(r))) errores[campo(nombre)] = mensaje;
+      const clave = [r.tipo, r.nombre, r.ubicacion].map(normalizar).join("|");
       if (r.nombre.trim() && vistos.has(clave)) errores[campo("nombre")] = "Este recurso ya está incluido en la ficha.";
       vistos.add(clave);
     });
@@ -147,7 +143,7 @@ function Asistente({ catalogos }: { catalogos: RiesgosCatalogos }) {
   const [id, setId] = useState(nuevoId);
   const [paso, setPaso] = useState(0);
   const [valores, setValores] = useState<Valores>(valoresIniciales);
-  const [recursos, setRecursos] = useState<RiesgosRecursoEntrada[]>(() => [recursoVacio("San Cristóbal")]);
+  const [recursos, setRecursos] = useState<RiesgosRecursoEntrada[]>(() => [recursoVacio()]);
   const [errores, setErrores] = useState<Errores>({});
   const [enviando, setEnviando] = useState(false);
   const [recibo, setRecibo] = useState<RiesgosRecibo | null>(null);
@@ -168,19 +164,17 @@ function Asistente({ catalogos }: { catalogos: RiesgosCatalogos }) {
 
   function cambiarRecurso(indice: number, cambios: Partial<RiesgosRecursoEntrada>) {
     setRecursos((actual) => actual.map((r, i) => (i === indice ? { ...r, ...cambios } : r)));
-    for (const campo of Object.keys(cambios)) limpiar(`recursos.${indice}.${campo}`);
+    const campos = Object.keys(cambios);
+    // The quantity rules tie several fields together: raising "existente" can
+    // settle the message on "operativa". The live check shows what still holds.
+    if (campos.some((c) => (CAMPOS_RELACIONADOS as readonly string[]).includes(c))) campos.push(...CAMPOS_RELACIONADOS);
+    Array.from(new Set(campos)).forEach((campo) => limpiar(`recursos.${indice}.${campo}`));
   }
 
   function cambiarTipo(indice: number, tipo: RiesgosRecursoTipo) {
     const actual = recursos[indice];
     const unidad = actual.unidad === UNIDAD_SUGERIDA[actual.tipo] ? UNIDAD_SUGERIDA[tipo] : actual.unidad;
     cambiarRecurso(indice, { tipo, unidad, detalles: {} });
-  }
-
-  function cambiarIslaFicha(isla: RiesgosIsla) {
-    cambiar("isla", isla);
-    // The ficha's island is the default of every resource; each can still differ.
-    setRecursos((actual) => actual.map((r) => ({ ...r, isla })));
   }
 
   function avanzar() {
@@ -226,7 +220,7 @@ function Asistente({ catalogos }: { catalogos: RiesgosCatalogos }) {
     setId(nuevoId());
     setPaso(0);
     setValores(valoresIniciales());
-    setRecursos([recursoVacio("San Cristóbal")]);
+    setRecursos([recursoVacio()]);
     setErrores({});
     setRecibo(null);
   }
@@ -236,7 +230,7 @@ function Asistente({ catalogos }: { catalogos: RiesgosCatalogos }) {
       <Recibo
         titulo="Gracias por aportar a la preparación provincial."
         codigo={recibo.codigo}
-        detalle="La ficha quedó pendiente de revisión por el equipo coordinador del COE Provincial."
+        detalle="La ficha quedó registrada y ya forma parte de la matriz provincial del COE."
         onOtro={reiniciar}
         otroTexto="Registrar otra ficha"
       />
@@ -288,7 +282,8 @@ function Asistente({ catalogos }: { catalogos: RiesgosCatalogos }) {
                 error={errores.mesaGrupo} sinMesa={catalogos.sinMesa} mesasTecnicas={catalogos.mesasTecnicas}
                 gruposTrabajo={catalogos.gruposTrabajo} />
               <CampoSelect id="isla" etiqueta="Isla donde se encuentran los recursos *" valor={valores.isla}
-                opciones={catalogos.islas} onChange={(v) => cambiarIslaFicha(v as RiesgosIsla)} error={errores.isla} />
+                opciones={catalogos.islas} onChange={(v) => cambiar("isla", v as RiesgosIsla)} error={errores.isla}
+                ayuda="Todos los recursos de esta ficha quedan en esta isla. Si tiene recursos en otra isla, envíe una ficha por cada isla." />
             </div>
             {(["principal", "alterno"] as const).map((quien) => (
               <fieldset key={quien} className="space-y-3">
@@ -318,6 +313,10 @@ function Asistente({ catalogos }: { catalogos: RiesgosCatalogos }) {
 
       {paso === 1 && (
         <div className="space-y-4">
+          <p className="rounded-lg border border-teal-200 bg-teal-50 px-4 py-3 text-sm text-teal-900">
+            Todos los recursos de esta ficha se registran en <strong>{valores.isla}</strong>. Para recursos en otra isla,
+            envíe una ficha aparte.
+          </p>
           {recursos.map((recurso, i) => (
             <TarjetaRecurso
               key={i}
@@ -338,7 +337,7 @@ function Asistente({ catalogos }: { catalogos: RiesgosCatalogos }) {
             type="button"
             variant="outline"
             disabled={recursos.length >= catalogos.maxRecursos}
-            onClick={() => setRecursos((actual) => [...actual, recursoVacio(valores.isla)])}
+            onClick={() => setRecursos((actual) => [...actual, recursoVacio()])}
           >
             <Plus /> Agregar otro recurso
           </Button>
@@ -357,6 +356,7 @@ function Asistente({ catalogos }: { catalogos: RiesgosCatalogos }) {
             <dl className="grid gap-4 text-sm sm:grid-cols-2">
               <div><dt className="text-muted-foreground">Institución</dt><dd className="font-medium">{valores.institucionNombre} · {valores.institucionTipo}</dd></div>
               <div><dt className="text-muted-foreground">Mesa o grupo</dt><dd className="font-medium">{valores.mesaGrupo}</dd></div>
+              <div><dt className="text-muted-foreground">Isla de los recursos</dt><dd className="font-medium">{valores.isla}</dd></div>
               <div><dt className="text-muted-foreground">Delegado principal</dt><dd className="font-medium">{valores.principal.nombre} · {valores.principal.cargo}</dd></div>
               <div><dt className="text-muted-foreground">Delegado alterno</dt><dd className="font-medium">{valores.alterno.nombre} · {valores.alterno.cargo}</dd></div>
             </dl>
@@ -364,7 +364,7 @@ function Asistente({ catalogos }: { catalogos: RiesgosCatalogos }) {
               <table className="w-full text-sm">
                 <thead>
                   <tr className="border-b text-left text-xs text-muted-foreground">
-                    <th className="py-2 pr-3">Recurso</th><th className="py-2 pr-3">Tipo</th><th className="py-2 pr-3">Isla</th>
+                    <th className="py-2 pr-3">Recurso</th><th className="py-2 pr-3">Tipo</th>
                     <th className="py-2 pr-3 text-right">Existente</th><th className="py-2 pr-3 text-right">Operativo</th><th className="py-2 text-right">Movilizable</th>
                   </tr>
                 </thead>
@@ -372,7 +372,7 @@ function Asistente({ catalogos }: { catalogos: RiesgosCatalogos }) {
                   {recursos.map((r, i) => (
                     <tr key={i} className="border-b last:border-0">
                       <td className="py-2 pr-3 font-medium">{r.nombre}<span className="block text-xs text-muted-foreground">{r.ubicacion} · {r.unidad}</span></td>
-                      <td className="py-2 pr-3">{r.tipo}</td><td className="py-2 pr-3">{r.isla}</td>
+                      <td className="py-2 pr-3">{r.tipo}</td>
                       <td className="py-2 pr-3 text-right">{r.cantidadExistente}</td><td className="py-2 pr-3 text-right">{r.cantidadOperativa}</td>
                       <td className="py-2 text-right font-semibold">{r.cantidadMovilizable}</td>
                     </tr>
@@ -443,19 +443,32 @@ function TarjetaRecurso({
   onQuitar?: () => void;
 }) {
   const campo = (nombre: string) => `recursos.${indice}.${nombre}`;
-  const cantidad = (nombre: "cantidadExistente" | "cantidadOperativa" | "cantidadMovilizable", etiqueta: string) => (
-    <Campo id={campo(nombre)} etiqueta={etiqueta} error={errores[campo(nombre)]}>
-      <Input
-        id={campo(nombre)}
-        type="number"
-        min={0}
-        inputMode="numeric"
-        value={String(recurso[nombre])}
-        aria-invalid={!!errores[campo(nombre)]}
-        onChange={(e) => onCambiar({ [nombre]: Math.max(0, Number.parseInt(e.target.value || "0", 10) || 0) })}
-      />
-    </Campo>
-  );
+  const avisos = reglasCantidades(recurso);
+  // Nothing moves that the institution does not own or that is unavailable.
+  const sinMovilizable = !recurso.esTitular
+    ? "Cero: el recurso no es de la institución."
+    : recurso.disponibilidad === "No disponible" ? "Cero: el recurso no está disponible." : undefined;
+  const cantidad = (nombre: CampoCantidad, etiqueta: string) => {
+    const error = avisos[nombre] ?? errores[campo(nombre)];
+    const bloqueada = nombre === "cantidadMovilizable" && !!sinMovilizable;
+    return (
+      <Campo id={campo(nombre)} etiqueta={etiqueta} error={error} ayuda={bloqueada ? sinMovilizable : undefined}>
+        <Input
+          id={campo(nombre)}
+          type="text"
+          inputMode="numeric"
+          pattern="[0-9]*"
+          autoComplete="off"
+          value={String(recurso[nombre])}
+          disabled={bloqueada}
+          aria-invalid={!!error}
+          aria-describedby={error ? `${campo(nombre)}-error` : undefined}
+          onFocus={(e) => e.target.select()}
+          onChange={(e) => onCambiar({ [nombre]: leerCantidad(e.target.value) })}
+        />
+      </Campo>
+    );
+  };
 
   return (
     <Card>
@@ -473,22 +486,27 @@ function TarjetaRecurso({
             onChange={(v) => onCambiarTipo(v as RiesgosRecursoTipo)} error={errores[campo("tipo")]} />
           <CampoTexto id={campo("nombre")} etiqueta="Nombre del recurso *" valor={recurso.nombre}
             placeholder="Ej. brigada de rescate, camioneta 4x4" onChange={(v) => onCambiar({ nombre: v })} error={errores[campo("nombre")]} />
-          <CampoSelect id={campo("isla")} etiqueta="Isla *" valor={recurso.isla} opciones={catalogos.islas}
-            onChange={(v) => onCambiar({ isla: v as RiesgosIsla })} error={errores[campo("isla")]} />
           <CampoTexto id={campo("ubicacion")} etiqueta="Ubicación *" valor={recurso.ubicacion}
             placeholder="Ej. bodega central, barrio El Progreso" onChange={(v) => onCambiar({ ubicacion: v })} error={errores[campo("ubicacion")]} />
           <CampoTexto id={campo("unidad")} etiqueta="Unidad de medida *" valor={recurso.unidad}
             onChange={(v) => onCambiar({ unidad: v })} error={errores[campo("unidad")]} />
           <CampoSelect id={campo("disponibilidad")} etiqueta="Disponibilidad *" valor={recurso.disponibilidad}
             opciones={catalogos.disponibilidades}
-            onChange={(v) => onCambiar({ disponibilidad: v as RiesgosRecursoEntrada["disponibilidad"] })}
-            error={errores[campo("disponibilidad")]} />
+            onChange={(v) => onCambiar({
+              disponibilidad: v as RiesgosRecursoEntrada["disponibilidad"],
+              ...(v === "No disponible" ? { cantidadMovilizable: 0 } : {}),
+            })}
+            error={avisos.disponibilidad ?? errores[campo("disponibilidad")]} />
         </div>
         <div className="grid gap-4 sm:grid-cols-3">
           {cantidad("cantidadExistente", "Cantidad existente *")}
           {cantidad("cantidadOperativa", "Cantidad operativa *")}
           {cantidad("cantidadMovilizable", "Realmente movilizable *")}
         </div>
+        <p className="-mt-2 text-xs text-muted-foreground">
+          Solo números enteros, cero o mayores. La cantidad operativa no puede superar la existente, y la realmente
+          movilizable no puede superar la operativa.
+        </p>
         <label className="flex items-start gap-2 text-sm">
           <input type="checkbox" className="mt-0.5 size-4" checked={recurso.esTitular}
             onChange={(e) => onCambiar({ esTitular: e.target.checked, ...(e.target.checked ? {} : { cantidadMovilizable: 0 }) })} />

@@ -14,7 +14,6 @@ function recurso(cambios: Partial<RiesgosRecursoEntrada> = {}): RiesgosRecursoEn
   return {
     tipo: "Vehículos",
     nombre: "Camioneta 4x4",
-    isla: "San Cristóbal",
     ubicacion: "Bodega central",
     unidad: "vehículos",
     cantidadExistente: 3,
@@ -117,8 +116,20 @@ test("unknown fields are refused instead of silently stored", () => {
 test("an institution keeps one key across case, accents and spacing", () => {
   assert.equal(claveInstitucion("Ministerio de Educación"), claveInstitucion("  ministerio  de EDUCACION "));
   assert.notEqual(claveInstitucion("Ministerio de Educación"), claveInstitucion("Ministerio de Salud"));
-  assert.equal(claveActivo(recurso()), claveActivo(recurso({ nombre: "CAMIONETA 4x4" })));
-  assert.notEqual(claveActivo(recurso()), claveActivo(recurso({ isla: "Santa Cruz" })));
+  const enIsla = (cambios: Partial<RiesgosRecursoEntrada>, isla = "San Cristóbal") => claveActivo({ ...recurso(cambios), isla });
+  assert.equal(enIsla({}), enIsla({ nombre: "CAMIONETA 4x4" }));
+  assert.notEqual(enIsla({}), enIsla({}, "Santa Cruz"));
+});
+
+test("a resource has no island of its own; one sent by an older page is dropped", () => {
+  const parsed = fichaSchema.parse(ficha({
+    recursos: [{ ...recurso(), isla: "Isabela" } as RiesgosRecursoEntrada],
+  }));
+  assert.equal("isla" in parsed.recursos[0], false);
+  // Other unknown fields are still refused.
+  assert.equal(fichaSchema.safeParse(ficha({
+    recursos: [{ ...recurso(), isla: "Isabela", extra: 1 } as RiesgosRecursoEntrada],
+  })).success, false);
 });
 
 test("a COE designation needs its reporter and two distinct delegates", () => {

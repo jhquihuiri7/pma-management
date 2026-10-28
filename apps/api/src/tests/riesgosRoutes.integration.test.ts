@@ -61,17 +61,17 @@ test(
         observaciones: "=cmd|' /C calc'!A0",
         recursos: [
           {
-            tipo: "Talento humano", nombre: "Brigadistas", isla: "Santa Cruz", ubicacion: "Estación central",
+            tipo: "Talento humano", nombre: "Brigadistas", ubicacion: "Estación central",
             unidad: "Personas", cantidadExistente: 12, cantidadOperativa: 10, cantidadMovilizable: 8,
             esTitular: true, disponibilidad: "Inmediata", restricciones: "", detalles: { turno: "24/7" },
           },
           {
-            tipo: "Talento humano", nombre: "Voluntarios", isla: "Isabela", ubicacion: "Puerto Villamil",
+            tipo: "Talento humano", nombre: "Voluntarios", ubicacion: "Bellavista",
             unidad: " personas ", cantidadExistente: 5, cantidadOperativa: 5, cantidadMovilizable: 5,
             esTitular: true, disponibilidad: "Condicionada", restricciones: "", detalles: {},
           },
           {
-            tipo: "Vehículos", nombre: "Ambulancia prestada", isla: "Santa Cruz", ubicacion: "Hospital",
+            tipo: "Vehículos", nombre: "Ambulancia prestada", ubicacion: "Hospital",
             unidad: "vehículos", cantidadExistente: 1, cantidadOperativa: 1, cantidadMovilizable: 0,
             esTitular: false, disponibilidad: "Condicionada", restricciones: "", detalles: {},
           },
@@ -117,6 +117,15 @@ test(
         assert.equal(reintento.json().createdAt, creada.json().createdAt);
       });
 
+      await t.test("a page opened before the island change still submits; the ficha's island wins", async () => {
+        const antigua = nuevaFicha({ institucionNombre: `${institucion} (formulario antiguo)` });
+        const payload = { ...antigua, recursos: antigua.recursos.map((r) => ({ ...r, isla: "Isabela" })) };
+        const res = await app.inject({ method: "POST", url: "/riesgos/public/fichas", headers: origin, payload });
+        assert.equal(res.statusCode, 201, res.body);
+        const guardada = (await app.inject({ method: "GET", url: `/riesgos/fichas/${antigua.id}`, headers: auth(adminJwt) })).json() as RiesgosFicha;
+        assert.ok(guardada.detalleRecursos.every((r) => r.isla === "Santa Cruz"));
+      });
+
       await t.test("a rejected ficha names each field with the form's own path", async () => {
         const mala = nuevaFicha();
         mala.recursos[0].cantidadOperativa = 99;
@@ -133,26 +142,20 @@ test(
         assert.equal(res.statusCode, 200);
         const mia = (res.json() as RiesgosFichaResumen[]).find((f) => f.id === primera.id);
         assert.equal(mia?.recursos, 3);
-        assert.equal(mia?.estado, "pendiente");
       });
 
-      await t.test("only an administrator reviews; resources follow their ficha", async () => {
-        const visor = await app.inject({
-          method: "PUT", url: `/riesgos/fichas/${primera.id}/revision`, headers: auth(viewerJwt),
+      await t.test("a submission counts at once; only owned resources add capacity", async () => {
+        const ficha = (await app.inject({ method: "GET", url: `/riesgos/fichas/${primera.id}`, headers: auth(viewerJwt) })).json() as RiesgosFicha;
+        assert.deepEqual(ficha.detalleRecursos.map((r) => r.vigente), [true, true, true]);
+        // The borrowed ambulance is a reference: it is listed but never mobilized.
+        assert.deepEqual(ficha.detalleRecursos.map((r) => r.movilizableConsolidado), [8, 5, 0]);
+        assert.ok(ficha.detalleRecursos.every((r) => r.isla === "Santa Cruz"), "resources take the ficha's island");
+        // There is no review step left to call.
+        const revision = await app.inject({
+          method: "PUT", url: `/riesgos/fichas/${primera.id}/revision`, headers: auth(adminJwt),
           payload: { estado: "validado", nota: "" },
         });
-        assert.equal(visor.statusCode, 403);
-
-        const res = await app.inject({
-          method: "PUT", url: `/riesgos/fichas/${primera.id}/revision`, headers: auth(adminJwt),
-          payload: { estado: "validado", nota: "Revisada en campo" },
-        });
-        assert.equal(res.statusCode, 200, res.body);
-        const ficha = res.json() as RiesgosFicha;
-        assert.equal(ficha.estado, "validado");
-        assert.equal(ficha.revisadoPorNombre, "Administradora de riesgos");
-        assert.deepEqual(ficha.detalleRecursos.map((r) => r.estado), ["validado", "validado", "validado"]);
-        assert.deepEqual(ficha.detalleRecursos.map((r) => r.movilizableConsolidado), [8, 5, 0]);
+        assert.equal(revision.statusCode, 404);
       });
 
       await t.test("capacity adds up per type and unit, never across units", async () => {
@@ -161,48 +164,42 @@ test(
         const resumen = res.json() as RiesgosResumen;
         const personas = resumen.capacidad.find((f) => f.tipo === "Talento humano" && f.unidad === "personas");
         assert.ok(personas, JSON.stringify(resumen.capacidad));
-        // "Personas" and " personas " are one unit; only this run's ficha is validated.
-        assert.ok(personas.porIsla["Santa Cruz"] >= 8);
-        assert.ok(personas.porIsla.Isabela >= 5);
+        // "Personas" and " personas " are one unit.
+        assert.ok(personas.porIsla["Santa Cruz"] >= 13);
         assert.equal(personas.total, Object.values(personas.porIsla).reduce((a, b) => a + b, 0));
       });
 
-      await t.test("a second validated ficha cannot count the same owned asset twice", async () => {
-        const segunda = nuevaFicha({ institucionNombre: `  ${institucion.toUpperCase()} ` });
-        const creada = await app.inject({ method: "POST", url: "/riesgos/public/fichas", headers: origin, payload: segunda });
+      await t.test("resubmitting an asset replaces its earlier declaration instead of adding to it", async () => {
+        const personas = async () => {
+          const resumen = (await app.inject({ method: "GET", url: "/riesgos/resumen", headers: auth(viewerJwt) })).json() as RiesgosResumen;
+          return resumen.capacidad.find((f) => f.tipo === "Talento humano" && f.unidad === "personas")?.total ?? 0;
+        };
+        const antes = await personas();
+
+        // Same institution (other spelling), same brigade: 6 mobilizable now instead of 8.
+        const correccion = nuevaFicha({ institucionNombre: `  ${institucion.toUpperCase()} ` });
+        correccion.recursos = [{ ...correccion.recursos[0], cantidadMovilizable: 6 }];
+        const creada = await app.inject({ method: "POST", url: "/riesgos/public/fichas", headers: origin, payload: correccion });
         assert.equal(creada.statusCode, 201, creada.body);
 
-        const choque = await app.inject({
-          method: "PUT", url: `/riesgos/fichas/${segunda.id}/revision`, headers: auth(adminJwt),
-          payload: { estado: "validado", nota: "" },
-        });
-        assert.equal(choque.statusCode, 409);
-        assert.match(choque.json().message, /Brigadistas/);
-        // The failed review left nothing half-done.
-        const pendiente = (await app.inject({ method: "GET", url: `/riesgos/fichas/${segunda.id}`, headers: auth(adminJwt) })).json() as RiesgosFicha;
-        assert.equal(pendiente.estado, "pendiente");
-        assert.ok(pendiente.detalleRecursos.every((r) => r.estado === "pendiente"));
-
-        const excluir = await app.inject({
-          method: "PUT", url: `/riesgos/fichas/${primera.id}/revision`, headers: auth(adminJwt),
-          payload: { estado: "excluido", nota: "Reemplazada por la ficha nueva" },
-        });
-        assert.equal(excluir.statusCode, 200);
-        const validar = await app.inject({
-          method: "PUT", url: `/riesgos/fichas/${segunda.id}/revision`, headers: auth(adminJwt),
-          payload: { estado: "validado", nota: "" },
-        });
-        assert.equal(validar.statusCode, 200, validar.body);
+        assert.equal(await personas(), antes - 8 + 6);
+        const original = (await app.inject({ method: "GET", url: `/riesgos/fichas/${primera.id}`, headers: auth(viewerJwt) })).json() as RiesgosFicha;
+        assert.deepEqual(original.detalleRecursos.map((r) => r.vigente), [false, true, true]);
+        assert.deepEqual(original.detalleRecursos.map((r) => r.movilizableConsolidado), [0, 5, 0]);
       });
 
       await t.test("resources filter by institution and export formula-safe", async () => {
         const clave = claveInstitucion(institucion);
-        const lista = await app.inject({ method: "GET", url: `/riesgos/recursos?institucion=${clave}&estado=validado`, headers: auth(viewerJwt) });
+        const lista = await app.inject({ method: "GET", url: `/riesgos/recursos?institucion=${clave}`, headers: auth(viewerJwt) });
         assert.equal(lista.statusCode, 200);
-        assert.equal((lista.json() as RiesgosRecurso[]).length, 3);
+        const recursos = lista.json() as RiesgosRecurso[];
+        assert.equal(recursos.length, 4);
+        assert.equal(recursos.filter((r) => !r.vigente).length, 1);
 
         const tabla = (await app.inject({ method: "GET", url: `/riesgos/exportar/recursos?institucion=${clave}`, headers: auth(viewerJwt) })).json() as RiesgosTabla;
-        assert.equal(tabla.filas.length, 6);
+        assert.equal(tabla.filas.length, 4);
+        const columna = tabla.encabezados.indexOf("Declaración vigente");
+        assert.equal(tabla.filas.filter((fila) => String(fila[columna]).startsWith("No")).length, 1);
         const observaciones = tabla.encabezados.indexOf("Observaciones");
         assert.ok(tabla.filas.every((fila) => String(fila[observaciones]).startsWith("'=")));
       });
@@ -239,7 +236,8 @@ test(
       if (fichaIds.length) await db.delete(riesgosFichas).where(inArray(riesgosFichas.id, fichaIds));
       if (delegacionIds.length) await db.delete(riesgosDelegaciones).where(inArray(riesgosDelegaciones.id, delegacionIds));
       const buckets = ["riesgos-ficha", "riesgos-delegacion"].flatMap((scope) =>
-        Object.values(buildAuthRateLimitKeys({ scope, subject: claveInstitucion(institucion), ip: "127.0.0.1" })));
+        [institucion, `${institucion} (formulario antiguo)`].flatMap((nombre) =>
+          Object.values(buildAuthRateLimitKeys({ scope, subject: claveInstitucion(nombre), ip: "127.0.0.1" }))));
       await db.delete(authRateLimits).where(inArray(authRateLimits.bucketKey, buckets));
       await db.delete(userApps).where(inArray(userApps.userId, [adminId, viewerId, outsiderId]));
       await db.delete(users).where(inArray(users.id, [adminId, viewerId, outsiderId]));

@@ -81,6 +81,7 @@ export function CampoSelect({
   onChange,
   error,
   vacio,
+  ayuda,
 }: {
   id: string;
   etiqueta: string;
@@ -90,9 +91,10 @@ export function CampoSelect({
   error?: string;
   /** Placeholder option; omitted when the field always has a value. */
   vacio?: string;
+  ayuda?: string;
 }) {
   return (
-    <Campo id={id} etiqueta={etiqueta} error={error}>
+    <Campo id={id} etiqueta={etiqueta} error={error} ayuda={ayuda}>
       <select
         id={id}
         className={selectClass}

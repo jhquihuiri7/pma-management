@@ -4,7 +4,6 @@ import type { RiesgosCampoInvalido } from "@pma/types";
 import {
   CAMPOS_DETALLE,
   DISPONIBILIDADES,
-  ESTADOS,
   ISLAS,
   MAX_RECURSOS,
   MESAS_GRUPOS,
@@ -74,11 +73,21 @@ const delegadoSchema = contactoSchema
   .extend({ documento: texto.max(30, "Use como máximo 30 caracteres.").default("") })
   .strict();
 
-export const recursoSchema = z
+/**
+ * Every resource sits on its ficha's island, so the form no longer asks for one
+ * per resource. Pages opened before that change (2026-10-27) still send it; it
+ * is dropped instead of failing the strict check, and the ficha's island wins.
+ */
+function sinIslaPropia(value: unknown): unknown {
+  if (!value || typeof value !== "object" || Array.isArray(value) || !("isla" in value)) return value;
+  const { isla: _ignorada, ...resto } = value as Record<string, unknown>;
+  return resto;
+}
+
+export const recursoSchema = z.preprocess(sinIslaPropia, z
   .object({
     tipo: enumCon(TIPOS_RECURSO, "Seleccione el tipo de recurso."),
     nombre: requerido("Ingrese el nombre del recurso."),
-    isla: enumCon(ISLAS, "Seleccione la isla."),
     ubicacion: requerido("Ingrese la ubicación."),
     unidad: requerido("Ingrese la unidad de medida."),
     cantidadExistente: cantidad,
@@ -111,7 +120,7 @@ export const recursoSchema = z
       Object.entries(r.detalles).filter(([clave, valor]) => permitidos.has(clave) && valor !== ""),
     );
     return { ...r, detalles };
-  });
+  }));
 
 function exigirPersonasDistintas(
   ctx: z.RefinementCtx,
@@ -149,7 +158,7 @@ export const fichaSchema = z
     exigirPersonasDistintas(ctx, ficha.principal, ficha.alterno, "alterno");
     const vistos = new Set<string>();
     ficha.recursos.forEach((recurso, indice) => {
-      const clave = claveActivo(recurso);
+      const clave = claveActivo({ ...recurso, isla: ficha.isla });
       if (vistos.has(clave)) {
         ctx.addIssue({ code: "custom", path: ["recursos", indice, "nombre"], message: `Recurso duplicado en esta ficha: ${recurso.nombre}` });
       }
@@ -194,16 +203,11 @@ const vacioAIndefinido = (value: unknown) => (value === "" ? undefined : value);
 export const filtrosRecursosSchema = z.object({
   isla: z.preprocess(vacioAIndefinido, z.enum(ISLAS).optional()),
   tipo: z.preprocess(vacioAIndefinido, z.enum(TIPOS_RECURSO).optional()),
-  estado: z.preprocess(vacioAIndefinido, z.enum(ESTADOS).optional()),
   institucion: z.preprocess(vacioAIndefinido, z.string().regex(/^I-[0-9a-f]{32}$/).optional()),
   q: z.preprocess(vacioAIndefinido, z.string().trim().max(200).optional()),
 });
 
 export type FiltrosRecursos = z.infer<typeof filtrosRecursosSchema>;
-
-export const filtrosFichasSchema = z.object({
-  estado: z.preprocess(vacioAIndefinido, z.enum(ESTADOS).optional()),
-});
 
 export const filtrosDelegacionesSchema = z.object({
   isla: z.preprocess(vacioAIndefinido, z.enum(ISLAS).optional()),
@@ -211,10 +215,3 @@ export const filtrosDelegacionesSchema = z.object({
 });
 
 export type FiltrosDelegaciones = z.infer<typeof filtrosDelegacionesSchema>;
-
-export const revisionSchema = z
-  .object({
-    estado: z.enum(ESTADOS),
-    nota: z.string().trim().max(1000, "Use como máximo 1.000 caracteres.").default(""),
-  })
-  .strict();
