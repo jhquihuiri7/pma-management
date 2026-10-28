@@ -1,8 +1,10 @@
 "use client";
 
+import { useState } from "react";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { soloDigitos } from "@/lib/riesgos";
+import type { RiesgosInstitucionCatalogo, RiesgosInstitucionTipo } from "@/types";
 
 export const selectClass =
   "flex h-8 w-full rounded-lg border border-input bg-background px-2.5 text-sm outline-none focus-visible:border-ring focus-visible:ring-3 focus-visible:ring-ring/50 aria-invalid:border-destructive aria-invalid:ring-3 aria-invalid:ring-destructive/20";
@@ -110,6 +112,54 @@ export function CampoSelect({
         ))}
       </select>
     </Campo>
+  );
+}
+
+const OTRA_INSTITUCION = "__otra__";
+
+/**
+ * The convened institutions by name, plus "Otra" for one outside the list,
+ * which then writes its own name. Choosing a listed one also suggests its type
+ * (`tipo`); writing a name leaves the type to the person filling the form.
+ */
+export function CampoInstitucion({
+  instituciones,
+  valor,
+  onChange,
+  error,
+}: {
+  instituciones: RiesgosInstitucionCatalogo[];
+  valor: string;
+  onChange: (nombre: string, tipo?: RiesgosInstitucionTipo | "") => void;
+  error?: string;
+}) {
+  const [otraElegida, setOtraElegida] = useState(() => valor !== "" && !instituciones.some((i) => i.nombre === valor));
+
+  return (
+    <>
+      <Campo id="institucionNombre" etiqueta="Institución *" error={otraElegida ? undefined : error}>
+        <select
+          id="institucionNombre"
+          className={selectClass}
+          value={otraElegida ? OTRA_INSTITUCION : valor}
+          aria-invalid={!otraElegida && !!error}
+          onChange={(e) => {
+            const elegida = instituciones.find((i) => i.nombre === e.target.value);
+            setOtraElegida(!elegida);
+            onChange(elegida?.nombre ?? "", elegida?.tipo ?? "");
+          }}
+        >
+          <option value="" disabled>Seleccione la institución</option>
+          {instituciones.map((i) => <option key={i.nombre} value={i.nombre}>{i.nombre}</option>)}
+          <option value={OTRA_INSTITUCION}>Otra institución (no está en la lista)</option>
+        </select>
+      </Campo>
+      {otraElegida && (
+        <CampoTexto id="institucionOtra" etiqueta="Nombre de la institución *" valor={valor}
+          onChange={(nombre) => onChange(nombre)} error={error}
+          ayuda="Escriba el nombre oficial completo." />
+      )}
+    </>
   );
 }
 

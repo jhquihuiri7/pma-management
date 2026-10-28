@@ -4,6 +4,7 @@ import type { RiesgosCampoInvalido } from "@pma/types";
 import {
   CAMPOS_DETALLE,
   DISPONIBILIDADES,
+  INSTITUCIONES,
   ISLAS,
   MAX_RECURSOS,
   MESAS_GRUPOS,
@@ -30,9 +31,16 @@ function digest(prefix: string, value: string): string {
   return `${prefix}-${createHash("sha256").update(value).digest("hex").slice(0, 32)}`;
 }
 
-/** Groups fichas of the same institution while its name is free text. */
+/** Groups fichas of the same institution, whatever the case, accents or spacing of its name. */
 export function claveInstitucion(nombre: string): string {
   return digest("I", normalizarTexto(nombre));
+}
+
+const NOMBRES_INSTITUCION = new Map(INSTITUCIONES.map((i) => [normalizarTexto(i.nombre), i.nombre]));
+
+/** A listed institution is stored with its catalog name, even when typed by hand. */
+export function nombreInstitucion(nombre: string): string {
+  return NOMBRES_INSTITUCION.get(normalizarTexto(nombre)) ?? nombre;
 }
 
 /** Identifies one asset within an institution: same type, name, island and place. */
@@ -139,7 +147,7 @@ function exigirPersonasDistintas(
 export const fichaSchema = z
   .object({
     id: z.string().uuid("Identificador de envío inválido."),
-    institucionNombre: requerido("Ingrese el nombre de la institución."),
+    institucionNombre: requerido("Seleccione la institución o escriba su nombre.").transform(nombreInstitucion),
     institucionTipo: enumCon(TIPOS_INSTITUCION, "Seleccione el tipo de institución."),
     mesaGrupo: enumCon(MESAS_GRUPOS, "Seleccione una mesa o grupo."),
     isla: enumCon(ISLAS, "Seleccione la isla."),
@@ -171,7 +179,7 @@ export type FichaValidada = z.infer<typeof fichaSchema>;
 export const delegacionSchema = z
   .object({
     id: z.string().uuid("Identificador de envío inválido."),
-    institucionNombre: requerido("Ingrese el nombre de la institución."),
+    institucionNombre: requerido("Seleccione la institución o escriba su nombre.").transform(nombreInstitucion),
     institucionTipo: enumCon(TIPOS_INSTITUCION, "Seleccione el tipo de institución."),
     isla: enumCon(ISLAS, "Seleccione la isla."),
     mesaGrupo: enumCon(MESAS_GRUPOS, "Seleccione una mesa o grupo."),

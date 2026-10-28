@@ -16,7 +16,7 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Skeleton } from "@/components/ui/skeleton";
-import { Campo, CampoMesaGrupo, CampoSelect, CampoTexto, Recibo, textareaClass } from "./campos";
+import { Campo, CampoInstitucion, CampoMesaGrupo, CampoSelect, CampoTexto, Recibo, textareaClass } from "./campos";
 import type {
   RiesgosCatalogos,
   RiesgosContacto,
@@ -89,7 +89,7 @@ const normalizar = (value: string) => value.trim().toLocaleLowerCase("es").repla
 function validarPaso(paso: number, v: Valores, recursos: RiesgosRecursoEntrada[]): Errores {
   const errores: Errores = {};
   if (paso === 0) {
-    if (v.institucionNombre.trim().length < 2) errores.institucionNombre = "Ingrese el nombre de la institución.";
+    if (v.institucionNombre.trim().length < 2) errores.institucionNombre = "Seleccione la institución o escriba su nombre.";
     if (!v.institucionTipo) errores.institucionTipo = "Seleccione el tipo de institución.";
     if (!v.mesaGrupo) errores.mesaGrupo = "Seleccione una mesa o grupo.";
     for (const quien of ["principal", "alterno"] as const) {
@@ -273,8 +273,12 @@ function Asistente({ catalogos }: { catalogos: RiesgosCatalogos }) {
           </CardHeader>
           <CardContent className="space-y-6">
             <div className="grid gap-4 sm:grid-cols-2">
-              <CampoTexto id="institucionNombre" etiqueta="Nombre de la institución *" valor={valores.institucionNombre}
-                onChange={(v) => cambiar("institucionNombre", v)} error={errores.institucionNombre} />
+              <CampoInstitucion instituciones={catalogos.instituciones} valor={valores.institucionNombre}
+                onChange={(nombre, tipo) => {
+                  cambiar("institucionNombre", nombre);
+                  if (tipo !== undefined) cambiar("institucionTipo", tipo);
+                }}
+                error={errores.institucionNombre} />
               <CampoSelect id="institucionTipo" etiqueta="Tipo de institución *" valor={valores.institucionTipo}
                 opciones={catalogos.tiposInstitucion} vacio="Seleccione el tipo"
                 onChange={(v) => cambiar("institucionTipo", v)} error={errores.institucionTipo} />

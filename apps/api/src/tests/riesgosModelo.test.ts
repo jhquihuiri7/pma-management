@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import type { RiesgosDelegacionEntrada, RiesgosFichaEntrada, RiesgosRecursoEntrada } from "@pma/types";
+import { catalogos, INSTITUCIONES, TIPOS_INSTITUCION } from "../modules/riesgos/catalogos.js";
 import { celdaSegura } from "../modules/riesgos/exportacion.js";
 import {
   camposInvalidos,
@@ -8,6 +9,7 @@ import {
   claveInstitucion,
   delegacionSchema,
   fichaSchema,
+  normalizarTexto,
 } from "../modules/riesgos/modelo.js";
 
 function recurso(cambios: Partial<RiesgosRecursoEntrada> = {}): RiesgosRecursoEntrada {
@@ -121,6 +123,23 @@ test("an institution keeps one key across case, accents and spacing", () => {
   assert.notEqual(enIsla({}), enIsla({}, "Santa Cruz"));
 });
 
+test("a listed institution is stored with its catalog name; any other keeps the name it wrote", () => {
+  assert.equal(
+    fichaSchema.parse(ficha({ institucionNombre: "  cuerpo de bomberos de SANTA CRUZ " })).institucionNombre,
+    "Cuerpo de Bomberos de Santa Cruz",
+  );
+  assert.equal(fichaSchema.parse(ficha({ institucionNombre: "Fundación de prueba" })).institucionNombre, "Fundación de prueba");
+  assert.ok(rechazos(fichaSchema, ficha({ institucionNombre: "" })).institucionNombre);
+});
+
+test("the institution catalog has one entry per name, a valid type and comes sorted", () => {
+  assert.equal(new Set(INSTITUCIONES.map((i) => normalizarTexto(i.nombre))).size, INSTITUCIONES.length);
+  assert.ok(INSTITUCIONES.every((i) => (TIPOS_INSTITUCION as readonly string[]).includes(i.tipo)));
+  const nombres = catalogos().instituciones.map((i) => i.nombre);
+  assert.equal(nombres.length, 32);
+  assert.deepEqual(nombres, [...nombres].sort((a, b) => a.localeCompare(b, "es")));
+});
+
 test("a resource has no island of its own; one sent by an older page is dropped", () => {
   const parsed = fichaSchema.parse(ficha({
     recursos: [{ ...recurso(), isla: "Isabela" } as RiesgosRecursoEntrada],
@@ -145,6 +164,10 @@ test("a COE designation needs its reporter and two distinct delegates", () => {
     confirmado: true,
   };
   assert.equal(delegacionSchema.safeParse(valida).success, true);
+  assert.equal(
+    delegacionSchema.parse({ ...valida, institucionNombre: "ministerio de salud publica (msp)" }).institucionNombre,
+    "Ministerio de Salud Pública (MSP)",
+  );
 
   const campos = rechazos(delegacionSchema, { ...valida, alterno: { ...valida.alterno, correo: "ana@example.org" } });
   assert.match(campos["alterno.correo"], /distintos/);

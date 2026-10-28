@@ -101,6 +101,7 @@ test(
         assert.equal(res.statusCode, 200);
         assert.equal(res.json().maxRecursos, 50);
         assert.ok(res.json().islas.includes("Baltra"));
+        assert.ok(res.json().instituciones.some((i: { nombre: string }) => i.nombre === "Cuerpo de Bomberos de Santa Cruz"));
       });
 
       await t.test("a ficha is accepted only from our own pages, and a retry keeps one row", async () => {

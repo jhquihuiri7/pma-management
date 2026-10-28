@@ -888,8 +888,16 @@ export interface RiesgosCampoDetalle {
   ejemplo: string;
 }
 
+/** An institution the forms offer by name; its type pre-fills the form. */
+export interface RiesgosInstitucionCatalogo {
+  nombre: string;
+  tipo: RiesgosInstitucionTipo;
+}
+
 export interface RiesgosCatalogos {
   islas: RiesgosIsla[];
+  /** Sorted by name. An institution outside the list writes its own name. */
+  instituciones: RiesgosInstitucionCatalogo[];
   tiposInstitucion: RiesgosInstitucionTipo[];
   /** The option for an institution outside every MTT and GT. */
   sinMesa: string;

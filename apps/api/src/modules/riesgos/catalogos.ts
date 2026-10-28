@@ -2,6 +2,7 @@ import type {
   RiesgosCampoDetalle,
   RiesgosCatalogos,
   RiesgosDisponibilidad,
+  RiesgosInstitucionCatalogo,
   RiesgosInstitucionTipo,
   RiesgosIsla,
   RiesgosRecursoTipo,
@@ -14,6 +15,47 @@ import type {
 export const ISLAS = ["San Cristóbal", "Santa Cruz", "Isabela", "Floreana", "Baltra"] as const satisfies readonly RiesgosIsla[];
 
 export const TIPOS_INSTITUCION = ["Público", "Privado", "ONG", "Otro"] as const satisfies readonly RiesgosInstitucionTipo[];
+
+/**
+ * Institutions convened to the COE Provincial, in the order of the list the
+ * coordination sent on 2026-10-27; the last three appear only in copies or
+ * references. The forms offer them by name, and any other institution can
+ * still write its own.
+ */
+export const INSTITUCIONES: readonly RiesgosInstitucionCatalogo[] = [
+  { nombre: "Gobierno Autónomo Descentralizado Municipal Isabela", tipo: "Público" },
+  { nombre: "Cuerpo de Bomberos San Cristóbal", tipo: "Público" },
+  { nombre: "Gobierno Autónomo Descentralizado Parroquial El Progreso", tipo: "Público" },
+  { nombre: "Gobierno Autónomo Descentralizado Parroquial Rural Bellavista", tipo: "Público" },
+  { nombre: "Cuerpo de Bomberos de Isabela", tipo: "Público" },
+  { nombre: "Cuerpo de Bomberos de Santa Cruz", tipo: "Público" },
+  { nombre: "Gobierno Autónomo Descentralizado Parroquial Rural Tomás de Berlanga", tipo: "Público" },
+  { nombre: "Gobierno Autónomo Descentralizado Municipal San Cristóbal", tipo: "Público" },
+  { nombre: "Gobierno Autónomo Descentralizado Parroquial Rural Santa Rosa", tipo: "Público" },
+  { nombre: "Cruz Roja Junta Provincial de Galápagos", tipo: "ONG" },
+  { nombre: "Gobierno Autónomo Descentralizado Parroquial Rural Isla Santa María", tipo: "Público" },
+  { nombre: "Ministerio de Infraestructura y Tecnología", tipo: "Público" },
+  { nombre: "Secretaría Nacional de Gestión de Riesgos (SNGR)", tipo: "Público" },
+  { nombre: "Servicio Integrado de Seguridad ECU 911", tipo: "Público" },
+  { nombre: "Instituto Ecuatoriano de Seguridad Social (IESS)", tipo: "Público" },
+  { nombre: "Corporación Nacional de Telecomunicaciones (CNT)", tipo: "Público" },
+  { nombre: "Ministerio de Salud Pública (MSP)", tipo: "Público" },
+  { nombre: "Dirección General de Aviación Civil (DGAC)", tipo: "Público" },
+  { nombre: "Gobierno Autónomo Descentralizado Municipal de Santa Cruz", tipo: "Público" },
+  { nombre: "Ministerio de Gobierno", tipo: "Público" },
+  { nombre: "BanEcuador B.P.", tipo: "Público" },
+  { nombre: "Petroecuador", tipo: "Público" },
+  { nombre: "Consejo de Gobierno de Galápagos", tipo: "Público" },
+  { nombre: "Ministerio de Educación, Deporte y Cultura", tipo: "Público" },
+  { nombre: "Fuerza Naval", tipo: "Público" },
+  { nombre: "Agencia de Regulación y Control de la Bioseguridad y Cuarentena para Galápagos (ABG)", tipo: "Público" },
+  { nombre: "Ministerio de Desarrollo Económico y Productivo", tipo: "Público" },
+  { nombre: "Agencia Nacional de Regulación y Control de Transporte Terrestre, Tránsito y Seguridad Vial (ANT)", tipo: "Público" },
+  { nombre: "Empresa Eléctrica Provincial Galápagos (ELECGALAPAGOS S.A.)", tipo: "Público" },
+  { nombre: "Ministerio de Ambiente y Energía (Dirección del Parque Nacional Galápagos)", tipo: "Público" },
+  { nombre: "Ministerio de Trabajo y Desarrollo Humano", tipo: "Público" },
+  { nombre: "Instituto Nacional de Meteorología e Hidrología (INAMHI)", tipo: "Público" },
+];
 
 export const SIN_MESA = "No pertenece";
 
@@ -85,6 +127,7 @@ export const CAMPOS_DETALLE: Record<RiesgosRecursoTipo, RiesgosCampoDetalle[]> =
 export function catalogos(): RiesgosCatalogos {
   return {
     islas: [...ISLAS],
+    instituciones: [...INSTITUCIONES].sort((a, b) => a.nombre.localeCompare(b.nombre, "es")),
     tiposInstitucion: [...TIPOS_INSTITUCION],
     sinMesa: SIN_MESA,
     mesasTecnicas: [...MESAS_TECNICAS],
