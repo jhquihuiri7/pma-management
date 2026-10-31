@@ -77,8 +77,8 @@ const tileParamsSchema = layerParamsSchema.extend({
   y: z.string().regex(/^\d+(?:\.png)?$/),
 });
 
-const VECTOR_MAX_FILE_BYTES = 50 * 1024 * 1024;
-const VECTOR_MAX_TOTAL_BYTES = 75 * 1024 * 1024;
+const VECTOR_MAX_FILE_BYTES = 75 * 1024 * 1024;
+const VECTOR_MAX_TOTAL_BYTES = 100 * 1024 * 1024;
 const RASTER_MAX_SIDECAR_BYTES = 100 * 1024 * 1024;
 
 const bboxSchema = z.tuple([
@@ -227,7 +227,7 @@ export async function geoRoutes(app: FastifyInstance) {
         const buf = await part.toBuffer();
         uploadedBytes += buf.byteLength;
         if (uploadedBytes > VECTOR_MAX_TOTAL_BYTES) {
-          throw new HttpError(413, "Los archivos de la capa superan el límite total de 75 MB.");
+          throw new HttpError(413, "Los archivos de la capa superan el límite total de 100 MB.");
         }
         if (part.fieldname === "data") {
           data = buf;
@@ -785,7 +785,7 @@ async function parseRasterFieldsOrCleanup(
 
 function parseFeatureCollection(data: Buffer, declaredType: "Point" | "LineString" | "Polygon") {
   if (data.byteLength > VECTOR_MAX_FILE_BYTES) {
-    throw new HttpError(413, "El GeoJSON normalizado supera el límite de 50 MB.");
+    throw new HttpError(413, "El GeoJSON normalizado supera el límite de 75 MB.");
   }
 
   let parsed: unknown;

@@ -26,7 +26,7 @@ import {
 
 const gzip = promisify(gzipCallback);
 const gunzip = promisify(gunzipCallback);
-const VECTOR_MAX_FILE_BYTES = 50 * 1024 * 1024;
+const VECTOR_MAX_FILE_BYTES = 75 * 1024 * 1024;
 
 export type CreateLayerInput = {
   name: string;
@@ -260,7 +260,7 @@ export async function appendFeature(
   };
   const serialized = Buffer.from(JSON.stringify(nextCollection), "utf8");
   if (serialized.byteLength > VECTOR_MAX_FILE_BYTES) {
-    throw new HttpError(413, "La nueva revisión supera el límite de 50 MB para una capa vectorial.");
+    throw new HttpError(413, "La nueva revisión supera el límite de 75 MB para una capa vectorial.");
   }
   const bbox = bboxForFeatures(nextCollection.features);
   const compressed = await gzip(serialized);
