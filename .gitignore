@@ -40,3 +40,8 @@ next-env.d.ts
 
 # local IDE / tooling
 .claude/
+
+# Respaldos locales de la base de datos y documentos internos (repo público)
+/respaldo_*.sql
+/6.1 Informe PG2030 2026 1T vf 10abr26.docx
+/resultado_final.xlsx
