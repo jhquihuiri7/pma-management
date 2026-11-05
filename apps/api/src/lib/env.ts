@@ -74,6 +74,41 @@ const schema = z.object({
   PG2030_IA_TIMEOUT_MS: z.coerce.number().int().positive().default(60_000),
   PG2030_IA_MAX_TOKENS: z.coerce.number().int().positive().default(2_048),
 
+  // Workspace con RustGIS (docs/plan-integracion-rustgis.md). "legacy" deja el
+  // Workspace anterior para todos; "pilot" muestra RustGIS solo a los usuarios
+  // de GEO_WORKSPACE_PILOT_USERS (ids o correos separados por comas); "rustgis",
+  // a todos los usuarios con la app geo.
+  GEO_WORKSPACE_ENGINE: z.enum(["legacy", "pilot", "rustgis"]).default("legacy"),
+  GEO_WORKSPACE_PILOT_USERS: z.string().default(""),
+  // Ruta (mismo origen) donde nginx sirve la imagen de RustGIS, con barra final.
+  GEO_WORKSPACE_APP_PATH: z.string().regex(/^\/[^?#]*\/$/).default("/geo/workspace/app/"),
+  // Tope del JSON de un proyecto guardado. RustGIS admite hasta 512 MiB, pero el
+  // puente reenvía el proyecto entero tras cada cambio: los datos deben ir por URL.
+  GEO_WORKSPACE_MAX_PROJECT_BYTES: z.coerce.number().int().positive().default(50 * 1024 * 1024),
+  // Con un valor (p. ej. /_nas_files/), los .fgb/.tif los entrega nginx con
+  // X-Accel-Redirect y resuelve él los Range; vacío, los sirve la propia API.
+  GEO_FILE_ACCEL_PREFIX: z.string().regex(/^(|\/[^?#]*\/)$/).default(""),
+
+  // Asistente de IA del Workspace: proxy hacia un endpoint compatible con OpenAI.
+  // La clave nunca llega al navegador. Sin WORKSPACE_AI_API_KEY se usa NVIDIA_API_KEY.
+  WORKSPACE_AI_ENABLED: z.preprocess((v) => v === true || v === "true" || v === "1", z.boolean()),
+  WORKSPACE_AI_API_KEY: z.string().default(""),
+  WORKSPACE_AI_BASE_URL: z.string().url().default("https://integrate.api.nvidia.com/v1"),
+  WORKSPACE_AI_ALLOWED_HOSTS: z.string().default("integrate.api.nvidia.com"),
+  // Modelo real. RustGIS lo pide con el alias, así cambiar de modelo no exige recompilarlo.
+  WORKSPACE_AI_MODEL: z.string().min(1).default("minimaxai/minimax-m3.1-flash"),
+  WORKSPACE_AI_MODEL_ALIAS: z.string().min(1).default("sigtar-asistente"),
+  // Otros modelos que se pueden pedir por su nombre (separados por comas).
+  WORKSPACE_AI_EXTRA_MODELS: z.string().default(""),
+  // 0 = no añadir max_tokens (RustGIS no lo envía).
+  WORKSPACE_AI_MAX_TOKENS: z.coerce.number().int().min(0).default(0),
+  WORKSPACE_AI_HEADERS_TIMEOUT_MS: z.coerce.number().int().positive().default(60_000),
+  WORKSPACE_AI_TIMEOUT_MS: z.coerce.number().int().positive().default(180_000),
+  WORKSPACE_AI_MAX_BODY_BYTES: z.coerce.number().int().positive().default(4 * 1024 * 1024),
+  WORKSPACE_AI_USER_PER_MINUTE: z.coerce.number().int().positive().default(20),
+  WORKSPACE_AI_USER_PER_DAY: z.coerce.number().int().positive().default(500),
+  WORKSPACE_AI_MAX_CONCURRENT: z.coerce.number().int().positive().default(4),
+
   SMTP_HOST: z.string().optional(),
   SMTP_PORT: z.coerce.number().int().positive().default(587),
   SMTP_USER: z.string().optional(),

@@ -5,8 +5,12 @@ import {
   getBoss,
   stopBoss,
   RASTER_QUEUE,
+  FGB_QUEUE,
+  type FgbJob,
   type RasterJob,
 } from "./jobs/boss.js";
+import { processFlatGeobuf } from "./jobs/flatgeobuf.js";
+import { listFgbToBuild, requestFgb } from "./modules/geo/layerArtifacts.js";
 import {
   listQueuedRasterJobs,
   markRasterProcessing,
@@ -28,6 +32,12 @@ import { closeDb } from "./db/client.js";
 const STORAGE_CLEANUP_INTERVAL_MS = 30_000;
 const MAIL_OUTBOX_INTERVAL_MS = 15_000;
 const RASTER_RECONCILE_INTERVAL_MS = 60_000;
+// FlatGeobuf of each vector's current revision for the RustGIS Workspace. The
+// reconciler also builds them for layers that existed before (a batch a tick).
+const FGB_RECONCILE_INTERVAL_MS = 120_000;
+const FGB_RECONCILE_BATCH = 40;
+let fgbReconcileTimer: NodeJS.Timeout | undefined;
+let fgbReconcilePromise: Promise<void> | null = null;
 let cleanupTimer: NodeJS.Timeout | undefined;
 let mailTimer: NodeJS.Timeout | undefined;
 let rasterReconcileTimer: NodeJS.Timeout | undefined;
@@ -79,6 +89,20 @@ async function reconcileQueuedRasters(): Promise<void> {
     }
   })().finally(() => { rasterReconcilePromise = null; });
   return rasterReconcilePromise;
+}
+
+async function reconcileFlatGeobufs(): Promise<void> {
+  if (fgbReconcilePromise) return fgbReconcilePromise;
+  fgbReconcilePromise = (async () => {
+    const pending = await listFgbToBuild(FGB_RECONCILE_BATCH);
+    let queued = 0;
+    for (const item of pending) {
+      const status = await requestFgb(item.layerId, item.revision);
+      if (status === "pending") queued += 1;
+    }
+    if (queued > 0) console.log(`[worker] flatgeobuf: ${queued} layer revision(s) queued`);
+  })().finally(() => { fgbReconcilePromise = null; });
+  return fgbReconcilePromise;
 }
 
 /**
@@ -180,6 +204,21 @@ async function main() {
     }
   );
 
+  await boss.work<FgbJob>(
+    FGB_QUEUE,
+    { batchSize: 1 },
+    async (jobs) => {
+      for (const job of jobs) {
+        try {
+          await processFlatGeobuf(job.data);
+        } catch (err) {
+          console.error(`[worker] flatgeobuf job ${job.id} failed:`, err instanceof Error ? err.message : err);
+          throw err;
+        }
+      }
+    },
+  );
+
   await drainStorageCleanup().catch((err) => console.error("[worker] initial storage cleanup failed:", err));
   cleanupTimer = setInterval(() => {
     void drainStorageCleanup().catch((err) => console.error("[worker] storage cleanup failed:", err));
@@ -195,6 +234,11 @@ async function main() {
     void reconcileQueuedRasters().catch((err) => console.error("[worker] raster reconciliation failed:", err));
   }, RASTER_RECONCILE_INTERVAL_MS);
   rasterReconcileTimer.unref();
+  await reconcileFlatGeobufs().catch((err) => console.error("[worker] initial flatgeobuf reconciliation failed:", err));
+  fgbReconcileTimer = setInterval(() => {
+    void reconcileFlatGeobufs().catch((err) => console.error("[worker] flatgeobuf reconciliation failed:", err));
+  }, FGB_RECONCILE_INTERVAL_MS);
+  fgbReconcileTimer.unref();
 
   if (isPrevieneConfigured()) {
     await syncPreviene().catch((err) => console.error("[worker] initial previene sync failed:", err));
@@ -229,6 +273,7 @@ async function shutdown(signal: string) {
   if (cleanupTimer) clearInterval(cleanupTimer);
   if (mailTimer) clearInterval(mailTimer);
   if (rasterReconcileTimer) clearInterval(rasterReconcileTimer);
+  if (fgbReconcileTimer) clearInterval(fgbReconcileTimer);
   if (previeneTimer) clearInterval(previeneTimer);
   if (pg2030Timer) clearInterval(pg2030Timer);
   await stopBoss().catch((error) => console.error("[worker] failed to stop pg-boss:", error));

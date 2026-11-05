@@ -1,0 +1,282 @@
+diff --git a/apps/rustgis-web/src/embed.rs b/apps/rustgis-web/src/embed.rs
+index dbe30f7..6168205 100644
+--- a/apps/rustgis-web/src/embed.rs
++++ b/apps/rustgis-web/src/embed.rs
+@@ -8,7 +8,7 @@
+ //!
+ //! | From the page | Does |
+ //! |---|---|
+-//! | `{"rustgis": "project", "text": <project JSON>}` | replaces the project with the page's copy |
++//! | `{"rustgis": "project", "text": <project JSON>, "id"?: <any>}` | replaces the project with the page's copy; with an `id`, answered with `result` |
+ //! | `{"rustgis": "run", "id": <any>, "command": <id>, "params"?: {…}}` | runs one of the app's own commands (`ui.*`), answered with `result` |
+ //!
+ //! | From the app | Says |
+@@ -22,6 +22,11 @@
+ //! (`ui.*`: panes, the language, the theme); everything else changes the project, which the page
+ //! sends whole and the app only opens. A change is posted once the project has stayed the same for [`SETTLE`], so a
+ //! pan sends one message, not one a frame; the page's own project is never echoed back.
++//!
++//! SIGTAR (pma-management) additions, kept compatible with pages that don't know them: the posted
++//! project carries the active map's active layer (or picked tile layer) under
++//! `maps[active_map].sigtar_active`, a change of it is posted like any other change, and a project
++//! sent with it opens with that layer active again. Builds without these additions ignore the field.
+ 
+ use serde_json::{Value, json};
+ use web_time::{Duration, Instant};
+@@ -32,8 +37,8 @@ pub const SETTLE: Duration = Duration::from_millis(600);
+ /// A message from the embedding page.
+ #[derive(Debug, PartialEq)]
+ pub enum Msg {
+-    /// Replace the project with this one.
+-    Project(String),
++    /// Replace the project with this one; a non-null `id` asks for a `result`.
++    Project { id: Value, text: String },
+     /// Run a command; its outcome is posted back under `id`.
+     Run { id: Value, command: String, params: Value },
+ }
+@@ -41,7 +46,10 @@ pub enum Msg {
+ /// Reads a message from the page; anything else (another script's messages) is `None`.
+ pub fn parse(v: &Value) -> Option<Msg> {
+     match v.get("rustgis")?.as_str()? {
+-        "project" => Some(Msg::Project(v.get("text")?.as_str()?.to_string())),
++        "project" => Some(Msg::Project {
++            id: v.get("id").cloned().unwrap_or(Value::Null),
++            text: v.get("text")?.as_str()?.to_string(),
++        }),
+         "run" => Some(Msg::Run {
+             id: v.get("id").cloned().unwrap_or(Value::Null),
+             command: v.get("command")?.as_str()?.to_string(),
+@@ -71,13 +79,60 @@ pub fn result(id: Value, outcome: Result<Value, String>) -> Value {
+     }
+ }
+ 
+-/// What the page has seen of the project: its revision, active map and view. A view change
+-/// isn't an edit, so the session's revision alone would miss a pan.
+-pub type Key = (u64, usize, [u64; 3]);
++/// What the page has seen of the project: its revision, active map and view, and the active
++/// layer (or picked tile layer). A view change isn't an edit, so the session's revision alone
++/// would miss a pan; nor is picking another layer.
++pub type Key = (u64, usize, [u64; 3], Option<u32>, Option<usize>);
+ 
+ pub fn key(s: &rustgis_engine::Session) -> Key {
+     let c = &s.project.map().camera;
+-    (s.revision, s.project.active_map, [c.center.x.to_bits(), c.center.y.to_bits(), c.res.to_bits()])
++    (
++        s.revision,
++        s.project.active_map,
++        [c.center.x.to_bits(), c.center.y.to_bits(), c.res.to_bits()],
++        s.active_layer,
++        s.selected_tile(),
++    )
++}
++
++/// The member of the active map that carries its active layer (SIGTAR addition).
++pub const ACTIVE_FIELD: &str = "sigtar_active";
++
++/// The layer the Layers pane acts on: a map layer by id, or a tile layer by its address.
++#[derive(Debug, Clone, PartialEq)]
++pub enum Active {
++    Layer(u32),
++    Tile(String),
++}
++
++/// Writes `active` into the active map of a serialized project, or removes the field.
++pub fn with_active(project: &mut Value, active: Option<&Active>) {
++    let index = project.get("active_map").and_then(Value::as_u64).unwrap_or(0) as usize;
++    let Some(map) = project.get_mut("maps").and_then(|m| m.get_mut(index)).and_then(Value::as_object_mut) else {
++        return;
++    };
++    match active {
++        Some(Active::Layer(id)) => {
++            map.insert(ACTIVE_FIELD.into(), json!({"layer": id}));
++        }
++        Some(Active::Tile(url)) => {
++            map.insert(ACTIVE_FIELD.into(), json!({"tile": url}));
++        }
++        None => {
++            map.remove(ACTIVE_FIELD);
++        }
++    }
++}
++
++/// The active layer a project's text names for its active map, if any.
++pub fn active_in(text: &str) -> Option<Active> {
++    let v: Value = serde_json::from_str(text).ok()?;
++    let index = v.get("active_map").and_then(Value::as_u64).unwrap_or(0) as usize;
++    let field = v.get("maps")?.get(index)?.get(ACTIVE_FIELD)?;
++    if let Some(id) = field.get("layer").and_then(Value::as_u64).and_then(|id| u32::try_from(id).ok()) {
++        return Some(Active::Layer(id));
++    }
++    field.get("tile").and_then(Value::as_str).filter(|u| !u.is_empty()).map(|u| Active::Tile(u.to_string()))
+ }
+ 
+ /// Decides when a change is posted.
+@@ -131,7 +186,11 @@ mod tests {
+ 
+     #[test]
+     fn parses_the_page_messages_and_ignores_others() {
+-        assert_eq!(parse(&json!({"rustgis": "project", "text": "{}"})), Some(Msg::Project("{}".into())));
++        assert_eq!(parse(&json!({"rustgis": "project", "text": "{}"})), Some(Msg::Project { id: Value::Null, text: "{}".into() }));
++        assert_eq!(
++            parse(&json!({"rustgis": "project", "id": 9, "text": "{}"})),
++            Some(Msg::Project { id: json!(9), text: "{}".into() })
++        );
+         assert_eq!(
+             parse(&json!({"rustgis": "run", "id": 3, "command": "ui.language", "params": {"code": "de"}})),
+             Some(Msg::Run { id: json!(3), command: "ui.language".into(), params: json!({"code": "de"}) })
+@@ -158,7 +217,7 @@ mod tests {
+     #[test]
+     fn a_change_is_posted_once_it_settles_and_never_echoed() {
+         let t = Instant::now();
+-        let k = |rev| (rev, 0, [0, 0, 0]);
++        let k = |rev| (rev, 0, [0, 0, 0], None, None);
+         let mut c = Changes::default();
+         // The first project is the page's to send.
+         assert_eq!(c.due(k(1), t), (false, None));
+@@ -174,5 +233,34 @@ mod tests {
+         // A change undone before it settles posts nothing.
+         assert_eq!(c.due(k(5), t), (false, Some(SETTLE)));
+         assert_eq!(c.due(k(4), t + SETTLE), (false, None));
++        // Picking another layer is a change too.
++        let picked = (4, 0, [0, 0, 0], Some(7), None);
++        assert_eq!(c.due(picked, t), (false, Some(SETTLE)));
++        assert_eq!(c.due(picked, t + SETTLE), (true, None));
++    }
++
++    #[test]
++    fn the_active_layer_travels_with_the_project() {
++        let mut p = json!({"active_map": 1, "maps": [{"name": "a"}, {"name": "b"}]});
++        with_active(&mut p, Some(&Active::Layer(12)));
++        assert_eq!(p["maps"][1][ACTIVE_FIELD], json!({"layer": 12}));
++        assert!(p["maps"][0].get(ACTIVE_FIELD).is_none());
++        assert_eq!(active_in(&p.to_string()), Some(Active::Layer(12)));
++
++        with_active(&mut p, Some(&Active::Tile("https://h/cog.tif".into())));
++        assert_eq!(active_in(&p.to_string()), Some(Active::Tile("https://h/cog.tif".into())));
++
++        with_active(&mut p, None);
++        assert!(p["maps"][1].get(ACTIVE_FIELD).is_none());
++        assert_eq!(active_in(&p.to_string()), None);
++
++        // Projects without the field, other apps' projects and broken text name none.
++        assert_eq!(active_in(r#"{"active_map": 0, "maps": [{"name": "a"}]}"#), None);
++        assert_eq!(active_in(r#"{"maps": [{"sigtar_active": {"layer": -1}}]}"#), None);
++        assert_eq!(active_in("not json"), None);
++        // A missing map is left alone.
++        let mut empty = json!({"active_map": 3, "maps": []});
++        with_active(&mut empty, Some(&Active::Layer(1)));
++        assert_eq!(empty, json!({"active_map": 3, "maps": []}));
+     }
+ }
+diff --git a/apps/rustgis-web/src/web.rs b/apps/rustgis-web/src/web.rs
+index 6418b46..454c08f 100644
+--- a/apps/rustgis-web/src/web.rs
++++ b/apps/rustgis-web/src/web.rs
+@@ -394,10 +394,22 @@ impl Embed {
+         let queued = std::mem::take(&mut *self.queue.borrow_mut());
+         for value in queued {
+             match parse(&value) {
+-                Some(Msg::Project(text)) => match app.run("project.openText", serde_json::json!({"text": text})) {
+-                    Ok(_) => self.changes.seen(key(&app.session)),
+-                    Err(e) => app.session.notify(e, true),
+-                },
++                Some(Msg::Project { id, text }) => {
++                    // SIGTAR: the layer that was active when the page saved the project.
++                    let active = crate::embed::active_in(&text);
++                    let outcome = app.run("project.openText", serde_json::json!({"text": text}));
++                    match &outcome {
++                        Ok(_) => {
++                            restore_active(app, active);
++                            self.changes.seen(key(&app.session));
++                        }
++                        Err(e) => app.session.notify(e.clone(), true),
++                    }
++                    // A page that sends an id is told whether the project opened.
++                    if !id.is_null() {
++                        self.answer(&crate::embed::result(id, outcome));
++                    }
++                }
+                 Some(Msg::Run { id, command, params }) => {
+                     let outcome = if crate::embed::runnable(&command) {
+                         app.run(&command, params)
+@@ -410,8 +422,11 @@ impl Embed {
+             }
+         }
+         match self.changes.due(key(&app.session), web_time::Instant::now()) {
+-            (true, _) => match serde_json::to_string(&app.session.project) {
+-                Ok(text) => self.answer(&crate::embed::project(&text)),
++            (true, _) => match serde_json::to_value(&app.session.project) {
++                Ok(mut project) => {
++                    crate::embed::with_active(&mut project, active_now(&app.session).as_ref());
++                    self.answer(&crate::embed::project(&project.to_string()));
++                }
+                 Err(e) => log::error!("couldn't send the project: {e}"),
+             },
+             (false, Some(wait)) => ctx.request_repaint_after(wait),
+@@ -420,6 +435,58 @@ impl Embed {
+     }
+ }
+ 
++/// SIGTAR: the layer the Layers pane acts on — the active map layer, else the picked tile layer.
++fn active_now(s: &rustgis_ui_egui::rustgis_engine::Session) -> Option<crate::embed::Active> {
++    if let Some(id) = s.active_layer {
++        return Some(crate::embed::Active::Layer(id));
++    }
++    let i = s.selected_tile()?;
++    s.map().tiles.get(i).map(|t| crate::embed::Active::Tile(t.url.clone()))
++}
++
++/// SIGTAR: makes the layer a project was saved with active again, when it is still in it.
++fn restore_active(app: &mut RustGisApp, active: Option<crate::embed::Active>) {
++    let s = &mut app.session;
++    match active {
++        Some(crate::embed::Active::Layer(id)) => {
++            if s.map().layers.iter().any(|l| l.id == id) {
++                s.active_layer = Some(id);
++            }
++        }
++        Some(crate::embed::Active::Tile(url)) => {
++            let index = s.project.active_map;
++            if let Some(map) = s.project.maps.get_mut(index)
++                && map.tiles.iter().any(|t| t.url == url)
++            {
++                for t in &mut map.tiles {
++                    t.selected = t.url == url;
++                }
++                s.active_layer = None;
++            }
++        }
++        None => {}
++    }
++}
++
++/// SIGTAR: embedded in the geoportal, the assistant starts on the geoportal's own model proxy, on
++/// the page's own origin, so the provider's key stays on the server and nothing is typed in each
++/// visit. Set when the app is built (`RUSTGIS_EMBED_ASSISTANT_PATH`, `…_MODEL`), never by the page
++/// that frames it: any page may frame the app, and it must not be able to point the assistant
++/// elsewhere. The user can still change these for the visit.
++fn seed_assistant(prefs: &mut HashMap<String, String>) {
++    use rustgis_ui_egui::rustgis_assistant::provider::{PROVIDER_PREF, url_pref};
++    let Some(path) = option_env!("RUSTGIS_EMBED_ASSISTANT_PATH").map(str::trim).filter(|p| p.starts_with('/')) else {
++        return;
++    };
++    let Some(origin) = web_sys::window().and_then(|w| w.location().origin().ok()) else {
++        return;
++    };
++    let model = option_env!("RUSTGIS_EMBED_ASSISTANT_MODEL").map(str::trim).filter(|m| !m.is_empty()).unwrap_or("sigtar-asistente");
++    prefs.insert(PROVIDER_PREF.to_string(), "custom".to_string());
++    prefs.insert(url_pref("custom"), format!("{origin}{path}"));
++    prefs.insert("assistant_model_custom".to_string(), model.to_string());
++}
++
+ impl eframe::App for WebShell {
+     fn logic(&mut self, ctx: &egui::Context, frame: &mut eframe::Frame) {
+         // The GPU map backend draws inside egui's wgpu pass; hand over the render state.
+@@ -875,6 +942,7 @@ fn services(inbox: Inbox, font_inbox: Inbox, notes: Notes, ctx: egui::Context, e
+     let http_ctx = ctx.clone();
+     let (load_pref, save_pref): (Box<dyn Fn(&str) -> Option<String>>, Box<dyn Fn(&str, &str)>) = if embedded {
+         let prefs = Rc::new(RefCell::new(HashMap::<String, String>::new()));
++        seed_assistant(&mut prefs.borrow_mut());
+         let saved = prefs.clone();
+         (
+             Box::new(move |key: &str| prefs.borrow().get(key).cloned()),

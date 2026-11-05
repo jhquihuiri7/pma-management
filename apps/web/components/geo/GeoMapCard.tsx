@@ -18,10 +18,12 @@ import {
   Pencil,
   Trash2,
   Layers,
+  Lock,
 } from "lucide-react";
 import { GEO_CATEGORIES } from "@/lib/geo-mock-data";
 import type { GeoMap } from "@/types/geo";
 import EditMapDialog from "@/components/geo/EditMapDialog";
+import MapAccessDialog from "@/components/geo/MapAccessDialog";
 
 const CATEGORY_ICONS: Record<string, React.ElementType> = {
   TreePine, Building2, Users, BriefcaseBusiness, Scale, Database, Landmark,
@@ -48,6 +50,8 @@ interface Props {
 
 export default function GeoMapCard({ geoMap, canEdit, canDelete, onEdit, onDelete }: Props) {
   const [editOpen, setEditOpen] = useState(false);
+  const [accessOpen, setAccessOpen] = useState(false);
+  const [visibility, setVisibility] = useState(geoMap.visibility ?? "public");
   const [confirmDelete, setConfirmDelete] = useState(false);
   const deleteMap = useConfirmedMutation<void, void>({
     mutation: async (_args, signal) => {
@@ -101,6 +105,12 @@ export default function GeoMapCard({ geoMap, canEdit, canDelete, onEdit, onDelet
           <h3 className="font-semibold text-slate-900 text-sm leading-tight line-clamp-2 mb-1.5">
             {geoMap.title}
           </h3>
+          {visibility !== "public" && (
+            <span className="mb-1.5 inline-flex items-center gap-1 rounded-full bg-amber-50 px-2 py-0.5 text-[10px] font-medium text-amber-700">
+              <Lock className="h-2.5 w-2.5" />
+              {visibility === "internal" ? "Interno" : "Restringido"}
+            </span>
+          )}
           <p className="text-xs text-slate-500 line-clamp-2 leading-relaxed mb-3">
             {geoMap.description}
           </p>
@@ -134,6 +144,17 @@ export default function GeoMapCard({ geoMap, canEdit, canDelete, onEdit, onDelet
                   title="Editar"
                 >
                   <Pencil className="w-3.5 h-3.5" />
+                </button>
+              )}
+
+              {canDelete && (
+                /* Who may read it (ADMIN) */
+                <button
+                  onClick={() => setAccessOpen(true)}
+                  className="p-1.5 rounded-md text-slate-400 hover:text-teal-600 hover:bg-teal-50 transition-colors"
+                  title="Acceso"
+                >
+                  <Lock className="w-3.5 h-3.5" />
                 </button>
               )}
 
@@ -185,6 +206,15 @@ export default function GeoMapCard({ geoMap, canEdit, canDelete, onEdit, onDelet
           </div>
         </div>
       </div>
+
+      {accessOpen && (
+        <MapAccessDialog
+          mapId={geoMap.id}
+          mapTitle={geoMap.title}
+          onClose={() => setAccessOpen(false)}
+          onSaved={setVisibility}
+        />
+      )}
 
       {editOpen && onEdit && (
         <EditMapDialog

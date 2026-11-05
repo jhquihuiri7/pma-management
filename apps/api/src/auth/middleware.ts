@@ -47,6 +47,24 @@ export async function authenticate(req: FastifyRequest, _reply: FastifyReply): P
   req.log = req.log.child({ userId: user.id, userEmail: user.email });
 }
 
+/**
+ * For public routes that serve more to a signed-in reader (a restricted map):
+ * a valid session fills `req.user`; a missing, expired or forged token leaves
+ * the request anonymous instead of failing it. A database outage still fails.
+ */
+export async function optionalAuthenticate(req: FastifyRequest, reply: FastifyReply): Promise<void> {
+  if (req.user || !extractToken(req)) return;
+  try {
+    await authenticate(req, reply);
+  } catch (error) {
+    if ((error as { statusCode?: number })?.statusCode === 401) {
+      req.user = undefined;
+      return;
+    }
+    throw error;
+  }
+}
+
 export function requireRole(...allowed: Array<AccessTokenClaims["role"]>) {
   return async (req: FastifyRequest) => {
     if (!req.user) throw Unauthorized();

@@ -193,3 +193,18 @@ export async function buildCog(absInput: string, absOutput: string, info: GdalIn
   await runGdal("gdal_translate", args, logPath);
   return compression;
 }
+
+/**
+ * GeoJSON (optionally gzip-compressed, read through /vsigzip/) → FlatGeobuf with a
+ * packed spatial index, for the RustGIS Workspace: RustGIS reads an indexed
+ * FlatGeobuf by HTTP range, a view at a time, and keeps it in projects by its
+ * address instead of copying the features. Multi-part types are promoted so a
+ * layer mixing Polygon and MultiPolygon gets one geometry type.
+ */
+export async function buildFlatGeobuf(input: string, absOutput: string, logPath: string): Promise<void> {
+  await runGdal(
+    "ogr2ogr",
+    ["-f", "FlatGeobuf", "-nlt", "PROMOTE_TO_MULTI", "-lco", "SPATIAL_INDEX=YES", absOutput, input],
+    logPath,
+  );
+}

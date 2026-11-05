@@ -5,6 +5,7 @@ import { NotFound } from "../../lib/errors.js";
 import { buildGeoMapDir } from "../../storage/index.js";
 import { enqueueStorageDirectoryCleanup } from "../shared/storageCleanup.js";
 import { lockAndAssertGeoAdmin, lockAndAssertGeoEditor } from "./authorization.js";
+import { invalidateMapAccess, normalizeVisibility } from "./access.js";
 
 export type GeoMapInput = {
   title: string;
@@ -111,6 +112,7 @@ export async function deleteMap(id: string, actorId: string) {
     const deleted = await tx.delete(geoMaps).where(eq(geoMaps.id, id)).returning({ id: geoMaps.id });
     if (deleted.length !== 1) throw NotFound("Map not found");
   });
+  invalidateMapAccess(id);
 }
 
 function rowToApi(row: typeof geoMaps.$inferSelect) {
@@ -124,6 +126,7 @@ function rowToApi(row: typeof geoMaps.$inferSelect) {
     center: [row.centerLat, row.centerLng] as [number, number],
     zoom: row.zoom,
     tags: row.tags,
+    visibility: normalizeVisibility(row.visibility),
     createdBy: row.createdBy,
     createdAt: row.createdAt,
     updatedAt: row.updatedAt,

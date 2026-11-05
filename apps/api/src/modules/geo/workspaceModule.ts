@@ -2,13 +2,14 @@ import { and, asc, desc, eq, inArray } from "drizzle-orm";
 import type { GeoWorkspaceCatalogMap } from "@pma/types/geo";
 import { getDb } from "../../db/client.js";
 import { geoMapLayers, geoMaps, geoRasterLayers } from "../../db/schema/geo.js";
+import { readableMapsCondition, type GeoReader } from "./access.js";
 
 /**
  * Lightweight public catalog used by the temporary Workspace. Heavy vector
  * data and raster pixels keep flowing through their existing public routes.
  * Storage paths are deliberately never selected or returned here.
  */
-export async function listWorkspaceCatalog(categoryId?: string): Promise<GeoWorkspaceCatalogMap[]> {
+export async function listWorkspaceCatalog(categoryId?: string, reader?: GeoReader): Promise<GeoWorkspaceCatalogMap[]> {
   const db = getDb();
   const maps = await db
     .select({
@@ -19,7 +20,7 @@ export async function listWorkspaceCatalog(categoryId?: string): Promise<GeoWork
       createdAt: geoMaps.createdAt,
     })
     .from(geoMaps)
-    .where(categoryId ? eq(geoMaps.categoryId, categoryId) : undefined)
+    .where(and(readableMapsCondition(reader), categoryId ? eq(geoMaps.categoryId, categoryId) : undefined))
     .orderBy(desc(geoMaps.createdAt));
 
   if (maps.length === 0) return [];

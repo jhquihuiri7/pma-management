@@ -80,6 +80,21 @@ services:
       # to the 120000 default and the viewer's "API sin respuesta" banner is
       # timed off a number nobody configured.
       PREVIENE_SYNC_INTERVAL_MS: ${PREVIENE_SYNC_INTERVAL_MS:-120000}
+      # Workspace con RustGIS (docs/plan-integracion-rustgis.md §9). "legacy"
+      # keeps the old Workspace for everyone; "pilot" shows RustGIS only to
+      # GEO_WORKSPACE_PILOT_USERS (ids or e-mails, comma-separated).
+      GEO_WORKSPACE_ENGINE: ${GEO_WORKSPACE_ENGINE:-legacy}
+      GEO_WORKSPACE_PILOT_USERS: ${GEO_WORKSPACE_PILOT_USERS:-}
+      # nginx serves the .fgb/.tif files (and their byte ranges) from its
+      # read-only NAS mount when the API answers with X-Accel-Redirect.
+      GEO_FILE_ACCEL_PREFIX: ${GEO_FILE_ACCEL_PREFIX:-/_nas_files/}
+      # The Workspace assistant's model proxy. The key stays on the server
+      # (never in the browser); without WORKSPACE_AI_API_KEY the API uses the
+      # NVIDIA key already configured for PG2030.
+      WORKSPACE_AI_ENABLED: ${WORKSPACE_AI_ENABLED:-false}
+      WORKSPACE_AI_API_KEY: ${WORKSPACE_AI_API_KEY:-${NVIDIA_API_KEY:-}}
+      WORKSPACE_AI_BASE_URL: ${WORKSPACE_AI_BASE_URL:-https://integrate.api.nvidia.com/v1}
+      WORKSPACE_AI_MODEL: ${WORKSPACE_AI_MODEL:-minimaxai/minimax-m3.1-flash}
     # The Galápagos Previene API is reached over `previene-link`, NOT over the
     # host: it binds 127.0.0.1:8080, which host.docker.internal (the bridge
     # gateway) cannot reach. See the networks block at the bottom of this file
@@ -123,6 +138,16 @@ services:
         condition: service_healthy
     restart: unless-stopped
 
+  # RustGIS Web for the Workspace (infra/rustgis/build.sh builds the image:
+  # the pinned RustGIS release plus the geoportal's patch). Static files only,
+  # served by nginx at /geo/workspace/app/; no published port.
+  rustgis:
+    image: pma-management/rustgis:prod
+    container_name: pma-rustgis
+    expose:
+      - "8080"
+    restart: unless-stopped
+
   nginx:
     image: nginx:1.27-alpine
     container_name: pma-nginx
@@ -132,6 +157,9 @@ services:
     volumes:
       - ./nginx/conf.d:/etc/nginx/conf.d:ro
       - ${NGINX_SSL_CERT_DIR:-/etc/ssl/cgreg}:/etc/ssl/cgreg:ro
+      # Read-only: only reachable through X-Accel-Redirect from the API, which
+      # authorises each Workspace file first (location /_nas_files/, internal).
+      - /mnt/synology_smb/sistema-ambiental:/data/storage:ro
     depends_on:
       web:
         condition: service_started

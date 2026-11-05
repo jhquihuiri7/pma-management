@@ -85,6 +85,9 @@ services:
       NODE_ENV: development
       PORT: 3000
       API_BASE_URL: http://api:3001
+      # RustGIS for the Workspace (the rustgis service below); in production
+      # nginx serves it instead.
+      RUSTGIS_DEV_URL: http://rustgis:8080
       WATCHPACK_POLLING: "true"
     ports:
       - "3000:3000"
@@ -96,6 +99,14 @@ services:
 
   # Raster worker (dev): Node + GDAL with hot-reload. Bind-mounts ./apps/api for
   # source code and writes rasters to the same NAS mount as the API.
+  # RustGIS Web (infra/rustgis/build.sh dev). Keep the :dev tag distinct from prod.
+  rustgis:
+    image: pma-management/rustgis:dev
+    container_name: pma-rustgis
+    expose:
+      - "8080"
+    restart: unless-stopped
+
   worker:
     image: pma-management/worker:dev
     build:

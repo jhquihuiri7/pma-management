@@ -1,4 +1,4 @@
-import { pgTable, uuid, text, timestamp, jsonb, doublePrecision, integer, bigint, boolean, index, uniqueIndex } from "drizzle-orm/pg-core";
+import { pgTable, uuid, text, timestamp, jsonb, doublePrecision, integer, bigint, boolean, index, uniqueIndex, primaryKey } from "drizzle-orm/pg-core";
 import { users } from "./shared.js";
 
 export const geoMaps = pgTable(
@@ -14,6 +14,8 @@ export const geoMaps = pgTable(
     centerLng: doublePrecision("center_lng").notNull(),
     zoom: integer("zoom").notNull().default(13),
     tags: jsonb("tags"),
+    // public | internal | restricted (migration 0037; enforced in modules/geo/access.ts)
+    visibility: text("visibility").notNull().default("public"),
     createdBy: uuid("created_by").references(() => users.id, { onDelete: "set null" }),
     createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
     updatedAt: timestamp("updated_at", { withTimezone: true }).defaultNow().notNull(),
@@ -167,4 +169,72 @@ export const geoRasterLayers = pgTable(
   (t) => ({
     mapIdx: index("geo_raster_layers_map_idx").on(t.mapId),
   })
+);
+
+/** Users allowed to read a 'restricted' map (besides ADMIN and its creator). */
+export const geoMapAccess = pgTable(
+  "geo_map_access",
+  {
+    mapId: uuid("map_id")
+      .notNull()
+      .references(() => geoMaps.id, { onDelete: "cascade" }),
+    userId: uuid("user_id")
+      .notNull()
+      .references(() => users.id, { onDelete: "cascade" }),
+    createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
+  },
+  (t) => ({
+    pk: primaryKey({ columns: [t.mapId, t.userId] }),
+    userIdx: index("geo_map_access_user_idx").on(t.userId),
+  }),
+);
+
+/**
+ * Files derived from a vector revision for the RustGIS Workspace. Today only
+ * the FlatGeobuf with a spatial index ('fgb'), which RustGIS reads by HTTP range
+ * and keeps in projects by address instead of copying the features.
+ */
+export const geoLayerArtifacts = pgTable(
+  "geo_layer_artifacts",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    layerId: uuid("layer_id")
+      .notNull()
+      .references(() => geoMapLayers.id, { onDelete: "cascade" }),
+    revision: integer("revision").notNull(),
+    kind: text("kind").notNull(), // fgb
+    status: text("status").notNull().default("pending"), // pending | ready | error
+    path: text("path"),
+    sizeBytes: bigint("size_bytes", { mode: "number" }),
+    errorMessage: text("error_message"),
+    createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
+    updatedAt: timestamp("updated_at", { withTimezone: true }).defaultNow().notNull(),
+  },
+  (t) => ({
+    layerRevKindUq: uniqueIndex("geo_layer_artifacts_layer_rev_kind_uq").on(t.layerId, t.revision, t.kind),
+  }),
+);
+
+/** A RustGIS project saved from the Workspace. */
+export const geoWorkspaceProjects = pgTable(
+  "geo_workspace_projects",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    title: text("title").notNull(),
+    ownerId: uuid("owner_id")
+      .notNull()
+      .references(() => users.id, { onDelete: "cascade" }),
+    sourceMapId: uuid("source_map_id").references(() => geoMaps.id, { onDelete: "set null" }),
+    // The project exactly as RustGIS sent it (text, so numbers round-trip).
+    rustgisProject: text("rustgis_project").notNull(),
+    layerRefs: jsonb("layer_refs").notNull().default([]),
+    rustgisVersion: text("rustgis_version").notNull(),
+    revision: integer("revision").notNull().default(1),
+    sizeBytes: integer("size_bytes").notNull(),
+    createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
+    updatedAt: timestamp("updated_at", { withTimezone: true }).defaultNow().notNull(),
+  },
+  (t) => ({
+    ownerIdx: index("geo_workspace_projects_owner_idx").on(t.ownerId, t.updatedAt),
+  }),
 );

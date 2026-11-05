@@ -2,7 +2,7 @@ import type { FastifyInstance } from "fastify";
 import { z } from "zod";
 import { extname } from "node:path";
 import { randomUUID } from "node:crypto";
-import { authenticate, requireApp, requireRole } from "../../auth/middleware.js";
+import { authenticate, optionalAuthenticate, requireApp, requireRole } from "../../auth/middleware.js";
 import {
   createMap, listMaps, getMapById, updateMap, updateMapViewport, deleteMap,
 } from "../../modules/geo/mapsModule.js";
@@ -28,6 +28,15 @@ import { env } from "../../lib/env.js";
 import { beginDurableStorageIntent } from "../../modules/shared/durableFilePersistence.js";
 import { lockAndAssertGeoEditor } from "../../modules/geo/authorization.js";
 import { listWorkspaceCatalog } from "../../modules/geo/workspaceModule.js";
+import {
+  assertPublicRouteCanReadMap,
+  canReadMap,
+  GEO_VISIBILITIES,
+  invalidateMapAccess,
+} from "../../modules/geo/access.js";
+import { requestFgb } from "../../modules/geo/layerArtifacts.js";
+import { getMapAccess, listGrantedMapIds, setMapAccess } from "../../modules/geo/mapAccessModule.js";
+import { workspaceAiRoutes, workspaceV1Routes } from "./workspaceV1.js";
 import {
   createVisualization,
   deleteVisualization,
@@ -115,17 +124,46 @@ const adminOnly = [authenticate, requireApp("geo"), requireRole("ADMIN")];
 
 export async function geoRoutes(app: FastifyInstance) {
   // NOTE: no global auth hook — read routes below are intentionally public.
+  // A map's visibility (public | internal | restricted, modules/geo/access.ts)
+  // decides who may read it; public maps are served exactly as before.
 
-  app.get("/workspace/catalog", async (req) => {
+  // RustGIS Workspace (docs/plan-integracion-rustgis.md): catalog, data, projects
+  // and the assistant's model proxy. Every route there needs a session.
+  await app.register(workspaceV1Routes, { prefix: "/workspace/v1" });
+  await app.register(workspaceAiRoutes, { prefix: "/workspace/ai/v1" });
+
+  app.get("/workspace/catalog", async (req, reply) => {
     const { categoryId } = workspaceCatalogQuerySchema.parse(req.query);
-    return listWorkspaceCatalog(categoryId);
+    await optionalAuthenticate(req, reply);
+    return listWorkspaceCatalog(categoryId, req.user);
   });
 
-  app.get("/maps", async () => listMaps());
+  app.get("/maps", async (req, reply) => {
+    await optionalAuthenticate(req, reply);
+    const maps = await listMaps();
+    const reader = req.user;
+    const granted = reader && maps.some((m) => m.visibility === "restricted") ? await listGrantedMapIds(reader.sub) : new Set<string>();
+    return maps.filter((m) => canReadMap(reader, { visibility: m.visibility, createdBy: m.createdBy }, granted.has(m.id)));
+  });
 
-  app.get("/maps/:id", async (req) => {
+  app.get("/maps/:id", async (req, reply) => {
     const { id } = mapParamsSchema.parse(req.params);
+    await assertPublicRouteCanReadMap(req, reply, id);
     return getMapById(id);
+  });
+
+  // Who may read a map (ADMIN). Public by default; see modules/geo/access.ts.
+  app.get("/maps/:id/access", { preHandler: adminOnly }, async (req) => {
+    const { id } = mapParamsSchema.parse(req.params);
+    return getMapAccess(id);
+  });
+
+  app.put("/maps/:id/access", { preHandler: adminOnly }, async (req) => {
+    const { id } = mapParamsSchema.parse(req.params);
+    const body = mapAccessSchema.parse(req.body);
+    const result = await setMapAccess(id, req.user!.sub, body.visibility, body.userIds);
+    invalidateMapAccess(id);
+    return result;
   });
 
   app.post("/maps", { preHandler: geoEditor }, async (req, reply) => {
@@ -161,14 +199,16 @@ export async function geoRoutes(app: FastifyInstance) {
   });
 
   // ── Layers (GIS visualizer) ──────────────────────────────────────────────
-  app.get("/maps/:id/layers", async (req) => {
+  app.get("/maps/:id/layers", async (req, reply) => {
     const { id } = mapParamsSchema.parse(req.params);
+    await assertPublicRouteCanReadMap(req, reply, id);
     return listLayers(id);
   });
 
   // Stream a layer's normalized GeoJSON from the NAS.
   app.get("/maps/:id/layers/:layerId/data", async (req, reply) => {
     const { id, layerId } = layerParamsSchema.parse(req.params);
+    await assertPublicRouteCanReadMap(req, reply, id);
     const path = await getLayerDataPath(id, layerId);
     const storage = getStorage();
     if (!(await storage.exists(path))) throw NotFound("Layer data not found");
@@ -182,6 +222,7 @@ export async function geoRoutes(app: FastifyInstance) {
 
   app.get("/maps/:id/layers/:layerId/data/:revision", async (req, reply) => {
     const { id, layerId, revision } = layerRevisionParamsSchema.parse(req.params);
+    await assertPublicRouteCanReadMap(req, reply, id);
     const path = await getLayerRevisionDataPath(id, layerId, revision);
     const storage = getStorage();
     if (!(await storage.exists(path))) throw NotFound("Layer revision data not found");
@@ -286,6 +327,8 @@ export async function geoRoutes(app: FastifyInstance) {
       visible: parsedFields.visible,
       zIndex: parsedFields.zIndex,
     });
+    // The RustGIS Workspace reads it as a FlatGeobuf (built by the worker).
+    void requestFgb(layer.id, layer.dataRevision ?? 1).catch((err) => req.log.warn({ err }, "could not request FlatGeobuf"));
     reply.status(201);
     return { ...layer, persisted: true };
   });
@@ -311,6 +354,7 @@ export async function geoRoutes(app: FastifyInstance) {
     const { id, layerId } = layerParamsSchema.parse(req.params);
     const body = featureCreateSchema.parse(req.body);
     const result = await appendFeature(id, layerId, req.user!.sub, body);
+    void requestFgb(layerId, result.revision).catch((err) => req.log.warn({ err }, "could not request FlatGeobuf"));
     reply.status(201);
     return result;
   });
@@ -321,8 +365,9 @@ export async function geoRoutes(app: FastifyInstance) {
   });
 
   // ── Layer visualizations ────────────────────────────────────────────────
-  app.get("/maps/:id/layers/:layerId/visualizations", async (req) => {
+  app.get("/maps/:id/layers/:layerId/visualizations", async (req, reply) => {
     const { id, layerId } = layerParamsSchema.parse(req.params);
+    await assertPublicRouteCanReadMap(req, reply, id);
     return listVisualizations(id, layerId);
   });
 
@@ -359,8 +404,9 @@ export async function geoRoutes(app: FastifyInstance) {
 
   // ── Raster layers (orthophotos) ──────────────────────────────────────────
   // Public read (geoportal is browsable without a session); mutations are ADMIN.
-  app.get("/maps/:id/raster-layers", async (req) => {
+  app.get("/maps/:id/raster-layers", async (req, reply) => {
     const { id } = mapParamsSchema.parse(req.params);
+    await assertPublicRouteCanReadMap(req, reply, id);
     return listRasterLayers(id);
   });
 
@@ -373,6 +419,7 @@ export async function geoRoutes(app: FastifyInstance) {
     const Z = parseInt(zRaw, 10), X = parseInt(x, 10), Y = parseInt(y, 10);
     const tileLimit = 2 ** Z;
     if (Z > 22 || X >= tileLimit || Y >= tileLimit) throw BadRequest("Invalid tile coordinates");
+    const mapAccess = await assertPublicRouteCanReadMap(req, reply, id);
 
     const cogPath = await getProcessedCogPath(id, layerId);
     const fileUrl = `${env.TITILER_DATA_ROOT.replace(/\/+$/, "")}/${cogPath.replace(/^\/+/, "")}`;
@@ -399,8 +446,12 @@ export async function geoRoutes(app: FastifyInstance) {
 
     const body = Buffer.from(await resp.arrayBuffer());
     reply.header("Content-Type", resp.headers.get("content-type") ?? "image/png");
-    // The COG is immutable per layer id, so tiles can be cached hard.
-    reply.header("Cache-Control", "public, max-age=31536000, immutable");
+    // The COG is immutable per layer id, so tiles can be cached hard — but
+    // only privately when the map isn't public.
+    reply.header(
+      "Cache-Control",
+      mapAccess.visibility === "public" ? "public, max-age=31536000, immutable" : "private, max-age=31536000, immutable",
+    );
     return reply.send(body);
   });
 
@@ -614,6 +665,11 @@ export async function geoRoutes(app: FastifyInstance) {
     }
   });
 }
+
+const mapAccessSchema = z.object({
+  visibility: z.enum(GEO_VISIBILITIES),
+  userIds: z.array(z.string().uuid()).max(500).optional(),
+}).strict();
 
 const viewportSchema = z.object({
   center: z.tuple([

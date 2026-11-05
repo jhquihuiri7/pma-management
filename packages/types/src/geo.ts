@@ -33,6 +33,8 @@ export interface GeoMap {
   center: [number, number];
   zoom: number;
   tags?: string[];
+  /** Who may read it (API ≥ migration 0037); absent means public. */
+  visibility?: "public" | "internal" | "restricted";
   createdBy: string;
   createdAt: string;
   updatedAt?: string;

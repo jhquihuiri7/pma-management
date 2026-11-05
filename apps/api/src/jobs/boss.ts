@@ -24,6 +24,22 @@ const RASTER_QUEUE_OPTIONS = {
   retryDelay: 60,
 } as const;
 
+/**
+ * FlatGeobuf of a vector revision for the RustGIS Workspace (jobs/flatgeobuf.ts).
+ * Small, quick jobs: one per layer revision at a time.
+ */
+export const FGB_QUEUE = "build-flatgeobuf";
+
+export type FgbJob = { layerId: string; revision: number };
+
+const FGB_QUEUE_OPTIONS = {
+  name: FGB_QUEUE,
+  policy: "stately",
+  expireInSeconds: 30 * 60,
+  retryLimit: 1,
+  retryDelay: 60,
+} as const;
+
 let _boss: PgBoss | null = null;
 let _starting: Promise<PgBoss> | null = null;
 
@@ -42,6 +58,8 @@ export async function getBoss(): Promise<PgBoss> {
       // (e.g. created earlier with defaults).
       await boss.createQueue(RASTER_QUEUE, RASTER_QUEUE_OPTIONS);
       await boss.updateQueue(RASTER_QUEUE, RASTER_QUEUE_OPTIONS);
+      await boss.createQueue(FGB_QUEUE, FGB_QUEUE_OPTIONS);
+      await boss.updateQueue(FGB_QUEUE, FGB_QUEUE_OPTIONS);
       _boss = boss;
       return boss;
     })().catch((err) => {
@@ -62,6 +80,17 @@ export async function enqueueRasterProcessing(job: RasterJob): Promise<string | 
     expireInSeconds: RASTER_QUEUE_OPTIONS.expireInSeconds,
     retryLimit: RASTER_QUEUE_OPTIONS.retryLimit,
     retryDelay: RASTER_QUEUE_OPTIONS.retryDelay,
+  });
+}
+
+/** Enqueue the FlatGeobuf of a vector revision. Returns the job id (or null when one is already queued). */
+export async function enqueueFlatGeobuf(job: FgbJob): Promise<string | null> {
+  const boss = await getBoss();
+  return boss.send(FGB_QUEUE, job, {
+    singletonKey: `${job.layerId}:${job.revision}`,
+    expireInSeconds: FGB_QUEUE_OPTIONS.expireInSeconds,
+    retryLimit: FGB_QUEUE_OPTIONS.retryLimit,
+    retryDelay: FGB_QUEUE_OPTIONS.retryDelay,
   });
 }
 

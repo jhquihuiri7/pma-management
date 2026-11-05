@@ -45,3 +45,6 @@ next-env.d.ts
 /respaldo_*.sql
 /6.1 Informe PG2030 2026 1T vf 10abr26.docx
 /resultado_final.xlsx
+
+# RustGIS: directorio de trabajo de infra/rustgis/build.sh
+infra/rustgis/.build/

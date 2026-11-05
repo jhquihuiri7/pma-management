@@ -1,0 +1,88 @@
+# syntax=docker/dockerfile:1
+#
+# RustGIS Web para el Workspace del Geoportal SIGTAR — compilación completa para CI.
+#
+# ⚠ NO usar en el servidor de producción (11 GB de RAM): el perfil `web` de RustGIS enlaza con
+# LTO completo en una sola unidad y agotó la memoria del host el 2026-11-04. En el servidor, usar
+# infra/rustgis/build.sh, que compila en un contenedor con límites de memoria y CPU.
+#
+# Es la imagen oficial de RustGIS (su Dockerfile de la versión fijada, sin analítica y con
+# direcciones relativas) con un único parche propio, patches/0001-sigtar-embed.patch:
+#   - con ?embed, el asistente arranca apuntando al proxy de IA del propio geoportal
+#     (mismo origen; la clave del proveedor queda en el servidor);
+#   - la capa activa viaja en el proyecto que intercambian la página y la app, y se restaura;
+#   - el mensaje "project" con "id" recibe un "result" (acuse de apertura).
+#
+#   docker build -t pma-management/rustgis:prod infra/rustgis
+#
+# Ver infra/rustgis/README.md para actualizar la versión fijada.
+
+ARG RUSTGIS_REF=v0.5.0
+ARG RUSTGIS_COMMIT=a5603d1b2906b1c204b6b97c2eb01ac094a20adf
+
+# 1) Fuente fijada y verificada, con el parche aplicado (misma imagen base que la compilación).
+FROM --platform=$BUILDPLATFORM rust:1.99.1-slim@sha256:1a939748a7cbab172de91a014e3804a97af1394a8c844faa67fce9401c4e40fb AS source
+ARG RUSTGIS_REF
+ARG RUSTGIS_COMMIT
+RUN apt-get update \
+    && apt-get install -y --no-install-recommends ca-certificates git \
+    && rm -rf /var/lib/apt/lists/*
+RUN git clone --depth 1 --branch "${RUSTGIS_REF}" https://github.com/opengeos/RustGIS /src \
+    && test "$(git -C /src rev-parse HEAD)" = "${RUSTGIS_COMMIT}"
+COPY patches/ /patches/
+RUN cd /src && for p in /patches/*.patch; do git apply --check "$p" && git apply "$p"; done
+
+# 2) Compilación, igual que el Dockerfile oficial de v0.5.0.
+FROM --platform=$BUILDPLATFORM rust:1.99.1-slim@sha256:1a939748a7cbab172de91a014e3804a97af1394a8c844faa67fce9401c4e40fb AS build
+RUN apt-get update \
+    && apt-get install -y --no-install-recommends ca-certificates clang curl \
+    && rm -rf /var/lib/apt/lists/*
+RUN rustup target add wasm32-unknown-unknown
+ARG BUILDARCH
+RUN case "$BUILDARCH" in \
+      amd64) arch=x86_64; sum=f2b4680cd239693a646a2795e4633c625328d7b2a044fbe749fa3a2fe9e7036b ;; \
+      arm64) arch=aarch64; sum=b1d8e60e454f7fc182d9a4d95d1506ffbae947d8ba90f8f6f02da93b60f980f9 ;; \
+      *) echo "no Trunk release for BUILDARCH='$BUILDARCH' (BuildKit sets it)" >&2; exit 1 ;; \
+    esac \
+    && curl -sSfL -o /tmp/trunk.tar.gz "https://github.com/trunk-rs/trunk/releases/download/v0.21.14/trunk-${arch}-unknown-linux-gnu.tar.gz" \
+    && echo "${sum}  /tmp/trunk.tar.gz" > /tmp/trunk.sha256 \
+    && sha256sum -c /tmp/trunk.sha256 \
+    && tar xzf /tmp/trunk.tar.gz -C /usr/local/bin trunk \
+    && rm /tmp/trunk.tar.gz /tmp/trunk.sha256
+
+# Lo que el parche lee al compilar (option_env!): ruta del proxy de IA en el mismo origen y
+# nombre de modelo que el proxy traduce al modelo real configurado en el servidor.
+ARG RUSTGIS_EMBED_ASSISTANT_PATH=/api-proxy/geo/workspace/ai/v1
+ARG RUSTGIS_EMBED_ASSISTANT_MODEL=sigtar-asistente
+ENV RUSTGIS_EMBED_ASSISTANT_PATH=${RUSTGIS_EMBED_ASSISTANT_PATH} \
+    RUSTGIS_EMBED_ASSISTANT_MODEL=${RUSTGIS_EMBED_ASSISTANT_MODEL} \
+    CARGO_BUILD_JOBS=6
+
+WORKDIR /src
+COPY --from=source /src /src
+WORKDIR /src/apps/rustgis-web
+RUN --mount=type=cache,id=sigtar-rustgis-registry,target=/usr/local/cargo/registry \
+    --mount=type=cache,id=sigtar-rustgis-target,target=/src/target \
+    --mount=type=cache,id=sigtar-rustgis-trunk,target=/root/.cache/trunk \
+    trunk build --release --locked --public-url ./
+WORKDIR /src
+RUN --mount=type=cache,id=sigtar-rustgis-registry,target=/usr/local/cargo/registry \
+    --mount=type=cache,id=sigtar-rustgis-target,target=/src/target \
+    cargo xtask web-pwa dist/web
+
+# 3) Servir con el nginx de la imagen oficial.
+FROM nginxinc/nginx-unprivileged:1.31.7-alpine-slim@sha256:a8cb0f33d51fa107c96fd2bd3a71aaf564ec131e9d2bdf8700944f0ed8b170d7
+ARG RUSTGIS_REF
+ARG RUSTGIS_COMMIT
+LABEL org.opencontainers.image.title="RustGIS web app (SIGTAR)" \
+      org.opencontainers.image.description="RustGIS web app con el parche de integración del Geoportal SIGTAR" \
+      org.opencontainers.image.source="https://github.com/opengeos/RustGIS" \
+      org.opencontainers.image.licenses="Apache-2.0" \
+      org.opencontainers.image.version="${RUSTGIS_REF}-sigtar" \
+      org.opencontainers.image.revision="${RUSTGIS_COMMIT}"
+COPY --from=source /src/packaging/docker/nginx.conf /etc/nginx/conf.d/default.conf
+COPY --from=build /src/dist/web /usr/share/nginx/html
+# Apache-2.0 §4(b): los archivos modificados se declaran junto a la app servida.
+COPY patches/ /usr/share/nginx/html/sigtar-patches/
+EXPOSE 8080
+HEALTHCHECK --timeout=5s CMD wget -q --spider http://127.0.0.1:8080/healthz || exit 1
