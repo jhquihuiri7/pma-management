@@ -220,7 +220,6 @@
 .protocolo-limpieza .acc-map.leaflet-container{font-family:var(--font-ui);font-size:12px}
 .protocolo-limpieza .acc-map .leaflet-control-attribution{font-size:10px}
 /* Tiles overlap by 1 px (mapasCalor.ts); normal blending lets the top one cover the joint. */
-.protocolo-limpieza .acc-map.leaflet-container img.leaflet-tile{mix-blend-mode:normal}
 .protocolo-limpieza .acc-heat{pointer-events:none}
 .protocolo-limpieza .acc-marker{background:none;border:0}
 .protocolo-limpieza .acc-pin{position:relative;width:44px;height:44px}

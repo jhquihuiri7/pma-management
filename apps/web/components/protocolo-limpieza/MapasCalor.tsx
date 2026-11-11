@@ -4,6 +4,7 @@ import { useCallback, useEffect, useLayoutEffect, useRef, useState } from "react
 import type * as LeafletNS from "leaflet";
 import { Map as MapIcon, Maximize2, Minimize2, Minus, Plus, RotateCcw, SquareDashed } from "lucide-react";
 import "leaflet/dist/leaflet.css";
+import "maplibre-gl/dist/maplibre-gl.css";
 import { balanceGestion, type EstadoAcumulacion } from "@/lib/protocolo-limpieza/acumulacion";
 import { gradienteLimpieza } from "@/lib/protocolo-limpieza/barrios";
 import type { LimpiezaBarrio } from "@/lib/protocolo-limpieza/tablero";
@@ -46,6 +47,8 @@ export default function MapasCalor({ estado, limpieza }: { estado: EstadoAcumula
       try {
         const modulo = await import("leaflet");
         const L = (modulo as unknown as { default?: typeof modulo }).default ?? modulo;
+        // Registers `L.maplibreGL`, for the Geoportal's light basemap (it reaches for the DOM on load).
+        await import("@maplibre/maplibre-gl-leaflet");
         if (descartado || !islaRef.current || !regionRef.current) return;
         const sinMovimiento = !!window.matchMedia?.("(prefers-reduced-motion: reduce)").matches;
         mapas = createAccumulationMaps(L, { island: islaRef.current, region: regionRef.current }, { motion: !sinMovimiento });

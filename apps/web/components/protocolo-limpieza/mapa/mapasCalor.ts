@@ -7,7 +7,7 @@
 // the view add the Geoportal's neighbourhoods under the heat.
 import type * as LeafletNS from "leaflet";
 import { routes } from "@pma/types/protocolo-limpieza";
-import { OSM_RASTER } from "@/lib/basemaps";
+import { OPENFREEMAP_ATTRIBUTION, OPENFREEMAP_STYLES } from "@/lib/basemaps";
 import {
   balanceGestion,
   destination,
@@ -222,24 +222,14 @@ function voyageHtml(v: Viaje, unit: string) {
 const voyageTip = (v: Viaje, unit: string) =>
   `<strong>${esc(v.buque)}</strong> · R4 Baltra → Guayaquil<br>Salida de Baltra: ${longDate(v.salida)}, 00:00 (hora de Galápagos)<br>Llegada estimada: ${longDate(v.llegada)}, 23:59 (hora de Guayaquil)<br>${v.status === "navegando" ? `Navegando · ${Math.round(v.progress * 100)} % del trayecto` : v.status === "programado" ? "Programado: espera en Baltra" : "Arribado: espera el traslado al patio (R5)"}<br>${v.containers} contenedor${v.containers === 1 ? "" : "es"} · ${esc(qty(v.amount, unit))}`;
 
-// With fractional zoom (zoomSnap .25) the browser scales each tile on its own and smooths its
-// edges, so thin light lines show between tiles. Each tile is drawn 1 px larger than its slot
-// and painted with normal blending (protocolo-limpieza.css): the tile on top covers the joint.
-// Leaflet's own `mix-blend-mode: plus-lighter` would add the overlapping colours and draw the
-// lines in white. Only these maps: L.TileLayer itself is left alone for the rest of SIGTAR.
-const SOLAPE_TESELA_PX = 1;
-function capaOsm(L: Leaflet): LeafletNS.TileLayer {
-  type ConTeselas = LeafletNS.TileLayer & { getTileSize(): LeafletNS.Point };
-  const base = L.TileLayer.prototype as unknown as { _initTile(this: ConTeselas, tile: HTMLElement): void };
-  const SinJuntas = L.TileLayer.extend({
-    _initTile(this: ConTeselas, tile: HTMLElement) {
-      base._initTile.call(this, tile);
-      const size = this.getTileSize();
-      tile.style.width = `${size.x + SOLAPE_TESELA_PX}px`;
-      tile.style.height = `${size.y + SOLAPE_TESELA_PX}px`;
-    },
-  }) as unknown as new (url: string, options: LeafletNS.TileLayerOptions) => LeafletNS.TileLayer;
-  return new SinJuntas(OSM_RASTER.url, { attribution: OSM_RASTER.attribution, maxZoom: OSM_RASTER.maxZoom });
+// The Geoportal's light basemap ("Claro": OpenFreeMap positron, vector), drawn by MapLibre
+// inside Leaflet like in the Geoportal and in Previene. It sits in Leaflet's tilePane, under
+// the neighbourhoods, the heat and the points. MapasCalor.tsx registers `L.maplibreGL` first.
+function fondoClaro(L: Leaflet): LeafletNS.Layer {
+  return L.maplibreGL({
+    style: OPENFREEMAP_STYLES.light,
+    attributionControl: { customAttribution: OPENFREEMAP_ATTRIBUTION },
+  });
 }
 
 const latlng = (p: { lat: number; lon: number }): LatLng => [p.lat, p.lon];
@@ -304,9 +294,9 @@ export function createAccumulationMaps(
 
   const setup = (el: HTMLElement, bounds: LeafletNS.LatLngBounds, far?: boolean, controlesPropios = false): Vista => {
     // The Santa Cruz map brings its own controls (MapasCalor.tsx): zoom, reset, area and expand.
-    const map = L.map(el, { zoomSnap: 0.25, zoomDelta: 0.5, scrollWheelZoom: false, dragging: !L.Browser.mobile, minZoom: 3, zoomControl: !controlesPropios });
+    const map = L.map(el, { zoomSnap: 0.25, zoomDelta: 0.5, scrollWheelZoom: false, dragging: !L.Browser.mobile, minZoom: 3, maxZoom: 19, zoomControl: !controlesPropios });
     map.createPane("accHeat").style.zIndex = "350";
-    capaOsm(L).addTo(map);
+    fondoClaro(L).addTo(map);
     const view = { el, bounds, far, map } as Vista;
     view.heat = new Heat({ pantalla: !!far }).addTo(map) as CapaCalor;
     view.legs = legs.map((l) => {
