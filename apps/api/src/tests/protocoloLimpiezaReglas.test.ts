@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { camposDe, clean, datosAnteriores, forms, limpiarRecursos, recordKey, type OperacionLimpieza } from "../modules/protocoloLimpieza/reglas.js";
+import { admiteReportesNuevos, camposDe, clean, datosAnteriores, forms, limpiarRecursos, recordKey, type OperacionLimpieza } from "../modules/protocoloLimpieza/reglas.js";
 
 // Ported from the standalone app's tests/protocol.test.mjs and
 // tests/records.test.mjs: the rules are the same file for the web and the API.
@@ -129,4 +129,14 @@ test("resources: whole quantities above zero, with the resource (capitalised) an
   assert.throws(() => limpiarRecursos([{ ...fila, institucion: "" }]), { message: "Completa la institución del recurso 1." });
   assert.throws(() => limpiarRecursos([{ ...fila, institucion: "x".repeat(201) }]), /200 caracteres/);
   assert.throws(() => limpiarRecursos(Array.from({ length: 21 }, () => fila)), { message: "Registra como máximo 20 recursos por reporte." });
+});
+
+test("Carga en contenedores takes no new reports, but its earlier reports still validate for an edit", () => {
+  assert.equal(admiteReportesNuevos("carga"), false);
+  const nuevas = (Object.keys(forms) as OperacionLimpieza[]).filter(admiteReportesNuevos);
+  assert.deepEqual(nuevas, ["recoleccion", "patioSCY", "relleno", "puertoSCY", "embarque", "patioGYE", "recepcion", "gestion"]);
+  assert.deepEqual(nuevas.filter((k) => forms[k].route === "R1"), ["recoleccion"]);
+  assert.deepEqual(clean("carga", { fecha: "2026-11-10", contenedor: "c-1", tipo: "Escombro", t: 2, m3: 3, u: 1 }), {
+    fecha: "2026-11-10", contenedor: "C-1", tipo: "Escombro", t: 2, m3: 3, u: 1,
+  });
 });

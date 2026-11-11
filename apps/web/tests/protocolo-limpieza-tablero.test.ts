@@ -171,7 +171,9 @@ test("the form asks for the cleaning percentage right after the neighbourhood", 
 
 test("the form offers each executor its operations and suggests what was already reported", () => {
   assert.deepEqual(executors, ["GAD SCX", "OPC", "NAVIERA", "GESTORA AMBIENTAL"]);
-  assert.deepEqual(operationsOf("GAD SCX"), ["recoleccion", "carga", "relleno"]);
+  // R1 is reported only with Recolección: "Carga en contenedores" is no longer offered.
+  assert.deepEqual(operationsOf("GAD SCX"), ["recoleccion", "relleno"]);
+  assert.deepEqual(operationsOf("GAD SCX").filter((k) => forms[k].route === "R1"), ["recoleccion"]);
   assert.deepEqual(operationsOf("GESTORA AMBIENTAL"), ["recepcion", "gestion"]);
   assert.deepEqual(suggestions([reg("carga", { contenedor: "B" }), reg("carga", { contenedor: "A" }), reg("carga", { contenedor: "A" })], "contenedor"), ["A", "B"]);
   const instituciones = sugerenciasRecurso([reg("carga", {}, { recursos: [{ cantidad: 1, recurso: "grúa", institucion: "Armada" }] })], "institucion");

@@ -2,6 +2,7 @@
 // lib/dashboard.js of the standalone app. There it lived inside a DOM
 // controller; here it is pure so the React views share it and tests reach it.
 import {
+  admiteReportesNuevos,
   camposAnteriores,
   camposDe,
   conMayuscula,
@@ -209,8 +210,9 @@ export function buildCsv(rows: readonly RegistroLimpieza[]): string {
 // ── Formulario ──────────────────────────────────────────────────────────────
 export const executors: readonly string[] = Array.from(new Set(Object.values(routes).map((route) => route[1])));
 
+/** The operations a new report of the executor may use (a retired one is no longer offered). */
 export function operationsOf(executor: string): OperacionLimpieza[] {
-  return (Object.keys(forms) as OperacionLimpieza[]).filter((kind) => routes[forms[kind].route][1] === executor);
+  return (Object.keys(forms) as OperacionLimpieza[]).filter((kind) => routes[forms[kind].route][1] === executor && admiteReportesNuevos(kind));
 }
 
 // The neighbourhood is chosen from a list (the Geoportal's layer), so it is not typed with suggestions.

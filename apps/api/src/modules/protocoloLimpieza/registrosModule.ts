@@ -4,9 +4,11 @@ import { protocoloLimpiezaFotos, protocoloLimpiezaRegistros } from "../../db/sch
 import { BadRequest, Conflict } from "../../lib/errors.js";
 import { lockAndAssertActor } from "../shared/transactionalActor.js";
 import {
+  admiteReportesNuevos,
   camposDe,
   clean,
   datosAnteriores,
+  forms,
   limpiarRecursos,
   recordKey,
   type DatosRegistroLimpieza,
@@ -91,6 +93,8 @@ export async function listarRegistros(): Promise<RegistroLimpieza[]> {
 
 export async function crearRegistro(actorId: string, kind: unknown, data: unknown, recursos?: unknown): Promise<{ id: string }> {
   const entrada = validar(kind, data, recursos);
+  // A retired operation keeps its earlier reports (editarRegistro) but takes no new ones.
+  if (!admiteReportesNuevos(entrada.kind)) throw BadRequest(`«${forms[entrada.kind].name}» ya no recibe reportes nuevos.`);
   const uniqueKey = recordKey(entrada.kind, entrada.data);
   try {
     return await getDb().transaction(async (tx) => {

@@ -266,7 +266,8 @@ function FormularioReporte({ row, kind: kindInicial, records, nombresBarrios, on
         <label>
           Operación
           <select id="kind" name="kind" value={kind} disabled={editando} onChange={(e) => empezarDeNuevo(e.target.value as OperacionLimpieza)}>
-            {operationsOf(executor).map((k) => <option key={k} value={k}>{forms[k].route} · {forms[k].name}</option>)}
+            {/* An edit keeps its operation, even a retired one no longer offered for new reports. */}
+            {(editando ? [kind] : operationsOf(executor)).map((k) => <option key={k} value={k}>{forms[k].route} · {forms[k].name}</option>)}
           </select>
         </label>
       </div>

@@ -112,6 +112,32 @@ test(
         assert.equal(sinBarrio.json().message, "Completa Barrio.");
       });
 
+      await t.test("Carga en contenedores takes no new reports; an earlier one still lists and can be edited", async () => {
+        const carga = { fecha: "2026-11-10", contenedor: `C-${lote}`, tipo: "Escombro", t: 2, m3: 3, u: 1 };
+        const nuevo = await app.inject({
+          method: "POST", url: "/protocolo-limpieza/registros", headers: auth(viewerJwt), payload: { kind: "carga", data: carga },
+        });
+        assert.equal(nuevo.statusCode, 400);
+        assert.equal(nuevo.json().message, "«Carga en contenedores» ya no recibe reportes nuevos.");
+
+        // A report saved before the operation was retired.
+        const [anterior] = await db.insert(protocoloLimpiezaRegistros).values({
+          kind: "carga", data: carga, uniqueKey: `carga-anterior-${lote}`,
+          createdBy: viewerId, createdByName: "Visor de limpieza", updatedBy: viewerId, updatedByName: "Visor de limpieza",
+        }).returning({ id: protocoloLimpiezaRegistros.id });
+        registroIds.push(anterior.id);
+        const lista = await app.inject({ method: "GET", url: "/protocolo-limpieza/registros", headers: auth(viewerJwt) });
+        assert.equal(lista.json().records.find((r: { id: string }) => r.id === anterior.id)?.kind, "carga");
+        const editado = await app.inject({
+          method: "PUT", url: `/protocolo-limpieza/registros/${anterior.id}`, headers: auth(viewerJwt),
+          payload: { version: 1, kind: "carga", data: { ...carga, t: 5 } },
+        });
+        assert.equal(editado.statusCode, 200, editado.body);
+        const [fila] = await db.select().from(protocoloLimpiezaRegistros).where(inArray(protocoloLimpiezaRegistros.id, [anterior.id]));
+        assert.equal(fila.version, 2);
+        assert.equal((fila.data as Record<string, unknown>).t, 5);
+      });
+
       await t.test("guarda, evita duplicados y detecta edición concurrente", async () => {
         const recursos = [
           { cantidad: 10, recurso: "Personas", institucion: "Consejo de Gobierno" },

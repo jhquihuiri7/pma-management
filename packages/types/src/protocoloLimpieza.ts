@@ -41,6 +41,11 @@ export interface FormularioLimpieza {
   name: string;
   hint: string;
   fields: readonly CampoLimpieza[];
+  /**
+   * No longer offered for new reports. Its earlier reports still show, count
+   * and can be edited (their operation never changes).
+   */
+  retirado?: true;
 }
 
 /** [trayecto, ejecución, apoyo, recursos disponibles] as the protocol lists them. */
@@ -157,7 +162,9 @@ export const forms: Readonly<Record<OperacionLimpieza, FormularioLimpieza>> = {
     hint: "Una fila por barrio y tipo de residuo en cada fecha. Registra el porcentaje de limpieza acumulado del barrio: su último reporte pinta el barrio en el mapa.",
     fields: [date("fecha", "Fecha de recolección"), field("barrio", "Barrio"), type, ...moved("recolectada"), num("avance", "Porcentaje de limpieza del barrio (%)")],
   },
+  // Retired on 2026-11-11 at the user's request: R1 is reported only with Recolección.
   carga: {
+    retirado: true,
     route: "R1",
     name: "Carga en contenedores",
     hint: "Una fila por contenedor y tipo de residuo en cada fecha. El tablero cuenta los códigos de contenedor distintos.",
@@ -251,6 +258,9 @@ export const OPERACIONES_LIMPIEZA = Object.keys(forms) as OperacionLimpieza[];
 export function esOperacionLimpieza(kind: unknown): kind is OperacionLimpieza {
   return typeof kind === "string" && Object.hasOwn(forms, kind);
 }
+
+/** Whether a new report may use the operation: every one but the retired ones. */
+export const admiteReportesNuevos = (kind: OperacionLimpieza): boolean => !forms[kind].retirado;
 
 export const fold = (value: unknown): string => String(value ?? "").trim().normalize("NFC").toLocaleLowerCase("es");
 
