@@ -1,0 +1,150 @@
+{
+ "file_size": 149462614,
+ "filename": "nube.copc.laz",
+ "now": "2026-11-11T18:54:27+0000",
+ "pdal_version": "2.10.2 (git-version: 21d285)",
+ "reader": "readers.copc",
+ "summary": {
+  "bounds": {
+   "maxx": 798414.612,
+   "maxy": 9918252.867,
+   "maxz": 39.46,
+   "minx": 798175.605,
+   "miny": 9918014.69,
+   "minz": -12.85
+  },
+  "dimensions": "X, Y, Z, Intensity, ReturnNumber, NumberOfReturns, ScanDirectionFlag, EdgeOfFlightLine, Classification, Synthetic, KeyPoint, Withheld, Overlap, ScanAngleRank, UserData, PointSourceId, GpsTime, ScanChannel, Red, Green, Blue",
+  "num_points": 23398310,
+  "srs": {
+   "compoundwkt": "PROJCS[\"WGS 84 / UTM zone 15S\",GEOGCS[\"WGS 84\",DATUM[\"WGS_1984\",SPHEROID[\"WGS 84\",6378137,298.257223563,AUTHORITY[\"EPSG\",\"7030\"]],AUTHORITY[\"EPSG\",\"6326\"]],PRIMEM[\"Greenwich\",0,AUTHORITY[\"EPSG\",\"8901\"]],UNIT[\"degree\",0.0174532925199433,AUTHORITY[\"EPSG\",\"9122\"]],AUTHORITY[\"EPSG\",\"4326\"]],PROJECTION[\"Transverse_Mercator\"],PARAMETER[\"latitude_of_origin\",0],PARAMETER[\"central_meridian\",-93],PARAMETER[\"scale_factor\",0.9996],PARAMETER[\"false_easting\",500000],PARAMETER[\"false_northing\",10000000],UNIT[\"metre\",1,AUTHORITY[\"EPSG\",\"9001\"]],AXIS[\"Easting\",EAST],AXIS[\"Northing\",NORTH],AUTHORITY[\"EPSG\",\"32715\"]]",
+   "horizontal": "PROJCS[\"WGS 84 / UTM zone 15S\",GEOGCS[\"WGS 84\",DATUM[\"WGS_1984\",SPHEROID[\"WGS 84\",6378137,298.257223563,AUTHORITY[\"EPSG\",\"7030\"]],AUTHORITY[\"EPSG\",\"6326\"]],PRIMEM[\"Greenwich\",0,AUTHORITY[\"EPSG\",\"8901\"]],UNIT[\"degree\",0.0174532925199433,AUTHORITY[\"EPSG\",\"9122\"]],AUTHORITY[\"EPSG\",\"4326\"]],PROJECTION[\"Transverse_Mercator\"],PARAMETER[\"latitude_of_origin\",0],PARAMETER[\"central_meridian\",-93],PARAMETER[\"scale_factor\",0.9996],PARAMETER[\"false_easting\",500000],PARAMETER[\"false_northing\",10000000],UNIT[\"metre\",1,AUTHORITY[\"EPSG\",\"9001\"]],AXIS[\"Easting\",EAST],AXIS[\"Northing\",NORTH],AUTHORITY[\"EPSG\",\"32715\"]]",
+   "isgeocentric": false,
+   "isgeographic": false,
+   "json": {
+    "type": "ProjectedCRS",
+    "name": "WGS 84 / UTM zone 15S",
+    "base_crs": {
+     "type": "GeographicCRS",
+     "name": "WGS 84",
+     "datum": {
+      "type": "GeodeticReferenceFrame",
+      "name": "World Geodetic System 1984",
+      "ellipsoid": {
+       "name": "WGS 84",
+       "semi_major_axis": 6378137,
+       "inverse_flattening": 298.257223563
+      }
+     },
+     "coordinate_system": {
+      "subtype": "ellipsoidal",
+      "axis": [
+       {
+        "name": "Geodetic latitude",
+        "abbreviation": "Lat",
+        "direction": "north",
+        "unit": "degree"
+       },
+       {
+        "name": "Geodetic longitude",
+        "abbreviation": "Lon",
+        "direction": "east",
+        "unit": "degree"
+       }
+      ]
+     },
+     "id": {
+      "authority": "EPSG",
+      "code": 4326
+     }
+    },
+    "conversion": {
+     "name": "UTM zone 15S",
+     "method": {
+      "name": "Transverse Mercator",
+      "id": {
+       "authority": "EPSG",
+       "code": 9807
+      }
+     },
+     "parameters": [
+      {
+       "name": "Latitude of natural origin",
+       "value": 0,
+       "unit": "degree",
+       "id": {
+        "authority": "EPSG",
+        "code": 8801
+       }
+      },
+      {
+       "name": "Longitude of natural origin",
+       "value": -93,
+       "unit": "degree",
+       "id": {
+        "authority": "EPSG",
+        "code": 8802
+       }
+      },
+      {
+       "name": "Scale factor at natural origin",
+       "value": 0.9996,
+       "unit": "unity",
+       "id": {
+        "authority": "EPSG",
+        "code": 8805
+       }
+      },
+      {
+       "name": "False easting",
+       "value": 500000,
+       "unit": "metre",
+       "id": {
+        "authority": "EPSG",
+        "code": 8806
+       }
+      },
+      {
+       "name": "False northing",
+       "value": 10000000,
+       "unit": "metre",
+       "id": {
+        "authority": "EPSG",
+        "code": 8807
+       }
+      }
+     ]
+    },
+    "coordinate_system": {
+     "subtype": "Cartesian",
+     "axis": [
+      {
+       "name": "Easting",
+       "abbreviation": "E",
+       "direction": "east",
+       "unit": "metre"
+      },
+      {
+       "name": "Northing",
+       "abbreviation": "N",
+       "direction": "north",
+       "unit": "metre"
+      }
+     ]
+    },
+    "id": {
+     "authority": "EPSG",
+     "code": 32715
+    }
+   },
+   "prettycompoundwkt": "PROJCS[\"WGS 84 / UTM zone 15S\",\n    GEOGCS[\"WGS 84\",\n        DATUM[\"WGS_1984\",\n            SPHEROID[\"WGS 84\",6378137,298.257223563,\n                AUTHORITY[\"EPSG\",\"7030\"]],\n            AUTHORITY[\"EPSG\",\"6326\"]],\n        PRIMEM[\"Greenwich\",0,\n            AUTHORITY[\"EPSG\",\"8901\"]],\n        UNIT[\"degree\",0.0174532925199433,\n            AUTHORITY[\"EPSG\",\"9122\"]],\n        AUTHORITY[\"EPSG\",\"4326\"]],\n    PROJECTION[\"Transverse_Mercator\"],\n    PARAMETER[\"latitude_of_origin\",0],\n    PARAMETER[\"central_meridian\",-93],\n    PARAMETER[\"scale_factor\",0.9996],\n    PARAMETER[\"false_easting\",500000],\n    PARAMETER[\"false_northing\",10000000],\n    UNIT[\"metre\",1,\n        AUTHORITY[\"EPSG\",\"9001\"]],\n    AXIS[\"Easting\",EAST],\n    AXIS[\"Northing\",NORTH],\n    AUTHORITY[\"EPSG\",\"32715\"]]",
+   "prettywkt": "PROJCS[\"WGS 84 / UTM zone 15S\",\n    GEOGCS[\"WGS 84\",\n        DATUM[\"WGS_1984\",\n            SPHEROID[\"WGS 84\",6378137,298.257223563,\n                AUTHORITY[\"EPSG\",\"7030\"]],\n            AUTHORITY[\"EPSG\",\"6326\"]],\n        PRIMEM[\"Greenwich\",0,\n            AUTHORITY[\"EPSG\",\"8901\"]],\n        UNIT[\"degree\",0.0174532925199433,\n            AUTHORITY[\"EPSG\",\"9122\"]],\n        AUTHORITY[\"EPSG\",\"4326\"]],\n    PROJECTION[\"Transverse_Mercator\"],\n    PARAMETER[\"latitude_of_origin\",0],\n    PARAMETER[\"central_meridian\",-93],\n    PARAMETER[\"scale_factor\",0.9996],\n    PARAMETER[\"false_easting\",500000],\n    PARAMETER[\"false_northing\",10000000],\n    UNIT[\"metre\",1,\n        AUTHORITY[\"EPSG\",\"9001\"]],\n    AXIS[\"Easting\",EAST],\n    AXIS[\"Northing\",NORTH],\n    AUTHORITY[\"EPSG\",\"32715\"]]",
+   "proj4": "+proj=utm +zone=15 +south +datum=WGS84 +units=m +no_defs",
+   "units": {
+    "horizontal": "metre",
+    "vertical": ""
+   },
+   "vertical": "",
+   "wkt": "PROJCS[\"WGS 84 / UTM zone 15S\",GEOGCS[\"WGS 84\",DATUM[\"WGS_1984\",SPHEROID[\"WGS 84\",6378137,298.257223563,AUTHORITY[\"EPSG\",\"7030\"]],AUTHORITY[\"EPSG\",\"6326\"]],PRIMEM[\"Greenwich\",0,AUTHORITY[\"EPSG\",\"8901\"]],UNIT[\"degree\",0.0174532925199433,AUTHORITY[\"EPSG\",\"9122\"]],AUTHORITY[\"EPSG\",\"4326\"]],PROJECTION[\"Transverse_Mercator\"],PARAMETER[\"latitude_of_origin\",0],PARAMETER[\"central_meridian\",-93],PARAMETER[\"scale_factor\",0.9996],PARAMETER[\"false_easting\",500000],PARAMETER[\"false_northing\",10000000],UNIT[\"metre\",1,AUTHORITY[\"EPSG\",\"9001\"]],AXIS[\"Easting\",EAST],AXIS[\"Northing\",NORTH],AUTHORITY[\"EPSG\",\"32715\"]]"
+  }
+ }
+}

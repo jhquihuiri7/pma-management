@@ -10,7 +10,7 @@
 --
 -- Run it inside a single transaction, and afterwards:
 --
---   delete from drizzle.__drizzle_migrations where hash like '%0031_pg2030_catalog_schema%';
+--   delete from drizzle.__drizzle_migrations where created_at = 1787700000000; -- 0031_pg2030_catalog_schema
 DROP TABLE IF EXISTS "pg2030_usuario_institucion";--> statement-breakpoint
 DROP TABLE IF EXISTS "pg2030_instituciones";--> statement-breakpoint
 DROP TABLE IF EXISTS "pg2030_conflictos_importacion";--> statement-breakpoint

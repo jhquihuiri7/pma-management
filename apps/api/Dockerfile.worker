@@ -1,11 +1,33 @@
 # Worker image: Node + GDAL CLI. GDAL lives ONLY inside this image — never on
 # the host. Built on Debian (bookworm) because its gdal-bin ships the COG driver
 # with JPEG/WEBP/DEFLATE support, which the alpine GDAL package lacks.
+
+# Point clouds (Protocolo de limpieza · Visualización 3D): untwine turns an
+# uploaded LAS/LAZ into a COPC (cloud optimised point cloud) and PDAL reads its
+# metadata. Debian bookworm no longer packages PDAL, so both come pinned from
+# conda-forge into /opt/pointcloud with their own libraries. gdal-bin below is
+# untouched: the worker calls them by absolute path and /opt/pointcloud never
+# goes on PATH.
+FROM node:20-bookworm-slim AS pointcloud
+ARG MICROMAMBA_VERSION=2.10.0-0
+RUN apt-get update \
+  && apt-get install -y --no-install-recommends ca-certificates curl \
+  && rm -rf /var/lib/apt/lists/*
+RUN curl -fsSL -o /usr/local/bin/micromamba \
+      "https://github.com/mamba-org/micromamba-releases/releases/download/${MICROMAMBA_VERSION}/micromamba-linux-64" \
+  && chmod +x /usr/local/bin/micromamba \
+  && MAMBA_ROOT_PREFIX=/tmp/mamba micromamba create -y -q -p /opt/pointcloud -c conda-forge \
+       untwine=1.5.1 libpdal-core=2.10.2 \
+  && rm -rf /tmp/mamba \
+  && test -x /opt/pointcloud/bin/untwine \
+  && /opt/pointcloud/bin/pdal --version
+
 FROM node:20-bookworm-slim AS base
 
 RUN apt-get update \
   && apt-get install -y --no-install-recommends gdal-bin unzip \
   && rm -rf /var/lib/apt/lists/*
+COPY --from=pointcloud /opt/pointcloud /opt/pointcloud
 
 WORKDIR /app
 
@@ -25,6 +47,7 @@ FROM node:20-bookworm-slim AS runner
 RUN apt-get update \
   && apt-get install -y --no-install-recommends gdal-bin unzip \
   && rm -rf /var/lib/apt/lists/*
+COPY --from=pointcloud /opt/pointcloud /opt/pointcloud
 
 WORKDIR /app
 ENV NODE_ENV=production

@@ -6,7 +6,7 @@
 -- under GEO/maps/{mapId}/layers/{layerId}/artifacts/ and can be deleted by hand.
 -- Run it inside a single transaction, and afterwards:
 --
---   delete from drizzle.__drizzle_migrations where hash like '%0037_geo_workspace%';
+--   delete from drizzle.__drizzle_migrations where created_at = 1792077600000; -- 0037_geo_workspace
 DROP TABLE IF EXISTS "geo_workspace_projects";
 DROP TABLE IF EXISTS "geo_layer_artifacts";
 DROP TABLE IF EXISTS "geo_map_access";

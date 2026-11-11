@@ -1,0 +1,31 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="128" height="128" viewBox="21 8 93 93" role="img" aria-labelledby="pr-t">
+<title id="pr-t">Relleno sanitario · disposición</title>
+<defs><linearGradient id="pr-body" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#ffffff"/><stop offset="1" stop-color="#fdf0c4"/></linearGradient></defs>
+<g transform="translate(-1 -8)"><g class="pr-rock"><path d="M28 85l5-5.5 6.5 2 1 5.5-6.5 3z" fill="#a8a29e" stroke="#0a2c40" stroke-opacity=".45" stroke-width="1.3" stroke-linejoin="round"/><path d="M33 79l3.5-3.5 4.4 1 .3 3.6-4.2 2z" fill="#d6d3d1" stroke="#0a2c40" stroke-opacity=".45" stroke-width="1.3" stroke-linejoin="round"/></g></g>
+<g fill="#94a3b8"><circle class="pr-s1" cx="63" cy="34" r="3.4" fill-opacity=".8"/><circle class="pr-s2" cx="63" cy="34" r="3.4" fill-opacity=".8"/><circle class="pr-s3" cx="63" cy="34" r="3.4" fill-opacity=".8"/></g>
+<g class="pr-dozer">
+<rect x="61.4" y="38" width="3.4" height="16" rx="1.2" fill="#0a2c40"/>
+<rect x="70" y="31" width="18" height="24" fill="url(#pr-body)" stroke="#0a2c40" stroke-opacity=".45" stroke-width="1.3" stroke-linejoin="round"/>
+<rect x="72.5" y="34" width="13" height="11" rx="1.6" fill="#bae6fd"/>
+<rect x="68" y="28.5" width="22" height="4.6" rx="2" fill="#0a2c40"/>
+<path d="M49 57.5Q49 53 53.5 53H88V66H49Z" fill="url(#pr-body)" stroke="#0a2c40" stroke-opacity=".45" stroke-width="1.3" stroke-linejoin="round"/>
+<rect x="49" y="62.5" width="39" height="2.4" fill="#0a2c40" fill-opacity=".85"/>
+<path d="M39 71.5H53" stroke="#0a2c40" stroke-width="4.6" stroke-linecap="round"/>
+<path d="M41 59.5L51 57.5" stroke="#557083" stroke-width="2.8" stroke-linecap="round"/>
+<path d="M32.5 51Q28 65 33.5 79H42.5Q39 65 42.5 52.5Z" fill="#0a2c40"/>
+<rect x="50" y="65.5" width="40" height="12" rx="6" fill="#0f2a3a"/>
+<circle cx="56.5" cy="71.6" r="3.3" fill="#5b7688"/><circle cx="64.5" cy="71.6" r="3.3" fill="#5b7688"/><circle cx="72.5" cy="71.6" r="3.3" fill="#5b7688"/><circle cx="80.5" cy="71.6" r="3.3" fill="#5b7688"/>
+</g>
+<g class="pr-w-body">
+<ellipse cx="104" cy="78.8" rx="9.5" ry="2.2" fill="#0f172a" opacity=".22"/>
+<path d="M100.8 65V76.8M107.2 65V76.8" stroke="#1e293b" stroke-width="3.8" stroke-linecap="round"/>
+<path d="M98.2 77.3h4.4M105.4 77.3h4.4" stroke="#78350f" stroke-width="2.6" stroke-linecap="round"/>
+<path d="M108.6 54l2 8.5" stroke="#f97316" stroke-width="3.4" stroke-linecap="round"/>
+<rect x="97.4" y="50" width="13.2" height="16" rx="4.6" fill="#f97316"/>
+<path d="M97.4 56.4h13.2M97.4 61h13.2" stroke="#fef08a" stroke-width="1.7"/>
+<circle cx="104" cy="45.4" r="4.6" fill="#e9b48a"/>
+<path d="M98.5 44.4a5.5 5.5 0 0 1 11 0z" fill="#facc15"/>
+<rect x="97.2" y="43.5" width="13.6" height="2.1" rx="1" fill="#ca8a04"/>
+<g class="pr-w-arm"><path d="M99.5 54L92 59.5" stroke="#f97316" stroke-width="3.4" stroke-linecap="round"/><circle cx="92" cy="59.5" r="2" fill="#e9b48a"/><path d="M92 59.5L83 75.5" stroke="#92400e" stroke-width="2.3" stroke-linecap="round"/><path d="M86 75l-7 -3.6 3.4 6 -7 3.6z" fill="#cbd5e1" stroke="#64748b" stroke-width=".9" stroke-linejoin="round"/></g>
+</g>
+</svg>

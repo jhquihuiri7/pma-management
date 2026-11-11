@@ -11,7 +11,7 @@
 --
 -- And afterwards, so the runner does not think 0029 is still applied:
 --
---   delete from drizzle.__drizzle_migrations where hash like '%0029_pg2030_module%';
+--   delete from drizzle.__drizzle_migrations where created_at = 1787600000000; -- 0029_pg2030_module
 
 -- Postgres cannot remove a value from an enum. The type has to be rebuilt, and
 -- every column that uses it re-pointed at the new one.

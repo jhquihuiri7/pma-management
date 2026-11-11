@@ -267,6 +267,20 @@
       "when": 1792077600000,
       "tag": "0037_geo_workspace",
       "breakpoints": true
+    },
+    {
+      "idx": 38,
+      "version": "7",
+      "when": 1792177600000,
+      "tag": "0038_protocolo_limpieza_module",
+      "breakpoints": true
+    },
+    {
+      "idx": 39,
+      "version": "7",
+      "when": 1792277600000,
+      "tag": "0039_protocolo_limpieza_nubes",
+      "breakpoints": true
     }
   ]
 }

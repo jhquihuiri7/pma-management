@@ -35,6 +35,12 @@ const schema = z.object({
   // Hard timeout for a single GDAL invocation (ms). Default 3 h — comfortably
   // above a 5 GB COG build, and below pg-boss's 4 h job expiration.
   RASTER_JOB_TIMEOUT_MS: z.coerce.number().int().positive().default(10_800_000),
+  // Point clouds of the Protocolo de limpieza (Visualización 3D). The worker
+  // image ships untwine and PDAL from conda-forge under /opt/pointcloud
+  // (apps/api/Dockerfile.worker); each conversion is cut after the timeout.
+  NUBE_UNTWINE_BIN: z.string().default("/opt/pointcloud/bin/untwine"),
+  NUBE_PDAL_BIN: z.string().default("/opt/pointcloud/bin/pdal"),
+  NUBE_JOB_TIMEOUT_MS: z.coerce.number().int().positive().default(7_200_000),
 
   // TiTiler (internal tile server). The browser NEVER reaches it directly — the
   // API proxies tiles and injects the COG path, so TiTiler can't be used to read

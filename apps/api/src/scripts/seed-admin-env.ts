@@ -53,7 +53,7 @@ async function seedAdminFromEnv() {
     console.log(`✓ Usuario creado: ${userId}`);
 
     // Asignar todas las apps
-    const apps = ["pma", "rgdp", "geo", "previene", "pg2030", "plan_familiar", "riesgos"] as const;
+    const apps = ["pma", "rgdp", "geo", "previene", "pg2030", "plan_familiar", "riesgos", "protocolo_limpieza"] as const;
     await db.insert(userApps).values(
       apps.map((appKey) => ({
         userId: userId,

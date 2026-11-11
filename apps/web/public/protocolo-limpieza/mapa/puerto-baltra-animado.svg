@@ -1,0 +1,33 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="128" height="128" viewBox="7 6 116 116" role="img" aria-labelledby="pb-t">
+<title id="pb-t">Puerto de Baltra · embarque</title>
+<defs><linearGradient id="pb-hull" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#16405e"/><stop offset="1" stop-color="#0a2c40"/></linearGradient></defs>
+<style>.pb-trolley{transform-origin:30px 40px;animation:pbtrolley 4.2s ease-in-out infinite}@keyframes pbtrolley{0%,10%,100%{transform:translateX(0)}45%,60%{transform:translateX(54px)}}.pb-ship{transform-origin:92px 92px;animation:pbship 2.2s ease-in-out infinite}@keyframes pbship{0%,100%{transform:translateY(0) rotate(0)}50%{transform:translateY(1.8px) rotate(.8deg)}}.pb-w-arm{transform-origin:51.5px 64px;animation:pbwarm 1.1s ease-in-out infinite}@keyframes pbwarm{0%,100%{transform:rotate(-18deg)}50%{transform:rotate(24deg)}}@media (prefers-reduced-motion:reduce){*{animation:none!important}}</style>
+<g class="pb-ship">
+<g stroke="#0a2c40" stroke-opacity=".45" stroke-width="1.3" stroke-linejoin="round"><rect x="66" y="66" width="11" height="10" rx="1" fill="#fbbf24"/><rect x="78" y="66" width="11" height="10" rx="1" fill="#34d399"/><rect x="90" y="66" width="11" height="10" rx="1" fill="#f87171"/><rect x="72" y="56" width="11" height="10" rx="1" fill="#fb923c"/><rect x="84" y="56" width="11" height="10" rx="1" fill="#e2e8f0"/></g>
+<rect x="104" y="54" width="14" height="22" rx="1.6" fill="#fff" stroke="#0a2c40" stroke-opacity=".45" stroke-width="1.3" stroke-linejoin="round"/><rect x="106" y="58" width="10" height="3.4" rx="1" fill="#1e3a8a"/>
+<path d="M60 76H122L119 98H66Q62 98 61 95Z" fill="url(#pb-hull)"/>
+<path d="M61.6 92H119.8L119 98H66Q62 98 61 95Z" fill="#ef4444"/>
+<path d="M62 79H121.6" stroke="#fff" stroke-opacity=".85" stroke-width="1.8"/>
+</g>
+<path d="M16 88V36M36 88V36" stroke="#facc15" stroke-width="4"/>
+<path d="M16 50L36 64M36 50L16 64" stroke="#ca8a04" stroke-width="1.6"/>
+<rect x="9" y="29" width="103" height="7" rx="1.6" fill="#facc15" stroke="#ca8a04" stroke-width="1"/>
+<path d="M12 35l6-5 6 5 6-5 6 5 6-5 6 5 6-5 6 5 6-5 6 5 6-5 6 5 6-5 6 5 6-5 4 3.4" fill="none" stroke="#ca8a04" stroke-width="1.2"/>
+<g class="pb-trolley">
+<rect x="22" y="36" width="16" height="6" rx="1.4" fill="#0a2c40"/>
+<path d="M30 42V50" stroke="#0a2c40" stroke-width="1.8"/>
+<rect x="21" y="50" width="18" height="11" rx="1.2" fill="#38bdf8"/><path d="M26 53v5M30 53v5M34 53v5" stroke="#0369a1" stroke-width="1.2" stroke-linecap="round"/>
+</g>
+<g class="pb-w-body">
+<ellipse cx="47" cy="88.8" rx="9.5" ry="2.2" fill="#0f172a" opacity=".22"/>
+<path d="M43.8 75V86.8M50.2 75V86.8" stroke="#1e293b" stroke-width="3.8" stroke-linecap="round"/>
+<path d="M41.2 87.3h4.4M48.4 87.3h4.4" stroke="#78350f" stroke-width="2.6" stroke-linecap="round"/>
+<path d="M42.4 64l-2 8.5" stroke="#f97316" stroke-width="3.4" stroke-linecap="round"/>
+<rect x="40.4" y="60" width="13.2" height="16" rx="4.6" fill="#f97316"/>
+<path d="M40.4 66.4h13.2M40.4 71h13.2" stroke="#fef08a" stroke-width="1.7"/>
+<circle cx="47" cy="55.4" r="4.6" fill="#e9b48a"/>
+<path d="M41.5 54.4a5.5 5.5 0 0 1 11 0z" fill="#facc15"/>
+<rect x="40.2" y="53.5" width="13.6" height="2.1" rx="1" fill="#ca8a04"/>
+<g class="pb-w-arm"><path d="M51.5 64L59 69.5" stroke="#f97316" stroke-width="3.4" stroke-linecap="round"/><circle cx="59" cy="69.5" r="2" fill="#e9b48a"/><path d="M59 70.5L61 56.5" stroke="#334155" stroke-width="2" stroke-linecap="round"/><path d="M61 56.5l9 2 -1 6 -8 -1z" fill="#ef4444"/></g>
+</g>
+</svg>

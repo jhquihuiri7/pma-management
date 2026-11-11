@@ -4,6 +4,7 @@ import { storageCleanupJobs } from "../../db/schema/shared.js";
 import { pmaEvidences, pmaFormats } from "../../db/schema/pma.js";
 import { rgdpEvidences, rgdpFormats } from "../../db/schema/rgdp.js";
 import { geoRasterLayers } from "../../db/schema/geo.js";
+import { protocoloLimpiezaNubes } from "../../db/schema/protocoloLimpieza.js";
 import { getStorage, type StorageProvider } from "../../storage/index.js";
 
 type DbTransaction = Parameters<Parameters<ReturnType<typeof getDb>["transaction"]>[0]>[0];
@@ -214,6 +215,17 @@ async function isPathStillReferenced(
       .where(eq(geoRasterLayers.id, rasterTmp[1]))
       .limit(1);
     if (rows[0]?.status === "queued" || rows[0]?.status === "processing") return true;
+  }
+  // A point cloud's folder (Protocolo de limpieza · Visualización 3D) holds its original and
+  // its COPC: it is removed only once the cloud's row is gone.
+  const nubeDirectory = /^PROTOCOLO_LIMPIEZA\/nubes\/([0-9a-f-]{36})$/i.exec(storagePath);
+  if (nubeDirectory) {
+    const rows = await db
+      .select({ id: protocoloLimpiezaNubes.id })
+      .from(protocoloLimpiezaNubes)
+      .where(eq(protocoloLimpiezaNubes.id, nubeDirectory[1]))
+      .limit(1);
+    if (rows.length > 0) return true;
   }
   const lookups = await Promise.all([
     db.select({ id: pmaEvidences.id }).from(pmaEvidences).where(eq(pmaEvidences.storagePath, storagePath)).limit(1),

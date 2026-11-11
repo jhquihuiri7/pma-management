@@ -18,7 +18,7 @@
 --
 -- And afterwards, so the runner does not think 0018 is still applied:
 --
---   delete from drizzle.__drizzle_migrations where hash like '%0018_previene_module%';
+--   delete from drizzle.__drizzle_migrations where created_at = 1784541600010; -- 0018_previene_module
 
 -- ── 1. The tables ──────────────────────────────────────────────────────────
 -- previene_media has an ON DELETE CASCADE FK onto previene_reports, so it goes

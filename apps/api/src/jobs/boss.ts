@@ -40,6 +40,23 @@ const FGB_QUEUE_OPTIONS = {
   retryDelay: 60,
 } as const;
 
+/**
+ * Point clouds of the Protocolo de limpieza (Visualización 3D): untwine turns
+ * the uploaded LAS/LAZ into a COPC (jobs/procesarNube.ts). One job per cloud at
+ * a time; no automatic retry, since a bad file fails the same way again (the
+ * user retries from the viewer). Expiration well above a multi-GB conversion.
+ */
+export const NUBE_QUEUE = "protocolo-limpieza-nube";
+
+export type NubeJob = { id: string };
+
+const NUBE_QUEUE_OPTIONS = {
+  name: NUBE_QUEUE,
+  policy: "stately",
+  expireInSeconds: 3 * 60 * 60,
+  retryLimit: 0,
+} as const;
+
 let _boss: PgBoss | null = null;
 let _starting: Promise<PgBoss> | null = null;
 
@@ -60,6 +77,8 @@ export async function getBoss(): Promise<PgBoss> {
       await boss.updateQueue(RASTER_QUEUE, RASTER_QUEUE_OPTIONS);
       await boss.createQueue(FGB_QUEUE, FGB_QUEUE_OPTIONS);
       await boss.updateQueue(FGB_QUEUE, FGB_QUEUE_OPTIONS);
+      await boss.createQueue(NUBE_QUEUE, NUBE_QUEUE_OPTIONS);
+      await boss.updateQueue(NUBE_QUEUE, NUBE_QUEUE_OPTIONS);
       _boss = boss;
       return boss;
     })().catch((err) => {
@@ -91,6 +110,16 @@ export async function enqueueFlatGeobuf(job: FgbJob): Promise<string | null> {
     expireInSeconds: FGB_QUEUE_OPTIONS.expireInSeconds,
     retryLimit: FGB_QUEUE_OPTIONS.retryLimit,
     retryDelay: FGB_QUEUE_OPTIONS.retryDelay,
+  });
+}
+
+/** Queue the conversion of a point cloud. Null when one is already queued for it. */
+export async function enqueueNube(job: NubeJob): Promise<string | null> {
+  const boss = await getBoss();
+  return boss.send(NUBE_QUEUE, job, {
+    singletonKey: job.id,
+    expireInSeconds: NUBE_QUEUE_OPTIONS.expireInSeconds,
+    retryLimit: NUBE_QUEUE_OPTIONS.retryLimit,
   });
 }
 

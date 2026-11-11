@@ -1,14 +1,19 @@
 import "dotenv/config";
 import { env } from "./lib/env.js";
 import {
+  enqueueNube,
   enqueueRasterProcessing,
   getBoss,
   stopBoss,
+  NUBE_QUEUE,
   RASTER_QUEUE,
   FGB_QUEUE,
   type FgbJob,
+  type NubeJob,
   type RasterJob,
 } from "./jobs/boss.js";
+import { limpiarTemporalesNubes, procesarTrabajoNube } from "./jobs/procesarNube.js";
+import { nubesEnProceso } from "./modules/protocoloLimpieza/nubesModule.js";
 import { processFlatGeobuf } from "./jobs/flatgeobuf.js";
 import { listFgbToBuild, requestFgb } from "./modules/geo/layerArtifacts.js";
 import {
@@ -37,6 +42,11 @@ const RASTER_RECONCILE_INTERVAL_MS = 60_000;
 const FGB_RECONCILE_INTERVAL_MS = 120_000;
 const FGB_RECONCILE_BATCH = 40;
 let fgbReconcileTimer: NodeJS.Timeout | undefined;
+// Point clouds still 'procesando' are queued again (the queue's singleton key makes it
+// idempotent): an upload whose enqueue was lost, or a worker that stopped mid-conversion.
+const NUBE_RECONCILE_INTERVAL_MS = 120_000;
+let nubeReconcileTimer: NodeJS.Timeout | undefined;
+let nubeReconcilePromise: Promise<void> | null = null;
 let fgbReconcilePromise: Promise<void> | null = null;
 let cleanupTimer: NodeJS.Timeout | undefined;
 let mailTimer: NodeJS.Timeout | undefined;
@@ -89,6 +99,18 @@ async function reconcileQueuedRasters(): Promise<void> {
     }
   })().finally(() => { rasterReconcilePromise = null; });
   return rasterReconcilePromise;
+}
+
+async function reconcileNubes(): Promise<void> {
+  if (nubeReconcilePromise) return nubeReconcilePromise;
+  nubeReconcilePromise = (async () => {
+    let queued = 0;
+    for (const id of await nubesEnProceso()) {
+      if (await enqueueNube({ id })) queued += 1;
+    }
+    if (queued > 0) console.log(`[worker] point clouds: ${queued} conversion(s) queued again`);
+  })().finally(() => { nubeReconcilePromise = null; });
+  return nubeReconcilePromise;
 }
 
 async function reconcileFlatGeobufs(): Promise<void> {
@@ -219,6 +241,16 @@ async function main() {
     },
   );
 
+  // Point clouds (Protocolo de limpieza): one conversion at a time.
+  await limpiarTemporalesNubes().catch((err) => console.error("[worker] point cloud temp cleanup failed:", err));
+  await boss.work<NubeJob>(
+    NUBE_QUEUE,
+    { batchSize: 1 },
+    async (jobs) => {
+      for (const job of jobs) await procesarTrabajoNube(job.data.id);
+    },
+  );
+
   await drainStorageCleanup().catch((err) => console.error("[worker] initial storage cleanup failed:", err));
   cleanupTimer = setInterval(() => {
     void drainStorageCleanup().catch((err) => console.error("[worker] storage cleanup failed:", err));
@@ -239,6 +271,11 @@ async function main() {
     void reconcileFlatGeobufs().catch((err) => console.error("[worker] flatgeobuf reconciliation failed:", err));
   }, FGB_RECONCILE_INTERVAL_MS);
   fgbReconcileTimer.unref();
+  await reconcileNubes().catch((err) => console.error("[worker] initial point cloud reconciliation failed:", err));
+  nubeReconcileTimer = setInterval(() => {
+    void reconcileNubes().catch((err) => console.error("[worker] point cloud reconciliation failed:", err));
+  }, NUBE_RECONCILE_INTERVAL_MS);
+  nubeReconcileTimer.unref();
 
   if (isPrevieneConfigured()) {
     await syncPreviene().catch((err) => console.error("[worker] initial previene sync failed:", err));
@@ -274,11 +311,12 @@ async function shutdown(signal: string) {
   if (mailTimer) clearInterval(mailTimer);
   if (rasterReconcileTimer) clearInterval(rasterReconcileTimer);
   if (fgbReconcileTimer) clearInterval(fgbReconcileTimer);
+  if (nubeReconcileTimer) clearInterval(nubeReconcileTimer);
   if (previeneTimer) clearInterval(previeneTimer);
   if (pg2030Timer) clearInterval(pg2030Timer);
   await stopBoss().catch((error) => console.error("[worker] failed to stop pg-boss:", error));
   await Promise.allSettled(
-    [cleanupPromise, mailPromise, rasterReconcilePromise, previenePromise, pg2030Promise].filter(Boolean) as Promise<void>[]
+    [cleanupPromise, mailPromise, rasterReconcilePromise, nubeReconcilePromise, previenePromise, pg2030Promise].filter(Boolean) as Promise<void>[]
   );
   await closeMail().catch((error) => console.error("[worker] failed to close SMTP:", error));
   await closeDb().catch((error) => console.error("[worker] failed to close database pool:", error));

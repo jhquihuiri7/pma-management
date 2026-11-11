@@ -34,7 +34,7 @@ import { Plus, Trash2, Send, Pencil, X } from "lucide-react";
 import { toast } from "sonner";
 import { User, type Pg2030Institucion } from "@/types";
 
-type AppKey = "pma" | "rgdp" | "geo" | "previene" | "pg2030" | "plan_familiar" | "riesgos";
+type AppKey = "pma" | "rgdp" | "geo" | "previene" | "pg2030" | "plan_familiar" | "riesgos" | "protocolo_limpieza";
 
 const APP_LABELS: Record<AppKey, string> = {
   pma: "PMA",
@@ -44,9 +44,10 @@ const APP_LABELS: Record<AppKey, string> = {
   pg2030: "PG2030",
   plan_familiar: "Plan Familiar",
   riesgos: "Gestión de Riesgos",
+  protocolo_limpieza: "Protocolo de limpieza",
 };
 
-const ALL_APPS: AppKey[] = ["pma", "rgdp", "geo", "previene", "pg2030", "plan_familiar", "riesgos"];
+const ALL_APPS: AppKey[] = ["pma", "rgdp", "geo", "previene", "pg2030", "plan_familiar", "riesgos", "protocolo_limpieza"];
 
 const emptyForm = {
   name: "",

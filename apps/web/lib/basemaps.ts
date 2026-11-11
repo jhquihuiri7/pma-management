@@ -53,3 +53,16 @@ export const OPENFREEMAP_ATTRIBUTION =
   '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> &middot; ' +
   '<a href="https://www.openmaptiles.org/">OpenMapTiles</a> &middot; ' +
   '<a href="https://openfreemap.org/">OpenFreeMap</a>';
+
+/**
+ * OpenStreetMap's own raster tiles, used as-is by the Protocolo de limpieza
+ * heat maps (Leaflet `L.tileLayer`), which asked for OpenStreetMap and no
+ * other basemap. No key. The office resolver used to answer SERVFAIL for
+ * openstreetmap.org (see the note in components/plan-familiar/LocationPicker);
+ * if these maps come up blank there, check DNS before the code.
+ */
+export const OSM_RASTER = {
+  url: "https://tile.openstreetmap.org/{z}/{x}/{y}.png",
+  maxZoom: 19,
+  attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a>',
+} as const;

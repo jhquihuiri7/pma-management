@@ -6,6 +6,7 @@
   "types": "./src/index.ts",
   "exports": {
     ".": "./src/index.ts",
-    "./geo": "./src/geo.ts"
+    "./geo": "./src/geo.ts",
+    "./protocolo-limpieza": "./src/protocoloLimpieza.ts"
   }
 }

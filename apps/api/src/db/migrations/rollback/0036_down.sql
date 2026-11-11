@@ -5,7 +5,7 @@
 -- pre-deploy dump if the old state matters). Run it inside a single
 -- transaction, and afterwards:
 --
---   delete from drizzle.__drizzle_migrations where hash like '%0036_riesgos_sin_revision%';
+--   delete from drizzle.__drizzle_migrations where created_at = 1791977600000; -- 0036_riesgos_sin_revision
 DO $$ BEGIN
   CREATE TYPE "riesgos_estado" AS ENUM ('pendiente', 'validado', 'excluido');
 EXCEPTION

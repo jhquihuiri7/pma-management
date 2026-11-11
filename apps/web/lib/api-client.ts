@@ -71,7 +71,8 @@ function apiUrl(input: string): string {
     input.startsWith("/previene/") ||
     input.startsWith("/pg2030/") ||
     input.startsWith("/plan-familiar/") ||
-    input.startsWith("/riesgos/")
+    input.startsWith("/riesgos/") ||
+    input.startsWith("/protocolo-limpieza/")
   ) {
     return `${BASE_URL}${input}`;
   }
@@ -425,7 +426,7 @@ export const auth = {
       !response.user.adminId ||
       !["ADMIN", "REPORTER", "VIEWER"].includes(response.user.role) ||
       !Array.isArray(response.user.apps) ||
-      response.user.apps.some((app) => !["pma", "rgdp", "geo", "previene", "pg2030", "plan_familiar", "riesgos"].includes(app))
+      response.user.apps.some((app) => !["pma", "rgdp", "geo", "previene", "pg2030", "plan_familiar", "riesgos", "protocolo_limpieza"].includes(app))
     ) {
       throw new ApiError(200, "El servidor devolvió una sesión inválida", response, "invalid_response");
     }
@@ -452,6 +453,6 @@ export const auth = {
     name: string;
     role: "ADMIN" | "REPORTER" | "VIEWER";
     adminId: string;
-    apps: Array<"pma" | "rgdp" | "geo" | "previene" | "pg2030" | "plan_familiar" | "riesgos">;
+    apps: Array<"pma" | "rgdp" | "geo" | "previene" | "pg2030" | "plan_familiar" | "riesgos" | "protocolo_limpieza">;
   } }>("/auth/me"),
 };

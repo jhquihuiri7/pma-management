@@ -4,15 +4,16 @@ import { useRouter } from "next/navigation";
 import { useEffect } from "react";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
-import { Leaf, Shield, LogOut, Map, Users, Siren, Target, Home, LifeBuoy } from "lucide-react";
+import { Leaf, Shield, LogOut, Map, Users, Siren, Target, Home, LifeBuoy, Recycle } from "lucide-react";
 import { useAuth } from "@/lib/auth-context";
+import { APP_HOME } from "@/lib/app-homes";
 
 const SUBSYSTEM_APPS = [
   {
     key: "pma",
     label: "Plan de Manejo Ambiental",
     description: "Gestión de planes, evidencias y reportes ambientales.",
-    href: "/pma/dashboard",
+    href: APP_HOME.pma,
     icon: Leaf,
     color: "text-green-600",
     border: "border-green-200 hover:border-green-400",
@@ -22,7 +23,7 @@ const SUBSYSTEM_APPS = [
     key: "rgdp",
     label: "Registro Generador de Desechos Peligrosos",
     description: "Planes, generación de residuos peligrosos y evidencias de los generadores.",
-    href: "/rgdp/dashboard",
+    href: APP_HOME.rgdp,
     icon: Shield,
     color: "text-blue-600",
     border: "border-blue-200 hover:border-blue-400",
@@ -32,7 +33,7 @@ const SUBSYSTEM_APPS = [
     key: "geo",
     label: "Geoportal Ambiental",
     description: "Exploración de mapas interactivos y datos geoespaciales.",
-    href: "/geo/dashboard",
+    href: APP_HOME.geo,
     icon: Map,
     color: "text-teal-600",
     border: "border-teal-200 hover:border-teal-400",
@@ -42,7 +43,7 @@ const SUBSYSTEM_APPS = [
     key: "previene",
     label: "Galápagos Previene",
     description: "Reportes ciudadanos de emergencias y eventos naturales.",
-    href: "/previene",
+    href: APP_HOME.previene,
     icon: Siren,
     color: "text-emerald-600",
     border: "border-emerald-200 hover:border-emerald-400",
@@ -52,7 +53,7 @@ const SUBSYSTEM_APPS = [
     key: "pg2030",
     label: "PG2030",
     description: "Seguimiento al Plan Galápagos 2030.",
-    href: "/pg2030/dashboard",
+    href: APP_HOME.pg2030,
     icon: Target,
     color: "text-indigo-600",
     border: "border-indigo-200 hover:border-indigo-400",
@@ -62,7 +63,7 @@ const SUBSYSTEM_APPS = [
     key: "plan_familiar",
     label: "Plan Familiar de Emergencia",
     description: "Consulta los planes registrados por las familias de Galápagos.",
-    href: "/plan-familiar/resultados",
+    href: APP_HOME.plan_familiar,
     icon: Home,
     color: "text-cyan-700",
     border: "border-cyan-200 hover:border-cyan-400",
@@ -72,11 +73,21 @@ const SUBSYSTEM_APPS = [
     key: "riesgos",
     label: "Gestión de Riesgos",
     description: "Recursos institucionales y delegados para el COE Provincial y el Comité Territorial.",
-    href: "/riesgos/admin",
+    href: APP_HOME.riesgos,
     icon: LifeBuoy,
     color: "text-orange-600",
     border: "border-orange-200 hover:border-orange-400",
     bg: "hover:bg-orange-50",
+  },
+  {
+    key: "protocolo_limpieza",
+    label: "Protocolo de limpieza",
+    description: "Trazabilidad de residuos y escombros de Santa Cruz a Guayaquil.",
+    href: APP_HOME.protocolo_limpieza,
+    icon: Recycle,
+    color: "text-amber-700",
+    border: "border-amber-200 hover:border-amber-400",
+    bg: "hover:bg-amber-50",
   },
 ] as const;
 

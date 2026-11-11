@@ -9,7 +9,7 @@
 --
 -- Run it inside a single transaction, and afterwards:
 --
---   delete from drizzle.__drizzle_migrations where hash like '%0035_riesgos_module%';
+--   delete from drizzle.__drizzle_migrations where created_at = 1791877600000; -- 0035_riesgos_module
 DROP TABLE IF EXISTS "riesgos_delegaciones";
 DROP TABLE IF EXISTS "riesgos_recursos";
 DROP TABLE IF EXISTS "riesgos_fichas";

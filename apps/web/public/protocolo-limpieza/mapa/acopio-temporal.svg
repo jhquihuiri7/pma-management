@@ -1,0 +1,29 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="128" height="128" viewBox="5 16 112 112" role="img" aria-labelledby="pa-t">
+<title id="pa-t">Acopio temporal · carga de contenedores</title>
+<defs><linearGradient id="pa-front" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#ffffff"/><stop offset="1" stop-color="#d9efe8"/></linearGradient><linearGradient id="pa-pile" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#a16207"/><stop offset="1" stop-color="#713f12"/></linearGradient></defs>
+<path d="M6 108C10 90 22 80 33 82C41 83 46 94 48 108Z" fill="url(#pa-pile)"/>
+<g><circle cx="18" cy="96" r="5.4" fill="#166534"/><circle cx="29" cy="89" r="5.8" fill="#334155"/><circle cx="38" cy="97" r="5" fill="#1f2937"/><circle cx="25" cy="100" r="4.4" fill="#4d7c0f"/><path d="M12 104l5-4 6 2-2 5z" fill="#e7e5e4"/></g>
+<g class="pa-hoist">
+<path d="M87 -10V30" stroke="#0a2c40" stroke-width="3" stroke-linecap="round"/>
+<circle cx="87" cy="33.6" r="3.6" fill="none" stroke="#0a2c40" stroke-width="2.6"/>
+<path d="M85 36.4L68 50M89 36.4L108 48" stroke="#0a2c40" stroke-width="2" stroke-linecap="round"/>
+<path d="M66 54L76 48H116L106 54Z" fill="#f2fbf8" stroke="#0a2c40" stroke-opacity=".45" stroke-width="1.3" stroke-linejoin="round"/>
+<path d="M106 54L116 48V78L106 84Z" fill="#a6d8c7" stroke="#0a2c40" stroke-opacity=".45" stroke-width="1.3" stroke-linejoin="round"/>
+<rect x="66" y="54" width="40" height="30" fill="url(#pa-front)" stroke="#0a2c40" stroke-opacity=".45" stroke-width="1.3" stroke-linejoin="round"/>
+<g stroke="#bddfd3" stroke-width="2" stroke-linecap="round"><path d="M71 59V79M76 59V79M96 59V79M101 59V79"/></g>
+<rect x="66" y="81" width="40" height="3" fill="#0a2c40"/>
+<circle cx="86" cy="69" r="8.6" fill="#0f766e"/><path d="M82.21 65.82A4.95 4.95 0 0 1 87.53 64.29" fill="none" stroke="#fff" stroke-width="1.87" stroke-linecap="round"/><path d="M89.83 65.04L87.81 62.36L86.62 66.02Z" fill="#fff" stroke="#fff" stroke-width="0.5" stroke-linejoin="round"/><path d="M90.65 67.31A4.95 4.95 0 0 1 89.31 72.68" fill="none" stroke="#fff" stroke-width="1.87" stroke-linecap="round"/><path d="M87.51 74.3L90.85 73.89L88.27 71.03Z" fill="#fff" stroke="#fff" stroke-width="0.5" stroke-linejoin="round"/><path d="M85.14 73.87A4.95 4.95 0 0 1 81.16 70.03" fill="none" stroke="#fff" stroke-width="1.87" stroke-linecap="round"/><path d="M80.66 67.66L79.34 70.75L83.11 69.95Z" fill="#fff" stroke="#fff" stroke-width="0.5" stroke-linejoin="round"/>
+</g>
+<g class="pa-w-body">
+<ellipse cx="54" cy="106.8" rx="9.5" ry="2.2" fill="#0f172a" opacity=".22"/>
+<path d="M50.8 93V104.8M57.2 93V104.8" stroke="#1e293b" stroke-width="3.8" stroke-linecap="round"/>
+<path d="M48.2 105.3h4.4M55.4 105.3h4.4" stroke="#78350f" stroke-width="2.6" stroke-linecap="round"/>
+<path d="M58.6 82l2 8.5" stroke="#f97316" stroke-width="3.4" stroke-linecap="round"/>
+<rect x="47.4" y="78" width="13.2" height="16" rx="4.6" fill="#f97316"/>
+<path d="M47.4 84.4h13.2M47.4 89h13.2" stroke="#fef08a" stroke-width="1.7"/>
+<circle cx="54" cy="73.4" r="4.6" fill="#e9b48a"/>
+<path d="M48.5 72.4a5.5 5.5 0 0 1 11 0z" fill="#facc15"/>
+<rect x="47.2" y="71.5" width="13.6" height="2.1" rx="1" fill="#ca8a04"/>
+<g class="pa-w-arm"><path d="M49.5 82L42 87.5" stroke="#f97316" stroke-width="3.4" stroke-linecap="round"/><circle cx="42" cy="87.5" r="2" fill="#e9b48a"/><path d="M42 87.5L33 103.5" stroke="#92400e" stroke-width="2.3" stroke-linecap="round"/><path d="M36 103l-7 -3.6 3.4 6 -7 3.6z" fill="#cbd5e1" stroke="#64748b" stroke-width=".9" stroke-linejoin="round"/></g>
+</g>
+</svg>

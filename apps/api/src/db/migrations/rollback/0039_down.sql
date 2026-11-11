@@ -1,0 +1,18 @@
+-- Rollback of 0039_protocolo_limpieza_nubes.sql — Protocolo de limpieza ·
+-- Visualización 3D.
+--
+-- NOT run by the migration runner. Rolling the images back is enough: the
+-- table is inert once the api no longer references it. Use this only if it
+-- must actually disappear. Every cloud record is destroyed; dump them first if
+-- they matter:
+--
+--   docker exec pma-postgres pg_dump -U postgres -d pma_db -t protocolo_limpieza_nubes > protocolo_limpieza_nubes.sql
+--
+-- The LAS/LAZ originals and their COPC stay in storage under
+-- PROTOCOLO_LIMPIEZA/nubes/ and can be deleted by hand. Afterwards:
+--
+--   delete from drizzle.__drizzle_migrations where created_at = 1792277600000;
+--
+-- (`hash` is the SHA-256 of the SQL, not the file name; `created_at` is the
+-- migration's `when` in meta/_journal.json.)
+DROP TABLE IF EXISTS "protocolo_limpieza_nubes";

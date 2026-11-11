@@ -18,6 +18,7 @@ import {
   FieldLabel,
 } from "@/components/ui/field"
 import { Input } from "@/components/ui/input"
+import { APP_HOME } from "@/lib/app-homes"
 
 export function LoginForm({
   className,
@@ -46,7 +47,8 @@ export function LoginForm({
       if (next) {
         router.push(next)
       } else if (user.apps.length === 1) {
-        router.push(`/${user.apps[0]}/dashboard`)
+        // Each app's own home: not all of them live at /<app>/dashboard.
+        router.push(APP_HOME[user.apps[0]] ?? "/select-app")
       } else {
         router.push("/select-app")
       }
