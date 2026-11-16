@@ -1,7 +1,7 @@
 "use client";
 
 import { Fragment, useMemo } from "react";
-import { MapPin, Package, Route, Users } from "lucide-react";
+import { MapPin, Route, Users } from "lucide-react";
 import { conMayuscula, type RutaLimpieza } from "@pma/types/protocolo-limpieza";
 import { computeAccumulation } from "@/lib/protocolo-limpieza/acumulacion";
 import { colorLimpieza } from "@/lib/protocolo-limpieza/barrios";
@@ -12,10 +12,8 @@ import {
   listaLimpieza,
   number,
   recursosPorRuta,
-  unidadesPorRuta,
   type FilaLimpieza,
   type RecursosRuta,
-  type UnidadesRuta,
 } from "@/lib/protocolo-limpieza/tablero";
 import { useProtocoloLimpieza } from "./contexto";
 import FlujoLogistico from "./FlujoLogistico";
@@ -31,7 +29,6 @@ export default function TableroVista() {
   const limpieza = useMemo(() => limpiezaPorBarrio(records), [records]);
   const filasLimpieza = useMemo(() => listaLimpieza(nombresBarrios, limpieza), [nombresBarrios, limpieza]);
   const recursos = useMemo(() => recursosPorRuta(records), [records]);
-  const unidades = useMemo(() => unidadesPorRuta(records, today), [records, today]);
 
   return (
     <section id="dashboard" className="view">
@@ -45,67 +42,15 @@ export default function TableroVista() {
       <MapasCalor estado={estado} limpieza={limpieza} />
       <div className="overview">
         <RecursosPorRuta filas={recursos} onRoute={showRouteRecords} />
-        {/* Beside the tall resources table: the units, and the neighbourhoods under them. */}
-        <div className="overview-columna">
-          <UnidadesPorRuta filas={unidades} onRoute={showRouteRecords} />
-          <article className="panel">
-            <div className="panel-heading">
-              <h2><MapPin className="ico" />Limpieza por barrio</h2>
-              <span className="caption">Último porcentaje reportado en R1</span>
-            </div>
-            <LimpiezaBarrios filas={filasLimpieza} />
-          </article>
-        </div>
+        <article className="panel">
+          <div className="panel-heading">
+            <h2><MapPin className="ico" />Limpieza por barrio</h2>
+            <span className="caption">Último porcentaje reportado en R1</span>
+          </div>
+          <LimpiezaBarrios filas={filasLimpieza} />
+        </article>
       </div>
     </section>
-  );
-}
-
-/**
- * Colchones y RAEE de cada ruta hasta hoy, contados como en el flujo: lo que entró a la ruta y lo que
- * aún queda en ella (no pasó a la siguiente).
- */
-function UnidadesPorRuta({ filas, onRoute }: { filas: UnidadesRuta[]; onRoute(route: RutaLimpieza): void }) {
-  const celda = (v: number) => <td className={`recursos-num unidades-num${v ? "" : " is-cero"}`}>{number(v)}</td>;
-  return (
-    <article className="panel unidades-panel">
-      <div className="panel-heading">
-        <h2><Package className="ico" />Unidades por ruta</h2>
-        <span className="caption">Hasta hoy: lo que entró y lo que aún queda</span>
-      </div>
-      <div className="table-wrap">
-        <table className="recursos-tabla unidades-tabla">
-          <thead>
-            <tr>
-              <th scope="col" rowSpan={2}>Ruta</th>
-              <th scope="colgroup" colSpan={2} className="unidades-grupo">Colchones</th>
-              <th scope="colgroup" colSpan={2} className="unidades-grupo">RAEE</th>
-            </tr>
-            <tr>
-              <th scope="col" className="recursos-num">Entró</th>
-              <th scope="col" className="recursos-num">Queda</th>
-              <th scope="col" className="recursos-num">Entró</th>
-              <th scope="col" className="recursos-num">Queda</th>
-            </tr>
-          </thead>
-          <tbody>
-            {filas.map(({ route, colchones, raee }) => (
-              <tr key={route}>
-                <td className="recursos-ruta">
-                  <button type="button" className="recursos-ir" onClick={() => onRoute(route)} title={`Ver los registros de ${route}`}>
-                    <RouteTag route={route} size={34} />
-                  </button>
-                </td>
-                {celda(colchones.entro)}
-                {celda(colchones.queda)}
-                {celda(raee.entro)}
-                {celda(raee.queda)}
-              </tr>
-            ))}
-          </tbody>
-        </table>
-      </div>
-    </article>
   );
 }
 

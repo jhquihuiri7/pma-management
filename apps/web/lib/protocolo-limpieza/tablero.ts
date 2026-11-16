@@ -16,7 +16,7 @@ import {
   type RegistroLimpieza,
   type RutaLimpieza,
 } from "@pma/types/protocolo-limpieza";
-import { computeAccumulation, escenaRuta, type EstadoAcumulacion, type RegistroCalculo, type Unidad } from "./acumulacion";
+import { escenaRuta, type EstadoAcumulacion, type Unidad } from "./acumulacion";
 import { claveBarrio } from "./barrios";
 
 export type VistaLimpieza = "dashboard" | "history" | "protocol" | "nubes";
@@ -161,24 +161,6 @@ export function recursosPorRuta(records: readonly RegistroLimpieza[]): RecursosR
       .sort((a, b) => eventDate(b).localeCompare(eventDate(a)) || (b.updatedAt ?? "").localeCompare(a.updatedAt ?? ""))[0];
     return { route, fecha: ultimo ? eventDate(ultimo) : null, recursos: ultimo?.recursos ?? [] };
   });
-}
-
-// ── Unidades por ruta ───────────────────────────────────────────────────────
-export interface UnidadesRuta {
-  route: RutaLimpieza;
-  /** What the route moved up to today, and what is still at its point (not passed on yet). */
-  colchones: { entro: number; queda: number };
-  raee: { entro: number; queda: number };
-}
-
-/** Mattresses and WEEE of each route, counted like the flow (computeAccumulation, up to today). */
-export function unidadesPorRuta(records: readonly RegistroCalculo[], today: string): UnidadesRuta[] {
-  const [colchones, raee] = (["colchones", "raee"] as const).map((unit) => computeAccumulation(records, { unit, today }));
-  return RUTAS_LIMPIEZA.map((route) => ({
-    route,
-    colchones: { entro: colchones.moved[route], queda: colchones.stock[route] },
-    raee: { entro: raee.moved[route], queda: raee.stock[route] },
-  }));
 }
 
 /** "20 Personas, necesidad 25 (CGREG) | 2 Volquetas (GAD SCX)": for the CSV and the search. */
