@@ -11,6 +11,7 @@ import {
   currentDate,
   displayDate,
   executors,
+  indicadores,
   limpiezaPorBarrio,
   listaLimpieza,
   operationsOf,
@@ -297,10 +298,44 @@ test("the prefilled dates keep their distance from the main one, and the photo i
   assert.equal(prellenado([despues, antes], "patioGYE", "2026-11-10")?.data.contenedor, "B");
 });
 
-test("the unit selector offers mattresses and WEEE, and the CSV keeps the units total after them", () => {
-  assert.deepEqual(UNIDADES.map(([u]) => u), ["t", "m3", "u", "colchones", "raee"]);
+test("the unit selector offers tonnes and cubic metres only, and the CSV keeps the units total after the units", () => {
+  assert.deepEqual(UNIDADES.map(([u]) => u), ["t", "m3"]);
   assert.equal(qtyText(12, "colchones"), "12 colchones");
   assert.equal(qtyText(3, "raee"), "3 RAEE");
   const i = csvFields.indexOf("raee");
   assert.deepEqual(csvFields.slice(i - 1, i + 2), ["colchones", "raee", "u"]);
+});
+
+test("indicators: totals up to today in the dashboard's unit, rubble only to the landfill, and the average cleaning", () => {
+  const records = [
+    reg("recoleccion", { fecha: "2026-11-15", barrio: "Punta Estrada", tipo: "Desecho", t: 4, m3: 6, colchones: 10, raee: 2, u: 12, avance: 40 }),
+    reg("recoleccion", { fecha: "2026-11-16", barrio: "Las Ninfas", tipo: "Escombro", t: 1.5, m3: 2, colchones: 0, raee: 0, u: 0, avance: 90 }),
+    // After today: not counted in the totals yet, like in the flow.
+    reg("recoleccion", { fecha: "2026-11-20", barrio: "Miramar", tipo: "Desecho", t: 9, m3: 9, colchones: 9, raee: 9, u: 18, avance: 20 }),
+    // The landfill counts by its entry date, and only rubble.
+    reg("relleno", { fecha: "2026-11-14", recepcion: "2026-11-15", tipo: "Escombro", t: 0.7, m3: 1, documento: "C-1" }),
+    reg("relleno", { fecha: "2026-11-15", recepcion: "2026-11-15", tipo: "Desecho", t: 3, m3: 4, documento: "C-2" }),
+    reg("relleno", { fecha: "2026-11-16", recepcion: "2026-11-17", tipo: "Escombro", t: 5, m3: 5, documento: "C-3" }),
+    // R6 is the reception by the waste manager; the accredited management does not add up.
+    reg("recepcion", { fecha: "2026-11-16", contenedor: "A-1", tipo: "Desecho", t: 2, m3: 3, colchones: 1, raee: 0, u: 1, documento: "R-1" }),
+    reg("gestion", { fecha: "2026-11-16", contenedor: "A-1", tipo: "Desecho", t: 2, m3: 3, colchones: 1, raee: 0, u: 1, documento: "G-1" }),
+  ];
+  const limpieza = limpiezaPorBarrio(records);
+  const today = "2026-11-16";
+
+  assert.deepEqual(indicadores(records, limpieza, "t", today), {
+    recolectados: 5.5,
+    relleno: 0.7,
+    gestionados: 2,
+    colchones: 10,
+    raee: 2,
+    // The cleaning is the panel's: the latest report of each neighbourhood, even after today.
+    limpieza: 50,
+    barriosReportados: 3,
+  });
+  const enM3 = indicadores(records, limpieza, "m3", today);
+  assert.deepEqual([enM3.recolectados, enM3.relleno, enM3.gestionados, enM3.colchones], [8, 1, 3, 10]);
+  assert.deepEqual(indicadores([], new Map(), "t", today), {
+    recolectados: 0, relleno: 0, gestionados: 0, colchones: 0, raee: 0, limpieza: null, barriosReportados: 0,
+  });
 });

@@ -8,17 +8,21 @@ import { colorLimpieza } from "@/lib/protocolo-limpieza/barrios";
 import {
   currentDate,
   displayDate,
+  indicadores,
   limpiezaPorBarrio,
   listaLimpieza,
   number,
+  pctText,
   recursosPorRuta,
+  unitSymbol,
   type FilaLimpieza,
+  type Indicadores,
   type RecursosRuta,
 } from "@/lib/protocolo-limpieza/tablero";
 import { useProtocoloLimpieza } from "./contexto";
 import FlujoLogistico from "./FlujoLogistico";
 import MapasCalor from "./MapasCalor";
-import { RouteTag } from "./RutaIcono";
+import { RouteIcon, RouteTag } from "./RutaIcono";
 
 /** Tablero: flujo logístico, mapa de calor, recursos por ruta y limpieza por barrio. */
 export default function TableroVista() {
@@ -29,9 +33,11 @@ export default function TableroVista() {
   const limpieza = useMemo(() => limpiezaPorBarrio(records), [records]);
   const filasLimpieza = useMemo(() => listaLimpieza(nombresBarrios, limpieza), [nombresBarrios, limpieza]);
   const recursos = useMemo(() => recursosPorRuta(records), [records]);
+  const totales = useMemo(() => indicadores(records, limpieza, unit, today), [records, limpieza, unit, today]);
 
   return (
     <section id="dashboard" className="view">
+      <FilaIndicadores datos={totales} unit={unit} />
       <section className="panel flow-panel">
         <div className="panel-heading">
           <h2><Route className="ico" />Flujo logístico de residuos</h2>
@@ -51,6 +57,40 @@ export default function TableroVista() {
         </article>
       </div>
     </section>
+  );
+}
+
+/** Los seis totales de arriba del tablero, hasta hoy, con los nombres que dio el usuario. */
+function FilaIndicadores({ datos, unit }: { datos: Indicadores; unit: string }) {
+  const { limpieza, barriosReportados: n } = datos;
+  const tarjetas: ReadonlyArray<{ route: string; nombre: string; valor: string; medida?: string; nota: string }> = [
+    { route: "R1", nombre: "Residuos recolectados totales (R1)", valor: number(datos.recolectados), medida: unitSymbol(unit), nota: "Escombro y desecho" },
+    { route: "R2.1", nombre: "Desechos trasladados al relleno sanitario SCX totales (R2.1)", valor: number(datos.relleno), medida: unitSymbol(unit), nota: "Solo escombro" },
+    { route: "R6", nombre: "Residuos gestionados totales (R6)", valor: number(datos.gestionados), medida: unitSymbol(unit), nota: "Recepción por la gestora" },
+    { route: "R1", nombre: "Cantidad de (Colchones) gestionados totales (R1)", valor: number(datos.colchones), medida: "unid.", nota: "Recolección" },
+    { route: "R1", nombre: "Cantidad de (RAEE) gestionados totales (R1)", valor: number(datos.raee), medida: "unid.", nota: "Recolección" },
+    {
+      route: "R1",
+      nombre: "Porcentaje de limpieza de barrios (R1)",
+      valor: limpieza === null ? "—" : pctText(limpieza / 100),
+      nota: n ? `Promedio de ${n} ${n === 1 ? "barrio reportado" : "barrios reportados"}` : "Sin reportes",
+    },
+  ];
+  return (
+    <dl className="indicadores" aria-label="Indicadores hasta hoy">
+      {tarjetas.map(({ route, nombre, valor, medida, nota }) => (
+        <div key={nombre} className="indicador">
+          <dt>
+            <RouteIcon route={route} size={30} />
+            <span className="indicador-nombre">{nombre}</span>
+          </dt>
+          <dd>
+            <span className="indicador-valor">{valor}{medida && <small> {medida}</small>}</span>
+            <span className="indicador-nota">{nota}</span>
+          </dd>
+        </div>
+      ))}
+    </dl>
   );
 }
 

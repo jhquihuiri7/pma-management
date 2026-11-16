@@ -107,6 +107,17 @@
 .protocolo-limpieza .panel h2{display:flex;align-items:center;gap:8px;font-size:12px;font-weight:600;letter-spacing:.07em;text-transform:uppercase;color:var(--ink-2)}
 .protocolo-limpieza .panel h2 .ico{color:var(--teal-600)}
 .protocolo-limpieza .overview{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:20px;align-items:stretch}
+/* Indicadores: seis totales al inicio del tablero, montados sobre el hero */
+.protocolo-limpieza .indicadores{display:grid;grid-template-columns:repeat(6,minmax(0,1fr));gap:14px;margin:0}
+.protocolo-limpieza .indicador{display:flex;flex-direction:column;gap:10px;min-width:0;padding:14px 16px 15px;border:1px solid var(--line-soft);border-radius:16px;background:#fff;box-shadow:var(--shadow-card)}
+.protocolo-limpieza .indicador dt{display:grid;gap:8px;justify-items:start}
+.protocolo-limpieza .indicador-nombre{font-size:12px;font-weight:600;line-height:1.35;color:var(--ink-2)}
+.protocolo-limpieza .indicador dd{display:grid;gap:3px;margin:auto 0 0}
+.protocolo-limpieza .indicador-valor{font-size:24px;font-weight:700;line-height:1.1;color:var(--ink);font-variant-numeric:tabular-nums;overflow-wrap:anywhere}
+.protocolo-limpieza .indicador-valor small{font-size:13px;font-weight:600;color:var(--ink-3)}
+.protocolo-limpieza .indicador-nota{font-size:11.5px;color:var(--subtle)}
+@media(max-width:1180px){.protocolo-limpieza .indicadores{grid-template-columns:repeat(3,minmax(0,1fr))}}
+@media(max-width:650px){.protocolo-limpieza .indicadores{grid-template-columns:repeat(2,minmax(0,1fr));gap:10px}.protocolo-limpieza .indicador{padding:12px 13px}.protocolo-limpieza .indicador-valor{font-size:20px}}
 /* Flujo logístico: una columna por ruta, R2.1 como derivación bajo R2 */
 .protocolo-limpieza .flow-panel{container-type:inline-size}
 .protocolo-limpieza .flow{position:relative;display:grid;grid-template-columns:repeat(6,minmax(0,1fr));grid-template-rows:42px auto auto;gap:14px;margin-top:16px}

@@ -29,12 +29,11 @@ export const heroCopy: Record<VistaLimpieza, readonly [titulo: string, texto: st
   nubes: ["Visualización 3D", "Nubes de puntos de cada sitio por fecha de levantamiento: elige un sitio y recorre su línea de tiempo para ver cómo cambia."],
 };
 
+// The dashboard's unit selector: tonnes and cubic metres only (user, 2026-11-16). Mattresses and
+// WEEE have their own indicators; the units still go to the forms and the CSV.
 export const UNIDADES: ReadonlyArray<readonly [Unidad, string]> = [
   ["t", "Toneladas"],
   ["m3", "Metros cúbicos"],
-  ["u", "Unidades"],
-  ["colchones", "Colchones"],
-  ["raee", "RAEE"],
 ];
 
 const format = new Intl.NumberFormat("es-EC", { maximumFractionDigits: 2 });
@@ -139,6 +138,52 @@ export function listaLimpieza(nombres: readonly string[], limpieza: ReadonlyMap<
     filas.push({ barrio: oficiales.get(clave) ?? dato.barrio, avance: dato.avance, fecha: dato.fecha });
   });
   return filas.sort((a, b) => b.avance - a.avance || a.barrio.localeCompare(b.barrio, "es"));
+}
+
+// ── Indicadores ─────────────────────────────────────────────────────────────
+// Decisions of the user (2026-11-16): the totals count up to today, dated like the flow; R1, R2.1
+// and R6 follow the dashboard's unit; the R2.1 total is rubble only ("Escombro"), the only waste
+// that should reach the landfill; R6 is the reception by the waste manager, as in the flow; the
+// mattresses and WEEE are those collected in R1; the cleaning is the average of the latest
+// percentage of each neighbourhood with a report.
+export interface Indicadores {
+  /** In the dashboard's unit. */
+  recolectados: number;
+  relleno: number;
+  gestionados: number;
+  /** Units collected in R1. */
+  colchones: number;
+  raee: number;
+  /** Average of the reported neighbourhoods (0–100), or null when none has a report. */
+  limpieza: number | null;
+  barriosReportados: number;
+}
+
+export function indicadores(
+  records: readonly RegistroLimpieza[],
+  limpieza: ReadonlyMap<string, LimpiezaBarrio>,
+  unit: Unidad,
+  today: string,
+): Indicadores {
+  const total = (kind: OperacionLimpieza, campo: string, cuenta: (d: RegistroLimpieza["data"]) => boolean = () => true) =>
+    Math.round(
+      records
+        .filter((r) => {
+          const fecha = r.kind === "relleno" ? r.data.recepcion || r.data.fecha : r.data.fecha;
+          return r.kind === kind && !!fecha && String(fecha) <= today && cuenta(r.data);
+        })
+        .reduce((suma, r) => suma + (Number(r.data[campo]) || 0), 0) * 100,
+    ) / 100;
+  const avances = Array.from(limpieza.values(), (b) => b.avance);
+  return {
+    recolectados: total("recoleccion", unit),
+    relleno: total("relleno", unit, (d) => fold(d.tipo) === fold("Escombro")),
+    gestionados: total("recepcion", unit),
+    colchones: total("recoleccion", "colchones"),
+    raee: total("recoleccion", "raee"),
+    limpieza: avances.length ? avances.reduce((a, b) => a + b, 0) / avances.length : null,
+    barriosReportados: avances.length,
+  };
 }
 
 // ── Recursos por ruta ───────────────────────────────────────────────────────
