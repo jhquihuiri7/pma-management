@@ -7,7 +7,8 @@
 // tests live in tests/protocolo-limpieza-acumulacion.test.ts.
 import { extremosRuta, fold, type RutaLimpieza } from "@pma/types/protocolo-limpieza";
 
-export type Unidad = "t" | "m3" | "u";
+/** Tonnes, cubic metres, all units, or the units of one type (colchones, RAEE). */
+export type Unidad = "t" | "m3" | "u" | "colchones" | "raee";
 export type ZonaPunto = "sc" | "gye";
 export type LadoEtiqueta = "right" | "left" | "top" | "bottom";
 export type EstadoViaje = "programado" | "navegando" | "arribado";

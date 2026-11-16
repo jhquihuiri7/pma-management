@@ -370,6 +370,8 @@
 .protocolo-limpieza .route-info strong{font-weight:600;color:var(--teal-800)}
 .protocolo-limpieza .route-info p+p{margin-top:2px}
 .protocolo-limpieza .fields{display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-bottom:14px;padding:0 20px}
+/* A field with a note under it makes its row taller: the fields beside it stay at the top. */
+.protocolo-limpieza .fields>label{align-content:start}
 /* A field the form fills by itself (the units of rubble, always 0) and its note. */
 .protocolo-limpieza .fields input:disabled{background:var(--surface-2,#f1f5f9);color:var(--muted);cursor:not-allowed}
 .protocolo-limpieza .field-hint{display:block;margin-top:4px;font-size:11.5px;font-weight:500;letter-spacing:normal;text-transform:none;color:var(--muted)}

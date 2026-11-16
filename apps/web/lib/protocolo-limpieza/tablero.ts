@@ -33,6 +33,8 @@ export const UNIDADES: ReadonlyArray<readonly [Unidad, string]> = [
   ["t", "Toneladas"],
   ["m3", "Metros cúbicos"],
   ["u", "Unidades"],
+  ["colchones", "Colchones"],
+  ["raee", "RAEE"],
 ];
 
 const format = new Intl.NumberFormat("es-EC", { maximumFractionDigits: 2 });
@@ -42,7 +44,7 @@ export const displayDate = (d?: string | number | null) => (d ? String(d).split(
 export const currentDate = (now: Date = new Date()) =>
   new Intl.DateTimeFormat("en-CA", { timeZone: "Pacific/Galapagos", year: "numeric", month: "2-digit", day: "2-digit" }).format(now);
 // Símbolo de la unidad elegida en el tablero: toneladas, metros cúbicos o unidades.
-export const unitSymbol = (unit: string) => ({ m3: "m³", u: "unid." } as Record<string, string>)[unit] ?? "t";
+export const unitSymbol = (unit: string) => ({ m3: "m³", u: "unid.", colchones: "colchones", raee: "RAEE" } as Record<string, string>)[unit] ?? "t";
 export const qtyText = (v: number, unit: string) => number(v) + " " + unitSymbol(unit);
 export const pctText = (v: number) => new Intl.NumberFormat("es-EC", { maximumFractionDigits: 1 }).format(v * 100) + " %";
 
@@ -181,8 +183,14 @@ export function visibleHistory(records: readonly RegistroLimpieza[], route: stri
 
 /** Every field of every form, once, in form order: the CSV's columns. */
 // The fields of every form, then those the forms no longer ask (older reports keep them).
+// The total of units (u), which clean() works out and no form asks, goes after its types.
 export const csvFields: readonly string[] = Array.from(
-  new Set(Object.values(forms).flatMap((f) => f.fields.map((p) => p.id)).concat(Object.keys(camposAnteriores))),
+  new Set(
+    Object.values(forms)
+      .flatMap((f) => f.fields.map((p) => p.id))
+      .flatMap((id) => (id === "raee" ? ["raee", "u"] : [id]))
+      .concat(Object.keys(camposAnteriores)),
+  ),
 );
 
 // A cell that starts like a formula is written as text, so a spreadsheet never runs it.

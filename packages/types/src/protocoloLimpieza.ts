@@ -34,6 +34,8 @@ export interface CampoLimpieza {
   integer?: boolean;
   /** The values a "select" field accepts. */
   options?: readonly string[];
+  /** A short note shown under the field. */
+  ayuda?: string;
 }
 
 export interface FormularioLimpieza {
@@ -104,12 +106,17 @@ const num = (id: string, label: string, required = true) => field(id, label, "nu
 export const TIPOS_RESIDUO = ["Escombro", "Desecho"] as const;
 const type: CampoLimpieza = { ...field("tipo", "Tipo de residuo", "select"), options: TIPOS_RESIDUO };
 const box = field("contenedor", "Código de contenedor");
-// Toda ruta registra cuánto movió, siempre en toneladas, metros cúbicos y unidades (número entero).
+// Toda ruta registra cuánto movió: toneladas, metros cúbicos y, desde el 2026-11-16, las unidades
+// de cada tipo, colchones y RAEE (números enteros). El total de unidades, `u`, es su suma: lo
+// guarda clean(), y el tablero, los barcos y el CSV lo siguen leyendo como antes.
 const moved = (action: string): CampoLimpieza[] => [
   num("t", `Cantidad ${action} (t)`),
   num("m3", `Cantidad ${action} (m³)`),
-  { ...num("u", `Cantidad ${action} (unidades)`), integer: true },
+  { ...num("colchones", "Colchones (unidades)"), integer: true },
+  { ...num("raee", "RAEE (unidades)"), integer: true, ayuda: "Residuos de aparatos eléctricos y electrónicos." },
 ];
+/** The types of units, each with its own count. */
+export const CAMPOS_UNIDADES = ["colchones", "raee"] as const;
 // Fotografía adjunta: se guarda en el servidor y el registro conserva su identificador.
 const photo = (id: string, label: string) => field(id, label, "photo");
 
@@ -286,8 +293,8 @@ export const fold = (value: unknown): string => String(value ?? "").trim().norma
 
 /**
  * Rubble cannot be counted in units (decision of 2026-11-15): in a form with a
- * waste type, "Escombro" takes 0 units, whatever was sent, and the form shows the
- * field disabled.
+ * waste type, "Escombro" takes 0 of every type of unit, whatever was sent, and
+ * the form shows those fields disabled.
  */
 export function sinUnidades(kind: OperacionLimpieza, tipo: unknown): boolean {
   return String(tipo ?? "").trim() === "Escombro" && camposDe(kind).some((f) => f.id === "tipo");
@@ -299,8 +306,8 @@ export function clean(kind: unknown, input: unknown): DatosRegistroLimpieza {
   const values = input as Record<string, unknown>;
   const out: DatosRegistroLimpieza = {};
   for (const f of camposDe(kind)) {
-    if (f.id === "u" && sinUnidades(kind, values.tipo)) {
-      out.u = 0;
+    if ((CAMPOS_UNIDADES as readonly string[]).includes(f.id) && sinUnidades(kind, values.tipo)) {
+      out[f.id] = 0;
       continue;
     }
     const raw = values[f.id];
@@ -325,6 +332,10 @@ export function clean(kind: unknown, input: unknown): DatosRegistroLimpieza {
       if (f.type === "photo" && !FOTO_ID_PATTERN.test(s)) throw Error("Vuelve a adjuntar la " + f.label.toLowerCase() + ".");
       out[f.id] = f.id === "contenedor" ? s.toUpperCase() : s;
     }
+  }
+  // The total of units, the sum of its types: what the dashboard counts in "Unidades".
+  if (camposDe(kind).some((f) => f.id === "colchones")) {
+    out.u = CAMPOS_UNIDADES.reduce((total, id) => total + Number(out[id] ?? 0), 0);
   }
   // Dates are YYYY-MM-DD text, so comparing the strings compares the days.
   const fecha = out.fecha;

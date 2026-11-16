@@ -17,7 +17,7 @@ const chain = [
 
 test("todas las rutas registran toneladas, metros cúbicos y unidades obligatorios", () => {
   for (const f of Object.values(forms)) {
-    for (const id of ["t", "m3", "u"]) assert.ok(f.fields.some((x) => x.id === id && x.required), `${f.name} sin ${id}`);
+    for (const id of ["t", "m3", "colchones", "raee"]) assert.ok(f.fields.some((x) => x.id === id && x.required), `${f.name} sin ${id}`);
   }
 });
 
@@ -157,4 +157,15 @@ test("balance de gestión: el rojo es lo que falta sacar de Santa Cruz y el verd
   assert.equal(final.parteGestionada.toFixed(3), "0.444");
   // Sin registros no hay nada que pintar.
   assert.deepEqual(balanceGestion(computeAccumulation([], { today: "2026-11-10" })), { porSacar: 0, gestionado: 0, base: 0, partePorSacar: 0, parteGestionada: 0 });
+});
+
+test("the dashboard counts mattresses and WEEE apart, and their total as units", () => {
+  const registros = [
+    rec("recoleccion", { fecha: "2026-11-16", t: 4, m3: 6, colchones: 10, raee: 2, u: 12 }),
+    rec("recoleccion", { fecha: "2026-11-16", t: 1, m3: 1, colchones: 0, raee: 5, u: 5 }),
+  ];
+  const hoy = "2026-11-16";
+  assert.equal(computeAccumulation(registros, { unit: "colchones", today: hoy }).moved.R1, 10);
+  assert.equal(computeAccumulation(registros, { unit: "raee", today: hoy }).moved.R1, 7);
+  assert.equal(computeAccumulation(registros, { unit: "u", today: hoy }).moved.R1, 17);
 });

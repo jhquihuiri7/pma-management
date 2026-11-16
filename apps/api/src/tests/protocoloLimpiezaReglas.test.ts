@@ -8,7 +8,7 @@ import { admiteReportesNuevos, camposDe, clean, datosAnteriores, forms, limpiarR
 // Campos mínimos de la columna "Datos trazabilidad" del protocolo (Word).
 const minimum: Record<OperacionLimpieza, string[]> = {
   recoleccion: ["barrio", "fecha", "tipo", "t", "m3", "avance"],
-  carga: ["tipo", "contenedor", "t", "m3", "u"],
+  carga: ["tipo", "contenedor", "t", "m3", "colchones", "raee"],
   patioSCY: ["propietario", "contenedor", "fechaCarga", "fecha"],
   relleno: ["tipo", "t", "m3", "fecha"],
   puertoSCY: ["contenedor", "fecha", "foto", "documento"],
@@ -31,18 +31,18 @@ test("cada ruta pide los campos mínimos del protocolo", () => {
   }
 });
 
-const base = { fecha: "2026-11-10", contenedor: "C-1", t: 2, m3: 3, u: 4 };
+const base = { fecha: "2026-11-10", contenedor: "C-1", t: 2, m3: 3, colchones: 3, raee: 1 };
 
 test("valida unidades enteras, fecha de carga y fotografía", () => {
   // Units are counted for waste (rubble takes 0, see below), and only whole ones.
-  assert.throws(() => clean("carga", { ...base, tipo: "Desecho", u: 1.5 }), /entero/);
+  assert.throws(() => clean("carga", { ...base, tipo: "Desecho", colchones: 1.5 }), /entero/);
   assert.throws(() => clean("patioSCY", { ...base, propietario: "P", fechaCarga: "2026-11-11" }), /carga de residuos/);
   assert.equal(clean("patioSCY", { ...base, propietario: "P", fechaCarga: "2026-11-09" }).fechaCarga, "2026-11-09");
   assert.throws(() => clean("puertoSCY", { ...base, documento: "G-1" }), /fotografía/);
   assert.throws(() => clean("puertoSCY", { ...base, documento: "G-1", foto: "../registros.sqlite" }), /fotografía/);
 });
 
-const data = { fecha: "2026-11-10", barrio: "Sector de prueba", tipo: "Escombro", t: 1, m3: 4, u: 3, avance: 50 };
+const data = { fecha: "2026-11-10", barrio: "Sector de prueba", tipo: "Escombro", t: 1, m3: 4, colchones: 2, raee: 1, avance: 50 };
 
 test("rechaza cantidades negativas, fechas inválidas y tipos de residuo fuera de la lista", () => {
   assert.throws(() => clean("recoleccion", { ...data, t: -1 }));
@@ -137,17 +137,18 @@ test("Carga en contenedores takes no new reports, but its earlier reports still 
   const nuevas = (Object.keys(forms) as OperacionLimpieza[]).filter(admiteReportesNuevos);
   assert.deepEqual(nuevas, ["recoleccion", "patioSCY", "relleno", "puertoSCY", "embarque", "patioGYE", "recepcion", "gestion"]);
   assert.deepEqual(nuevas.filter((k) => forms[k].route === "R1"), ["recoleccion"]);
-  assert.deepEqual(clean("carga", { fecha: "2026-11-10", contenedor: "c-1", tipo: "Desecho", t: 2, m3: 3, u: 1 }), {
-    fecha: "2026-11-10", contenedor: "C-1", tipo: "Desecho", t: 2, m3: 3, u: 1,
+  assert.deepEqual(clean("carga", { fecha: "2026-11-10", contenedor: "c-1", tipo: "Desecho", t: 2, m3: 3, colchones: 1, raee: 0 }), {
+    fecha: "2026-11-10", contenedor: "C-1", tipo: "Desecho", t: 2, m3: 3, colchones: 1, raee: 0, u: 1,
   });
 });
 
 test("rubble is not counted in units: with Escombro the units are 0 whatever was sent", () => {
   const recoleccion = { fecha: "2026-11-10", barrio: "Pelikan Bay", tipo: "Escombro", t: 2, m3: 3, avance: 40 };
-  assert.equal(clean("recoleccion", { ...recoleccion, u: 60 }).u, 0);
-  assert.equal(clean("recoleccion", recoleccion).u, 0, "the disabled field sends nothing");
-  assert.equal(clean("recoleccion", { ...recoleccion, tipo: "Desecho", u: 60 }).u, 60);
-  assert.throws(() => clean("recoleccion", { ...recoleccion, tipo: "Desecho" }), /Completa Cantidad recolectada \(unidades\)/);
+  const escombro = clean("recoleccion", { ...recoleccion, colchones: 60, raee: 5 });
+  assert.deepEqual([escombro.colchones, escombro.raee, escombro.u], [0, 0, 0]);
+  assert.equal(clean("recoleccion", recoleccion).u, 0, "the disabled fields send nothing");
+  assert.equal(clean("recoleccion", { ...recoleccion, tipo: "Desecho", colchones: 60, raee: 5 }).u, 65);
+  assert.throws(() => clean("recoleccion", { ...recoleccion, tipo: "Desecho", raee: 5 }), /Completa Colchones \(unidades\)/);
   assert.equal(sinUnidades("relleno", "Escombro"), true);
   // A form without a waste type keeps its units.
   assert.equal(sinUnidades("patioSCY", "Escombro"), false);
@@ -161,4 +162,17 @@ test("each resource may say how many are needed besides how many are available",
   assert.deepEqual(limpiarRecursos([{ ...fila, necesidad: "" }]), [{ cantidad: 20, recurso: "Personas", institucion: "CGREG" }]);
   assert.throws(() => limpiarRecursos([fila, { ...fila, necesidad: 2.5 }]), { message: "Usa un número entero (0 o más) en la necesidad del recurso 2." });
   assert.throws(() => limpiarRecursos([{ ...fila, necesidad: -1 }]), /necesidad del recurso 1/);
+});
+
+test("units are counted by type, mattresses and WEEE, and their total is kept as u", () => {
+  const traslado = { fecha: "2026-11-16", fechaCarga: "2026-11-16", contenedor: "c-9", propietario: "P", t: 4, m3: 6, colchones: "12", raee: "3" };
+  const limpio = clean("patioSCY", traslado);
+  assert.deepEqual([limpio.colchones, limpio.raee, limpio.u], [12, 3, 15]);
+  // Every form that moves waste asks both, as whole numbers.
+  for (const kind of Object.keys(forms) as OperacionLimpieza[]) {
+    const ids = camposDe(kind).map((f) => f.id);
+    assert.ok(ids.includes("colchones") && ids.includes("raee") && !ids.includes("u"), kind);
+  }
+  assert.throws(() => clean("patioSCY", { ...traslado, raee: "1.5" }), /entero/);
+  assert.throws(() => clean("patioSCY", { ...traslado, colchones: "" }), /Completa Colchones \(unidades\)/);
 });

@@ -7,6 +7,7 @@ import { computeAccumulation, destination, points } from "../lib/protocolo-limpi
 import { claveBarrio } from "../lib/protocolo-limpieza/barrios";
 import {
   buildCsv,
+  csvFields,
   currentDate,
   displayDate,
   executors,
@@ -15,12 +16,14 @@ import {
   operationsOf,
   ordenarCampos,
   prellenado,
+  qtyText,
   recursosPorRuta,
   recursosTexto,
   routeIconSrc,
   sugerenciasRecurso,
   suggestions,
   traspasos,
+  UNIDADES,
   visibleHistory,
 } from "../lib/protocolo-limpieza/tablero";
 
@@ -292,4 +295,12 @@ test("the prefilled dates keep their distance from the main one, and the photo i
   const antes = reg("patioGYE", { fecha: "2026-11-09", contenedor: "A" }, { updatedAt: "2026-11-09T08:00:00.000Z" });
   const despues = reg("patioGYE", { fecha: "2026-11-09", contenedor: "B" }, { updatedAt: "2026-11-09T17:00:00.000Z" });
   assert.equal(prellenado([despues, antes], "patioGYE", "2026-11-10")?.data.contenedor, "B");
+});
+
+test("the unit selector offers mattresses and WEEE, and the CSV keeps the units total after them", () => {
+  assert.deepEqual(UNIDADES.map(([u]) => u), ["t", "m3", "u", "colchones", "raee"]);
+  assert.equal(qtyText(12, "colchones"), "12 colchones");
+  assert.equal(qtyText(3, "raee"), "3 RAEE");
+  const i = csvFields.indexOf("raee");
+  assert.deepEqual(csvFields.slice(i - 1, i + 2), ["colchones", "raee", "u"]);
 });

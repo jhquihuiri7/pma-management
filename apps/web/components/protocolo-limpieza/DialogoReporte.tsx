@@ -5,6 +5,7 @@ import { useEffect, useRef, useState, type FormEvent } from "react";
 import { Camera, Plus, X } from "lucide-react";
 import { toast } from "sonner";
 import {
+  CAMPOS_UNIDADES,
   camposDe,
   clean,
   sinUnidades,
@@ -237,13 +238,13 @@ function FormularioReporte({ row, kind: kindInicial, records, nombresBarrios, on
         </label>
       );
     }
-    if (p.id === "u" && sinUnidades(kind, tipo)) {
+    if ((CAMPOS_UNIDADES as readonly string[]).includes(p.id) && sinUnidades(kind, tipo)) {
       // Rubble is not counted in units: 0, and nothing can be entered (clean() saves 0 too).
       return (
-        <label key="u-escombro">
+        <label key={`${p.id}-escombro`}>
           {p.label}
-          <input type="number" value="0" disabled readOnly aria-describedby="u-escombro-nota" />
-          <small id="u-escombro-nota" className="field-hint">Los escombros no se cuantifican en unidades.</small>
+          <input type="number" value="0" disabled readOnly aria-describedby={`${p.id}-escombro-nota`} />
+          <small id={`${p.id}-escombro-nota`} className="field-hint">Los escombros no se cuantifican en unidades.</small>
         </label>
       );
     }
@@ -252,7 +253,8 @@ function FormularioReporte({ row, kind: kindInicial, records, nombresBarrios, on
     return (
       <label key={p.id}>
         {etiqueta}
-        <input name={p.id} type={p.type} defaultValue={String(v)} required={p.required} list={lista} {...extra} />
+        <input name={p.id} type={p.type} defaultValue={String(v)} required={p.required} list={lista} aria-describedby={p.ayuda ? `${p.id}-ayuda` : undefined} {...extra} />
+        {p.ayuda && <small id={`${p.id}-ayuda`} className="field-hint">{p.ayuda}</small>}
       </label>
     );
   };

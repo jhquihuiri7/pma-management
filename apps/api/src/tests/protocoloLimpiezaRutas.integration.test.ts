@@ -64,7 +64,7 @@ test(
 
     const data = {
       fecha: "2026-11-10", barrio: `Sector de prueba ${lote}`, tipo: "Escombro",
-      t: 1, m3: 4, u: 3, avance: 50,
+      t: 1, m3: 4, colchones: 2, raee: 1, avance: 50,
     };
 
     try {
@@ -121,7 +121,7 @@ test(
       });
 
       await t.test("Carga en contenedores takes no new reports; an earlier one still lists and can be edited", async () => {
-        const carga = { fecha: "2026-11-10", contenedor: `C-${lote}`, tipo: "Escombro", t: 2, m3: 3, u: 1 };
+        const carga = { fecha: "2026-11-10", contenedor: `C-${lote}`, tipo: "Escombro", t: 2, m3: 3, colchones: 0, raee: 0 };
         const nuevo = await app.inject({
           method: "POST", url: "/protocolo-limpieza/registros", headers: auth(viewerJwt), payload: { kind: "carga", data: carga },
         });
@@ -256,7 +256,7 @@ test(
         assert.deepEqual(entregada.rawPayload, JPEG);
 
         const r3 = {
-          fecha: "2026-11-10", contenedor: `${lote}-C`, t: 2, m3: 3, u: 4, documento: "G-1",
+          fecha: "2026-11-10", contenedor: `${lote}-C`, t: 2, m3: 3, colchones: 3, raee: 1, documento: "G-1",
         };
         const conFoto = await app.inject({
           method: "POST", url: "/protocolo-limpieza/registros", headers: auth(viewerJwt), payload: { kind: "puertoSCY", data: { ...r3, foto: id } },
