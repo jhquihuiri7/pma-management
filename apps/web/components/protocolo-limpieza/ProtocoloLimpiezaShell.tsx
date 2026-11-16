@@ -3,7 +3,7 @@
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { ArrowLeft, ClipboardList, LayoutGrid, Leaf, List, LogIn, LogOut, Plus, Rotate3d } from "lucide-react";
+import { ArrowLeft, ClipboardList, LayoutGrid, List, LogIn, LogOut, Plus, Rotate3d } from "lucide-react";
 import { barrios as barriosProtocolo, type OperacionLimpieza, type RegistroLimpieza } from "@pma/types/protocolo-limpieza";
 import { fetchLayerData, fetchLayers } from "@/components/geo/gis/persistence";
 import { ApiError } from "@/lib/api-client";
@@ -15,6 +15,7 @@ import { heroCopy, UNIDADES, type VistaLimpieza } from "@/lib/protocolo-limpieza
 import { ContextoLimpieza, type ContextoProtocoloLimpieza } from "./contexto";
 import DialogoDetalle from "./DialogoDetalle";
 import DialogoReporte from "./DialogoReporte";
+import { IconoLluvia } from "./IconoLluvia";
 import "./protocolo-limpieza.css";
 
 const BASE = "/protocolo-limpieza";
@@ -144,7 +145,7 @@ export default function ProtocoloLimpiezaShell({ children }: { children: React.R
         <div className="app-shell">
           <aside className="side">
             <div className="brand">
-              <div className="mark" aria-hidden="true"><Leaf className="ico" /></div>
+              <div className="mark" aria-hidden="true"><IconoLluvia className="ico" /></div>
               <div><strong>Gestión de residuos</strong><small>Santa Cruz: ENOS 2026-2027</small></div>
             </div>
             <nav className="tabs" aria-label="Vistas">
@@ -183,7 +184,7 @@ export default function ProtocoloLimpiezaShell({ children }: { children: React.R
               <div className="hero-inner">
                 <div className="hero-top">
                   <div>
-                    <p className="eyebrow"><Leaf className="ico" />Santa Cruz · Galápagos</p>
+                    <p className="eyebrow"><IconoLluvia className="ico" />Santa Cruz · Galápagos</p>
                     <h1 id="hero-title">{titulo}</h1>
                     <p className="hero-text" id="hero-text">{texto}</p>
                   </div>

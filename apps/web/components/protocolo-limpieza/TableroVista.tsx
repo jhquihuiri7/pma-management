@@ -65,7 +65,7 @@ function RecursosPorRuta({ filas, onRoute }: { filas: RecursosRuta[]; onRoute(ro
       <div className="table-wrap">
         <table className="recursos-tabla">
           <thead>
-            <tr><th scope="col">Ruta</th><th scope="col">Institución</th><th scope="col">Recurso disponible</th></tr>
+            <tr><th scope="col">Ruta</th><th scope="col">Institución</th><th scope="col">Disponible</th><th scope="col" className="recursos-num">Necesidad</th></tr>
           </thead>
           <tbody>
             {filas.map(({ route, fecha, recursos }) => {
@@ -81,7 +81,7 @@ function RecursosPorRuta({ filas, onRoute }: { filas: RecursosRuta[]; onRoute(ro
                 return (
                   <tr key={route}>
                     {ruta}
-                    <td colSpan={2} className="recursos-vacio">{fecha ? "Sin recursos en el último reporte" : "—"}</td>
+                    <td colSpan={3} className="recursos-vacio">{fecha ? "Sin recursos en el último reporte" : "—"}</td>
                   </tr>
                 );
               }
@@ -92,6 +92,8 @@ function RecursosPorRuta({ filas, onRoute }: { filas: RecursosRuta[]; onRoute(ro
                       {i === 0 && ruta}
                       <td>{r.institucion}</td>
                       <td className="recursos-cantidad">{number(r.cantidad)} {conMayuscula(r.recurso)}</td>
+                      {/* Reports saved before the need was asked have none. */}
+                      <td className="recursos-cantidad recursos-num">{r.necesidad !== undefined ? number(r.necesidad) : "—"}</td>
                     </tr>
                   ))}
                 </Fragment>

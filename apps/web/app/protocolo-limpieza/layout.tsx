@@ -2,8 +2,8 @@ import type { Metadata } from "next";
 import ProtocoloLimpiezaShell from "@/components/protocolo-limpieza/ProtocoloLimpiezaShell";
 
 export const metadata: Metadata = {
-  title: "Protocolo de limpieza | SIGTAR",
-  description: "Trazabilidad de residuos y escombros de Santa Cruz a Guayaquil: reportes, registros e indicadores por ruta.",
+  title: "Gestión de residuos | SIGTAR",
+  description: "Gestión y trazabilidad de residuos y desechos de Santa Cruz a Guayaquil (ENOS 2026-2027): reportes, registros e indicadores por ruta.",
 };
 
 // Public in read-only mode since 2026-11-15 (middleware.ts lets visitors in):

@@ -152,3 +152,13 @@ test("rubble is not counted in units: with Escombro the units are 0 whatever was
   // A form without a waste type keeps its units.
   assert.equal(sinUnidades("patioSCY", "Escombro"), false);
 });
+
+test("each resource may say how many are needed besides how many are available", () => {
+  const fila = { cantidad: "20", recurso: "personas", institucion: "CGREG" };
+  assert.deepEqual(limpiarRecursos([{ ...fila, necesidad: " 25 " }]), [{ cantidad: 20, recurso: "Personas", institucion: "CGREG", necesidad: 25 }]);
+  assert.deepEqual(limpiarRecursos([{ ...fila, necesidad: 0 }])[0].necesidad, 0, "nothing more needed");
+  // Optional: left empty (and in older reports) there is no need at all.
+  assert.deepEqual(limpiarRecursos([{ ...fila, necesidad: "" }]), [{ cantidad: 20, recurso: "Personas", institucion: "CGREG" }]);
+  assert.throws(() => limpiarRecursos([fila, { ...fila, necesidad: 2.5 }]), { message: "Usa un número entero (0 o más) en la necesidad del recurso 2." });
+  assert.throws(() => limpiarRecursos([{ ...fila, necesidad: -1 }]), /necesidad del recurso 1/);
+});

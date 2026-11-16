@@ -82,16 +82,17 @@ export default function DialogoReporte(props: Props) {
 interface EstadoFoto { texto: string; error: boolean }
 
 /** A resource row as typed; empty rows are dropped when saving. */
-interface FilaRecurso { clave: number; cantidad: string; recurso: string; institucion: string }
+interface FilaRecurso { clave: number; cantidad: string; necesidad: string; recurso: string; institucion: string }
 
 let siguienteFila = 0;
-const filaRecurso = (r?: { cantidad: number; recurso: string; institucion: string }): FilaRecurso => ({
+const filaRecurso = (r?: { cantidad: number; necesidad?: number; recurso: string; institucion: string }): FilaRecurso => ({
   clave: ++siguienteFila,
   cantidad: r ? String(r.cantidad) : "",
+  necesidad: r?.necesidad !== undefined ? String(r.necesidad) : "",
   recurso: conMayuscula(r?.recurso ?? ""),
   institucion: r?.institucion ?? "",
 });
-const filaVacia = (f: FilaRecurso) => !f.cantidad.trim() && !f.recurso.trim() && !f.institucion.trim();
+const filaVacia = (f: FilaRecurso) => !f.cantidad.trim() && !f.necesidad.trim() && !f.recurso.trim() && !f.institucion.trim();
 
 const fotosDe = (row: RegistroLimpieza | null): Record<string, string> =>
   Object.fromEntries(
@@ -173,7 +174,7 @@ function FormularioReporte({ row, kind: kindInicial, records, nombresBarrios, on
     try {
       const data = clean(kind, enviado);
       const lista = limpiarRecursos(
-        recursos.filter((f) => !filaVacia(f)).map(({ cantidad, recurso, institucion }) => ({ cantidad, recurso, institucion })),
+        recursos.filter((f) => !filaVacia(f)).map(({ cantidad, necesidad, recurso, institucion }) => ({ cantidad, necesidad, recurso, institucion })),
       );
       if (row) await editarRegistro(row.id, { version: row.version, kind, data, recursos: lista });
       else await crearRegistro({ kind, data, recursos: lista });
@@ -295,13 +296,14 @@ function FormularioReporte({ row, kind: kindInicial, records, nombresBarrios, on
       <div id="fields" className="fields" key={`principal-${kind}-${version}`}>{campos.map(control)}</div>
       <fieldset className="recursos-form">
         <legend>Recursos / Servicios disponibles</legend>
-        <p className="small">Personal, vehículos o maquinaria de esta operación y la institución de cada uno. El tablero muestra los del último reporte de cada ruta.</p>
+        <p className="small">Personal, vehículos, maquinaria o servicios de esta operación: cuántos hay disponibles, cuántos se necesitan y la institución de cada uno. El tablero muestra los del último reporte de cada ruta.</p>
         {recursos.map((f, i) => {
-          const cambiarFila = (campo: "cantidad" | "recurso" | "institucion", valor: string) =>
+          const cambiarFila = (campo: "cantidad" | "necesidad" | "recurso" | "institucion", valor: string) =>
             setRecursos((filas) => filas.map((x) => (x.clave === f.clave ? { ...x, [campo]: valor } : x)));
           return (
             <div key={f.clave} className="recurso-fila">
-              <label>Cantidad<input type="number" min={1} step={1} inputMode="numeric" value={f.cantidad} onChange={(e) => cambiarFila("cantidad", e.target.value)} /></label>
+              <label>Disponible<input type="number" min={1} step={1} inputMode="numeric" value={f.cantidad} onChange={(e) => cambiarFila("cantidad", e.target.value)} /></label>
+              <label>Necesidad<input type="number" min={0} step={1} inputMode="numeric" value={f.necesidad} onChange={(e) => cambiarFila("necesidad", e.target.value)} /></label>
               <label>Recurso<input list="known-recurso" maxLength={100} placeholder="personas, vehículos…" value={f.recurso} onChange={(e) => cambiarFila("recurso", e.target.value)} /></label>
               <label>Institución<input list="known-institucion" maxLength={200} value={f.institucion} onChange={(e) => cambiarFila("institucion", e.target.value)} /></label>
               <button type="button" className="button secondary recurso-quitar" aria-label={`Quitar el recurso ${i + 1}`} onClick={() => setRecursos((filas) => filas.filter((x) => x.clave !== f.clave))}>

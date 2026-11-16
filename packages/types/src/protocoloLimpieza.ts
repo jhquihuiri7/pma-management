@@ -54,11 +54,14 @@ export type InfoRutaLimpieza = readonly [trayecto: string, ejecucion: string, ap
 /** A validated report: numbers for numeric fields, trimmed text for the rest. */
 export type DatosRegistroLimpieza = Record<string, string | number>;
 
-/** A resource available for the operation: "10 personas, Consejo de Gobierno". */
+/** A resource of the operation: "20 personas available, 25 needed, Consejo de Gobierno". */
 export interface RecursoLimpieza {
+  /** How many are available. */
   cantidad: number;
   recurso: string;
   institucion: string;
+  /** How many the operation needs (asked since 2026-11-15; older reports have none). */
+  necesidad?: number;
 }
 
 export interface RegistroLimpieza {
@@ -369,13 +372,19 @@ export function limpiarRecursos(input: unknown): RecursoLimpieza[] {
     if (!textoCantidad || !Number.isInteger(cantidad) || cantidad < 1 || cantidad > 100000) {
       throw Error(`Usa un número entero mayor que cero en la cantidad del recurso ${n}.`);
     }
+    // The need is optional: an empty one is left out (as in the reports saved before it was asked).
+    const textoNecesidad = String(fila.necesidad ?? "").trim();
+    const necesidad = textoNecesidad ? Number(textoNecesidad) : undefined;
+    if (necesidad !== undefined && (!Number.isInteger(necesidad) || necesidad < 0 || necesidad > 100000)) {
+      throw Error(`Usa un número entero (0 o más) en la necesidad del recurso ${n}.`);
+    }
     const recurso = conMayuscula(String(fila.recurso ?? "").trim());
     if (!recurso) throw Error(`Completa el recurso ${n}.`);
     if (recurso.length > 100) throw Error(`El recurso ${n} supera los 100 caracteres.`);
     const institucion = String(fila.institucion ?? "").trim();
     if (!institucion) throw Error(`Completa la institución del recurso ${n}.`);
     if (institucion.length > 200) throw Error(`La institución del recurso ${n} supera los 200 caracteres.`);
-    return { cantidad, recurso, institucion };
+    return necesidad === undefined ? { cantidad, recurso, institucion } : { cantidad, recurso, institucion, necesidad };
   });
 }
 

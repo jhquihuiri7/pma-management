@@ -4,7 +4,8 @@ import { useRouter } from "next/navigation";
 import { useEffect } from "react";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
-import { Leaf, Shield, LogOut, Map, Users, Siren, Target, Home, LifeBuoy, Recycle } from "lucide-react";
+import { Leaf, Shield, LogOut, Map, Users, Siren, Target, Home, LifeBuoy } from "lucide-react";
+import { IconoLluvia } from "@/components/protocolo-limpieza/IconoLluvia";
 import { useAuth } from "@/lib/auth-context";
 import { APP_HOME } from "@/lib/app-homes";
 
@@ -81,10 +82,10 @@ const SUBSYSTEM_APPS = [
   },
   {
     key: "protocolo_limpieza",
-    label: "Protocolo de limpieza",
-    description: "Trazabilidad de residuos y escombros de Santa Cruz a Guayaquil.",
+    label: "Gestión de residuos",
+    description: "Santa Cruz: ENOS 2026-2027. Trazabilidad de residuos y desechos de Santa Cruz a Guayaquil.",
     href: APP_HOME.protocolo_limpieza,
-    icon: Recycle,
+    icon: IconoLluvia,
     color: "text-amber-700",
     border: "border-amber-200 hover:border-amber-400",
     bg: "hover:bg-amber-50",

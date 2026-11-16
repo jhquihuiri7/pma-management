@@ -127,6 +127,8 @@ test("each route shows the resources of its latest report, and only those", () =
   assert.deepEqual([r3.fecha, r3.recursos], [null, []]);
   // A resource always reads with a capital letter, also in reports saved before that rule.
   assert.equal(recursosTexto(hoy), "10 Personas (Consejo de Gobierno (CGREG)) | 1 Vehículo (Consejo de Gobierno (CGREG))");
+  // The need, when the report gives it, goes after what is available.
+  assert.equal(recursosTexto([{ cantidad: 20, necesidad: 25, recurso: "personas", institucion: "CGREG" }]), "20 Personas, necesidad 25 (CGREG)");
 });
 
 test("records are searched in every value and resource, filtered by route and listed newest first", () => {

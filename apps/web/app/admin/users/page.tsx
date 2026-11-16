@@ -44,7 +44,7 @@ const APP_LABELS: Record<AppKey, string> = {
   pg2030: "PG2030",
   plan_familiar: "Plan Familiar",
   riesgos: "Gestión de Riesgos",
-  protocolo_limpieza: "Protocolo de limpieza",
+  protocolo_limpieza: "Gestión de residuos",
 };
 
 const ALL_APPS: AppKey[] = ["pma", "rgdp", "geo", "previene", "pg2030", "plan_familiar", "riesgos", "protocolo_limpieza"];

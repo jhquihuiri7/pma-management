@@ -63,7 +63,11 @@ export default function DialogoDetalle({ row, onClose }: { row: RegistroLimpieza
                 <dt>Recursos / Servicios disponibles</dt>
                 <dd>
                   <ul className="detalle-recursos">
-                    {row.recursos.map((r, i) => <li key={i}>{number(r.cantidad)} {conMayuscula(r.recurso)} · {r.institucion}</li>)}
+                    {row.recursos.map((r, i) => (
+                      <li key={i}>
+                        {number(r.cantidad)} {conMayuscula(r.recurso)} disponibles{r.necesidad !== undefined ? ` · necesidad ${number(r.necesidad)}` : ""} · {r.institucion}
+                      </li>
+                    ))}
                   </ul>
                 </dd>
               </>

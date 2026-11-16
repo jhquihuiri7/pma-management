@@ -161,9 +161,11 @@ export function recursosPorRuta(records: readonly RegistroLimpieza[]): RecursosR
   });
 }
 
-/** "10 personas (CGREG) | 2 personas (GAD SCX)": for the CSV and the search. */
+/** "20 Personas, necesidad 25 (CGREG) | 2 Volquetas (GAD SCX)": for the CSV and the search. */
 export const recursosTexto = (recursos: readonly RecursoLimpieza[] | undefined) =>
-  (recursos ?? []).map((r) => `${number(r.cantidad)} ${conMayuscula(r.recurso)} (${r.institucion})`).join(" | ");
+  (recursos ?? [])
+    .map((r) => `${number(r.cantidad)} ${conMayuscula(r.recurso)}${r.necesidad !== undefined ? `, necesidad ${number(r.necesidad)}` : ""} (${r.institucion})`)
+    .join(" | ");
 
 // ── Registros ───────────────────────────────────────────────────────────────
 export function visibleHistory(records: readonly RegistroLimpieza[], route: string, search: string): RegistroLimpieza[] {
