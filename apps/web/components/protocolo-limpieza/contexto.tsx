@@ -22,6 +22,11 @@ export interface ContextoProtocoloLimpieza {
   barrios: EstadoBarrios | null;
   /** Neighbourhoods to choose from: the layer's, or the protocol's list when the layer cannot be read. */
   nombresBarrios: string[];
+  /**
+   * The reader has a session with the module: may report, edit and upload, and sees who did.
+   * Anyone else reads the module only (2026-11-15).
+   */
+  puedeEditar: boolean;
   refresh(): Promise<void>;
   /** A new report of `kind`, or an edit of `row`. */
   openReport(kind?: OperacionLimpieza, row?: RegistroLimpieza | null): void;

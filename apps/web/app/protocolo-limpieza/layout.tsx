@@ -6,8 +6,9 @@ export const metadata: Metadata = {
   description: "Trazabilidad de residuos y escombros de Santa Cruz a Guayaquil: reportes, registros e indicadores por ruta.",
 };
 
-// Fully protected: middleware.ts sends visitors without a session to /login,
-// and every API call needs the protocolo_limpieza app.
+// Public in read-only mode since 2026-11-15 (middleware.ts lets visitors in):
+// reporting, editing and uploading need a session with the protocolo_limpieza
+// app, here and on the API, and only users with it see who reported.
 export default function ProtocoloLimpiezaLayout({ children }: { children: React.ReactNode }) {
   return <ProtocoloLimpiezaShell>{children}</ProtocoloLimpiezaShell>;
 }

@@ -1,7 +1,10 @@
 import type * as LeafletNS from "leaflet";
 import type { FeatureCollection } from "geojson";
+import { barrios as barriosProtocolo } from "@pma/types/protocolo-limpieza";
 import { claveBarrio, colorLimpieza, nombreBarrio } from "@/lib/protocolo-limpieza/barrios";
+import { escalaMapa, ESTILO_BARRIO_ZIP, ETIQUETA_BARRIO } from "@/lib/protocolo-limpieza/rutasGeoportal";
 import { number, type LimpiezaBarrio } from "@/lib/protocolo-limpieza/tablero";
+import type { CapaEtiquetas } from "./etiquetas";
 
 /**
  * Panes stack the basemap tiles at 200, the heat spots at 350 (the module's
@@ -13,14 +16,19 @@ import { number, type LimpiezaBarrio } from "@/lib/protocolo-limpieza/tablero";
 export const PANEL_BARRIOS = "protocoloLimpiezaBarrios";
 export const Z_PANEL_BARRIOS = 300;
 
-// A neighbourhood without a report: a soft outline, the map shows through.
+// A neighbourhood without a report: the style of barrios.qml (capas_residuos_scx_shapefile.zip),
+// a mint fill with a green outline at 75 %. A reported one keeps the outline and takes its
+// cleaning colour as fill.
 const ESTILO_BARRIO: LeafletNS.PathOptions = {
-  color: "#475569",
-  weight: 1,
-  opacity: 0.55,
-  fillColor: "#94a3b8",
-  fillOpacity: 0.06,
+  color: ESTILO_BARRIO_ZIP.borde,
+  weight: ESTILO_BARRIO_ZIP.bordeAncho,
+  opacity: ESTILO_BARRIO_ZIP.opacidad,
+  fillColor: ESTILO_BARRIO_ZIP.relleno,
+  fillOpacity: ESTILO_BARRIO_ZIP.opacidad,
 };
+// The label reads as the protocol writes the name ("Las Orquídeas"), else as the layer does.
+const NOMBRE_PROTOCOLO = new Map(barriosProtocolo.map((n) => [claveBarrio(n), n]));
+const etiquetaVisible = (map: LeafletNS.Map) => escalaMapa(map.getCenter().lat, map.getZoom()) <= ETIQUETA_BARRIO.escalaMaxima;
 
 // Hover only strengthens the outline, so the cleaning colour stays readable.
 const ESTILO_BARRIO_RESALTADO: LeafletNS.PathOptions = { weight: 2.2, opacity: 0.95 };
@@ -30,8 +38,11 @@ export interface CapaBarrios {
   pintar(limpieza: ReadonlyMap<string, LimpiezaBarrio>): void;
 }
 
-/** Draws the neighbourhoods in their own pane, with the name (and cleaning) on hover. */
-export function agregarCapaBarrios(L: typeof LeafletNS, map: LeafletNS.Map, datos: FeatureCollection): CapaBarrios {
+/**
+ * Draws the neighbourhoods in their own pane, with the name (and cleaning) on hover and, close
+ * enough (1:60.000), the name as a label of the .qml style.
+ */
+export function agregarCapaBarrios(L: typeof LeafletNS, map: LeafletNS.Map, datos: FeatureCollection, etiquetas?: CapaEtiquetas): CapaBarrios {
   const panel = map.getPane(PANEL_BARRIOS) ?? map.createPane(PANEL_BARRIOS);
   panel.style.zIndex = String(Z_PANEL_BARRIOS);
 
@@ -49,6 +60,19 @@ export function agregarCapaBarrios(L: typeof LeafletNS, map: LeafletNS.Map, dato
       });
     },
   }).addTo(map);
+
+  etiquetas?.fijar(
+    "barrios",
+    barrios
+      .filter((b) => b.nombre && typeof (b.capa as LeafletNS.Polygon).getCenter === "function")
+      .map((b, i) => {
+        const c = (b.capa as LeafletNS.Polygon).getCenter();
+        return {
+          id: `barrio-${i}`, tipo: "area" as const, latlng: [c.lat, c.lng] as [number, number],
+          texto: NOMBRE_PROTOCOLO.get(claveBarrio(b.nombre)) ?? b.nombre!, clase: "acc-etq-barrio", visible: etiquetaVisible,
+        };
+      }),
+  );
 
   return {
     pintar(limpieza) {

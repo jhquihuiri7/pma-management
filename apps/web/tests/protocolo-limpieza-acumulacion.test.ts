@@ -21,7 +21,7 @@ test("todas las rutas registran toneladas, metros cúbicos y unidades obligatori
   }
 });
 
-test("R4 está en Santa Cruz: sale de Baltra hacia Guayaquil", () => {
+test("R4 está en Santa Cruz: sale del Muelle de Itabaca hacia Guayaquil", () => {
   const zone = Object.fromEntries(points.map((p) => [p.id, p.zone]));
   assert.deepEqual(["R1", "R2", "R2.1", "R3", "R4"].map((id) => zone[id]), ["sc", "sc", "sc", "sc", "sc"]);
   assert.deepEqual(["R5", "R6"].map((id) => zone[id]), ["gye", "gye"]);
@@ -43,7 +43,7 @@ test("cada ruta pinta lo que entró menos lo que pasó a la siguiente, en la uni
   const t = computeAccumulation(chain, { today: "2026-11-05" });
   assert.deepEqual(t.moved, { R1: 100, R2: 70, "R2.1": 10, R3: 40, R4: 40, R5: 0, R6: 0 });
   assert.equal(t.stock.R1, 20); // 100 − 70 al patio − 10 al relleno
-  assert.equal(t.stock.R2, 30); // 70 − 40 a Baltra
+  assert.equal(t.stock.R2, 30); // 70 − 40 a Itabaca
   assert.equal(t.stock["R2.1"], 10);
   assert.equal(t.stock.R3, 0); // 40 − 40 embarcadas
   assert.equal(t.stock.R4, 40);

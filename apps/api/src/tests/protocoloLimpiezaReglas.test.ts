@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { admiteReportesNuevos, camposDe, clean, datosAnteriores, forms, limpiarRecursos, recordKey, type OperacionLimpieza } from "../modules/protocoloLimpieza/reglas.js";
+import { admiteReportesNuevos, camposDe, clean, datosAnteriores, forms, limpiarRecursos, recordKey, sinUnidades, type OperacionLimpieza } from "../modules/protocoloLimpieza/reglas.js";
 
 // Ported from the standalone app's tests/protocol.test.mjs and
 // tests/records.test.mjs: the rules are the same file for the web and the API.
@@ -34,7 +34,8 @@ test("cada ruta pide los campos mínimos del protocolo", () => {
 const base = { fecha: "2026-11-10", contenedor: "C-1", t: 2, m3: 3, u: 4 };
 
 test("valida unidades enteras, fecha de carga y fotografía", () => {
-  assert.throws(() => clean("carga", { ...base, tipo: "Escombro", u: 1.5 }), /entero/);
+  // Units are counted for waste (rubble takes 0, see below), and only whole ones.
+  assert.throws(() => clean("carga", { ...base, tipo: "Desecho", u: 1.5 }), /entero/);
   assert.throws(() => clean("patioSCY", { ...base, propietario: "P", fechaCarga: "2026-11-11" }), /carga de residuos/);
   assert.equal(clean("patioSCY", { ...base, propietario: "P", fechaCarga: "2026-11-09" }).fechaCarga, "2026-11-09");
   assert.throws(() => clean("puertoSCY", { ...base, documento: "G-1" }), /fotografía/);
@@ -136,7 +137,18 @@ test("Carga en contenedores takes no new reports, but its earlier reports still 
   const nuevas = (Object.keys(forms) as OperacionLimpieza[]).filter(admiteReportesNuevos);
   assert.deepEqual(nuevas, ["recoleccion", "patioSCY", "relleno", "puertoSCY", "embarque", "patioGYE", "recepcion", "gestion"]);
   assert.deepEqual(nuevas.filter((k) => forms[k].route === "R1"), ["recoleccion"]);
-  assert.deepEqual(clean("carga", { fecha: "2026-11-10", contenedor: "c-1", tipo: "Escombro", t: 2, m3: 3, u: 1 }), {
-    fecha: "2026-11-10", contenedor: "C-1", tipo: "Escombro", t: 2, m3: 3, u: 1,
+  assert.deepEqual(clean("carga", { fecha: "2026-11-10", contenedor: "c-1", tipo: "Desecho", t: 2, m3: 3, u: 1 }), {
+    fecha: "2026-11-10", contenedor: "C-1", tipo: "Desecho", t: 2, m3: 3, u: 1,
   });
+});
+
+test("rubble is not counted in units: with Escombro the units are 0 whatever was sent", () => {
+  const recoleccion = { fecha: "2026-11-10", barrio: "Pelikan Bay", tipo: "Escombro", t: 2, m3: 3, avance: 40 };
+  assert.equal(clean("recoleccion", { ...recoleccion, u: 60 }).u, 0);
+  assert.equal(clean("recoleccion", recoleccion).u, 0, "the disabled field sends nothing");
+  assert.equal(clean("recoleccion", { ...recoleccion, tipo: "Desecho", u: 60 }).u, 60);
+  assert.throws(() => clean("recoleccion", { ...recoleccion, tipo: "Desecho" }), /Completa Cantidad recolectada \(unidades\)/);
+  assert.equal(sinUnidades("relleno", "Escombro"), true);
+  // A form without a waste type keeps its units.
+  assert.equal(sinUnidades("patioSCY", "Escombro"), false);
 });

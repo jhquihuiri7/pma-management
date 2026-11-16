@@ -14,7 +14,7 @@ import { RouteTag } from "./RutaIcono";
  * opens this view already filtered and the link can be shared.
  */
 export default function RegistrosVista() {
-  const { records, loaded, openReport, showDetail } = useProtocoloLimpieza();
+  const { records, loaded, puedeEditar, openReport, showDetail } = useProtocoloLimpieza();
   const router = useRouter();
   const pathname = usePathname();
   const parametros = useSearchParams();
@@ -59,7 +59,8 @@ export default function RegistrosVista() {
           {filas.length ? (
             <table>
               <thead>
-                <tr>{["Ruta", "Operación", "Fecha del hito", "Lote / contenedor", "Reportado por", "Acciones"].map((h) => <th key={h} scope="col">{h}</th>)}</tr>
+                {/* Who reported is shown to users with the module only (the API leaves it out for anyone else). */}
+                <tr>{["Ruta", "Operación", "Fecha del hito", "Lote / contenedor", ...(puedeEditar ? ["Reportado por"] : []), "Acciones"].map((h) => <th key={h} scope="col">{h}</th>)}</tr>
               </thead>
               <tbody>
                 {filas.map((r) => (
@@ -68,11 +69,11 @@ export default function RegistrosVista() {
                     <td>{forms[r.kind].name}</td>
                     <td>{displayDate(eventDate(r))}</td>
                     <td>{[r.data.lote, r.data.contenedor].filter(Boolean).join(" / ") || "—"}</td>
-                    <td>{String(r.data.responsable ?? r.creadoPorNombre ?? "")}</td>
+                    {puedeEditar && <td>{String(r.data.responsable ?? r.creadoPorNombre ?? "")}</td>}
                     <td>
                       <div className="actions">
                         <button type="button" className="button secondary" onClick={() => showDetail(r)}>Ver</button>
-                        <button type="button" className="button secondary" onClick={() => openReport(r.kind, r)}>Editar</button>
+                        {puedeEditar && <button type="button" className="button secondary" onClick={() => openReport(r.kind, r)}>Editar</button>}
                       </div>
                     </td>
                   </tr>

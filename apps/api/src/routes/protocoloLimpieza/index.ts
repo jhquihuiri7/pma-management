@@ -1,7 +1,7 @@
 import { randomUUID } from "node:crypto";
-import type { FastifyInstance } from "fastify";
+import type { FastifyInstance, FastifyRequest } from "fastify";
 import { z } from "zod";
-import { authenticate, requireApp, requireRole } from "../../auth/middleware.js";
+import { authenticate, optionalAuthenticate, requireApp, requireRole } from "../../auth/middleware.js";
 import { enqueueNube } from "../../jobs/boss.js";
 import { BadRequest, HttpError, NotFound } from "../../lib/errors.js";
 import { getStorage, StorageUploadTooLargeError } from "../../storage/index.js";
@@ -25,7 +25,7 @@ import {
   validarDatosNube,
 } from "../../modules/protocoloLimpieza/nubesModule.js";
 import { crearRegistro, editarRegistro, listarRegistros, ROLES_PROTOCOLO_LIMPIEZA } from "../../modules/protocoloLimpieza/registrosModule.js";
-import { extensionNube, MAX_FOTO_BYTES, MAX_NUBE_BYTES, type DatosNube } from "../../modules/protocoloLimpieza/reglas.js";
+import { extensionNube, MAX_FOTO_BYTES, MAX_NUBE_BYTES, registroSinNombres, type DatosNube } from "../../modules/protocoloLimpieza/reglas.js";
 
 // The standalone app capped a report at 20 000 bytes for its fields (about
 // twenty of at most 500 characters). Up to 20 resources add about 7 KB more.
@@ -56,22 +56,29 @@ function cuerpo(body: unknown): Record<string, unknown> {
   return body as Record<string, unknown>;
 }
 
+/** Users with the module (ADMIN has it implicitly): they report, edit and see who did. */
+const conModulo = (request: FastifyRequest) =>
+  !!request.user && (request.user.role === "ADMIN" || request.user.apps.includes("protocolo_limpieza"));
+
 /**
  * Protocolo de limpieza: traceability of waste and rubble from Santa Cruz to
- * Guayaquil. Nothing is public: every route needs a session with the module,
- * and every role with it may report and edit. The standalone app's own
- * password gate (REQUIRE_LOGIN, /api/session) is gone.
+ * Guayaquil. Since 2026-11-15 anyone may read it, with or without a session
+ * (the user's decision): the reports, their photos and the point clouds in the
+ * viewer. Without the module, the names of people are left out. Everything that
+ * writes, and the download of a cloud's original file, needs a session with the
+ * module; every role with it may report and edit.
  */
 export async function protocoloLimpiezaRoutes(app: FastifyInstance) {
-  app.addHook("preHandler", authenticate);
-  app.addHook("preHandler", requireApp("protocolo_limpieza"));
+  const lectura = { preHandler: optionalAuthenticate };
+  const escritura = [authenticate, requireApp("protocolo_limpieza")];
 
-  app.get("/registros", async (_request, reply) => {
+  app.get("/registros", lectura, async (request, reply) => {
     reply.header("Cache-Control", "no-store");
-    return { records: await listarRegistros() };
+    const records = await listarRegistros();
+    return { records: conModulo(request) ? records : records.map(registroSinNombres) };
   });
 
-  app.post("/registros", { bodyLimit: MAX_REPORTE_BYTES }, async (request, reply) => {
+  app.post("/registros", { bodyLimit: MAX_REPORTE_BYTES, preHandler: escritura }, async (request, reply) => {
     const { kind, data, recursos } = cuerpo(request.body);
     const recibo = await crearRegistro(request.user!.sub, kind, data, recursos);
     request.log.info({ registroId: recibo.id, kind }, "protocolo limpieza report created");
@@ -79,7 +86,7 @@ export async function protocoloLimpiezaRoutes(app: FastifyInstance) {
     return recibo;
   });
 
-  app.put("/registros/:id", { bodyLimit: MAX_REPORTE_BYTES }, async (request) => {
+  app.put("/registros/:id", { bodyLimit: MAX_REPORTE_BYTES, preHandler: escritura }, async (request) => {
     const { id } = idParamsSchema.parse(request.params);
     const { kind, data, version, recursos } = cuerpo(request.body);
     const recibo = await editarRegistro(request.user!.sub, id, version, kind, data, recursos);
@@ -89,7 +96,7 @@ export async function protocoloLimpiezaRoutes(app: FastifyInstance) {
 
   // Multipart with one file, like every other upload in SIGTAR. The limit is
   // applied while reading, so an oversized photo is never held in memory.
-  app.post("/fotos", async (request, reply) => {
+  app.post("/fotos", { preHandler: escritura }, async (request, reply) => {
     const parte = await request.file({ limits: { fileSize: MAX_FOTO_BYTES, files: 1, fields: 0, parts: 1 } });
     if (!parte) throw BadRequest("Adjunta la fotografía.");
     let bytes: Buffer;
@@ -106,16 +113,17 @@ export async function protocoloLimpiezaRoutes(app: FastifyInstance) {
   });
 
   // ── Nubes de puntos (Visualización 3D) ────────────────────────────────────
-  app.get("/nubes", async (_request, reply) => {
+  app.get("/nubes", lectura, async (request, reply) => {
     reply.header("Cache-Control", "no-store");
-    return { nubes: await listarNubes() };
+    const nubes = await listarNubes();
+    return { nubes: conModulo(request) ? nubes : nubes.map((n) => ({ ...n, creadoPorNombre: "", actualizadoPorNombre: "" })) };
   });
 
   // Multipart: the fields sitio, fecha and descripcion, then the LAS/LAZ in
   // "archivo". The data come first, so a wrong form is refused before reading
   // gigabytes. The file is streamed to the NAS (never held in memory) inside a
   // folder reserved before the first byte: a failure or a crash leaves nothing.
-  app.post("/nubes", async (request, reply) => {
+  app.post("/nubes", { preHandler: escritura }, async (request, reply) => {
     const actorId = request.user!.sub;
     const storage = getStorage();
     const id = randomUUID();
@@ -202,7 +210,7 @@ export async function protocoloLimpiezaRoutes(app: FastifyInstance) {
     return nube;
   });
 
-  app.put("/nubes/:id", { bodyLimit: 4_000 }, async (request) => {
+  app.put("/nubes/:id", { bodyLimit: 4_000, preHandler: escritura }, async (request) => {
     const { id } = nubeParamsSchema.parse(request.params);
     const { version, ...datos } = cuerpo(request.body);
     const nube = await editarNube(request.user!.sub, id, version, datos);
@@ -210,14 +218,14 @@ export async function protocoloLimpiezaRoutes(app: FastifyInstance) {
     return nube;
   });
 
-  app.delete("/nubes/:id", { preHandler: requireRole("ADMIN") }, async (request) => {
+  app.delete("/nubes/:id", { preHandler: [...escritura, requireRole("ADMIN")] }, async (request) => {
     const { id } = nubeParamsSchema.parse(request.params);
     await eliminarNube(request.user!.sub, id);
     request.log.info({ nubeId: id }, "protocolo limpieza point cloud deleted");
     return { ok: true };
   });
 
-  app.post("/nubes/:id/reintentar", async (request) => {
+  app.post("/nubes/:id/reintentar", { preHandler: escritura }, async (request) => {
     const { id } = nubeParamsSchema.parse(request.params);
     const nube = await reintentarNube(request.user!.sub, id);
     // If the queue does not answer now, the worker's reconciliation queues it within minutes.
@@ -227,7 +235,7 @@ export async function protocoloLimpiezaRoutes(app: FastifyInstance) {
 
   // The viewer reads the COPC by HTTP ranges (its header first, then the octree nodes in
   // view). In production nginx serves the bytes and the ranges (X-Accel-Redirect).
-  app.get("/nubes/:id/copc", async (request, reply) => {
+  app.get("/nubes/:id/copc", lectura, async (request, reply) => {
     const { id } = nubeParamsSchema.parse(request.params);
     const copc = await copcDeNube(id);
     return sendStorageFile(request, reply, {
@@ -239,7 +247,8 @@ export async function protocoloLimpiezaRoutes(app: FastifyInstance) {
     });
   });
 
-  app.get("/nubes/:id/original", async (request, reply) => {
+  // The original (up to 5 GB) stays for users with the module; the viewer reads the COPC.
+  app.get("/nubes/:id/original", { preHandler: escritura }, async (request, reply) => {
     const { id } = nubeParamsSchema.parse(request.params);
     const original = await originalDeNube(id);
     reply.header("Content-Disposition", descarga(original.nombre));
@@ -252,7 +261,7 @@ export async function protocoloLimpiezaRoutes(app: FastifyInstance) {
     });
   });
 
-  app.get("/fotos/:id", async (request, reply) => {
+  app.get("/fotos/:id", lectura, async (request, reply) => {
     const { id } = idParamsSchema.parse(request.params);
     const path = await rutaFotoGuardada(id);
     const storage = getStorage();

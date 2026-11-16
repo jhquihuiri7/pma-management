@@ -81,12 +81,20 @@ test(
       const adminJwt = await token(adminId, "ADMIN", []);
       const outsiderJwt = await token(outsiderId, "REPORTER", ["pma"]);
 
-      await t.test("nothing is public: no session is 401 and a session without the module is 403", async () => {
-        for (const [method, url] of [["GET", "/registros"], ["POST", "/registros"], ["POST", "/fotos"], ["GET", "/fotos/x.jpg"]] as const) {
+      await t.test("anyone reads (since 2026-11-15); writing needs a session with the module", async () => {
+        for (const [method, url] of [["POST", "/registros"], ["PUT", `/registros/${randomUUID()}`], ["POST", "/fotos"]] as const) {
           const anonimo = await app.inject({ method, url: `/protocolo-limpieza${url}` });
           assert.equal(anonimo.statusCode, 401, `${method} ${url}`);
           const ajeno = await app.inject({ method, url: `/protocolo-limpieza${url}`, headers: auth(outsiderJwt) });
           assert.equal(ajeno.statusCode, 403, `${method} ${url}`);
+        }
+        for (const headers of [{}, auth(outsiderJwt)]) {
+          const lista = await app.inject({ method: "GET", url: "/protocolo-limpieza/registros", headers });
+          assert.equal(lista.statusCode, 200);
+          assert.ok(Array.isArray(lista.json().records));
+          assert.equal(lista.headers["cache-control"], "no-store");
+          // A photo is public too: an unknown one is simply not found.
+          assert.equal((await app.inject({ method: "GET", url: "/protocolo-limpieza/fotos/x.jpg", headers })).statusCode, 404);
         }
       });
 
@@ -122,12 +130,24 @@ test(
 
         // A report saved before the operation was retired.
         const [anterior] = await db.insert(protocoloLimpiezaRegistros).values({
-          kind: "carga", data: carga, uniqueKey: `carga-anterior-${lote}`,
+          kind: "carga", data: { ...carga, responsable: "Persona del reporte" }, uniqueKey: `carga-anterior-${lote}`,
           createdBy: viewerId, createdByName: "Visor de limpieza", updatedBy: viewerId, updatedByName: "Visor de limpieza",
         }).returning({ id: protocoloLimpiezaRegistros.id });
         registroIds.push(anterior.id);
         const lista = await app.inject({ method: "GET", url: "/protocolo-limpieza/registros", headers: auth(viewerJwt) });
-        assert.equal(lista.json().records.find((r: { id: string }) => r.id === anterior.id)?.kind, "carga");
+        const conModulo = lista.json().records.find((r: { id: string }) => r.id === anterior.id);
+        assert.equal(conModulo?.kind, "carga");
+        assert.equal(conModulo?.creadoPorNombre, "Visor de limpieza");
+        assert.equal(conModulo?.data.responsable, "Persona del reporte");
+        // Without a session, or without the module, the report comes without the names of people.
+        for (const headers of [{}, auth(outsiderJwt)]) {
+          const publica = await app.inject({ method: "GET", url: "/protocolo-limpieza/registros", headers });
+          const sinNombres = publica.json().records.find((r: { id: string }) => r.id === anterior.id);
+          assert.equal(sinNombres?.kind, "carga");
+          assert.equal(sinNombres?.data.contenedor, carga.contenedor);
+          assert.equal("creadoPorNombre" in sinNombres, false);
+          assert.equal("responsable" in sinNombres.data, false);
+        }
         const editado = await app.inject({
           method: "PUT", url: `/protocolo-limpieza/registros/${anterior.id}`, headers: auth(viewerJwt),
           payload: { version: 1, kind: "carga", data: { ...carga, t: 5 } },

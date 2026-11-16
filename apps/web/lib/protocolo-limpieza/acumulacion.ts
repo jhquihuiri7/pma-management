@@ -68,12 +68,12 @@ export interface EstadoAcumulacion {
   voyages: Viaje[];
 }
 
-// Cada ruta tiene su punto donde empieza (R4 sale de Baltra, en Santa Cruz); R2.1, donde
+// Cada ruta tiene su punto donde empieza (R4 sale del Muelle de Itabaca, en Santa Cruz); R2.1, donde
 // termina (sale del acopio, que es el punto de R2). Los nombres son los de los trayectos del
 // protocolo (packages/types), para que el mapa diga lo mismo que el documento.
 const origen = (route: RutaLimpieza) => extremosRuta(route)[0];
 const destino = (route: RutaLimpieza) => extremosRuta(route)[1];
-// R5 usa la escena del puerto de Guayaquil (en la app original repetía la de Baltra).
+// R5 usa la escena del puerto de Guayaquil (en la app original repetía la del puerto de R4).
 // Coordenadas en grados decimales (WGS84). Son referenciales: reemplázalas por las reales.
 export const points: readonly PuntoRuta[] = [
   { id: "R1", route: "R1", name: origen("R1"), note: "Recolectado en R1 que aún no pasa a R2 ni a R2.1", zone: "sc", lat: -0.743, lon: -90.315, scene: "zona-urbana", color: "#16a34a", label: "bottom" },
@@ -93,7 +93,7 @@ export function escenaRuta(route: string): string {
 // Destino final del R6; solo marca el final del tramo.
 export const destination = { id: "gestion", name: destino("R6"), note: "Destino final del R6", lat: -2.13, lon: -79.94 } as const;
 
-// Tramos que unen los puntos; R4 es el tramo marítimo de Baltra a Guayaquil.
+// Tramos que unen los puntos; R4 es el tramo marítimo del Muelle de Itabaca a Guayaquil.
 export const legs: readonly Tramo[] = [
   { route: "R1", from: "R1", to: "R2" },
   { route: "R2", from: "R2", to: "R3" },
@@ -136,10 +136,10 @@ const legByKind: Record<string, string> = { recoleccion: "R1", patioSCY: "R2", r
 const round = (v: number) => Math.round(v * 1e6) / 1e6;
 const porRuta = (value: number) => Object.fromEntries(points.map((p) => [p.id, value])) as Record<RutaLimpieza, number>;
 
-// Viajes del R4 (Baltra → Guayaquil): un barco por buque y fecha de salida. Su posición sale del
+// Viajes del R4 (Muelle de Itabaca → Guayaquil): un barco por buque y fecha de salida. Su posición sale del
 // reloj: desde las 00:00 del día de salida (hora de Galápagos, UTC−6) hasta las 23:59 del día de
 // llegada estimada (hora de Guayaquil, UTC−5), a velocidad constante. Antes de salir queda en
-// Baltra (programado); después de llegar, en Guayaquil (arribado) hasta que sus contenedores pasan al R5.
+// Itabaca (programado); después de llegar, en Guayaquil (arribado) hasta que sus contenedores pasan al R5.
 const GALAPAGOS = -6, GUAYAQUIL = -5;
 const localMidnight = (date: string, offset: number) => {
   const [y, m, d] = date.split("-").map(Number);

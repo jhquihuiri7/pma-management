@@ -6,7 +6,7 @@
 // (public/protocolo-limpieza/), the basemap constant (lib/basemaps.ts) and `islandMap`, which lets
 // the view add the Geoportal's neighbourhoods under the heat.
 import type * as LeafletNS from "leaflet";
-import { routes } from "@pma/types/protocolo-limpieza";
+import { extremosRuta, routes } from "@pma/types/protocolo-limpieza";
 import { OPENFREEMAP_ATTRIBUTION, OPENFREEMAP_STYLES } from "@/lib/basemaps";
 import {
   balanceGestion,
@@ -20,6 +20,10 @@ import {
   type ZonaPunto,
 } from "@/lib/protocolo-limpieza/acumulacion";
 import { unitSymbol } from "@/lib/protocolo-limpieza/tablero";
+import { guiaIcono, iconosApartados } from "@/lib/protocolo-limpieza/acomodoIconos";
+import { ANILLOS_PUNTO, lineaDeRuta, ubicacionesDePuntos, type DatosRutas } from "@/lib/protocolo-limpieza/rutasGeoportal";
+import { dibujarRutas, type CapaRutas } from "./capaRutas";
+import { crearCapaEtiquetas, type CapaEtiquetas } from "./etiquetas";
 import { iniciarSeleccionArea } from "./seleccionArea";
 
 type Leaflet = typeof LeafletNS;
@@ -165,26 +169,48 @@ function arc(a: LatLng, b: LatLng, bend = 0.14): LatLng[] {
   });
 }
 
-// Posición a lo largo del trayecto marítimo (f de 0 a 1).
-const sea = seaRoute as ReadonlyArray<LatLng>;
-const seaLengths = sea.slice(1).map((p, i) => Math.hypot(p[0] - sea[i][0], p[1] - sea[i][1]));
-const seaTotal = seaLengths.reduce((a, b) => a + b, 0);
-function alongSea(f: number): LatLng {
-  let d = f * seaTotal;
-  for (let i = 0; i < seaLengths.length; i++) {
-    if (d <= seaLengths[i] || i === seaLengths.length - 1) {
-      const t = Math.min(1, d / seaLengths[i]), [a, b] = [sea[i], sea[i + 1]];
-      return [a[0] + (b[0] - a[0]) * t, a[1] + (b[1] - a[1]) * t];
-    }
-    d -= seaLengths[i];
-  }
-  return sea[sea.length - 1];
+// El trayecto marítimo del R4 y la posición a lo largo de él (f de 0 a 1): el esquemático de
+// acumulacion.ts, o la línea del Geoportal cuando llega.
+interface Recorrido { linea: LatLng[]; inicio: LatLng; fin: LatLng; en(f: number): LatLng }
+function recorrido(linea: LatLng[]): Recorrido {
+  const largos = linea.slice(1).map((p, i) => Math.hypot(p[0] - linea[i][0], p[1] - linea[i][1]));
+  const total = largos.reduce((a, b) => a + b, 0);
+  return {
+    linea, inicio: linea[0], fin: linea[linea.length - 1],
+    en(f) {
+      let d = f * total;
+      for (let i = 0; i < largos.length; i++) {
+        if (d <= largos[i] || i === largos.length - 1) {
+          const t = largos[i] ? Math.min(1, d / largos[i]) : 0, [a, b] = [linea[i], linea[i + 1]];
+          return [a[0] + (b[0] - a[0]) * t, a[1] + (b[1] - a[1]) * t];
+        }
+        d -= largos[i];
+      }
+      return linea[linea.length - 1];
+    },
+  };
 }
 
-function pointHtml(p: PuntoRuta, state: EstadoAcumulacion, motion: boolean) {
+// With the Geoportal's points on the map, an icon sits on its point while it has room. When it
+// would touch another icon (acomodoIconos.ts) it slides this far aside (pixels: x right, y down)
+// and a leader joins it to its point: zoomed out, the urban zone (R1), the temporary storage (R2)
+// and the Santa Cruz container yard (R3), a few hundred metres apart, would pile up.
+const DESPLAZAMIENTO: Record<string, readonly [number, number]> = {
+  R1: [44, 30], R2: [-42, -40], "R2.1": [-46, 0], R3: [-48, 34], R4: [46, -6], R5: [-42, -36], R6: [42, 36],
+};
+// The figures then go on the outer side of their icon, away from the neighbouring ones.
+const LADO_CIFRA: Partial<Record<string, PuntoRuta["label"]>> = { R1: "right", R3: "left" };
+
+// With the Geoportal's routes each icon carries a leader, drawn only while the icon is aside: its
+// place, length and angle are CSS variables of the marker (moverIcono), so they survive the icon's
+// redraws and slide. A point the Geoportal does not have (R1's urban zone) gets a dot at its end.
+interface OpcionesIcono { lado?: PuntoRuta["label"]; guiaConPunto: boolean }
+
+function pointHtml(p: PuntoRuta, state: EstadoAcumulacion, motion: boolean, guia?: OpcionesIcono) {
   const v = state.stock[p.id], active = state.active.has(p.id);
   const scene = scenePath(p.scene, active && motion);
-  return `<div class="acc-pin is-${p.label}${active ? " is-active" : ""}${v > 0 ? " has-stock" : ""}" style="--c:${p.color}">
+  const lado = guia?.lado ?? p.label;
+  return `<div class="acc-pin is-${lado}${active ? " is-active" : ""}${v > 0 ? " has-stock" : ""}" style="--c:${p.color}">${guia ? `<span class="acc-pin-guia${guia.guiaConPunto ? " con-punto" : ""}"></span>` : ""}
 <span class="acc-pin-disc" style="background-image:url(${scene})"></span>${active ? '<span class="acc-pin-live"></span>' : ""}
 <span class="acc-pin-label"><b>${p.code ?? p.route}</b><span>${esc(qty(v, state.unit))}</span><small>${pct(share(v, state))}</small></span></div>`;
 }
@@ -196,9 +222,9 @@ const pointTip = (p: PuntoRuta, state: EstadoAcumulacion) => {
 function zoneValue(zone: ZonaPunto, state: EstadoAcumulacion) {
   return points.filter((p) => p.zone === zone).reduce((s, p) => s + state.stock[p.id], 0);
 }
-function zoneCenter(zone: ZonaPunto): LatLng {
-  const ps = points.filter((p) => p.zone === zone);
-  return [ps.reduce((s, p) => s + p.lat, 0) / ps.length, ps.reduce((s, p) => s + p.lon, 0) / ps.length];
+function zoneCenter(zone: ZonaPunto, pos: (id: string) => LatLng): LatLng {
+  const ps = points.filter((p) => p.zone === zone).map((p) => pos(p.id));
+  return [ps.reduce((s, p) => s + p[0], 0) / ps.length, ps.reduce((s, p) => s + p[1], 0) / ps.length];
 }
 function clusterHtml(zone: ZonaPunto, state: EstadoAcumulacion) {
   const v = zoneValue(zone, state), active = points.some((p) => p.zone === zone && state.active.has(p.id));
@@ -219,8 +245,10 @@ const voyageStatus = (v: Viaje) =>
 function voyageHtml(v: Viaje, unit: string) {
   return `<div class="acc-ship is-${v.status}">${v.status === "navegando" ? '<span class="acc-ship-wake"><i></i><i></i></span>' : ""}${shipSvg}<span class="acc-ship-tag"><span><b>${esc(v.buque)}</b> · ${esc(qty(v.amount, unit))}</span><small>${voyageStatus(v)}</small></span></div>`;
 }
+// R4 as the protocol writes it (Muelle de Itabaca → Puerto GYE).
+const [ORIGEN_R4, DESTINO_R4] = extremosRuta("R4");
 const voyageTip = (v: Viaje, unit: string) =>
-  `<strong>${esc(v.buque)}</strong> · R4 Baltra → Guayaquil<br>Salida de Baltra: ${longDate(v.salida)}, 00:00 (hora de Galápagos)<br>Llegada estimada: ${longDate(v.llegada)}, 23:59 (hora de Guayaquil)<br>${v.status === "navegando" ? `Navegando · ${Math.round(v.progress * 100)} % del trayecto` : v.status === "programado" ? "Programado: espera en Baltra" : "Arribado: espera el traslado al patio (R5)"}<br>${v.containers} contenedor${v.containers === 1 ? "" : "es"} · ${esc(qty(v.amount, unit))}`;
+  `<strong>${esc(v.buque)}</strong> · R4 ${ORIGEN_R4} → ${DESTINO_R4}<br>Salida: ${longDate(v.salida)}, 00:00 (hora de Galápagos)<br>Llegada estimada: ${longDate(v.llegada)}, 23:59 (hora de Guayaquil)<br>${v.status === "navegando" ? `Navegando · ${Math.round(v.progress * 100)} % del trayecto` : v.status === "programado" ? `Programado: espera en ${ORIGEN_R4}` : "Arribado: espera el traslado al patio (R5)"}<br>${v.containers} contenedor${v.containers === 1 ? "" : "es"} · ${esc(qty(v.amount, unit))}`;
 
 // The Geoportal's light basemap ("Claro": OpenFreeMap positron, vector), drawn by MapLibre
 // inside Leaflet like in the Geoportal and in Previene. It sits in Leaflet's tilePane, under
@@ -232,14 +260,18 @@ function fondoClaro(L: Leaflet): LeafletNS.Layer {
   });
 }
 
-const latlng = (p: { lat: number; lon: number }): LatLng => [p.lat, p.lon];
-const byId = (id: string) => (id === destination.id ? destination : points.find((p) => p.id === id)!);
-
 export interface MapasAcumulacion {
   update(next: EstadoAcumulacion): void;
   fit(name: "island" | "region"): void;
   /** The Santa Cruz map, for layers the view adds on top (the Geoportal's neighbourhoods). */
   islandMap: LeafletNS.Map;
+  /** The Santa Cruz map's labels, for the neighbourhood names (capaBarrios.ts). */
+  etiquetasIsla: CapaEtiquetas;
+  /**
+   * Draws the Geoportal's routes and points with their QGIS style in place of the schematic
+   * ones, and moves every icon, heat spot and the R4 ship to the real places.
+   */
+  setRutas(datos: DatosRutas): void;
   /**
    * Shows or hides the heat on the Santa Cruz map. It lies over the neighbourhoods, and the
    * urban point (R1) sits in Puerto Ayora, so hiding it is how their cleaning colour is read.
@@ -272,6 +304,12 @@ interface Vista {
   heat: CapaCalor;
   heatKey?: string;
   legs: Array<{ route: string; line: LeafletNS.Polyline }>;
+  rutas?: CapaRutas;
+  etiquetas: CapaEtiquetas;
+  /** The end of R6 as a dot; the Geoportal's point symbol replaces it. */
+  destino?: LeafletNS.Marker;
+  /** The user moved the map: new routes do not fit it again. */
+  movido: boolean;
   detail: LeafletNS.LayerGroup;
   points: Array<{ p: PuntoRuta; marker: LeafletNS.Marker }>;
   clusters: LeafletNS.LayerGroup;
@@ -289,8 +327,24 @@ export function createAccumulationMaps(
   { motion = true }: { motion?: boolean } = {},
 ): MapasAcumulacion {
   const Heat = heatLayer(L);
+  // `anchor` moves the icon off its point; tooltips then open from the icon's centre.
   const icon = (html: string, size: [number, number], className = "acc-marker", anchor: [number, number] = [size[0] / 2, size[1] / 2]) =>
-    L.divIcon({ className, html, iconSize: size, iconAnchor: anchor });
+    L.divIcon({ className, html, iconSize: size, iconAnchor: anchor, tooltipAnchor: [size[0] / 2 - anchor[0], size[1] / 2 - anchor[1]] });
+
+  // Where each point is: acumulacion.ts's reference places until the Geoportal's points arrive.
+  const posiciones = new Map<string, LatLng>([
+    ...points.map((p) => [p.id, [p.lat, p.lon]] as [string, LatLng]),
+    [destination.id, [destination.lat, destination.lon]],
+  ]);
+  const pos = (id: string): LatLng => posiciones.get(id)!;
+  let mar = recorrido([...(seaRoute as LatLng[])]);
+  let conRutas = false;
+  /** Points the Geoportal has: their icon's leader ends at the point symbol. */
+  const conAnillo = new Set<string>();
+  let ultimo: EstadoAcumulacion | null = null;
+  const boundsIsla = () => L.latLngBounds(points.filter((p) => p.zone === "sc").map((p) => pos(p.id))).pad(0.15);
+  const boundsRegion = () =>
+    L.latLngBounds([...mar.linea, ...points.filter((p) => p.zone === "gye").map((p) => pos(p.id)), ...(conRutas ? [pos(destination.id)] : [])]).pad(0.06);
 
   const setup = (el: HTMLElement, bounds: LeafletNS.LatLngBounds, far?: boolean, controlesPropios = false): Vista => {
     // The Santa Cruz map brings its own controls (MapasCalor.tsx): zoom, reset, area and expand.
@@ -299,8 +353,14 @@ export function createAccumulationMaps(
     fondoClaro(L).addTo(map);
     const view = { el, bounds, far, map } as Vista;
     view.heat = new Heat({ pantalla: !!far }).addTo(map) as CapaCalor;
+    view.movido = false;
+    map.on("dragstart", () => { view.movido = true; });
+    view.etiquetas = crearCapaEtiquetas(L, map, {
+      grupos: ["rutas", "barrios"],
+      obstaculos: ".acc-pin-disc, .acc-pin-label, .acc-cluster, .acc-ship, .acc-anillo, .acc-end, .acc-controles",
+    });
     view.legs = legs.map((l) => {
-      const line = l.sea ? (seaRoute as LatLng[]) : arc(latlng(byId(l.from)), latlng(byId(l.to)), l.branch ? -0.16 : 0.14);
+      const line = l.sea ? (seaRoute as LatLng[]) : arc(pos(l.from), pos(l.to), l.branch ? -0.16 : 0.14);
       return {
         route: l.route,
         line: L.polyline(line, { className: `acc-leg${l.sea ? " is-sea" : ""}${l.branch ? " is-branch" : ""}`, color: l.sea ? "#2563eb" : l.branch ? "#d97706" : "#0d9488", weight: 3.5, opacity: 1, smoothFactor: 1 })
@@ -311,17 +371,17 @@ export function createAccumulationMaps(
     view.detail = L.layerGroup();
     view.points = points.map((p) => ({
       p,
-      marker: L.marker(latlng(p), { icon: icon("", [44, 44]), keyboard: false, riseOnHover: true })
+      marker: L.marker(pos(p.id), { icon: icon("", [44, 44]), keyboard: false, riseOnHover: true })
         .bindTooltip("", { direction: "top", offset: [0, -22], className: "acc-tip" })
         .addTo(view.detail),
     }));
-    L.marker(latlng(destination), { icon: icon('<span class="acc-end"></span>', [16, 16]), keyboard: false })
+    view.destino = L.marker(pos(destination.id), { icon: icon('<span class="acc-end"></span>', [16, 16]), keyboard: false })
       .bindTooltip(`<strong>${esc(destination.name)}</strong><br>${esc(destination.note)}`, { direction: "top", offset: [0, -8], className: "acc-tip" })
       .addTo(view.detail);
     view.clusters = L.layerGroup();
     view.zones = (Object.keys(zones) as ZonaPunto[]).map((zone) => ({
       zone,
-      marker: L.marker(zoneCenter(zone), { icon: icon("", [0, 0]), keyboard: false }).addTo(view.clusters),
+      marker: L.marker(zoneCenter(zone, pos), { icon: icon("", [0, 0]), keyboard: false }).addTo(view.clusters),
     }));
     const syncZoom = () => {
       const detail = map.getZoom() >= DETAIL_ZOOM;
@@ -330,9 +390,17 @@ export function createAccumulationMaps(
       map.removeLayer(detail ? view.clusters : view.detail);
     };
     map.on("zoomend", syncZoom);
+    // After syncZoom: the icons that now have room go back onto their points, the rest move aside.
+    map.on("zoomend resize", () => acomodar(view));
     view.fitted = false;
     view.fit = () => {
-      if (view.el.clientWidth && view.el.clientHeight) { map.fitBounds(view.bounds, { padding: [24, 24] }); view.fitted = true; syncZoom(); }
+      if (view.el.clientWidth && view.el.clientHeight) {
+        // Beside their points, the Puerto Ayora icons and figures hang below the southernmost ones.
+        const abajo = conRutas && !view.far ? 96 : 24;
+        map.fitBounds(view.bounds, { paddingTopLeft: [24, 24], paddingBottomRight: [24, abajo] });
+        view.fitted = true;
+        syncZoom();
+      }
     };
     map.setView(view.bounds.getCenter(), view.far ? 5 : 10);
     syncZoom();
@@ -341,13 +409,17 @@ export function createAccumulationMaps(
   };
 
   const views: Record<"island" | "region", Vista> = {
-    island: setup(containers.island, L.latLngBounds(points.filter((p) => p.zone === "sc").map(latlng)).pad(0.15), false, true),
-    region: setup(containers.region, L.latLngBounds([...(seaRoute as LatLng[]), ...points.filter((p) => p.zone === "gye").map(latlng)]).pad(0.06), true),
+    island: setup(containers.island, boundsIsla(), false, true),
+    region: setup(containers.region, boundsRegion(), true),
   };
 
   // Ajusta el tamaño cuando el panel cambia o vuelve a mostrarse.
   const resize = new ResizeObserver(() => {
     for (const view of Object.values(views)) {
+      // A map leaving the page (the dashboard closing) shrinks to nothing before destroy() runs.
+      // Resizing it then makes the light basemap (maplibre-gl-leaflet) schedule a frame that runs
+      // after the map is removed and throws reading `getZoom` of null.
+      if (!view.el.isConnected || !view.el.clientWidth || !view.el.clientHeight) continue;
       view.map.invalidateSize({ pan: false });
       if (!view.fitted) view.fit();
     }
@@ -363,7 +435,7 @@ export function createAccumulationMaps(
   };
 
   // Barcos del R4 (mapa del tramo marítimo): uno por viaje, en su posición según la hora.
-  // Si varios coinciden en el mismo lugar (por ejemplo, programados en Baltra), se apilan.
+  // Si varios coinciden en el mismo lugar (por ejemplo, programados en Itabaca), se apilan.
   const fleet = L.layerGroup().addTo(views.region.map), ships = new Map<string, LeafletNS.Marker>();
   function updateShips(voyages: Viaje[], unit: string) {
     const seen = new Set<string>(), stacks = new Map<string, number>();
@@ -371,7 +443,7 @@ export function createAccumulationMaps(
       const spot = v.status === "navegando" ? v.progress.toFixed(3) : v.status;
       const level = stacks.get(spot) ?? 0;
       stacks.set(spot, level + 1);
-      const at: LatLng = v.status === "programado" ? sea[0] : v.status === "arribado" ? sea[sea.length - 1] : alongSea(v.progress);
+      const at: LatLng = v.status === "programado" ? mar.inicio : v.status === "arribado" ? mar.fin : mar.en(v.progress);
       let marker = ships.get(v.key);
       if (!marker) {
         marker = L.marker(at, { icon: icon("", [52, 30]), keyboard: false, zIndexOffset: 800 })
@@ -388,19 +460,20 @@ export function createAccumulationMaps(
   }
 
   function update(current: EstadoAcumulacion) {
+    ultimo = current;
     // Santa Cruz: red where waste accumulates, as large as its share of the total.
     const acumulacion: PuntosCalor = {
-      detail: points.filter((p) => current.stock[p.id] > 0).map((p) => ({ latlng: latlng(p), share: share(current.stock[p.id], current), tono: "rojo" })),
+      detail: points.filter((p) => current.stock[p.id] > 0).map((p) => ({ latlng: pos(p.id), share: share(current.stock[p.id], current), tono: "rojo" })),
       zones: (Object.keys(zones) as ZonaPunto[])
-        .map((zone) => ({ latlng: zoneCenter(zone), share: share(zoneValue(zone, current), current), tono: "rojo" as const }))
+        .map((zone) => ({ latlng: zoneCenter(zone, pos), share: share(zoneValue(zone, current), current), tono: "rojo" as const }))
         .filter((p) => p.share > 0),
     };
-    // Sea leg and Guayaquil: management. Red at Baltra, the last point of Santa Cruz, shrinks as
+    // Sea leg and Guayaquil: management. Red at Itabaca, the last point of Santa Cruz, shrinks as
     // waste leaves Galápagos; green in Guayaquil grows from nothing as it arrives (R5 and R6).
     const balance = balanceGestion(current);
     const manchas: PuntoCalor[] = [
-      { latlng: latlng(byId("R4")), share: balance.partePorSacar, tono: "rojo" as const },
-      { latlng: latlng(byId("R6")), share: balance.parteGestionada, tono: "verde" as const },
+      { latlng: pos("R4"), share: balance.partePorSacar, tono: "rojo" as const },
+      { latlng: pos("R6"), share: balance.parteGestionada, tono: "verde" as const },
     ].filter((p) => p.share > 0);
     const gestion: PuntosCalor = { detail: manchas, zones: manchas };
     for (const view of Object.values(views)) {
@@ -410,29 +483,104 @@ export function createAccumulationMaps(
       const sailing = current.voyages.some((v) => v.status === "navegando");
       for (const { route, line } of view.legs) line.getElement()?.classList.toggle("is-active", current.activeLegs.has(route) || (route === "R4" && sailing));
       for (const { p, marker } of view.points) {
-        setIcon(marker, pointHtml(p, current, motion), [44, 44]);
+        const guia = conRutas ? { lado: LADO_CIFRA[p.id], guiaConPunto: !conAnillo.has(p.id) } : undefined;
+        setIcon(marker, pointHtml(p, current, motion, guia), [44, 44]);
         marker.setTooltipContent(pointTip(p, current));
         marker.setZIndexOffset(current.active.has(p.id) ? 500 : current.stock[p.id] > 0 ? 200 : 0);
       }
       for (const { zone, marker } of view.zones) setIcon(marker, clusterHtml(zone, current), [0, 0]);
     }
     updateShips(current.voyages, current.unit);
+    // The figures under the labels may have changed size.
+    for (const view of Object.values(views)) {
+      acomodar(view);
+      view.etiquetas.recolocar();
+    }
+  }
+
+  // Slides an icon `d` pixels off its point (or back onto it, with null), with its leader and tooltip.
+  function moverIcono(marker: LeafletNS.Marker, d: readonly [number, number] | null, radio: number) {
+    const el = marker.getElement();
+    if (!el) return;
+    const [dx, dy] = d ?? [0, 0];
+    el.style.setProperty("--dx", `${dx}px`);
+    el.style.setProperty("--dy", `${dy}px`);
+    if (d) {
+      const { largo, angulo } = guiaIcono(dx, dy, radio);
+      el.style.setProperty("--guia-largo", `${largo.toFixed(1)}px`);
+      el.style.setProperty("--guia-angulo", `${angulo.toFixed(1)}deg`);
+      el.style.setProperty("--guia-opacidad", "0.8");
+    } else {
+      // The angle stays: the leader shrinks along it as the icon slides back.
+      el.style.setProperty("--guia-largo", "0px");
+      el.style.setProperty("--guia-opacidad", "0");
+    }
+    const tip = marker.getTooltip();
+    if (tip) {
+      tip.options.offset = L.point(dx, dy - 22);
+      if (tip.isOpen()) tip.update();
+    }
+  }
+
+  // Each icon on its point while it has room; those that would touch another one move aside.
+  function acomodar(view: Vista) {
+    if (!conRutas || !view.map.hasLayer(view.detail)) return;
+    const enPantalla = view.points.map(({ p }) => {
+      const { x, y } = view.map.latLngToContainerPoint(pos(p.id));
+      return { id: p.id, x, y };
+    });
+    const apartados = iconosApartados(enPantalla);
+    for (const { p, marker } of view.points) {
+      const d = apartados.has(p.id) ? DESPLAZAMIENTO[p.id] ?? null : null;
+      moverIcono(marker, d, conAnillo.has(p.id) ? ANILLOS_PUNTO.exterior / 2 : 0);
+    }
+    // The labels keep clear of the icons: placed again once the icons have slid (0.3 s).
+    view.etiquetas.recolocar();
+    window.setTimeout(() => view.etiquetas.recolocar(), 350);
+  }
+
+  function setRutas(datos: DatosRutas) {
+    ubicacionesDePuntos(datos.puntos, [...points.map((p) => p.id), destination.id]).forEach((ll, id) => {
+      posiciones.set(id, ll);
+      conAnillo.add(id);
+    });
+    const r4 = lineaDeRuta(datos.tramos, "R4");
+    if (r4) mar = recorrido(r4);
+    conRutas = true;
+    for (const view of Object.values(views)) {
+      for (const { line } of view.legs) view.map.removeLayer(line);
+      view.rutas?.quitar();
+      view.rutas = dibujarRutas(L, view.map, datos);
+      view.legs = view.rutas.lineas;
+      view.etiquetas.fijar("rutas", view.rutas.etiquetas);
+      for (const { p, marker } of view.points) marker.setLatLng(pos(p.id));
+      for (const { zone, marker } of view.zones) marker.setLatLng(zoneCenter(zone, pos));
+      if (view.destino) { view.detail.removeLayer(view.destino); view.destino = undefined; }
+    }
+    views.island.bounds = boundsIsla();
+    views.region.bounds = boundsRegion();
+    for (const view of Object.values(views)) if (!view.movido) view.fit();
+    if (ultimo) update(ultimo);
   }
 
   return {
     update,
     fit(name) { views[name]?.fit(); },
     islandMap: views.island.map,
+    etiquetasIsla: views.island.etiquetas,
+    setRutas,
     mostrarCalor(visible) {
       const panel = views.island.map.getPane("accHeat");
       if (panel) panel.style.display = visible ? "" : "none";
     },
     acercar(sentido) {
       const map = views.island.map;
+      views.island.movido = true;
       if (sentido > 0) map.zoomIn();
       else map.zoomOut();
     },
     seleccionarArea(alTerminar) {
+      views.island.movido = true;
       return iniciarSeleccionArea(L, views.island.map, alTerminar);
     },
     vistaIsla() {

@@ -5,8 +5,10 @@ import type * as LeafletNS from "leaflet";
 import { Map as MapIcon, Maximize2, Minimize2, Minus, Plus, RotateCcw, SquareDashed } from "lucide-react";
 import "leaflet/dist/leaflet.css";
 import "maplibre-gl/dist/maplibre-gl.css";
+import { fetchLayerData, fetchLayers } from "@/components/geo/gis/persistence";
 import { balanceGestion, type EstadoAcumulacion } from "@/lib/protocolo-limpieza/acumulacion";
 import { gradienteLimpieza } from "@/lib/protocolo-limpieza/barrios";
+import { cargarRutas, ESTILO_TRAMOS, type EstadoRutas } from "@/lib/protocolo-limpieza/rutasGeoportal";
 import type { LimpiezaBarrio } from "@/lib/protocolo-limpieza/tablero";
 import { useProtocoloLimpieza } from "./contexto";
 import { agregarCapaBarrios, type CapaBarrios } from "./mapa/capaBarrios";
@@ -16,7 +18,10 @@ import { createAccumulationMaps, gradienteCalor, type MapasAcumulacion, type Vis
  * Mapa de calor de residuos: una tarjeta de Santa Cruz y otra del tramo marítimo y Guayaquil.
  * Leaflet only runs in the browser, so it is loaded here, after the page mounts. The Santa
  * Cruz map also gets the Geoportal's neighbourhoods (read once by the module's layout, under
- * the Geoportal's visibility rules), coloured by their latest cleaning percentage.
+ * the Geoportal's visibility rules), coloured by their latest cleaning percentage. Both maps
+ * draw the routes and points of the Geoportal's map "Gestión de residuos y desechos de Santa
+ * Cruz - Rutas" with their QGIS style; until they arrive, or if they cannot be read, the
+ * schematic routes stay.
  */
 /** "56 %": the share of what must reach Guayaquil. */
 const porcentaje = (parte: number) => `${Math.round(parte * 100)} %`;
@@ -32,6 +37,8 @@ export default function MapasCalor({ estado, limpieza }: { estado: EstadoAcumula
   const estadoRef = useRef(estado);
   const limpiezaRef = useRef(limpieza);
   const [listos, setListos] = useState(false);
+  const [rutas, setRutas] = useState<EstadoRutas | null>(null);
+  const rutasPuestasRef = useRef(false);
   const [fallo, setFallo] = useState(false);
   const [calor, setCalor] = useState(true);
   // The Santa Cruz card can grow to fill the screen; collapsing brings back the view it had.
@@ -66,13 +73,27 @@ export default function MapasCalor({ estado, limpieza }: { estado: EstadoAcumula
       mapas?.destroy();
       mapasRef.current = null;
       capaRef.current = null;
+      rutasPuestasRef.current = false;
     };
   }, []);
+
+  // The routes, read through the Geoportal's own client (and its visibility rules).
+  useEffect(() => {
+    let vigente = true;
+    void cargarRutas({ fetchLayers, fetchLayerData }).then((estado) => { if (vigente) setRutas(estado); });
+    return () => { vigente = false; };
+  }, []);
+
+  useEffect(() => {
+    if (!listos || rutasPuestasRef.current || rutas?.estado !== "lista" || !mapasRef.current) return;
+    rutasPuestasRef.current = true;
+    mapasRef.current.setRutas(rutas.datos);
+  }, [listos, rutas]);
 
   // The neighbourhoods go on once both the maps and the layer are ready.
   useEffect(() => {
     if (!listos || capaRef.current || barrios?.estado !== "lista" || !mapasRef.current || !leafletRef.current) return;
-    capaRef.current = agregarCapaBarrios(leafletRef.current, mapasRef.current.islandMap, barrios.datos);
+    capaRef.current = agregarCapaBarrios(leafletRef.current, mapasRef.current.islandMap, barrios.datos, mapasRef.current.etiquetasIsla);
     capaRef.current.pintar(limpiezaRef.current);
   }, [listos, barrios]);
 
@@ -165,6 +186,7 @@ export default function MapasCalor({ estado, limpieza }: { estado: EstadoAcumula
             <div>
               <strong>Santa Cruz</strong>
               {barrios && barrios.estado !== "lista" && <small className="acc-note" title={barrios.motivo}>Barrios no disponibles</small>}
+              {rutas && rutas.estado !== "lista" && <small className="acc-note" title={rutas.motivo}>Rutas del Geoportal no disponibles</small>}
             </div>
             <div className="acc-acciones">
               {barrios?.estado === "lista" && (
@@ -232,12 +254,21 @@ export default function MapasCalor({ estado, limpieza }: { estado: EstadoAcumula
             </div>
             <button type="button" className="acc-fit" onClick={() => mapasRef.current?.fit("region")}>Centrar</button>
           </figcaption>
-          {mapa("acc-region", regionRef, "Mapa del tramo marítimo de Baltra a Guayaquil: lo que falta sacar de Santa Cruz en rojo y lo gestionado en Guayaquil en verde")}
+          {mapa("acc-region", regionRef, "Mapa del tramo marítimo del Muelle de Itabaca a Guayaquil: lo que falta sacar de Santa Cruz en rojo y lo gestionado en Guayaquil en verde")}
         </figure>
       </div>
       <p className="acc-legend">
         <span className="acc-heat-legend">Acumulación en Santa Cruz: menor<i className="acc-heat-scale" style={{ background: gradienteCalor("rojo") }} />mayor</span>
         <span className="acc-heat-legend">Hacia Guayaquil: por sacar<i className="acc-heat-scale" style={{ background: gradienteCalor("rojo") }} />· gestionado<i className="acc-heat-scale" style={{ background: gradienteCalor("verde") }} /></span>
+        {rutas?.estado === "lista" &&
+          Object.values(ESTILO_TRAMOS).map((e) => (
+            <span key={e.leyenda} className="acc-heat-legend">
+              <svg className="acc-ruta-muestra" width="34" height="8" aria-hidden="true">
+                <line x1="4" y1="4" x2="30" y2="4" stroke={e.color} strokeWidth={e.ancho} strokeLinecap="round" strokeDasharray={e.guiones.join(" ")} />
+              </svg>
+              {e.leyenda}
+            </span>
+          ))}
         {barrios?.estado === "lista" && (
           <>
             <span className="acc-heat-legend">Limpieza del barrio: 0 %<i className="acc-limpieza-scale" style={{ background: gradienteLimpieza() }} />100 %</span>

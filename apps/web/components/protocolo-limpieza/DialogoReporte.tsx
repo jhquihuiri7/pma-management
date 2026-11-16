@@ -7,6 +7,7 @@ import { toast } from "sonner";
 import {
   camposDe,
   clean,
+  sinUnidades,
   conMayuscula,
   forms,
   limpiarRecursos,
@@ -110,6 +111,8 @@ function FormularioReporte({ row, kind: kindInicial, records, nombresBarrios, on
   const [prefill, setPrefill] = useState(() => (row ? null : prellenado(records, inicial, today)));
   const base = row?.data ?? prefill?.data;
   const [barrio, setBarrio] = useState(() => String(base?.barrio ?? ""));
+  // The waste type decides whether the units can be entered (rubble has none).
+  const [tipo, setTipo] = useState(() => String(base?.tipo ?? ""));
   // Without earlier resources, one empty row, so the section asks to be filled.
   const [recursos, setRecursos] = useState<FilaRecurso[]>(() => {
     const previos = row ? row.recursos : prefill?.recursos;
@@ -132,6 +135,7 @@ function FormularioReporte({ row, kind: kindInicial, records, nombresBarrios, on
     setPrefill(previo);
     setError("");
     setBarrio(String(previo?.data.barrio ?? ""));
+    setTipo(String(previo?.data.tipo ?? ""));
     // The resources are those of that operation's latest report, or none.
     setRecursos(previo?.recursos.length ? previo.recursos.map((r) => filaRecurso(r)) : [filaRecurso()]);
     setFotos({});
@@ -225,10 +229,20 @@ function FormularioReporte({ row, kind: kindInicial, records, nombresBarrios, on
       return (
         <label key={p.id}>
           {etiqueta}
-          <select name={p.id} required={p.required} defaultValue={opciones.includes(String(v)) ? String(v) : ""}>
+          <select name={p.id} required={p.required} defaultValue={opciones.includes(String(v)) ? String(v) : ""} onChange={p.id === "tipo" ? (e) => setTipo(e.target.value) : undefined}>
             <option value="">Selecciona…</option>
             {opciones.map((o) => <option key={o}>{o}</option>)}
           </select>
+        </label>
+      );
+    }
+    if (p.id === "u" && sinUnidades(kind, tipo)) {
+      // Rubble is not counted in units: 0, and nothing can be entered (clean() saves 0 too).
+      return (
+        <label key="u-escombro">
+          {p.label}
+          <input type="number" value="0" disabled readOnly aria-describedby="u-escombro-nota" />
+          <small id="u-escombro-nota" className="field-hint">Los escombros no se cuantifican en unidades.</small>
         </label>
       );
     }
@@ -280,7 +294,7 @@ function FormularioReporte({ row, kind: kindInicial, records, nombresBarrios, on
       </div>
       <div id="fields" className="fields" key={`principal-${kind}-${version}`}>{campos.map(control)}</div>
       <fieldset className="recursos-form">
-        <legend>Recursos disponibles</legend>
+        <legend>Recursos / Servicios disponibles</legend>
         <p className="small">Personal, vehículos o maquinaria de esta operación y la institución de cada uno. El tablero muestra los del último reporte de cada ruta.</p>
         {recursos.map((f, i) => {
           const cambiarFila = (campo: "cantidad" | "recurso" | "institucion", valor: string) =>

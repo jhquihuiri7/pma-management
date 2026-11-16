@@ -22,6 +22,7 @@ import { toast } from "sonner";
 import { claveSitio, type NubePuntos } from "@pma/types/protocolo-limpieza";
 import { ApiError, apiErrorMessage } from "@/lib/api-client";
 import { useAuth } from "@/lib/auth-context";
+import { useProtocoloLimpieza } from "../contexto";
 import {
   agruparPorSitio,
   claseNube,
@@ -60,6 +61,8 @@ const CALIDADES: ReadonlyArray<readonly [Calidad, string]> = [
 export default function VisualizacionVista() {
   const { user } = useAuth();
   const esAdmin = user?.role === "ADMIN";
+  // Without a session with the module the view only shows: no upload, edit, retry or download.
+  const { puedeEditar } = useProtocoloLimpieza();
   const router = useRouter();
   const pathname = usePathname();
   const params = useSearchParams();
@@ -198,7 +201,7 @@ export default function VisualizacionVista() {
       <div className="panel nubes-panel">
         <div className="panel-heading">
           <h2><Rotate3d className="ico" />Nubes de puntos</h2>
-          <button type="button" className="button primary" onClick={abrirCarga}><Upload className="ico" />Cargar nube</button>
+          {puedeEditar && <button type="button" className="button primary" onClick={abrirCarga}><Upload className="ico" />Cargar nube</button>}
         </div>
         {falloLista && <p className="nubes-aviso is-error" role="alert">{falloLista}</p>}
         {!sitio ? (
@@ -213,7 +216,7 @@ export default function VisualizacionVista() {
                 Sitio
                 <select value={sitio.clave} onChange={(e) => elegir(e.target.value)}>
                   {sitios.map((s) => (
-                    <option key={s.clave} value={s.clave}>{s.sitio} ({s.nubes.length} {s.nubes.length === 1 ? "fecha" : "fechas"})</option>
+                    <option key={s.clave} value={s.clave}>{s.sitio}</option>
                   ))}
                 </select>
               </label>
@@ -302,7 +305,7 @@ export default function VisualizacionVista() {
                         <TriangleAlert className="ico" />
                         <p><strong>No se pudo convertir esta nube.</strong></p>
                         <p>{nube.error}</p>
-                        <button type="button" className="button secondary" disabled={ocupado} onClick={() => void reintentar(nube)}><RefreshCw className="ico" />Reintentar</button>
+                        {puedeEditar && <button type="button" className="button secondary" disabled={ocupado} onClick={() => void reintentar(nube)}><RefreshCw className="ico" />Reintentar</button>}
                       </>
                     )}
                   </div>
@@ -347,16 +350,18 @@ export default function VisualizacionVista() {
                   <div><dt>Puntos</dt><dd>{formatoPuntos(nube.puntos)}</dd></div>
                   <div><dt>Sistema</dt><dd>{metadatos?.crs?.nombre ?? (nube.estado === "lista" ? "Sin sistema de coordenadas" : "—")}</dd></div>
                   <div><dt>Archivo</dt><dd>{nube.archivoNombre} · {formatoBytes(nube.archivoBytes)}</dd></div>
-                  <div><dt>Cargado por</dt><dd>{nube.creadoPorNombre}</dd></div>
+                  {nube.creadoPorNombre && <div><dt>Cargado por</dt><dd>{nube.creadoPorNombre}</dd></div>}
                   {nube.descripcion && <div className="nubes-ficha-ancha"><dt>Descripción</dt><dd>{nube.descripcion}</dd></div>}
                 </dl>
-                <div className="nubes-acciones">
-                  <a className="button secondary" href={urlOriginal(nube.id)} download><Download className="ico" />Descargar original</a>
-                  <button type="button" className="button secondary" disabled={ocupado} onClick={() => abrirEdicion(nube)}><Pencil className="ico" />Editar datos</button>
-                  {esAdmin && (
-                    <button type="button" className="button secondary nubes-eliminar" disabled={ocupado} onClick={() => void eliminar(nube)}><Trash2 className="ico" />Eliminar</button>
-                  )}
-                </div>
+                {puedeEditar && (
+                  <div className="nubes-acciones">
+                    <a className="button secondary" href={urlOriginal(nube.id)} download><Download className="ico" />Descargar original</a>
+                    <button type="button" className="button secondary" disabled={ocupado} onClick={() => abrirEdicion(nube)}><Pencil className="ico" />Editar datos</button>
+                    {esAdmin && (
+                      <button type="button" className="button secondary nubes-eliminar" disabled={ocupado} onClick={() => void eliminar(nube)}><Trash2 className="ico" />Eliminar</button>
+                    )}
+                  </div>
+                )}
               </div>
             )}
           </>

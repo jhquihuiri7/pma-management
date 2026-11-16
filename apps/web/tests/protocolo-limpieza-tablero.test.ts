@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import test from "node:test";
 import { existsSync } from "node:fs";
 import { join } from "node:path";
-import { forms, routes, RUTAS_LIMPIEZA, type OperacionLimpieza, type RecursoLimpieza, type RegistroLimpieza } from "@pma/types/protocolo-limpieza";
+import { datosTrazabilidad, forms, routes, RUTAS_LIMPIEZA, type OperacionLimpieza, type RecursoLimpieza, type RegistroLimpieza } from "@pma/types/protocolo-limpieza";
 import { computeAccumulation, destination, points } from "../lib/protocolo-limpieza/acumulacion";
 import { claveBarrio } from "../lib/protocolo-limpieza/barrios";
 import {
@@ -202,8 +202,8 @@ test("routes, places and operations carry the exact names of the protocol docume
       "Zona urbana → Acopio temporal",
       "Acopio temporal → Patio contenedores SCX",
       "Acopio temporal → Relleno sanitario SCX",
-      "Patio contenedores SCX → Puerto de Baltra",
-      "Puerto Baltra → Puerto GYE",
+      "Patio contenedores SCX → Muelle de Itabaca",
+      "Muelle de Itabaca → Puerto GYE",
       "Puerto GYE → Patio contenedores GYE",
       "Patio GYE → Sitio de gestión de residuos",
     ],
@@ -216,7 +216,7 @@ test("routes, places and operations carry the exact names of the protocol docume
       ["R2", "Acopio temporal"],
       ["R2.1", "Relleno sanitario SCX"],
       ["R3", "Patio contenedores SCX"],
-      ["R4", "Puerto Baltra"],
+      ["R4", "Muelle de Itabaca"],
       ["R5", "Puerto GYE"],
       ["R6", "Patio GYE"],
     ],
@@ -224,9 +224,19 @@ test("routes, places and operations carry the exact names of the protocol docume
   assert.equal(destination.name, "Sitio de gestión de residuos");
   assert.equal(forms.patioSCY.name, "Traslado al Patio contenedores SCX");
   assert.equal(forms.relleno.name, "Entrega al Relleno sanitario SCX");
-  assert.equal(forms.puertoSCY.name, "Traslado al Puerto de Baltra");
+  assert.equal(forms.puertoSCY.name, "Traslado al Muelle de Itabaca");
   assert.equal(forms.patioGYE.name, "Traslado al Patio contenedores GYE");
   assert.equal(forms.recepcion.fields.find((f) => f.id === "sitio")?.label, "Sitio de gestión de residuos");
+  // The other columns of the document updated on 2026-11-15.
+  assert.deepEqual(RUTAS_LIMPIEZA.map((r) => routes[r][2]), ["CGREG", "CGREG - NAVIERAS", "CGREG - MIT", "CGREG", "CGREG", "CGREG", "APEL"]);
+  assert.deepEqual(RUTAS_LIMPIEZA.map((r) => routes[r][3]), [
+    "Personal y maquinaria", "Maquinaria y contenedores", "Personal y maquinaria", "Servicio logístico", "Buques",
+    "Servicio logístico", "Gestión de residuos y limpieza de contenedores",
+  ]);
+  assert.deepEqual(datosTrazabilidad.R6, ["Constancia de recepción y gestión."]);
+  assert.deepEqual(datosTrazabilidad.R4, ["Nombre del buque", "Fecha de salida de Itabaca", "Fecha de llegada a Guayaquil"]);
+  assert.equal(forms.embarque.fields.find((f) => f.id === "fecha")?.label, "Salida de Itabaca");
+  assert.ok(sugerenciasRecurso([], "recurso").includes("Servicio logístico"));
 });
 
 test("every route is drawn with its map scene, still or animated, and the files exist", () => {

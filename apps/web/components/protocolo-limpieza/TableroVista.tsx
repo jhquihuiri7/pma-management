@@ -54,12 +54,12 @@ export default function TableroVista() {
   );
 }
 
-/** Recursos disponibles de cada ruta, según su último reporte, con la institución de cada uno. */
+/** Recursos / servicios disponibles de cada ruta, según su último reporte, con la institución de cada uno. */
 function RecursosPorRuta({ filas, onRoute }: { filas: RecursosRuta[]; onRoute(route: RutaLimpieza): void }) {
   return (
     <article className="panel recursos-panel">
       <div className="panel-heading">
-        <h2><Users className="ico" />Recursos por ruta</h2>
+        <h2><Users className="ico" />Recursos / Servicios por ruta</h2>
         <span className="caption">Del último reporte de cada ruta</span>
       </div>
       <div className="table-wrap">

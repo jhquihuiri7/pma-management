@@ -3,7 +3,7 @@
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { ArrowLeft, ClipboardList, LayoutGrid, Leaf, List, LogOut, Plus, Rotate3d } from "lucide-react";
+import { ArrowLeft, ClipboardList, LayoutGrid, Leaf, List, LogIn, LogOut, Plus, Rotate3d } from "lucide-react";
 import { barrios as barriosProtocolo, type OperacionLimpieza, type RegistroLimpieza } from "@pma/types/protocolo-limpieza";
 import { fetchLayerData, fetchLayers } from "@/components/geo/gis/persistence";
 import { ApiError } from "@/lib/api-client";
@@ -58,7 +58,7 @@ interface EstadoReporte {
 export default function ProtocoloLimpiezaShell({ children }: { children: React.ReactNode }) {
   const pathname = usePathname();
   const router = useRouter();
-  const { user, logout, logoutPending } = useAuth();
+  const { user, status: authStatus, logout, logoutPending } = useAuth();
   const vista = vistaDe(pathname);
 
   const [records, setRecords] = useState<RegistroLimpieza[]>([]);
@@ -112,9 +112,15 @@ export default function ProtocoloLimpiezaShell({ children }: { children: React.R
     [barrios],
   );
 
+  // Anyone may read the module; reporting and editing need a session with it (the API checks it too).
+  const puedeEditar = !!user && (user.role === "ADMIN" || user.apps.includes("protocolo_limpieza"));
   const openReport = useCallback((kind: OperacionLimpieza = "recoleccion", row: RegistroLimpieza | null = null) => {
+    if (!puedeEditar) return;
     setReporte((prev) => ({ abierto: true, apertura: prev.apertura + 1, row, kind: row?.kind ?? kind }));
-  }, []);
+  }, [puedeEditar]);
+  // Without a session: a plain link (a full navigation), so the login comes back here (see
+  // memory of the login loop with Next's router cache on public pages).
+  const urlLogin = `/login?next=${encodeURIComponent(pathname)}`;
   const cerrarReporte = useCallback(() => setReporte((prev) => (prev.abierto ? { ...prev, abierto: false } : prev)), []);
   const cerrarDetalle = useCallback(() => setDetalle(null), []);
   const showRouteRecords = useCallback(
@@ -126,8 +132,8 @@ export default function ProtocoloLimpiezaShell({ children }: { children: React.R
   );
 
   const contexto = useMemo<ContextoProtocoloLimpieza>(
-    () => ({ records, loaded, status, unit, setUnit, barrios, nombresBarrios, refresh, openReport, showDetail: setDetalle, showRouteRecords }),
-    [records, loaded, status, unit, barrios, nombresBarrios, refresh, openReport, showRouteRecords],
+    () => ({ records, loaded, status, unit, setUnit, barrios, nombresBarrios, puedeEditar, refresh, openReport, showDetail: setDetalle, showRouteRecords }),
+    [records, loaded, status, unit, barrios, nombresBarrios, puedeEditar, refresh, openReport, showRouteRecords],
   );
 
   const [titulo, texto] = heroCopy[vista];
@@ -139,7 +145,7 @@ export default function ProtocoloLimpiezaShell({ children }: { children: React.R
           <aside className="side">
             <div className="brand">
               <div className="mark" aria-hidden="true"><Leaf className="ico" /></div>
-              <div><strong>Protocolo de limpieza</strong><small>Santa Cruz · Gestión de residuos</small></div>
+              <div><strong>Gestión de residuos</strong><small>Santa Cruz: ENOS 2026-2027</small></div>
             </div>
             <nav className="tabs" aria-label="Vistas">
               <p className="side-caption">Operación</p>
@@ -156,12 +162,20 @@ export default function ProtocoloLimpiezaShell({ children }: { children: React.R
                   <div><strong>{user.name}</strong><small>{ROLES[user.role] ?? user.role}</small></div>
                 </div>
               )}
-              <Link href="/select-app" className="side-logout" aria-label="Ver todas las apps">
-                <ArrowLeft className="ico" /><span>Ver todas las apps</span>
-              </Link>
-              <button type="button" className="side-logout" onClick={() => void logout()} disabled={logoutPending} aria-busy={logoutPending} aria-label="Cerrar sesión">
-                <LogOut className="ico" /><span>Cerrar sesión</span>
-              </button>
+              {user ? (
+                <>
+                  <Link href="/select-app" className="side-logout" aria-label="Ver todas las apps">
+                    <ArrowLeft className="ico" /><span>Ver todas las apps</span>
+                  </Link>
+                  <button type="button" className="side-logout" onClick={() => void logout()} disabled={logoutPending} aria-busy={logoutPending} aria-label="Cerrar sesión">
+                    <LogOut className="ico" /><span>Cerrar sesión</span>
+                  </button>
+                </>
+              ) : (
+                <a href={urlLogin} className="side-logout" aria-label="Iniciar sesión">
+                  <LogIn className="ico" /><span>Iniciar sesión</span>
+                </a>
+              )}
             </div>
           </aside>
           <main>
@@ -175,9 +189,15 @@ export default function ProtocoloLimpiezaShell({ children }: { children: React.R
                   </div>
                   <div className="hero-buttons">
                     <div className={`mode${status ? " is-offline" : ""}`} id="mode" role="status">{status ? "Sin conexión" : "En línea"}</div>
-                    <button type="button" className="button hero-primary" id="add" onClick={() => openReport()}>
-                      <Plus className="ico" />Reportar
-                    </button>
+                    {puedeEditar ? (
+                      <button type="button" className="button hero-primary" id="add" onClick={() => openReport()}>
+                        <Plus className="ico" />Reportar
+                      </button>
+                    ) : authStatus === "unauthenticated" ? (
+                      <a className="button hero-primary" id="login" href={urlLogin}>
+                        <LogIn className="ico" />Iniciar sesión para reportar
+                      </a>
+                    ) : null}
                   </div>
                 </div>
                 {vista === "dashboard" && (

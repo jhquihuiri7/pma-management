@@ -60,7 +60,7 @@ export default function DialogoDetalle({ row, onClose }: { row: RegistroLimpieza
             ))}
             {row.recursos?.length ? (
               <>
-                <dt>Recursos disponibles</dt>
+                <dt>Recursos / Servicios disponibles</dt>
                 <dd>
                   <ul className="detalle-recursos">
                     {row.recursos.map((r, i) => <li key={i}>{number(r.cantidad)} {conMayuscula(r.recurso)} · {r.institucion}</li>)}

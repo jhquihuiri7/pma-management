@@ -81,11 +81,15 @@ test(
       const adminJwt = await token(adminId, "ADMIN", []);
       const outsiderJwt = await token(outsiderId, "REPORTER", ["pma"]);
 
-      await t.test("nothing is public: no session is 401 and a session without the module is 403", async () => {
+      await t.test("anyone reads the list and the viewer's file; the rest needs a session with the module", async () => {
         const id = randomUUID();
-        for (const [method, url] of [["GET", "/nubes"], ["POST", "/nubes"], ["PUT", `/nubes/${id}`], ["DELETE", `/nubes/${id}`], ["GET", `/nubes/${id}/copc`], ["GET", `/nubes/${id}/original`]] as const) {
+        for (const [method, url] of [["POST", "/nubes"], ["PUT", `/nubes/${id}`], ["DELETE", `/nubes/${id}`], ["POST", `/nubes/${id}/reintentar`], ["GET", `/nubes/${id}/original`]] as const) {
           assert.equal((await app.inject({ method, url: `/protocolo-limpieza${url}` })).statusCode, 401, `${method} ${url}`);
           assert.equal((await app.inject({ method, url: `/protocolo-limpieza${url}`, headers: auth(outsiderJwt) })).statusCode, 403, `${method} ${url}`);
+        }
+        for (const headers of [{}, auth(outsiderJwt)]) {
+          assert.equal((await app.inject({ method: "GET", url: "/protocolo-limpieza/nubes", headers })).statusCode, 200);
+          assert.equal((await app.inject({ method: "GET", url: `/protocolo-limpieza/nubes/${id}/copc`, headers })).statusCode, 404);
         }
       });
 
@@ -102,6 +106,13 @@ test(
         assert.equal(nube.archivoNombre, "Desechos_densified.las");
         assert.equal(nube.creadoPorNombre, "Visor de nubes");
         assert.ok(existsSync(join(storageRoot, dirNube(nube.id), "original.las")));
+        // Read without the module, the cloud comes without the names of who uploaded and edited it.
+        for (const headers of [{}, auth(outsiderJwt)]) {
+          const publica = (await app.inject({ method: "GET", url: "/protocolo-limpieza/nubes", headers })).json().nubes.find((n: { id: string }) => n.id === nube.id);
+          assert.equal(publica?.sitio, sitio);
+          assert.equal(publica?.creadoPorNombre, "");
+          assert.equal(publica?.actualizadoPorNombre, "");
+        }
         // The upload intent was finalized: nothing left to clean.
         const pendientes = await db.select().from(storageCleanupJobs).where(eq(storageCleanupJobs.storagePath, dirNube(nube.id)));
         assert.equal(pendientes.length, 0);

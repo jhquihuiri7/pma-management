@@ -222,7 +222,7 @@
 /* Tiles overlap by 1 px (mapasCalor.ts); normal blending lets the top one cover the joint. */
 .protocolo-limpieza .acc-heat{pointer-events:none}
 .protocolo-limpieza .acc-marker{background:none;border:0}
-.protocolo-limpieza .acc-pin{position:relative;width:44px;height:44px}
+.protocolo-limpieza .acc-pin{position:relative;width:44px;height:44px;transform:translate(var(--dx,0px),var(--dy,0px));transition:transform .3s ease}
 /* Escena del punto: solo las figuras animadas, sin círculo ni fondo; el halo las separa del mapa. */
 .protocolo-limpieza .acc-pin-disc{position:absolute;inset:-4px;background-position:center;background-repeat:no-repeat;background-size:contain;filter:drop-shadow(0 0 1px rgba(15,23,42,.7)) drop-shadow(0 2px 2px rgba(15,23,42,.35))}
 .protocolo-limpieza .acc-pin-live{position:absolute;top:-3px;right:-3px;width:13px;height:13px;border:2px solid #fff;border-radius:50%;background:#22c55e;box-shadow:0 0 0 3px rgba(34,197,94,.3);animation:pl-acc-online 1.6s ease-out infinite}
@@ -281,8 +281,26 @@
 @keyframes pl-acc-bob{0%,100%{transform:translateY(0)}50%{transform:translateY(-2px)}}
 @keyframes pl-acc-wake{0%{transform:translate(0,-50%) scale(.6);opacity:.95}100%{transform:translate(-22px,-50%) scale(1.7);opacity:0}}
 @keyframes pl-acc-flow{to{stroke-dashoffset:-18}}
+/* Routes of the Geoportal (capaRutas.ts), drawn with tramos_residuos.qml: a route with movement today
+   moves its own dash pattern forward, one period (--periodo) per cycle. */
+.protocolo-limpieza .acc-ruta.is-active{animation:pl-acc-ruta-flujo 1.1s linear infinite}
+@keyframes pl-acc-ruta-flujo{to{stroke-dashoffset:calc(-1 * var(--periodo, 30px))}}
+/* Points of the Geoportal with puntos_rutas_scx.qml: a white disc, its colour disc and a white centre. */
+.protocolo-limpieza .acc-anillo{display:grid;place-items:center;width:100%;height:100%;border-radius:50%;background:#fff}
+.protocolo-limpieza .acc-anillo::before{content:"";grid-area:1/1;width:var(--disco);height:var(--disco);border-radius:50%;background:var(--c)}
+.protocolo-limpieza .acc-anillo i{grid-area:1/1;z-index:1;width:var(--centro);height:var(--centro);border-radius:50%;background:#fff}
+/* An icon moved beside its point, and the leader that joins them (mapasCalor.ts). */
+.protocolo-limpieza .acc-pin-guia{position:absolute;left:22px;top:22px;width:var(--guia-largo,0px);height:2px;margin-top:-1px;border-radius:1px;background:var(--c);opacity:var(--guia-opacidad,0);transform:rotate(var(--guia-angulo,0deg));transform-origin:0 50%;transition:width .3s ease,opacity .3s ease}
+.protocolo-limpieza .acc-pin-guia.con-punto::after{content:"";position:absolute;right:-4px;top:50%;width:8px;height:8px;margin-top:-4px;border:2px solid #fff;border-radius:50%;background:var(--c);box-sizing:border-box}
+/* Labels of the .qml styles, placed by etiquetas.ts. */
+.protocolo-limpieza .acc-etiquetas{position:absolute;left:0;top:0}
+.protocolo-limpieza .acc-etq{position:absolute;left:0;top:0;white-space:nowrap;line-height:1.2;font-family:"Segoe UI",system-ui,-apple-system,"Helvetica Neue",Arial,sans-serif;transform-origin:center;pointer-events:none}
+.protocolo-limpieza .acc-etq-punto{font-size:12px;font-weight:600;color:#1f2937;text-shadow:4.2px 0 0 #fff,3.8px 1.6px 0 #fff,2.9px 2.9px 0 #fff,1.6px 3.8px 0 #fff,0 4.2px 0 #fff,-1.6px 3.8px 0 #fff,-2.9px 2.9px 0 #fff,-3.8px 1.6px 0 #fff,-4.2px 0 0 #fff,-3.8px -1.6px 0 #fff,-2.9px -2.9px 0 #fff,-1.6px -3.8px 0 #fff,0 -4.2px 0 #fff,1.6px -3.8px 0 #fff,2.9px -2.9px 0 #fff,3.8px -1.6px 0 #fff,2.8px 0 0 #fff,2.4px 1.4px 0 #fff,1.4px 2.4px 0 #fff,0 2.8px 0 #fff,-1.4px 2.4px 0 #fff,-2.4px 1.4px 0 #fff,-2.8px 0 0 #fff,-2.4px -1.4px 0 #fff,-1.4px -2.4px 0 #fff,0 -2.8px 0 #fff,1.4px -2.4px 0 #fff,2.4px -1.4px 0 #fff,1.4px 0 0 #fff,1.0px 1.0px 0 #fff,0 1.4px 0 #fff,-1.0px 1.0px 0 #fff,-1.4px 0 0 #fff,-1.0px -1.0px 0 #fff,0 -1.4px 0 #fff,1.0px -1.0px 0 #fff}
+.protocolo-limpieza .acc-etq-tramo{padding:1.9px 4.9px;border:.76px solid #9fdcc9;border-radius:8.3px;background:#d5f3ea;font-size:10.67px;font-weight:700;color:#0f766e}
+.protocolo-limpieza .acc-etq-barrio{font-size:10.67px;font-weight:600;color:#0f6b58;text-shadow:3.4px 0 0 #fff,3.1px 1.3px 0 #fff,2.4px 2.4px 0 #fff,1.3px 3.1px 0 #fff,0 3.4px 0 #fff,-1.3px 3.1px 0 #fff,-2.4px 2.4px 0 #fff,-3.1px 1.3px 0 #fff,-3.4px 0 0 #fff,-3.1px -1.3px 0 #fff,-2.4px -2.4px 0 #fff,-1.3px -3.1px 0 #fff,0 -3.4px 0 #fff,1.3px -3.1px 0 #fff,2.4px -2.4px 0 #fff,3.1px -1.3px 0 #fff,2.3px 0 0 #fff,2.0px 1.1px 0 #fff,1.1px 2.0px 0 #fff,0 2.3px 0 #fff,-1.1px 2.0px 0 #fff,-2.0px 1.1px 0 #fff,-2.3px 0 0 #fff,-2.0px -1.1px 0 #fff,-1.1px -2.0px 0 #fff,0 -2.3px 0 #fff,1.1px -2.0px 0 #fff,2.0px -1.1px 0 #fff,1.1px 0 0 #fff,0.8px 0.8px 0 #fff,0 1.1px 0 #fff,-0.8px 0.8px 0 #fff,-1.1px 0 0 #fff,-0.8px -0.8px 0 #fff,0 -1.1px 0 #fff,0.8px -0.8px 0 #fff}
+.protocolo-limpieza .acc-legend svg.acc-ruta-muestra{display:inline-block;margin-right:7px;vertical-align:middle}
 @keyframes pl-acc-online{0%{box-shadow:0 0 0 0 rgba(34,197,94,.55)}100%{box-shadow:0 0 0 7px rgba(34,197,94,0)}}
-@media(prefers-reduced-motion:reduce){.protocolo-limpieza .route-live,.protocolo-limpieza .acc-pin-live,.protocolo-limpieza .acc-ship svg,.protocolo-limpieza .acc-ship-wake i,.protocolo-limpieza .acc-leg.is-active{animation:none}}
+@media(prefers-reduced-motion:reduce){.protocolo-limpieza .route-live,.protocolo-limpieza .acc-pin-live,.protocolo-limpieza .acc-ship svg,.protocolo-limpieza .acc-ship-wake i,.protocolo-limpieza .acc-leg.is-active,.protocolo-limpieza .acc-ruta.is-active{animation:none}.protocolo-limpieza .acc-pin,.protocolo-limpieza .acc-pin-guia{transition:none}}
 @media(max-width:1100px){.protocolo-limpieza .acc-maps{grid-template-columns:1fr}}
 @media(max-width:640px){.protocolo-limpieza .acc-map{height:380px}}
 /* Estado del contenedor */
@@ -352,6 +370,9 @@
 .protocolo-limpieza .route-info strong{font-weight:600;color:var(--teal-800)}
 .protocolo-limpieza .route-info p+p{margin-top:2px}
 .protocolo-limpieza .fields{display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-bottom:14px;padding:0 20px}
+/* A field the form fills by itself (the units of rubble, always 0) and its note. */
+.protocolo-limpieza .fields input:disabled{background:var(--surface-2,#f1f5f9);color:var(--muted);cursor:not-allowed}
+.protocolo-limpieza .field-hint{display:block;margin-top:4px;font-size:11.5px;font-weight:500;letter-spacing:normal;text-transform:none;color:var(--muted)}
 .protocolo-limpieza .optional{margin:0 20px 12px;padding:11px 13px;border:1px solid var(--line);border-radius:12px}
 .protocolo-limpieza .optional summary{cursor:pointer;font-size:12.5px;font-weight:600;color:var(--teal-700)}
 .protocolo-limpieza .optional .fields{margin:12px 0 0;padding:0}
@@ -411,7 +432,7 @@
 @media(max-width:650px){.protocolo-limpieza .side-bottom{flex-direction:row}.protocolo-limpieza .side-logout span{display:none}}
 
 /* Barrios de Santa Cruz, leídos del Geoportal (bajo las manchas de calor) */
-.protocolo-limpieza .acc-legend i.is-barrio{width:14px;height:10px;border-radius:3px;border:1px solid rgba(71,85,105,.55);background:rgba(148,163,184,.12)}
+.protocolo-limpieza .acc-legend i.is-barrio{width:14px;height:10px;border-radius:3px;border:1.5px solid rgba(141,216,189,.75);background:rgba(231,247,240,.75)}
 .protocolo-limpieza .acc-note{font-size:11px;font-weight:500;letter-spacing:normal;text-transform:none;color:#b45309}
 .protocolo-limpieza .acc-legend i.acc-limpieza-scale{width:72px;height:8px;margin:0;border-radius:999px;border:1px solid rgba(71,85,105,.35)}
 

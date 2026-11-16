@@ -119,17 +119,17 @@ export const barrios: readonly string[] = [
   "Central (Santa Rosa)", "Consejo De Gobierno", "Los Túneles 2",
 ];
 
-// Columnas Trayecto, Ejecución, Apoyo y Recursos disponibles del documento del
+// Columnas Trayecto, Ejecución, Apoyo y Recursos / Servicios disponibles del documento del
 // protocolo logístico, tal como están escritas. Los nombres de los lugares de
 // todo el módulo (mapa, flujo, formularios) salen de estos trayectos.
 export const routes: Readonly<Record<RutaLimpieza, InfoRutaLimpieza>> = {
-  R1: ["Zona urbana → Acopio temporal", "GAD SCX", "CGREG", "Personal y maquinaria."],
-  R2: ["Acopio temporal → Patio contenedores SCX", "OPC", "CGREG - NAVIERAS", "Maquinaria y contenedores."],
-  "R2.1": ["Acopio temporal → Relleno sanitario SCX", "GAD SCX", "CGREG - MIT", "Personal y maquinaria."],
-  R3: ["Patio contenedores SCX → Puerto de Baltra", "OPC", "CGREG", "-"],
-  R4: ["Puerto Baltra → Puerto GYE", "NAVIERA", "CGREG", "Buques."],
-  R5: ["Puerto GYE → Patio contenedores GYE", "OPC", "CGREG", "-"],
-  R6: ["Patio GYE → Sitio de gestión de residuos", "GESTORA AMBIENTAL", "APEL - CGREG - GAD SCX", "-"],
+  R1: ["Zona urbana → Acopio temporal", "GAD SCX", "CGREG", "Personal y maquinaria"],
+  R2: ["Acopio temporal → Patio contenedores SCX", "OPC", "CGREG - NAVIERAS", "Maquinaria y contenedores"],
+  "R2.1": ["Acopio temporal → Relleno sanitario SCX", "GAD SCX", "CGREG - MIT", "Personal y maquinaria"],
+  R3: ["Patio contenedores SCX → Muelle de Itabaca", "OPC", "CGREG", "Servicio logístico"],
+  R4: ["Muelle de Itabaca → Puerto GYE", "NAVIERA", "CGREG", "Buques"],
+  R5: ["Puerto GYE → Patio contenedores GYE", "OPC", "CGREG", "Servicio logístico"],
+  R6: ["Patio GYE → Sitio de gestión de residuos", "GESTORA AMBIENTAL", "APEL", "Gestión de residuos y limpieza de contenedores"],
 };
 
 /** Where a route starts and where it ends, as its trayecto names them. */
@@ -149,9 +149,10 @@ export const datosTrazabilidad: Readonly<Record<RutaLimpieza, readonly string[]>
   R2: ["Propietario de contenedor", "Código de contenedor", "Fecha de carga de residuos", "Fecha de traslado de contenedores"],
   "R2.1": ["Tipo y cantidad de desecho (t y m³)", "Fecha de traslado de desecho"],
   R3: ["Código de contenedor", "Fecha de traslado de contenedores", "Fotografía interior del contenedor", "Guía de remisión"],
-  R4: ["Nombre del buque", "Fecha de salida de Baltra", "Fecha de llegada a Guayaquil"],
+  // The document still wrote "Baltra" here; R4 leaves from the Muelle de Itabaca (user, 2026-11-15).
+  R4: ["Nombre del buque", "Fecha de salida de Itabaca", "Fecha de llegada a Guayaquil"],
   R5: ["Código de contenedor", "Fecha de llegada al patio", "Fecha de retiro de los residuos"],
-  R6: ["Constancia de recepción o gestión."],
+  R6: ["Constancia de recepción y gestión."],
 };
 
 // Campos mínimos de cada ruta según la columna "Datos trazabilidad" del protocolo, más los adicionales.
@@ -192,7 +193,7 @@ export const forms: Readonly<Record<OperacionLimpieza, FormularioLimpieza>> = {
     route: "R4",
     name: "Transporte marítimo",
     hint: "Una fila por contenedor y viaje, con la cantidad embarcada. Registra la llegada estimada: con la salida y la llegada, el mapa ubica el barco en tiempo real. Si la llegada cambia, edítala.",
-    fields: [date("fecha", "Salida de Baltra"), date("recepcion", "Llegada estimada a Guayaquil"), box, ...moved("embarcada"), field("buque", "Nombre del buque"), field("documento", "N.º de guía de remisión")],
+    fields: [date("fecha", "Salida de Itabaca"), date("recepcion", "Llegada estimada a Guayaquil"), box, ...moved("embarcada"), field("buque", "Nombre del buque"), field("documento", "N.º de guía de remisión")],
   },
   patioGYE: {
     route: "R5",
@@ -242,6 +243,22 @@ export const camposAnteriores: Readonly<Record<string, string>> = {
   notas: "Novedades",
 };
 
+/**
+ * Fields that name people: who reported (the old form's "Reportado por") and
+ * who delivered and received. Read without a session (or without the module),
+ * a report comes without them and without the name of the SIGTAR user who saved it.
+ */
+export const CAMPOS_DE_PERSONAS = ["responsable", "entrega", "recibe"] as const;
+
+/** A report as a reader without the module sees it: the same, minus the names of people. */
+export function registroSinNombres(r: RegistroLimpieza): RegistroLimpieza {
+  const data = { ...r.data };
+  for (const campo of CAMPOS_DE_PERSONAS) delete data[campo];
+  const copia: RegistroLimpieza = { ...r, data };
+  delete copia.creadoPorNombre;
+  return copia;
+}
+
 /** Values of a report that its form no longer asks (see camposAnteriores). */
 export function datosAnteriores(kind: OperacionLimpieza, data: Readonly<Record<string, unknown>>): DatosRegistroLimpieza {
   const vigentes = new Set(camposDe(kind).map((f) => f.id));
@@ -264,12 +281,25 @@ export const admiteReportesNuevos = (kind: OperacionLimpieza): boolean => !forms
 
 export const fold = (value: unknown): string => String(value ?? "").trim().normalize("NFC").toLocaleLowerCase("es");
 
+/**
+ * Rubble cannot be counted in units (decision of 2026-11-15): in a form with a
+ * waste type, "Escombro" takes 0 units, whatever was sent, and the form shows the
+ * field disabled.
+ */
+export function sinUnidades(kind: OperacionLimpieza, tipo: unknown): boolean {
+  return String(tipo ?? "").trim() === "Escombro" && camposDe(kind).some((f) => f.id === "tipo");
+}
+
 /** Validates a report and returns its clean values; throws an Error whose message names the field. */
 export function clean(kind: unknown, input: unknown): DatosRegistroLimpieza {
   if (!esOperacionLimpieza(kind) || !input || typeof input !== "object") throw Error("Selecciona una operación válida.");
   const values = input as Record<string, unknown>;
   const out: DatosRegistroLimpieza = {};
   for (const f of camposDe(kind)) {
+    if (f.id === "u" && sinUnidades(kind, values.tipo)) {
+      out.u = 0;
+      continue;
+    }
     const raw = values[f.id];
     const s = String(raw ?? "").trim();
     if (!s) {

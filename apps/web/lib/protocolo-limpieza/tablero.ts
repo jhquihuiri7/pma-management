@@ -23,7 +23,7 @@ export type VistaLimpieza = "dashboard" | "history" | "protocol" | "nubes";
 
 // Encabezado de cada vista, como en las páginas del Geoportal.
 export const heroCopy: Record<VistaLimpieza, readonly [titulo: string, texto: string]> = {
-  dashboard: ["Gestión de residuos", "Seguimiento de la recolección en Santa Cruz, el traslado marítimo desde Baltra y la gestión final en Guayaquil."],
+  dashboard: ["Gestión de residuos y desechos de Santa Cruz", "Seguimiento de las operaciones de recolección, acopio, transporte y gestión final."],
   history: ["Registros operativos", "Consulta, edita y exporta los reportes de cada ruta del protocolo logístico."],
   protocol: ["Rutas y responsabilidades", "Trayecto, ejecutor y datos de trazabilidad de cada ruta del protocolo logístico."],
   nubes: ["Visualización 3D", "Nubes de puntos de cada sitio por fecha de levantamiento: elige un sitio y recorre su línea de tiempo para ver cómo cambia."],
@@ -225,7 +225,8 @@ export function suggestions(records: readonly RegistroLimpieza[], key: (typeof s
 }
 
 // Offered while typing a resource: the protocol's own and what was already reported.
-const RECURSOS_PROTOCOLO = ["Personas", "Vehículos", "Volquetas", "Maquinaria", "Contenedores", "Buques"];
+// The last two are services the protocol lists for R3, R5 and R6.
+const RECURSOS_PROTOCOLO = ["Personas", "Vehículos", "Volquetas", "Maquinaria", "Contenedores", "Buques", "Servicio logístico", "Gestión de residuos y limpieza de contenedores"];
 // The protocol's institutions, as its Ejecución and Apoyo columns write them.
 const INSTITUCIONES_PROTOCOLO = Array.from(
   new Set(RUTAS_LIMPIEZA.flatMap((r) => [routes[r][1], ...routes[r][2].split(" - ")])),
