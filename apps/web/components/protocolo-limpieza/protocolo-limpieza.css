@@ -107,6 +107,8 @@
 .protocolo-limpieza .panel h2{display:flex;align-items:center;gap:8px;font-size:12px;font-weight:600;letter-spacing:.07em;text-transform:uppercase;color:var(--ink-2)}
 .protocolo-limpieza .panel h2 .ico{color:var(--teal-600)}
 .protocolo-limpieza .overview{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:20px;align-items:stretch}
+/* The right column of the overview: units by route over the neighbourhoods. */
+.protocolo-limpieza .overview-columna{display:grid;gap:20px;align-content:start;min-width:0}
 /* Flujo logístico: una columna por ruta, R2.1 como derivación bajo R2 */
 .protocolo-limpieza .flow-panel{container-type:inline-size}
 .protocolo-limpieza .flow{position:relative;display:grid;grid-template-columns:repeat(6,minmax(0,1fr));grid-template-rows:42px auto auto;gap:14px;margin-top:16px}
@@ -455,6 +457,14 @@
 .protocolo-limpieza .recursos-ir:hover .tag{background:var(--teal-200)}
 .protocolo-limpieza .recursos-cantidad{white-space:nowrap;font-weight:600;color:var(--ink)}
 .protocolo-limpieza .recursos-tabla .recursos-num{width:1%;text-align:right;white-space:nowrap}
+/* Unidades por ruta: Colchones and RAEE, each with what entered and what is still there. */
+.protocolo-limpieza .unidades-panel .table-wrap{margin-top:14px;border:1px solid var(--line-soft);border-radius:12px}
+.protocolo-limpieza .unidades-tabla th.unidades-grupo{text-align:center;border-left:1px solid var(--line-soft)}
+.protocolo-limpieza .unidades-tabla thead tr:last-child th:nth-child(odd){border-left:1px solid var(--line-soft)}
+.protocolo-limpieza .unidades-tabla td.unidades-num{font-weight:600;color:var(--ink)}
+.protocolo-limpieza .unidades-tabla td.unidades-num:nth-child(even){border-left:1px solid var(--line-soft)}
+.protocolo-limpieza .unidades-tabla td.is-cero{font-weight:500;color:var(--subtle)}
+.protocolo-limpieza .unidades-tabla .recursos-num{width:auto}
 .protocolo-limpieza .recursos-vacio{font-size:12.5px;color:var(--subtle)}
 
 /* Formulario: recursos disponibles */

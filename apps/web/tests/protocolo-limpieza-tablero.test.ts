@@ -23,6 +23,7 @@ import {
   sugerenciasRecurso,
   suggestions,
   traspasos,
+  unidadesPorRuta,
   UNIDADES,
   visibleHistory,
 } from "../lib/protocolo-limpieza/tablero";
@@ -303,4 +304,20 @@ test("the unit selector offers mattresses and WEEE, and the CSV keeps the units 
   assert.equal(qtyText(3, "raee"), "3 RAEE");
   const i = csvFields.indexOf("raee");
   assert.deepEqual(csvFields.slice(i - 1, i + 2), ["colchones", "raee", "u"]);
+});
+
+test("units by route: mattresses and WEEE that entered each route and that are still there, up to today", () => {
+  const filas = unidadesPorRuta(
+    [
+      reg("recoleccion", { fecha: "2026-11-15", t: 4, m3: 6, colchones: 10, raee: 2, u: 12 }),
+      reg("patioSCY", { fecha: "2026-11-16", contenedor: "A-1", t: 2, m3: 3, colchones: 4, raee: 0, u: 4 }),
+      // After today: not counted yet, like in the flow.
+      reg("patioSCY", { fecha: "2026-11-20", contenedor: "A-2", t: 2, m3: 3, colchones: 5, raee: 1, u: 6 }),
+    ],
+    "2026-11-16",
+  );
+  assert.deepEqual(filas.map((f) => f.route), ["R1", "R2", "R2.1", "R3", "R4", "R5", "R6"]);
+  const [r1, r2] = filas;
+  assert.deepEqual([r1.colchones, r1.raee], [{ entro: 10, queda: 6 }, { entro: 2, queda: 2 }]);
+  assert.deepEqual([r2.colchones, r2.raee], [{ entro: 4, queda: 4 }, { entro: 0, queda: 0 }]);
 });
