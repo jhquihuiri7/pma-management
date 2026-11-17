@@ -31,7 +31,7 @@ export async function registrarNivelObservado(
       referencia,
       fase: null,
       calidad: (entrada.calidad || "validado").trim(),
-      fuente: `MANUAL · ${usuario.name}`,
+      fuente: entrada.fuente?.trim() ? `${entrada.fuente.trim()} · ${usuario.name}` : `MANUAL · ${usuario.name}`,
       registradoPor: usuario.id,
       registradoPorNombre: usuario.name,
     },

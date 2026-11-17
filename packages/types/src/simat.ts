@@ -220,6 +220,8 @@ export interface SimatNivelObservadoEntrada {
   unidad: string;
   referencia: string;
   calidad: string;
+  /** Gauge or observer that took the reading; the server appends who registered it. */
+  fuente?: string;
 }
 
 // ── Connector health ─────────────────────────────────────────────────────────

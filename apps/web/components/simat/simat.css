@@ -1,46 +1,760 @@
-/* SIMAT-GAL. Scoped under .simat; the rest of the layout uses Tailwind. Palette
-   follows the Geoportal SIGTAR: slate with teal/emerald. */
-.simat {
-  --simat-teal: #0f766e;
-  --simat-teal-strong: #0d5b55;
-  --simat-emerald: #10b981;
-  background: #f1f5f9;
+/* ==========================================================================
+   SIMAT-GAL · Sistema visual (portado de «SIMAT-GAL · Vista previa»).
+   Generado: cada selector queda bajo .simat para no filtrar al resto de
+   SIGTAR; los @keyframes llevan prefijo simat-. Las fuentes las inyecta
+   next/font en app/simat/layout.tsx (--font-inter, --font-jbmono).
+   ========================================================================== */
+/* ==========================================================================
+   SIMAT-GAL · Sistema visual
+   Base: estilo del Geoportal SIGTAR (Inter, slate + teal/esmeralda, hero
+   aéreo con velo teal y trama de puntos, tarjetas flotantes).
+   Capa propia: sala de situación en vivo sobre la cartografía IGM.
+   ========================================================================== */
+
+.simat{
+  --font:var(--font-inter),'Inter',ui-sans-serif,system-ui,-apple-system,'Segoe UI',sans-serif;
+  --mono:var(--font-jbmono),'JetBrains Mono',ui-monospace,'SF Mono',Menlo,Consolas,monospace;
+
+  --bg:#f8fafc;
+  --surface:#ffffff;
+  --surface-2:#f8fafc;
+  --surface-3:#f1f5f9;
+  --ink:#0f172a;
+  --ink-2:#1e293b;
+  --ink-3:#475569;
+  --muted:#64748b;
+  --faint:#94a3b8;
+  --line:#e2e8f0;
+  --line-2:#eef2f6;
+  --line-strong:#cbd5e1;
+
+  --teal-50:#f0fdfa;
+  --teal-100:#ccfbf1;
+  --teal-200:#99f6e4;
+  --teal-300:#5eead4;
+  --teal-400:#2dd4bf;
+  --teal-500:#14b8a6;
+  --teal-600:#0d9488;
+  --teal-700:#0f766e;
+  --teal-800:#115e59;
+  --teal-900:#134e4a;
+  --teal-950:#042f2e;
+  --emerald-400:#34d399;
+  --emerald-500:#10b981;
+  --emerald-700:#047857;
+
+  /* Estados (reservados: siempre con ícono y texto) */
+  --good:#0ca30c;
+  --warning:#fab219;
+  --serious:#ec835a;
+  --critical:#d03b3b;
+
+  /* Series de datos (paleta validada para daltonismo) */
+  --s-blue:#2a78d6;
+  --s-orange:#eb6834;
+  --s-aqua:#1baf7a;
+  --s-yellow:#eda100;
+  --rain:#0d9488;
+  --rain-strong:#115e59;
+
+  --radius-xl:20px;
+  --radius-lg:16px;
+  --radius:12px;
+  --radius-sm:9px;
+  --shadow-float:0 20px 25px -5px rgba(15,23,42,.08),0 8px 10px -6px rgba(15,23,42,.05);
+  --shadow-pop:0 18px 40px -12px rgba(15,23,42,.28),0 6px 14px -6px rgba(15,23,42,.14);
+  --shadow-sm:0 1px 2px rgba(15,23,42,.05);
+
+  --sidebar-w:248px;
+  --topbar-h:60px;
+  --gutter:28px;
+  --maxw:1400px;
 }
 
-.simat-hero {
-  position: relative;
-  overflow: hidden;
-  border-radius: 1rem;
-  color: #fff;
-  background:
-    linear-gradient(120deg, rgba(13, 91, 85, 0.92), rgba(15, 118, 110, 0.78)),
-    url("/simat/hero-galapagos.jpg") center/cover no-repeat;
-}
+.simat *,.simat *::before,.simat *::after{box-sizing:border-box}
+.simat{-webkit-text-size-adjust:100%;scroll-padding-top:calc(var(--topbar-h) + 12px)}
+.simat{margin:0;background:var(--bg);color:var(--ink);font:400 14px/1.55 var(--font);-webkit-font-smoothing:antialiased;text-rendering:optimizeLegibility}
+.simat h1,.simat h2,.simat h3,.simat p{margin:0}
+.simat h1,.simat h2,.simat h3{font-weight:700;letter-spacing:-.02em;line-height:1.2}
+.simat a{color:var(--teal-700)}
+.simat button,.simat input,.simat select,.simat textarea{font:inherit;color:inherit}
+.simat button,.simat a,.simat summary,.simat label{touch-action:manipulation}
+.simat button{cursor:pointer}
+.simat :focus-visible{outline:3px solid rgba(20,184,166,.5);outline-offset:2px}
+.simat svg[viewBox="0 0 24 24"]{width:1em;height:1em;flex:none;fill:none;stroke:currentColor;stroke-width:2;stroke-linecap:round;stroke-linejoin:round}
+.simat pre{white-space:pre-wrap;overflow-wrap:anywhere}
+.simat [hidden]{display:none!important}
+.simat .sr-only{position:absolute;width:1px;height:1px;overflow:hidden;clip:rect(0 0 0 0);white-space:nowrap}
+.simat .skip-link{position:absolute;left:12px;top:-60px;z-index:100;background:var(--ink);color:#fff;padding:10px 14px;border-radius:10px;font-weight:600;text-decoration:none}
+.simat .skip-link:focus{top:12px}
 
-.simat-live-dot {
-  width: 9px;
-  height: 9px;
-  border-radius: 999px;
-  background: var(--simat-emerald);
-  box-shadow: 0 0 0 0 rgba(16, 185, 129, 0.6);
-  animation: simat-pulse 2s infinite;
-}
-.simat-live-dot[data-off="true"] {
-  background: #ef4444;
-  animation: none;
-}
-@keyframes simat-pulse {
-  0% { box-shadow: 0 0 0 0 rgba(16, 185, 129, 0.5); }
-  70% { box-shadow: 0 0 0 7px rgba(16, 185, 129, 0); }
-  100% { box-shadow: 0 0 0 0 rgba(16, 185, 129, 0); }
-}
+/* --------------------------------------------------------------------------
+   Barra lateral
+   -------------------------------------------------------------------------- */
+.simat .sidebar{position:fixed;inset:0 auto 0 0;width:var(--sidebar-w);background:var(--surface);border-right:1px solid var(--line);display:flex;flex-direction:column;z-index:50}
+.simat .brand{display:flex;align-items:center;gap:11px;padding:18px 18px 17px;color:var(--ink);text-decoration:none}
+.simat .brand-mark{width:36px;height:36px;border-radius:11px;flex:none;display:grid;place-items:center;color:#fff;background:linear-gradient(135deg,#34d399,#0d9488);box-shadow:0 8px 16px -8px rgba(13,148,136,.7)}
+.simat .brand-mark svg{width:20px;height:20px;stroke-width:2.3}
+.simat .brand-text{min-width:0}
+.simat .brand-text strong{display:block;font-size:15px;font-weight:800;letter-spacing:-.02em;line-height:1.2}
+.simat .brand-text small{display:block;font-size:11.5px;font-weight:500;color:var(--emerald-700);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.simat .sidebar nav{flex:1;overflow-y:auto;padding:6px 12px 12px;border-top:1px solid var(--line)}
+.simat .nav-caption{margin:16px 11px 6px;font-size:10.5px;font-weight:700;letter-spacing:.09em;text-transform:uppercase;color:var(--faint)}
+.simat .sidebar nav a{position:relative;display:flex;align-items:center;gap:11px;margin:2px 0;padding:9px 11px;border-radius:10px;color:var(--ink-3);font-size:13.5px;font-weight:500;text-decoration:none;transition:background .15s,color .15s}
+.simat .sidebar nav a svg{width:17px;height:17px;color:var(--faint);transition:color .15s}
+.simat .sidebar nav a:hover{background:var(--surface-3);color:var(--ink)}
+.simat .sidebar nav a.active{background:var(--teal-50);color:var(--teal-800);font-weight:600}
+.simat .sidebar nav a.active svg{color:var(--teal-600)}
+.simat .sidebar nav a.active::before{content:'';position:absolute;left:-12px;top:9px;bottom:9px;width:3px;border-radius:0 3px 3px 0;background:var(--teal-600)}
+.simat .sidebar-foot{padding:14px;border-top:1px solid var(--line)}
+.simat .system-card{padding:12px 13px;border-radius:12px;background:var(--surface-2);border:1px solid var(--line)}
+.simat .system-row{display:flex;align-items:center;gap:8px;font-size:12.5px}
+.simat .system-row strong{font-weight:600}
+.simat .system-card p{margin-top:6px;font-size:12px;line-height:1.45;color:var(--ink-3)}
+.simat .system-card p span{color:var(--faint)}
+.simat .status-dot{width:8px;height:8px;border-radius:50%;flex:none;background:var(--faint)}
+.simat .status-dot.ok{background:var(--emerald-500);box-shadow:0 0 0 3px rgba(16,185,129,.18)}
+.simat .status-dot.off{background:var(--critical);box-shadow:0 0 0 3px rgba(208,59,59,.15)}
+.simat .scrim{position:fixed;inset:0;background:rgba(15,23,42,.42);z-index:45}
 
-/* Risk level colors (Normal → Emergencia). */
-.simat-nivel-normal { background: #ecfdf5; color: #047857; border-color: #a7f3d0; }
-.simat-nivel-precaucion { background: #fffbeb; color: #b45309; border-color: #fde68a; }
-.simat-nivel-alerta { background: #fff7ed; color: #c2410c; border-color: #fed7aa; }
-.simat-nivel-emergencia { background: #fef2f2; color: #b91c1c; border-color: #fecaca; }
-.simat-nivel-sindato { background: #f8fafc; color: #475569; border-color: #e2e8f0; }
+/* --------------------------------------------------------------------------
+   Barra superior
+   -------------------------------------------------------------------------- */
+.simat main{margin-left:var(--sidebar-w);min-height:100vh;display:flex;flex-direction:column;min-width:0}
+.simat .topbar{position:sticky;top:0;z-index:40;height:var(--topbar-h);display:flex;align-items:center;gap:14px;padding:0 var(--gutter);background:rgba(255,255,255,.88);border-bottom:1px solid var(--line);-webkit-backdrop-filter:saturate(1.5) blur(12px);backdrop-filter:saturate(1.5) blur(12px)}
+.simat .topbar-menu{display:none;width:36px;height:36px;border-radius:10px;border:1px solid var(--line);background:var(--surface);place-items:center;color:var(--ink-3);font-size:18px}
+.simat .crumbs{display:flex;align-items:center;gap:9px;min-width:0;color:var(--muted);font-size:13.5px}
+.simat .crumbs strong{color:var(--ink);font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.simat .slash{color:var(--line-strong)}
+.simat .topbar-tools{margin-left:auto;display:flex;align-items:center;gap:10px}
+.simat .live-chip{display:inline-flex;align-items:center;gap:8px;height:32px;padding:0 12px;border-radius:999px;border:1px solid var(--teal-100);background:var(--teal-50);color:var(--teal-800);font-size:12.5px;font-weight:600;white-space:nowrap}
+.simat .live-dot{position:relative;width:8px;height:8px;border-radius:50%;background:var(--emerald-500)}
+.simat .live-chip.is-live .live-dot::after{content:'';position:absolute;inset:-4px;border-radius:50%;border:2px solid var(--emerald-500);opacity:0;animation:simat-ping 2s cubic-bezier(0,0,.2,1) infinite}
+.simat .live-chip.is-off{border-color:#fecaca;background:#fef2f2;color:#991b1b}
+.simat .live-chip.is-off .live-dot{background:var(--critical)}
+.simat .live-clock{padding-left:9px;border-left:1px solid var(--teal-200);font-family:var(--mono);font-size:12px;font-weight:500;color:var(--teal-900);font-variant-numeric:tabular-nums}
+.simat .sync-button{display:inline-flex;align-items:center;gap:7px;height:32px;padding:0 11px;border-radius:9px;border:1px solid var(--line);background:var(--surface);color:var(--ink-3);font-size:12.5px;font-weight:500;white-space:nowrap}
+.simat .sync-button:hover{background:var(--surface-2);color:var(--ink)}
+.simat .sync-button svg{font-size:14px}
+.simat .sync-button.is-loading svg{animation:simat-spin 1s linear infinite}
+.simat .auto-toggle{display:inline-flex;align-items:center;gap:7px;height:32px;padding:0 4px;font-size:12.5px;font-weight:600;color:var(--ink-3);cursor:pointer;user-select:none}
+.simat .auto-toggle input{position:absolute;opacity:0;width:1px;height:1px}
+.simat .switch{position:relative;width:30px;height:18px;border-radius:999px;background:var(--line-strong);transition:background .15s}
+.simat .switch::after{content:'';position:absolute;left:2px;top:2px;width:14px;height:14px;border-radius:50%;background:#fff;box-shadow:0 1px 2px rgba(15,23,42,.25);transition:transform .15s}
+.simat .auto-toggle input:checked + .switch{background:var(--teal-600)}
+.simat .auto-toggle input:checked + .switch::after{transform:translateX(12px)}
+.simat .auto-toggle input:focus-visible + .switch{outline:3px solid rgba(20,184,166,.5);outline-offset:2px}
+.simat .session-button{display:inline-flex;align-items:center;gap:9px;height:36px;padding:0 13px 0 6px;border-radius:999px;border:1px solid var(--line);background:var(--surface);font-size:13px;font-weight:600;color:var(--ink-2);white-space:nowrap}
+.simat .session-button:hover{background:var(--surface-2)}
+.simat .session-button .avatar{width:26px;height:26px;border-radius:50%;display:grid;place-items:center;background:var(--teal-100);color:var(--teal-700);font-size:11.5px;font-weight:700}
+.simat .session-button .avatar svg{font-size:14px}
+.simat .session-button small{color:var(--muted);font-weight:500}
 
-.simat-leaflet { height: 100%; width: 100%; border-radius: 0.75rem; z-index: 0; }
-.simat-leaflet .leaflet-popup-content { font-size: 13px; }
+/* --------------------------------------------------------------------------
+   Contenido
+   -------------------------------------------------------------------------- */
+.simat .content{flex:1;padding:0 0 56px;min-width:0}
+.simat .content > :not(.hero){margin-left:max(var(--gutter),calc((100% - var(--maxw)) / 2));margin-right:max(var(--gutter),calc((100% - var(--maxw)) / 2))}
+.simat .content > * + *{margin-top:18px}
+.simat .content > .hero + *{position:relative;z-index:3;margin-top:-58px}
+.simat .content > .hero-map + *{margin-top:-70px}
+.simat .boot{display:flex;align-items:center;gap:12px;margin-top:48px!important;padding:18px 20px;border-radius:var(--radius-lg);background:var(--surface);border:1px solid var(--line);color:var(--ink-3);font-weight:500}
+.simat .boot .live-dot{animation:simat-blink 1.2s ease-in-out infinite}
+.simat .boot.is-error{align-items:flex-start;border-color:#fecaca;background:#fef2f2;color:#7f1d1d}
+.simat .boot.is-error > svg{font-size:20px;margin-top:1px;color:var(--critical)}
+.simat .boot.is-error p{margin-top:3px;font-size:13px;font-weight:400}
+.simat .boot.is-error .button{margin-left:auto}
+.simat #view:focus{outline:none}
+.simat .muted,.simat .meta{color:var(--muted)}
+.simat .meta{font-size:12.5px}
+.simat .subtitle{color:var(--muted)}
+.simat .stack > * + *{margin-top:16px}
+
+/* --------------------------------------------------------------------------
+   Hero (estilo geoportal)
+   -------------------------------------------------------------------------- */
+.simat .hero{position:relative;overflow:hidden;isolation:isolate;color:#fff;background:linear-gradient(135deg,#0f766e,#0d9488 55%,#047857)}
+.simat .hero-photo{background-image:linear-gradient(135deg,rgba(15,118,110,.88),rgba(13,148,136,.8) 55%,rgba(4,120,87,.9)),url("/simat/hero-galapagos.jpg");background-size:cover;background-position:center 64%}
+.simat .hero-photo::after{content:'';position:absolute;inset:0;z-index:0;pointer-events:none;opacity:.1;background-image:radial-gradient(circle at 50% 50%,#fff 1px,transparent 1.3px);background-size:30px 30px}
+.simat .hero-inner{position:relative;z-index:1;display:flex;align-items:flex-end;justify-content:space-between;gap:24px 32px;flex-wrap:wrap;margin-left:max(var(--gutter),calc((100% - var(--maxw)) / 2));margin-right:max(var(--gutter),calc((100% - var(--maxw)) / 2));padding:34px 0 88px}
+.simat .hero-text{min-width:0;max-width:640px}
+.simat .eyebrow{display:flex;align-items:center;gap:8px;margin-bottom:10px;font-size:11.5px;font-weight:600;letter-spacing:.16em;text-transform:uppercase;color:var(--teal-700)}
+.simat .hero .eyebrow{color:var(--teal-200)}
+.simat .eyebrow svg{font-size:17px;letter-spacing:0}
+.simat .hero h1{font-size:31px;font-weight:700;letter-spacing:-.025em;color:#fff}
+.simat .hero-text > p{margin-top:8px;max-width:58ch;font-size:15px;line-height:1.55;color:var(--teal-100)}
+.simat .hero-actions{display:flex;align-items:center;gap:8px;flex-wrap:wrap}
+.simat .hero-actions .toolbar{gap:8px}
+
+.simat .hero-map{min-height:500px;background:#062b29}
+.simat .hero-map > .map{position:absolute;inset:0;z-index:0;height:auto;border-radius:0}
+.simat .hero-map .hero-inner{align-items:flex-start;padding:30px 0 104px;pointer-events:none}
+.simat .hero-panel{pointer-events:auto;width:min(410px,100%);padding:20px 20px 18px;border-radius:18px;background:linear-gradient(180deg,rgba(4,47,46,.82),rgba(4,47,46,.66));border:1px solid rgba(153,246,228,.16);box-shadow:0 24px 48px -24px rgba(0,0,0,.6);-webkit-backdrop-filter:blur(10px);backdrop-filter:blur(10px)}
+.simat .hero-panel h1{font-size:30px}
+.simat .hero-panel > p{margin-top:6px;font-size:14px;line-height:1.5;color:var(--teal-100)}
+.simat .hero-live{display:flex;flex-wrap:wrap;gap:6px;margin-top:14px}
+.simat .hero-chip{display:inline-flex;align-items:center;gap:7px;height:28px;padding:0 10px;border-radius:999px;background:rgba(255,255,255,.1);border:1px solid rgba(255,255,255,.14);color:#e6fffb;font-size:12px;font-weight:500;white-space:nowrap}
+.simat .hero-chip svg{font-size:13px;color:var(--teal-200)}
+.simat .hero-chip b{font-weight:700;color:#fff}
+.simat .hero-chip.is-demo{background:rgba(250,178,25,.16);border-color:rgba(250,178,25,.32);color:#fff3d1}
+.simat .hero-chip.is-demo svg{color:#fcd34d}
+.simat .hero-filters{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1.3fr);gap:10px;margin-top:16px}
+.simat .hero label{color:var(--teal-100);font-weight:500}
+.simat .hero select{border-color:rgba(255,255,255,.2);background-color:rgba(255,255,255,.96)}
+
+/* --------------------------------------------------------------------------
+   Tarjetas e indicadores
+   -------------------------------------------------------------------------- */
+.simat .card{min-width:0;background:var(--surface);border:1px solid var(--line);border-radius:var(--radius-lg)}
+.simat .card.elevated{border-color:var(--line-2);box-shadow:var(--shadow-float)}
+.simat .card-head{display:flex;align-items:flex-start;justify-content:space-between;gap:10px 16px;flex-wrap:wrap;padding:17px 18px 13px}
+.simat .card-head > div:first-child{min-width:0}
+.simat .card-head h2{display:flex;align-items:center;gap:8px;font-size:15.5px;font-weight:600;letter-spacing:-.015em}
+.simat .card-head h2 svg{font-size:17px;color:var(--teal-600)}
+.simat .card-head p{margin-top:3px}
+.simat .card-head .head-tools{display:flex;align-items:center;gap:8px;flex-wrap:wrap}
+.simat .card-foot{display:flex;align-items:center;justify-content:space-between;gap:10px;padding:12px 18px;border-top:1px solid var(--line-2)}
+.simat .card:has(> .card-foot){display:flex;flex-direction:column}
+.simat .card > .card-foot{margin-top:auto}
+.simat .pad{padding:18px}
+.simat .wide{min-width:0}
+
+.simat .kpis{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:16px}
+.simat .kpi{display:flex;flex-direction:column;gap:6px;min-width:0;padding:16px 18px 15px;background:var(--surface);border:1px solid var(--line-2);border-radius:var(--radius-lg);box-shadow:var(--shadow-float)}
+.simat .kpi-top{display:flex;align-items:flex-start;justify-content:space-between;gap:12px}
+.simat .kpi-label{font-size:12.5px;font-weight:600;color:var(--muted)}
+.simat .kpi-icon{width:36px;height:36px;flex:none;border-radius:11px;display:grid;place-items:center;color:#fff;font-size:17px;background:linear-gradient(135deg,#2dd4bf,#0d9488)}
+.simat .kpi-icon.sky{background:linear-gradient(135deg,#38bdf8,#0284c7)}
+.simat .kpi-icon.violet{background:linear-gradient(135deg,#a78bfa,#7c3aed)}
+.simat .kpi-icon.amber{background:linear-gradient(135deg,#fbbf24,#d97706)}
+.simat .kpi-value{font-size:27px;font-weight:700;letter-spacing:-.03em;line-height:1.12;color:var(--ink);overflow-wrap:anywhere}
+.simat .kpi-value small{font-size:15px;font-weight:600;letter-spacing:-.01em;color:var(--ink-3)}
+.simat .kpi-value.is-text{font-size:21px;letter-spacing:-.02em}
+.simat .kpi-detail{font-size:12.5px;color:var(--muted);min-height:19px}
+.simat .kpi-visual{margin-top:auto;padding-top:6px}
+
+/* Escala de estado interno (5 niveles) */
+.simat .level-steps{display:grid;grid-template-columns:repeat(5,1fr);gap:3px}
+.simat .level-steps span{height:6px;border-radius:999px;background:var(--surface-3)}
+.simat .level-steps span.on{background:var(--lvl,var(--faint))}
+.simat .level-steps + .level-caption{margin-top:6px;font-size:11.5px;color:var(--muted)}
+
+/* Barra segmentada */
+.simat .seg-bar{display:flex;gap:2px;height:8px;border-radius:999px;overflow:hidden;background:var(--surface-3)}
+.simat .seg-bar span{height:100%;min-width:3px}
+.simat .seg-legend{display:flex;flex-wrap:wrap;gap:4px 12px;margin-top:7px;font-size:11.5px;color:var(--ink-3)}
+.simat .seg-legend span{display:inline-flex;align-items:center;gap:5px}
+.simat .seg-legend i{width:8px;height:8px;border-radius:2px;flex:none}
+.simat .seg-legend b{font-weight:700;color:var(--ink)}
+
+.simat .station-chips{display:flex;flex-wrap:wrap;gap:5px}
+
+/* --------------------------------------------------------------------------
+   Rejillas
+   -------------------------------------------------------------------------- */
+.simat .grid{display:grid;gap:18px;grid-template-columns:minmax(0,1.85fr) minmax(0,1fr)}
+.simat .grid-even{grid-template-columns:repeat(2,minmax(0,1fr))}
+.simat .grid-3{grid-template-columns:repeat(3,minmax(0,1fr))}
+.simat .grid > *{min-width:0}
+
+/* --------------------------------------------------------------------------
+   Controles
+   -------------------------------------------------------------------------- */
+.simat .button{display:inline-flex;align-items:center;justify-content:center;gap:7px;height:36px;padding:0 14px;border:1px solid transparent;border-radius:10px;background:var(--teal-600);color:#fff;font-size:13px;font-weight:600;line-height:1;text-decoration:none;white-space:nowrap;transition:background .15s,border-color .15s,box-shadow .15s}
+.simat .button:hover{background:var(--teal-700)}
+.simat .button svg{font-size:15px}
+.simat .button.outline{background:var(--surface);border-color:var(--line-strong);color:var(--ink-2)}
+.simat .button.outline:hover{background:var(--surface-2);border-color:var(--faint)}
+.simat .button.secondary{background:var(--teal-50);border-color:var(--teal-100);color:var(--teal-800)}
+.simat .button.secondary:hover{background:var(--teal-100)}
+.simat .button:disabled{opacity:.55;cursor:not-allowed}
+.simat .button.small{height:30px;padding:0 10px;font-size:12px;border-radius:8px}
+.simat .hero .button{background:#fff;color:var(--teal-700);box-shadow:0 10px 15px -3px rgba(15,23,42,.18)}
+.simat .hero .button:hover{background:var(--teal-50)}
+.simat .hero .button.outline{background:rgba(255,255,255,.08);border-color:rgba(255,255,255,.5);color:#fff;box-shadow:none}
+.simat .hero .button.outline:hover{background:rgba(255,255,255,.16)}
+.simat .hero .button.secondary{background:rgba(255,255,255,.16);border-color:transparent;color:#fff;box-shadow:none}
+.simat .icon-button{display:inline-grid;place-items:center;min-width:34px;height:34px;padding:0 8px;border:1px solid var(--line);border-radius:9px;background:var(--surface);color:var(--ink-3);font-weight:700}
+.simat .icon-button:hover{background:var(--surface-2);color:var(--ink)}
+.simat .icon-button:disabled{opacity:.4;cursor:not-allowed}
+.simat .icon-button svg{font-size:16px}
+.simat .text-link{display:inline-flex;align-items:center;gap:5px;color:var(--teal-700);font-size:12.5px;font-weight:600;text-decoration:none}
+.simat .text-link:hover{color:var(--teal-900);text-decoration:underline;text-underline-offset:3px}
+.simat .text-link svg{font-size:14px}
+.simat .toolbar{display:flex;align-items:flex-end;gap:10px;flex-wrap:wrap}
+.simat .filter-bar{display:flex;align-items:flex-end;gap:12px;flex-wrap:wrap;padding:14px 16px;background:var(--surface);border:1px solid var(--line-2);border-radius:var(--radius-lg);box-shadow:var(--shadow-float)}
+.simat .filter-bar label{flex:0 1 210px}
+
+.simat label{display:grid;gap:5px;font-size:12.5px;font-weight:600;color:var(--ink-3)}
+.simat label.inline{display:flex;align-items:center;gap:9px;font-weight:500;color:var(--ink-2)}
+.simat input:not([type=checkbox]):not([type=radio]):not([type=file]),.simat select,.simat textarea{width:100%;min-width:0;height:38px;padding:0 11px;border:1px solid var(--line-strong);border-radius:10px;background:var(--surface);color:var(--ink);font-size:13.5px;font-weight:400;transition:border-color .15s,box-shadow .15s}
+.simat textarea{height:auto;padding:10px 11px;line-height:1.5;resize:vertical;font-family:var(--font)}
+.simat select{-webkit-appearance:none;appearance:none;padding-right:34px;background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%2364748b' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='m6 9 6 6 6-6'/%3E%3C/svg%3E");background-repeat:no-repeat;background-position:right 10px center;background-size:16px;text-overflow:ellipsis}
+.simat input:not([type=checkbox]):not([type=radio]):not([type=file]):focus,.simat select:focus,.simat textarea:focus{outline:none;border-color:var(--teal-500);box-shadow:0 0 0 3px rgba(20,184,166,.2)}
+.simat input[readonly]{background:var(--surface-2);color:var(--ink-3)}
+.simat input[type=checkbox]{width:16px;height:16px;margin:0;accent-color:var(--teal-600)}
+.simat input[type=file]{width:100%;padding:8px;border:1px dashed var(--line-strong);border-radius:10px;background:var(--surface-2);font-size:12.5px}
+.simat select:disabled{opacity:.6}
+.simat .field-grid{display:grid;grid-template-columns:1fr 1fr;gap:12px}
+.simat .field-grid .full{grid-column:1/-1}
+
+/* --------------------------------------------------------------------------
+   Etiquetas, avisos y estados vacíos
+   -------------------------------------------------------------------------- */
+.simat .pill{display:inline-flex;align-items:center;gap:5px;min-height:22px;padding:2px 9px;border-radius:999px;background:var(--surface-3);color:var(--ink-3);font-size:11.5px;font-weight:600;line-height:1.3;white-space:nowrap}
+.simat .pill svg{font-size:12px}
+.simat .pill.green{background:#dcfce7;color:#166534}
+.simat .pill.amber{background:#fef3c7;color:#854d0e}
+.simat .pill.red{background:#fee2e2;color:#991b1b}
+.simat .pill.blue{background:#dbeafe;color:#1e40af}
+.simat .pill.teal{background:var(--teal-100);color:var(--teal-800)}
+.simat .pill.outline{background:transparent;box-shadow:inset 0 0 0 1px var(--line)}
+.simat .pill .pd{width:6px;height:6px;border-radius:50%;background:currentColor}
+.simat .pill.red.pulse .pd{animation:simat-blink 1.4s ease-in-out infinite}
+.simat .chip{display:inline-flex;align-items:center;gap:6px;height:26px;padding:0 10px;border-radius:8px;background:var(--surface-2);border:1px solid var(--line);color:var(--ink-3);font-size:12px;font-weight:500;white-space:nowrap}
+.simat .chip svg{font-size:13px;color:var(--faint)}
+.simat .chips{display:flex;flex-wrap:wrap;gap:6px}
+.simat .banner{display:flex;align-items:flex-start;gap:10px;padding:11px 14px;border-radius:12px;border:1px solid #fde68a;background:#fffbeb;color:#78350f;font-size:13px;line-height:1.5}
+.simat .banner svg{flex:none;margin-top:2px;font-size:16px;color:#d97706}
+.simat .banner strong{font-weight:700}
+.simat .banner.info{border-color:var(--teal-100);background:var(--teal-50);color:var(--teal-900)}
+.simat .banner.info svg{color:var(--teal-600)}
+.simat .empty{display:flex;align-items:flex-start;gap:10px;padding:18px;color:var(--muted);font-size:13px}
+.simat .empty::before{content:'';flex:none;width:8px;height:8px;margin-top:6px;border-radius:50%;border:2px solid var(--line-strong)}
+.simat .form-error{color:#b42318;font-weight:600;font-size:13px}
+.simat .form-error:empty{display:none}
+
+/* --------------------------------------------------------------------------
+   Tablas
+   -------------------------------------------------------------------------- */
+.simat .table-wrap{overflow:auto;-webkit-overflow-scrolling:touch}
+.simat table{width:100%;border-collapse:collapse;text-align:left;font-size:13px}
+.simat th,.simat td{padding:11px 14px;vertical-align:top}
+.simat th{background:var(--surface-2);border-top:1px solid var(--line-2);border-bottom:1px solid var(--line);color:var(--muted);font-size:11.5px;font-weight:600;white-space:nowrap}
+.simat td{border-bottom:1px solid var(--line-2);color:var(--ink-2);font-variant-numeric:tabular-nums}
+.simat tbody tr:last-child td{border-bottom:0}
+.simat tbody tr:hover td{background:#fbfdfd}
+.simat td .button{height:30px;padding:0 10px;font-size:12px;border-radius:8px}
+.simat td a{font-weight:600;text-decoration:none}
+.simat td a:hover{text-decoration:underline}
+.simat .num{text-align:right;white-space:nowrap}
+.simat dl{display:grid;grid-template-columns:max-content minmax(0,1fr);gap:8px 16px;margin:0}
+.simat dt{color:var(--muted);font-size:12.5px;font-weight:500}
+.simat dd{margin:0;color:var(--ink-2);font-size:13px;overflow-wrap:anywhere;font-variant-numeric:tabular-nums}
+.simat summary{cursor:pointer;color:var(--teal-700);font-size:13px;font-weight:600;list-style-position:inside}
+.simat summary:hover{color:var(--teal-900)}
+.simat details[open] > summary{margin-bottom:10px}
+.simat .table-toggle{border-top:1px solid var(--line-2)}
+.simat .table-toggle > summary{padding:12px 18px;margin:0}
+.simat .table-toggle[open] > summary{border-bottom:1px solid var(--line-2)}
+.simat .table-toggle .table-wrap{max-height:320px}
+.simat .table-toggle thead th{position:sticky;top:0;z-index:1}
+
+/* --------------------------------------------------------------------------
+   Actividad reciente (línea de tiempo)
+   -------------------------------------------------------------------------- */
+.simat .timeline{list-style:none;margin:0;padding:2px 18px 6px}
+.simat .tl-item{position:relative;display:grid;grid-template-columns:30px minmax(0,1fr);gap:12px;padding:11px 0}
+.simat .tl-item::before{content:'';position:absolute;left:14.5px;top:42px;bottom:-11px;width:1px;background:var(--line)}
+.simat .tl-item:last-child::before{display:none}
+.simat .tl-node{width:30px;height:30px;border-radius:10px;display:grid;place-items:center;background:var(--teal-50);color:var(--teal-700);font-size:15px}
+.simat .tl-node.is-urgent{background:#fee2e2;color:#b91c1c}
+.simat .tl-node.is-ok{background:#dcfce7;color:#166534}
+.simat .tl-node.is-review{background:#fef3c7;color:#92400e}
+.simat .tl-top{display:flex;align-items:center;justify-content:space-between;gap:8px}
+.simat .tl-top strong{font-size:13.5px;font-weight:600;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.simat .tl-meta{margin-top:2px;font-size:12.5px;color:var(--muted)}
+.simat .tl-time{margin-top:3px;font-size:11.5px;color:var(--faint);font-variant-numeric:tabular-nums}
+
+/* Lista de estaciones */
+.simat .station-list{list-style:none;margin:0;padding:0 8px 8px}
+.simat .station-row{display:grid;grid-template-columns:auto minmax(0,1fr) auto;align-items:center;gap:12px;width:100%;padding:11px 10px;border:0;border-radius:12px;background:transparent;text-align:left}
+.simat .station-row:hover{background:var(--surface-2)}
+.simat .station-row[aria-pressed=true]{background:var(--teal-50);box-shadow:inset 0 0 0 1px var(--teal-100)}
+.simat .station-glyph{position:relative;width:34px;height:34px;border-radius:10px;display:grid;place-items:center;background:var(--surface-3);color:var(--ink-3);font-size:16px}
+.simat .station-row[aria-pressed=true] .station-glyph{background:var(--teal-600);color:#fff}
+.simat .station-name{display:block;font-size:13.5px;font-weight:600;color:var(--ink);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.simat .station-sub{display:block;font-size:12px;color:var(--muted);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.simat .station-side{display:flex;flex-direction:column;align-items:flex-end;gap:4px}
+
+/* Localizador */
+.simat .locator{position:relative;height:100%;min-height:220px;border-radius:12px;overflow:hidden;background:#e1f1ed;box-shadow:inset 0 0 0 1px rgba(15,23,42,.06)}
+.simat .locator canvas{position:absolute;inset:0;display:block}
+
+/* Lista de medidores */
+.simat .meter-list{list-style:none;margin:0;padding:4px 18px 14px;display:grid;gap:11px}
+.simat .meter-row{display:grid;grid-template-columns:44px minmax(0,1fr) 148px;align-items:center;gap:14px}
+.simat .meter-name{font-size:12.5px;font-weight:600;color:var(--ink-3);font-variant-numeric:tabular-nums}
+.simat .meter-track{position:relative;height:10px;border-radius:999px;background:var(--surface-3);overflow:hidden}
+.simat .meter-fill{position:absolute;left:0;top:0;bottom:0;border-radius:999px;background:var(--rain)}
+.simat .meter-fill.is-low{background:#5eead4}
+.simat .meter-figure{text-align:right;line-height:1.25}
+.simat .meter-figure strong{display:block;font-size:13px;font-weight:700;color:var(--ink);font-variant-numeric:tabular-nums}
+.simat .meter-figure span{display:block;font-size:11px;color:var(--muted);font-variant-numeric:tabular-nums;white-space:nowrap}
+.simat .meter-figure .warn{color:#a16207}
+.simat .meter-row.is-missing .meter-track{background:repeating-linear-gradient(135deg,var(--surface-3) 0 6px,#fff 6px 9px)}
+
+/* --------------------------------------------------------------------------
+   Visor cartográfico
+   -------------------------------------------------------------------------- */
+.simat .map{position:relative;overflow:hidden;background:#062b29;border-radius:0 0 calc(var(--radius-lg) - 1px) calc(var(--radius-lg) - 1px);height:330px;user-select:none;-webkit-user-select:none}
+.simat .map.is-light{background:#e3f1ee}
+.simat .map.is-visor{height:min(66vh,620px);min-height:420px}
+.simat .map-canvas{position:absolute;inset:0;width:100%;height:100%;display:block;cursor:grab;touch-action:none;outline:none}
+.simat .map.is-hero .map-canvas{touch-action:pan-y}
+.simat .map-canvas.is-dragging{cursor:grabbing}
+.simat .map-canvas:focus-visible{box-shadow:inset 0 0 0 3px rgba(94,234,212,.7)}
+.simat .map-markers{position:absolute;inset:0;z-index:2;pointer-events:none}
+.simat .mk{position:absolute;left:0;top:0;width:30px;height:30px;margin:0;padding:0;border:0;border-radius:50%;background:transparent;pointer-events:auto;cursor:pointer;will-change:transform}
+.simat .mk::before{content:'';position:absolute;left:9px;top:9px;width:12px;height:12px;border-radius:50%;background:var(--c);box-shadow:0 0 0 2px var(--ring,#fff),0 3px 8px rgba(0,0,0,.35);transition:transform .15s}
+.simat .mk:hover::before,.simat .mk:focus-visible::before{transform:scale(1.25)}
+.simat .mk:focus-visible{outline:2px solid #fff;outline-offset:0}
+.simat .mk-report::before{border-radius:3px;transform:rotate(45deg);width:11px;height:11px;left:9.5px;top:9.5px}
+.simat .mk-report:hover::before,.simat .mk-report:focus-visible::before{transform:rotate(45deg) scale(1.25)}
+.simat .mk.is-live::after{content:'';position:absolute;left:9px;top:9px;width:12px;height:12px;border-radius:50%;border:2px solid var(--c);opacity:0;animation:simat-ping 2.6s cubic-bezier(0,0,.2,1) infinite}
+.simat .mk-report.is-urgent::after{content:'';position:absolute;left:8px;top:8px;width:14px;height:14px;border-radius:50%;border:2px solid var(--c);opacity:0;animation:simat-ping 1.6s cubic-bezier(0,0,.2,1) infinite}
+.simat .mk.is-selected::before{width:16px;height:16px;left:7px;top:7px;box-shadow:0 0 0 3px var(--ring,#fff),0 0 0 7px rgba(255,255,255,.18),0 4px 10px rgba(0,0,0,.4)}
+.simat .mk-label{position:absolute;left:30px;top:3px;display:flex;align-items:center;gap:6px;height:24px;padding:0 9px;border-radius:8px;background:rgba(4,47,46,.86);border:1px solid rgba(153,246,228,.25);color:#f0fdfa;font-size:11.5px;font-weight:600;white-space:nowrap;pointer-events:none;box-shadow:0 6px 16px -8px rgba(0,0,0,.6)}
+.simat .mk-label b{font-weight:700;color:var(--teal-200);font-variant-numeric:tabular-nums}
+.simat .mk.is-selected{z-index:2}
+.simat .mk.label-left .mk-label{left:auto;right:30px}
+.simat .map.is-light .mk-label{background:rgba(255,255,255,.95);border-color:var(--line);color:var(--ink)}
+.simat .map.is-light .mk-label b{color:var(--teal-700)}
+.simat .map-tag,.simat .map-legend,.simat .map-info,.simat .map-coords,.simat .map-scale,.simat .map-hint{position:absolute;z-index:3}
+.simat .map-tag{left:14px;top:14px;display:inline-flex;align-items:center;gap:6px;height:26px;padding:0 10px;border-radius:8px;background:rgba(4,47,46,.72);border:1px solid rgba(153,246,228,.18);color:#ccfbf1;font-size:11px;font-weight:600;letter-spacing:.02em}
+.simat .map-tag svg{font-size:13px}
+.simat .map.is-light .map-tag{background:rgba(255,255,255,.94);border-color:var(--line);color:var(--teal-800)}
+.simat .map-tools{position:absolute;right:14px;top:14px;z-index:3;display:flex;flex-direction:column;gap:8px}
+.simat .tool-card{display:flex;flex-direction:column;padding:3px;border-radius:11px;background:rgba(255,255,255,.96);border:1px solid rgba(15,23,42,.08);box-shadow:0 8px 20px -10px rgba(0,0,0,.45)}
+.simat .tool-card button{width:32px;height:32px;display:grid;place-items:center;border:0;border-radius:8px;background:transparent;color:var(--ink-3);font-size:16px}
+.simat .tool-card button:hover{background:var(--surface-3);color:var(--ink)}
+.simat .tool-card button + button{margin-top:1px}
+.simat .map-legend{left:14px;bottom:14px;display:flex;flex-wrap:wrap;gap:4px 12px;max-width:calc(100% - 28px);padding:7px 11px;border-radius:10px;background:rgba(4,47,46,.72);border:1px solid rgba(153,246,228,.16);color:#ccfbf1;font-size:11.5px;font-weight:500}
+.simat .map.is-light .map-legend{background:rgba(255,255,255,.94);border-color:var(--line);color:var(--ink-3)}
+.simat .map-legend span{display:inline-flex;align-items:center;gap:6px;white-space:nowrap}
+.simat .lg{display:inline-block;width:9px;height:9px;border-radius:50%;background:var(--c);box-shadow:0 0 0 1.5px #fff}
+.simat .lg.diamond{border-radius:2px;transform:rotate(45deg);width:8px;height:8px}
+.simat .lg.square{border-radius:2px}
+.simat .lg.dashed{background:transparent;border:1.5px dashed var(--c);box-shadow:none;border-radius:2px}
+.simat .map-foot{position:absolute;right:14px;bottom:14px;z-index:3;display:flex;align-items:flex-end;gap:8px;pointer-events:none}
+.simat .map-coords,.simat .map-scale{position:static}
+.simat .map-coords:empty{display:none}
+.simat .map-coords{height:24px;display:inline-flex;align-items:center;padding:0 8px;border-radius:7px;background:rgba(4,47,46,.72);color:#ccfbf1;font:500 10.5px/1 var(--mono);font-variant-numeric:tabular-nums;white-space:nowrap}
+.simat .map-scale{display:flex;flex-direction:column;align-items:flex-start;gap:3px;padding:4px 8px 5px;border-radius:7px;background:rgba(4,47,46,.72);color:#ccfbf1;font:500 10.5px/1 var(--mono)}
+.simat .map-scale i{display:block;height:6px;border:1.5px solid currentColor;border-top:0}
+.simat .map.is-light .map-coords,.simat .map.is-light .map-scale{background:rgba(255,255,255,.94);color:var(--ink-3);box-shadow:inset 0 0 0 1px var(--line)}
+.simat .map-attr{position:absolute;right:14px;bottom:44px;z-index:3;font-size:10px;color:rgba(204,251,241,.7)}
+.simat .map.is-light .map-attr{color:var(--muted)}
+.simat .map-info{left:14px;bottom:52px;width:min(300px,calc(100% - 28px));padding:11px 13px 12px;border-radius:12px;background:#fff;color:var(--ink);box-shadow:var(--shadow-pop);font-size:12.5px}
+.simat .map-info h3{display:flex;align-items:center;gap:7px;font-size:13.5px;font-weight:600;letter-spacing:-.01em;padding-right:22px}
+.simat .map-info h3 i{width:9px;height:9px;border-radius:50%;background:var(--c);flex:none}
+.simat .map-info p{margin-top:3px;color:var(--muted)}
+.simat .map-info dl{margin-top:8px;gap:4px 12px}
+.simat .map-info dt,.simat .map-info dd{font-size:12px}
+.simat .map-info .map-info-close{position:absolute;right:6px;top:6px;width:26px;height:26px;border:0;border-radius:7px;background:transparent;color:var(--faint);display:grid;place-items:center}
+.simat .map-info .map-info-close:hover{background:var(--surface-3);color:var(--ink)}
+.simat .map-info .button{margin-top:10px}
+.simat .map-hint{left:50%;top:50%;transform:translate(-50%,-50%);padding:9px 14px;border-radius:10px;background:rgba(4,47,46,.85);color:#f0fdfa;font-size:12.5px;font-weight:500;pointer-events:none;opacity:0;transition:opacity .2s}
+.simat .map-hint.is-on{opacity:1}
+.simat .map.is-hero .map-tools{top:24px;right:max(var(--gutter),calc((100% - var(--maxw)) / 2))}
+.simat .map.is-hero .map-foot{right:max(var(--gutter),calc((100% - var(--maxw)) / 2));bottom:92px}
+.simat .map.is-hero .map-attr{right:max(var(--gutter),calc((100% - var(--maxw)) / 2));bottom:122px}
+.simat .map.is-hero .map-legend{left:auto;right:calc(max(var(--gutter),calc((100% - var(--maxw)) / 2)) + 56px);top:24px;bottom:auto}
+.simat .map.is-hero .map-tag{display:none}
+.simat .map.is-hero .map-info{left:auto;right:calc(max(var(--gutter),calc((100% - var(--maxw)) / 2)) + 56px);top:68px;bottom:auto}
+.simat .map-enter .map-canvas{animation:simat-mapIn .9s ease-out both}
+
+/* --------------------------------------------------------------------------
+   Gráficos (SVG)
+   -------------------------------------------------------------------------- */
+.simat .chart{position:relative;width:100%;min-height:40px}
+.simat .chart svg{display:block;width:100%;height:auto;overflow:visible;font-family:var(--font)}
+.simat .chart .gl{stroke:var(--line-2);stroke-width:1;shape-rendering:crispEdges}
+.simat .chart .base{stroke:var(--line-strong);stroke-width:1;shape-rendering:crispEdges}
+.simat .chart .tick{fill:var(--faint);font-size:10.5px;font-variant-numeric:tabular-nums}
+.simat .chart .tick-strong{fill:var(--ink-3);font-size:10.5px;font-weight:600}
+.simat .chart .lbl{fill:var(--ink-2);font-size:11px;font-weight:600;font-variant-numeric:tabular-nums;paint-order:stroke;stroke:#fff;stroke-width:3px;stroke-linejoin:round}
+.simat .chart .lbl-muted{fill:var(--muted);font-size:10.5px;font-weight:500}
+.simat .chart .panel-title{fill:var(--muted);font-size:11px;font-weight:600}
+.simat .chart .cross{stroke:var(--ink-3);stroke-width:1;shape-rendering:crispEdges;pointer-events:none}
+.simat .chart .hit{fill:transparent;cursor:crosshair}
+.simat .chart .bar{transition:opacity .12s}
+.simat .chart .gap-band{fill:var(--surface-3)}
+.simat .chart .now{stroke:var(--ink-3);stroke-width:1;stroke-dasharray:3 3}
+.simat .chart .threshold{stroke:var(--critical);stroke-width:1.5;stroke-dasharray:6 4}
+.simat .chart .day{stroke:var(--line);stroke-width:1;shape-rendering:crispEdges}
+.simat .chart-legend{display:flex;flex-wrap:wrap;align-items:center;gap:6px 16px;padding:0 18px 12px;font-size:12px;color:var(--ink-3)}
+.simat .chart-legend span{display:inline-flex;align-items:center;gap:7px}
+.simat .chart-legend i{display:inline-block;width:12px;height:12px;border-radius:3px;background:var(--c)}
+.simat .chart-legend i.line{height:2px;width:14px;border-radius:2px}
+.simat .chart-legend i.dot{width:9px;height:9px;border-radius:50%}
+.simat .chart-legend i.gap{background:var(--surface-3);box-shadow:inset 0 0 0 1px var(--line)}
+.simat .chart-legend i.thr{height:0;width:16px;border-radius:0;background:none;border-top:2px dashed var(--critical)}
+.simat .chart-legend i.ramp{width:56px;height:8px;border-radius:999px;background:linear-gradient(90deg,#cde2fb,#6da7ec,#256abf)}
+.simat .chart-body{padding:2px 14px 8px 8px}
+.simat .chart-stats{display:flex;flex-wrap:wrap;gap:8px}
+.simat .stat-mini{display:flex;flex-direction:column;gap:1px;min-width:96px;padding:7px 11px;border-radius:10px;background:var(--surface-2);border:1px solid var(--line-2)}
+.simat .stat-mini small{font-size:11px;font-weight:600;color:var(--muted)}
+.simat .stat-mini strong{font-size:15px;font-weight:700;letter-spacing:-.02em;color:var(--ink)}
+.simat .stat-mini strong span{font-size:12px;font-weight:600;color:var(--ink-3)}
+.simat .chart-tip{position:fixed;left:0;top:0;z-index:80;min-width:160px;max-width:260px;padding:9px 11px 10px;border-radius:11px;background:rgba(15,23,42,.96);color:#fff;font-size:12px;line-height:1.35;pointer-events:none;box-shadow:0 14px 30px -12px rgba(15,23,42,.5)}
+.simat .tip-title{margin-bottom:6px;color:#cbd5e1;font-size:11.5px;font-weight:500}
+.simat .tip-row{display:grid;grid-template-columns:14px auto 1fr;align-items:center;gap:7px;margin-top:3px}
+.simat .tip-row strong{font-size:13px;font-weight:700;font-variant-numeric:tabular-nums}
+.simat .tip-row span{color:#cbd5e1;font-size:11.5px}
+.simat .tip-key{display:block;width:12px;height:2px;border-radius:2px;background:var(--c)}
+.simat .tip-key.block{height:10px;width:10px;border-radius:2px}
+.simat .tip-key.dot{height:8px;width:8px;border-radius:50%}
+.simat .spark{display:block;width:100%;height:34px;overflow:visible}
+.simat .spark-cap{display:flex;justify-content:space-between;margin-top:2px;font-size:11px;color:var(--faint)}
+
+/* --------------------------------------------------------------------------
+   Riesgo
+   -------------------------------------------------------------------------- */
+.simat .normal{--risk-bg:#ecf9ee;--risk-ink:#14632a;--risk-stroke:#0ca30c}
+.simat .caution{--risk-bg:#fff7df;--risk-ink:#7a5200;--risk-stroke:#fab219}
+.simat .alert{--risk-bg:#fdf0e9;--risk-ink:#8f3b17;--risk-stroke:#ec835a}
+.simat .emergency{--risk-bg:#fdecec;--risk-ink:#8f2222;--risk-stroke:#d03b3b}
+.simat .unavailable{--risk-bg:#f1f5f9;--risk-ink:#334155;--risk-stroke:#94a3b8}
+
+.simat .risk-band{display:grid;grid-template-columns:auto minmax(0,1fr) auto;align-items:center;gap:8px 26px;padding:18px 22px}
+.simat .risk-band-dial{display:flex;flex-direction:column;align-items:center;width:188px}
+.simat .risk-band-body{min-width:0}
+.simat .risk-band-body h2{font-size:16px;font-weight:600}
+.simat .risk-band-body > p{margin-top:3px}
+.simat .risk-summary{display:flex;gap:8px;flex-wrap:wrap;margin-top:12px}
+.simat .risk-status{display:inline-flex;align-items:center;gap:7px;height:28px;padding:0 11px;border-radius:999px;background:var(--risk-bg);color:var(--risk-ink);font-size:12.5px;font-weight:600;box-shadow:inset 0 0 0 1px color-mix(in srgb,var(--risk-stroke) 35%,transparent)}
+.simat .risk-status svg{font-size:14px;color:var(--risk-stroke)}
+.simat .risk-facts{display:flex;flex-wrap:wrap;gap:10px;margin-top:14px}
+.simat .fact{display:flex;align-items:center;gap:10px;min-width:0;padding:8px 12px 8px 9px;border-radius:12px;background:var(--surface-2);border:1px solid var(--line-2)}
+.simat .fact-icon{width:30px;height:30px;border-radius:9px;display:grid;place-items:center;flex:none;background:var(--teal-100);color:var(--teal-700);font-size:15px}
+.simat .fact-icon.sea{background:#dbeafe;color:#1d4ed8}
+.simat .fact small{display:block;font-size:11px;font-weight:600;color:var(--muted)}
+.simat .fact strong{display:block;font-size:13.5px;font-weight:700;color:var(--ink);white-space:nowrap}
+.simat .fact strong span{font-weight:500;color:var(--muted);font-size:12px}
+.simat .dial{display:block;width:100%;max-width:188px;height:auto;overflow:visible}
+.simat .dial-caption{margin-top:-4px;text-align:center}
+.simat .dial-caption strong{display:flex;align-items:center;justify-content:center;gap:6px;font-size:15px;font-weight:700;color:var(--risk-ink,var(--ink))}
+.simat .dial-caption strong svg{color:var(--risk-stroke)}
+.simat .dial-caption span{display:block;margin-top:1px;font-size:11.5px;color:var(--muted)}
+
+.simat .risk-result{position:relative;overflow:hidden;background:var(--risk-bg,#f1f7f6);border-color:color-mix(in srgb,var(--risk-stroke,#94a3b8) 40%,var(--line));color:var(--risk-ink,#203b3e)}
+.simat .risk-result::before{content:'';position:absolute;left:0;top:0;bottom:0;width:5px;background:var(--risk-stroke,#94a3b8)}
+.simat .risk-result-main{display:flex;align-items:flex-start;gap:16px;padding:18px 22px 16px}
+.simat .risk-result-icon{width:44px;height:44px;flex:none;border-radius:13px;display:grid;place-items:center;background:#fff;color:var(--risk-stroke);font-size:22px;box-shadow:0 1px 2px rgba(15,23,42,.06)}
+.simat .risk-result .eyebrow{margin-bottom:5px;color:inherit;opacity:.85;letter-spacing:.08em;font-size:11px}
+.simat .risk-result h2{font-size:22px;font-weight:700;letter-spacing:-.02em}
+.simat .risk-result p{margin-top:5px;font-size:13.5px}
+.simat .risk-result ul{margin:10px 0 0;padding-left:18px;font-size:13px}
+.simat .risk-result li + li{margin-top:3px}
+.simat .risk-result-note{padding:10px 22px 11px;border-top:1px solid color-mix(in srgb,var(--risk-stroke,#94a3b8) 25%,transparent);font-size:12px;background:rgba(255,255,255,.45)}
+.simat .decision{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1.1fr);gap:0}
+.simat .decision > .decision-main{display:flex;flex-direction:column;border-right:1px solid var(--line-2)}
+.simat .decision-main > .decision-state{flex:1;align-content:center}
+.simat .decision-top{display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap;padding:16px 20px 0}
+.simat .decision-state{display:grid;grid-template-columns:150px minmax(0,1fr);align-items:center;gap:18px;padding:12px 20px 16px}
+.simat .decision-state h2{font-size:24px;font-weight:700;letter-spacing:-.025em;color:var(--risk-ink,var(--ink))}
+.simat .decision-state p{margin-top:4px;font-size:13.5px;color:var(--ink-3)}
+.simat .decision-state .meta{margin-top:6px}
+.simat .decision-state ul{margin:10px 0 0;padding-left:18px;font-size:12.5px;color:var(--ink-3)}
+.simat .decision-state li + li{margin-top:3px}
+.simat .decision-note{margin-top:auto;padding:11px 20px 13px;border-top:1px solid var(--line-2);font-size:12px;color:var(--muted)}
+.simat .mode-badge{display:inline-flex;align-items:center;gap:6px;font-size:12px;font-weight:600;color:var(--muted)}
+.simat .mode-badge svg{font-size:14px;color:var(--teal-600)}
+.simat .risk-mode{display:flex;align-items:flex-end;gap:10px;flex-wrap:wrap}
+.simat .risk-mode label{min-width:170px}
+.simat .decision-matrix{padding:16px 20px 18px}
+.simat .decision-matrix h3{font-size:13.5px;font-weight:600;margin-bottom:10px}
+.simat .risk-matrix{width:100%;border-collapse:separate;border-spacing:6px;table-layout:fixed;margin:-6px}
+.simat .risk-matrix th{background:none;border:0;padding:2px 4px;font-size:11.5px;font-weight:600;color:var(--muted);text-align:center}
+.simat .risk-matrix thead th:first-child{width:74px}
+.simat .risk-matrix th[scope=row]{text-align:right;vertical-align:middle;padding-right:8px}
+.simat .risk-matrix td{border:0}
+.simat .matrix-cell{position:relative;padding:12px 13px 12px;border-radius:12px;background:var(--risk-bg);color:var(--risk-ink);vertical-align:top}
+.simat tbody tr:hover td.matrix-cell{background:var(--risk-bg)}
+.simat .matrix-cell strong{display:flex;align-items:center;gap:6px;font-size:14.5px;font-weight:700}
+.simat .matrix-cell strong svg{color:var(--risk-stroke);font-size:15px}
+.simat .matrix-cell p{margin-top:4px;font-size:12px;line-height:1.45}
+.simat .matrix-cell small{display:block;margin-top:6px;font-size:11.5px;font-weight:700}
+.simat .matrix-cell.is-current{box-shadow:inset 0 0 0 2px var(--risk-stroke),0 8px 18px -10px var(--risk-stroke)}
+.simat .matrix-selected{display:inline-flex;align-items:center;margin-left:auto;height:20px;padding:0 7px;border-radius:999px;background:var(--risk-stroke);color:#fff;font-size:10.5px;font-weight:700;letter-spacing:.01em}
+.simat .matrix-cell.caution .matrix-selected{color:#3d2a00}
+.simat .risk-matrix .short{display:none}
+.simat .matrix-axis{display:flex;justify-content:space-between;margin-top:8px;padding-left:80px;font-size:11px;color:var(--faint)}
+
+.simat .risk-evidence{grid-template-columns:repeat(2,minmax(0,1fr))}
+.simat .risk-measure{position:relative;display:flex;flex-direction:column;height:100%;padding:0;cursor:pointer;transition:border-color .15s,box-shadow .15s}
+.simat .risk-measure:hover,.simat .risk-measure:has([aria-expanded=true]){border-color:var(--teal-300);box-shadow:0 0 0 3px rgba(20,184,166,.1)}
+.simat .risk-measure h2{padding:16px 18px 0;font-size:14px;font-weight:600}
+.simat .risk-measure-toggle{display:flex;align-items:center;justify-content:space-between;gap:8px;width:100%;padding:0;border:0;background:transparent;color:var(--ink);font:inherit;text-align:left}
+.simat .risk-measure-toggle > span:first-child{display:inline-flex;align-items:center;gap:9px}
+.simat .measure-icon{width:30px;height:30px;border-radius:9px;display:grid;place-items:center;background:var(--teal-50);color:var(--teal-700);font-size:15px}
+.simat .measure-icon.sea{background:#eff6ff;color:#1d4ed8}
+.simat .risk-chart-chevron{display:inline-flex;align-items:center;gap:5px;color:var(--teal-700);font-size:12px;font-weight:600}
+.simat .risk-chart-chevron svg{font-size:16px;transition:transform .15s}
+.simat .risk-measure-toggle[aria-expanded=true] .risk-chart-chevron svg{transform:rotate(180deg)}
+.simat .risk-measure-value{padding:10px 18px 0;font-size:30px;font-weight:700;letter-spacing:-.03em;line-height:1.1}
+.simat .risk-measure-value small{font-size:15px;font-weight:600;color:var(--ink-3);letter-spacing:-.01em}
+.simat .risk-measure > .meta{padding:4px 18px 0}
+.simat .threshold-meter{margin:12px 18px 0}
+.simat .threshold-meter .meter-track{height:8px}
+.simat .threshold-meter .tm-mark{position:absolute;top:-3px;bottom:-3px;width:2px;border-radius:2px;background:var(--critical)}
+.simat .threshold-meter .tm-cap{display:flex;justify-content:space-between;margin-top:5px;font-size:11px;color:var(--muted);font-variant-numeric:tabular-nums}
+.simat .risk-measure dl{margin:14px 18px 0;padding-top:12px;border-top:1px solid var(--line-2);grid-template-columns:minmax(120px,auto) minmax(0,1fr)}
+.simat .risk-measure .measure-foot{margin-top:auto;padding:12px 18px 14px}
+.simat .gauge-feedback{margin:12px 18px 0;padding:8px 10px;border-radius:9px;background:var(--surface-2);font-size:12px}
+.simat .gauge-feedback:empty{display:none}
+.simat #marine-observed{display:flex;flex-direction:column;min-width:0}
+.simat #marine-observed > .risk-measure{flex:1}
+.simat .gauge-trend{display:flex;align-items:center;gap:10px;padding:8px 12px;border-radius:11px;background:var(--surface-3);color:var(--ink-3)}
+.simat .gauge-trend svg{font-size:18px}
+.simat .gauge-trend strong,.simat .gauge-trend span{display:block}
+.simat .gauge-trend strong{font-size:13px}
+.simat .gauge-trend span{font-size:12px}
+.simat .gauge-trend.up{background:#e6f6f3;color:#0f5f56}
+.simat .gauge-trend.down{background:#fff2e8;color:#8b421b}
+
+.simat .rain-tools{display:flex;align-items:flex-end;gap:14px;flex-wrap:wrap;padding:12px 18px;border-block:1px solid var(--line-2);background:var(--surface-2)}
+.simat .rain-tools label{min-width:150px}
+.simat .rain-peak{flex:1;min-width:170px}
+.simat .rain-peak small,.simat .rain-peak strong,.simat .rain-peak span{display:block}
+.simat .rain-peak small{font-size:11px;font-weight:600;color:var(--muted)}
+.simat .rain-peak strong{font-size:20px;font-weight:700;letter-spacing:-.02em;color:var(--ink)}
+.simat .rain-peak span{font-size:12px;color:var(--muted)}
+.simat .rain-hint{padding:10px 18px 0}
+.simat .rain-interactive-chart{display:block;width:100%;height:250px;cursor:crosshair}
+.simat .rain-interactive-chart:focus-visible{outline-offset:-3px}
+.simat .rain-legend{padding:6px 18px 10px}
+.simat .rain-inspector{display:flex;align-items:center;justify-content:space-between;gap:12px;padding:11px 18px;border-top:1px solid var(--line-2);background:var(--surface-2);border-radius:0 0 var(--radius-lg) var(--radius-lg)}
+.simat .rain-inspector p{color:var(--muted);font-size:12.5px}
+.simat .rain-inspector b{color:var(--ink)}
+.simat .rain-inspector strong{font-size:13px}
+.simat .rain-inspector .toolbar{flex-wrap:nowrap;gap:6px}
+.simat .rain-current{display:grid;grid-template-columns:auto minmax(0,1fr);gap:4px 18px;align-items:center;padding:4px 18px 14px}
+.simat .rain-current .big{grid-row:span 3;padding:10px 16px;border-radius:12px;background:var(--teal-50);text-align:center}
+.simat .rain-current .big strong{display:block;font-size:26px;font-weight:700;letter-spacing:-.03em;color:var(--teal-900)}
+.simat .rain-current .big span{font-size:11.5px;color:var(--teal-800)}
+.simat .rain-current p{font-size:12.5px;color:var(--ink-3)}
+.simat .rain-forecast-details > summary{padding:12px 18px;border-top:1px solid var(--line-2)}
+.simat .rain-forecast-details .table-wrap{max-height:330px}
+.simat .rain-forecast-details thead th{position:sticky;top:0}
+.simat .criteria-note{display:flex;gap:10px;align-items:flex-start;padding:14px 18px;font-size:12.5px;color:var(--ink-3)}
+.simat .criteria-note svg{flex:none;margin-top:2px;color:var(--teal-600);font-size:16px}
+
+/* --------------------------------------------------------------------------
+   Diálogo y notificación
+   -------------------------------------------------------------------------- */
+.simat dialog{width:min(580px,calc(100% - 28px));max-height:calc(100vh - 40px);padding:0;border:0;border-radius:var(--radius-xl);background:var(--surface);color:var(--ink);box-shadow:0 30px 60px -20px rgba(15,23,42,.45)}
+.simat dialog[open]{animation:simat-dialogIn .18s ease-out}
+.simat dialog::backdrop{background:rgba(15,23,42,.5);-webkit-backdrop-filter:blur(3px);backdrop-filter:blur(3px)}
+.simat .modal-head{position:sticky;top:0;z-index:1;display:flex;align-items:center;justify-content:space-between;gap:12px;padding:16px 18px 14px 22px;border-bottom:1px solid var(--line-2);background:var(--surface)}
+.simat .modal-head h2{font-size:17px;font-weight:700}
+.simat #form{padding:18px 22px 22px}
+.simat #form .stack > .button:last-child{width:100%;height:40px;margin-top:20px}
+.simat #toast{position:fixed;right:22px;bottom:22px;z-index:90;max-width:min(420px,calc(100% - 44px));display:flex;align-items:center;gap:10px;padding:12px 16px 12px 14px;border-radius:12px;background:var(--ink);color:#fff;font-size:13.5px;font-weight:500;box-shadow:0 18px 40px -14px rgba(15,23,42,.55);animation:simat-toastIn .22s ease-out}
+.simat #toast::before{content:'';flex:none;width:8px;height:8px;border-radius:50%;background:var(--teal-400);box-shadow:0 0 0 4px rgba(45,212,191,.2)}
+.simat #toast.is-error::before{background:#f87171;box-shadow:0 0 0 4px rgba(248,113,113,.22)}
+
+/* --------------------------------------------------------------------------
+   Movimiento
+   -------------------------------------------------------------------------- */
+@keyframes simat-ping{0%{transform:scale(1);opacity:.75}80%,100%{transform:scale(3.2);opacity:0}}
+@keyframes simat-blink{50%{opacity:.25}}
+@keyframes simat-spin{to{transform:rotate(360deg)}}
+@keyframes simat-mapIn{from{opacity:0;transform:scale(1.015)}to{opacity:1;transform:none}}
+@keyframes simat-dialogIn{from{opacity:0;transform:translateY(8px) scale(.985)}to{opacity:1;transform:none}}
+@keyframes simat-toastIn{from{opacity:0;transform:translateY(8px)}to{opacity:1;transform:none}}
+@media (prefers-reduced-motion:reduce){
+  .simat *,.simat *::before,.simat *::after{animation-duration:.001ms!important;animation-iteration-count:1!important;transition-duration:.001ms!important}
+  .simat .mk.is-live::after,.simat .mk-report.is-urgent::after,.simat .live-chip.is-live .live-dot::after{display:none}
+}
+@media (min-width:1101px) and (hover:hover){.simat .hero-photo{background-attachment:fixed}}
+
+/* --------------------------------------------------------------------------
+   Adaptación a pantallas
+   -------------------------------------------------------------------------- */
+@media (max-width:1180px) and (min-width:1101px),(max-width:900px){
+  .simat .kpis{grid-template-columns:repeat(2,minmax(0,1fr))}
+  .simat .decision{grid-template-columns:1fr}
+  .simat .decision > .decision-main{border-right:0;border-bottom:1px solid var(--line-2)}
+}
+@media (max-width:1100px){
+  .simat{--gutter:22px}
+  .simat .sidebar{transform:translateX(-102%);transition:transform .22s ease;box-shadow:none}
+  .simat.nav-open .sidebar{transform:none;box-shadow:24px 0 48px -24px rgba(15,23,42,.4)}
+  .simat main{margin-left:0}
+  .simat .topbar-menu{display:grid}
+  .simat .grid{grid-template-columns:1fr}
+  .simat .risk-band{grid-template-columns:auto minmax(0,1fr)}
+  .simat .risk-band > .button{grid-column:1/-1;justify-self:start}
+  .simat .auto-toggle span:last-child{display:none}
+}
+@media (max-width:860px){
+  .simat .live-clock{display:none}
+  .simat .sync-button span{display:none}
+  .simat .session-button small{display:none}
+  .simat .hero-map{min-height:0;display:flex;flex-direction:column}
+  .simat .hero-map > .map{position:relative;inset:auto;order:2;height:380px}
+  .simat .hero-map .hero-inner{order:1;margin:0;padding:22px var(--gutter) 18px;background:linear-gradient(180deg,#0b4a45,#062b29)}
+  .simat .hero-panel{width:100%;padding:0;background:none;border:0;box-shadow:none;-webkit-backdrop-filter:none;backdrop-filter:none}
+  .simat .map.is-hero .map-foot{right:14px;bottom:14px}
+  .simat .map.is-hero .map-attr{display:none}
+  .simat .map.is-hero .map-legend{left:14px;right:auto;top:auto;bottom:14px}
+  .simat .map.is-hero .map-tools{top:14px;right:14px}
+  .simat .map.is-hero .map-info{left:14px;right:14px;top:14px;width:auto}
+  .simat .content > .hero-map + *{margin-top:16px}
+  .simat .grid-even,.simat .grid-3,.simat .risk-evidence{grid-template-columns:1fr}
+  .simat .locator{min-height:200px}
+  .simat .decision-state{grid-template-columns:1fr}
+  .simat .decision-state .dial-wrap{max-width:170px}
+}
+@media (max-width:640px){
+  .simat{--gutter:16px;--topbar-h:56px}
+  .simat .session-button{padding:0 5px}
+  .simat .session-label{display:none}
+  .simat .auto-toggle{padding:0}
+  .simat .table-wrap table{min-width:560px}
+  .simat .table-wrap table.risk-matrix{min-width:0}
+  .simat .risk-matrix .long{display:none}
+  .simat .risk-matrix .short{display:inline}
+  .simat .risk-matrix thead th:first-child{width:46px}
+  .simat .risk-matrix th[scope=row]{padding-right:2px}
+  .simat .matrix-cell{padding:10px}
+  .simat .matrix-cell p{display:none}
+  .simat .matrix-cell strong{flex-wrap:wrap;font-size:13.5px}
+  .simat .matrix-selected{margin-left:0}
+  .simat .decision-matrix{padding:14px 12px 16px}
+  .simat .map-attr{display:none}
+  .simat .map-legend{max-width:calc(100% - 118px);gap:3px 10px;font-size:11px}
+  .simat .topbar{gap:10px}
+  .simat .crumbs > span:first-child,.simat .crumbs .slash{display:none}
+  .simat .live-chip{padding:0 10px}
+  .simat .live-chip #live-label{display:none}
+  .simat .hero h1,.simat .hero-panel h1{font-size:25px}
+  .simat .hero-inner{padding:24px 0 76px}
+  .simat .hero-filters{grid-template-columns:1fr}
+  .simat .kpis{grid-template-columns:1fr 1fr;gap:10px}
+  .simat .kpi{padding:13px 13px 12px}
+  .simat .kpi-value{font-size:22px}
+  .simat .kpi-value.is-text{font-size:17px}
+  .simat .kpi-icon{width:30px;height:30px;font-size:15px;border-radius:9px}
+  .simat .field-grid{grid-template-columns:1fr}
+  .simat .risk-band{grid-template-columns:1fr;padding:16px}
+  .simat .risk-band-dial{width:100%;max-width:220px;justify-self:center}
+  .simat .meter-row{grid-template-columns:44px minmax(0,1fr) 84px;gap:9px}
+  .simat .map.is-visor{height:440px;min-height:0}
+  .simat .filter-bar label{flex:1 1 100%}
+  .simat dl{grid-template-columns:1fr;gap:2px}
+  .simat dd{margin-bottom:6px}
+  .simat .risk-measure dl{grid-template-columns:1fr}
+  .simat .rain-inspector{flex-direction:column;align-items:stretch}
+  .simat #toast{right:12px;left:12px;bottom:12px;max-width:none}
+}
+@media (max-width:400px){
+  .simat .kpis{grid-template-columns:1fr}
+}
+@media print{
+  .simat .sidebar,.simat .topbar,.simat .map-tools,.simat .scrim{display:none!important}
+  .simat main{margin-left:0}
+  .simat .card,.simat .kpi{break-inside:avoid;box-shadow:none}
+}

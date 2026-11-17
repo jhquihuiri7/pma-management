@@ -45,3 +45,15 @@ export function hace(iso?: string | null): string {
 export function duracion(min: number): string {
   return min < 60 ? `${min} min` : `${min / 60} h`;
 }
+
+const fmtMedida = new Intl.NumberFormat("es-EC", { maximumFractionDigits: 8 });
+
+/** Una medición tal como se registró (sin redondear a 2 decimales). */
+export function medida(valor?: number | null): string {
+  return valor == null || !Number.isFinite(valor) ? "—" : fmtMedida.format(valor);
+}
+
+/** La fecha (AAAA-MM-DD) de una marca de tiempo, para series diarias. */
+export function fechaDia(iso?: string | null): string {
+  return iso ? iso.slice(0, 10) : "—";
+}

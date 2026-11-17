@@ -1,212 +1,804 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
-import { Settings, Waves, Gauge, CloudRain } from "lucide-react";
+// Riesgo por lluvia y mar, réplica de la vista previa (risk-ui.js, riskPage()):
+// filtros, aviso costero, evaluación del sector con dial y matriz (y modo de
+// simulación), evidencia de lluvia y mar con medidores de umbral y gráficas
+// desplegables, nota del criterio y predicciones de marea.
+
+import { Fragment, useEffect, useMemo, useRef, useState, type CSSProperties, type ReactNode } from "react";
 import type { SimatEstacion, SimatEvaluacion, SimatMareografo, SimatNivelMar, SimatPronostico, SimatSerieLluvia } from "@pma/types";
-import { useSimat } from "./contexto";
-import { DialRiesgo, GraficoLluvia, GraficoMareografo, GraficoPronostico } from "./Graficos";
-import { CriterioForm } from "./FormulariosRiesgo";
-import { obtenerMareas, obtenerMareografo, obtenerPronostico, obtenerSerieLluvia } from "@/lib/simat/api";
-import { fechaHora, hace, horaPublicada, numero } from "@/lib/simat/formato";
+import { obtenerMareas, obtenerMareografo, obtenerPronostico } from "@/lib/simat/api";
+import { forecast, sea, tide, type SeaPoint } from "@/lib/simat/graficos";
+import { avisoMarino, extremosMarea, horaMarina, MAREOGRAFO_POR_PUERTO, observacionPuerto, prediccionesPuerto, puertosIsla } from "@/lib/simat/marinos";
+import { duracion, fechaDia, fechaHora, medida, numero } from "@/lib/simat/formato";
+import { TODAS_LAS_ISLAS, useSimat } from "./contexto";
+import { Icono } from "./iconos";
+import { MATRIZ, type NivelMatriz } from "./matriz";
+import ExploradorLluvia from "./ExploradorLluvia";
+import { CriterioModal, NivelObservadoModal, ventanasCompatibles } from "./Formularios";
+import { Cargando } from "./VistaGeneral";
+import { Cabecera, CardHead, Dial, FiltroEstacion, FiltroIsla, Grafico, Pill, Tabla, Vacio } from "./piezas";
 
-const GAUGE: Record<string, string> = { "Isla Santa Cruz": "sant", "Isla Baltra": "balt" };
+type Grafica = "rain" | "gauge" | null;
+type EstadoMareografo = SimatMareografo | "cargando" | "sin" | "error" | null;
 
-export default function VistaRiesgo() {
-  const { estado, cargando, error, refrescar } = useSimat();
-  const [isla, setIsla] = useState<string>("");
-  const [puerto, setPuerto] = useState<string>("");
-  const [sector, setSector] = useState<string>("");
-  const [mareografo, setMareografo] = useState<SimatMareografo | null>(null);
-  const [mareas, setMareas] = useState<SimatNivelMar[]>([]);
-  const [serie, setSerie] = useState<SimatSerieLluvia | null>(null);
-  const [pronostico, setPronostico] = useState<SimatPronostico | null>(null);
-  const [editando, setEditando] = useState(false);
+/* ---------- piezas ---------- */
 
-  const islas = estado?.islas ?? [];
-  useEffect(() => {
-    if (!isla && islas.length) setIsla("Santa Cruz");
-  }, [islas, isla]);
-
-  const puertos = useMemo(() => Object.entries(estado?.puertos?.[isla] ?? {}), [estado, isla]);
-  useEffect(() => {
-    if (puertos.length) setPuerto((p) => (puertos.some(([c]) => c === p) ? p : puertos[0][0]));
-    else setPuerto("");
-  }, [puertos]);
-
-  const evaluaciones = useMemo<SimatEvaluacion[]>(
-    () => (estado?.riesgo ?? []).filter((r) => r.criterio.puerto === puerto),
-    [estado, puerto]
+function TablaMatriz({ actual }: { actual?: string }) {
+  const celda = (item: NivelMatriz) => (
+    <td key={item.name} className={`matrix-cell ${item.code}${actual === item.name ? " is-current" : ""}`}>
+      <strong>
+        <Icono nombre={item.icon} />
+        {item.name}
+        {actual === item.name ? <span className="matrix-selected">Resultado</span> : null}
+      </strong>
+      <p>{item.note}</p>
+      <small>{item.decision}</small>
+    </td>
   );
-  useEffect(() => {
-    setSector((s) => (evaluaciones.some((e) => e.criterio.sector === s) ? s : evaluaciones[0]?.criterio.sector ?? ""));
-  }, [evaluaciones]);
-
-  const evaluacion = evaluaciones.find((e) => e.criterio.sector === sector) ?? null;
-  const criterio = evaluacion?.criterio ?? null;
-
-  // Gauge + tides for the selected port.
-  useEffect(() => {
-    const code = GAUGE[puerto];
-    if (!code) { setMareografo(null); return; }
-    const ctrl = new AbortController();
-    obtenerMareografo(code, ctrl.signal).then((m) => !ctrl.signal.aborted && setMareografo(m), () => setMareografo(null));
-    return () => ctrl.abort();
-  }, [puerto, estado]);
-
-  useEffect(() => {
-    if (!puerto) return;
-    const ctrl = new AbortController();
-    obtenerMareas(puerto, ctrl.signal).then((m) => !ctrl.signal.aborted && setMareas(m), () => setMareas([]));
-    return () => ctrl.abort();
-  }, [puerto, estado]);
-
-  // Rain + forecast for the criterion's station (or a default on the island).
-  const estacionLluvia = useMemo<SimatEstacion | undefined>(() => {
-    const porId = new Map((estado?.estaciones ?? []).map((e) => [e.id, e]));
-    if (criterio && porId.has(criterio.estacion)) return porId.get(criterio.estacion);
-    return (estado?.estaciones ?? []).find((e) => e.isla === isla && e.variables.includes("precipitacion") && e.pasoMin < 1440 && e.activa);
-  }, [estado, criterio, isla]);
-
-  useEffect(() => {
-    if (!estacionLluvia) { setSerie(null); setPronostico(null); return; }
-    const ctrl = new AbortController();
-    obtenerSerieLluvia(estacionLluvia.id, ctrl.signal).then((s) => !ctrl.signal.aborted && setSerie(s), () => setSerie(null));
-    obtenerPronostico(estacionLluvia.id, ctrl.signal).then((p) => !ctrl.signal.aborted && setPronostico(p), () => setPronostico(null));
-    return () => ctrl.abort();
-  }, [estacionLluvia, estado]);
-
-  if (cargando && !estado) return <p className="text-sm text-slate-500">Cargando…</p>;
-  if (error && !estado) return <p className="text-sm text-red-600">{error}</p>;
-  if (!estado) return null;
-
-  const sea = evaluacion?.mar;
-  const comparableMar = criterio && sea && sea.unidad === "m" && String(sea.referencia).toLowerCase() === criterio.datum.toLowerCase();
-
+  const dos = (largo: string, corto: string) => (
+    <>
+      <span className="long">{largo}</span>
+      <span className="short" aria-hidden="true">
+        {corto}
+      </span>
+    </>
+  );
   return (
-    <div className="space-y-6">
-      <header className="flex flex-wrap items-end justify-between gap-3">
-        <div>
-          <h1 className="text-xl font-semibold text-slate-900">Riesgo por lluvia y mar</h1>
-          <p className="text-sm text-slate-500">Nivel, mediciones y criterio de decisión por sector costero.</p>
-        </div>
-        {estado.puedeEditar && (
-          <button type="button" onClick={() => setEditando((v) => !v)} className="inline-flex items-center gap-1.5 rounded-lg bg-teal-600 px-3 py-1.5 text-sm text-white hover:bg-teal-700">
-            <Settings className="w-4 h-4" /> {criterio ? "Editar criterio" : "Configurar criterio"}
-          </button>
-        )}
-      </header>
+    <div className="table-wrap matrix-wrap">
+      <table className="risk-matrix">
+        <thead>
+          <tr>
+            <th scope="col">{dos("Intensidad de lluvia", "Lluvia")}</th>
+            <th scope="col">{dos("Nivel del mar bajo", "Mar bajo")}</th>
+            <th scope="col">{dos("Nivel del mar alto", "Mar alto")}</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr>
+            <th scope="row">Baja</th>
+            {MATRIZ.slice(0, 2).map(celda)}
+          </tr>
+          <tr>
+            <th scope="row">Alta</th>
+            {MATRIZ.slice(2).map(celda)}
+          </tr>
+        </tbody>
+      </table>
+    </div>
+  );
+}
 
-      <div className="flex flex-wrap gap-3">
-        <label className="text-sm">Isla
-          <select value={isla} onChange={(e) => setIsla(e.target.value)} className="ml-2 rounded-lg border px-2 py-1">
-            {islas.map((i) => <option key={i} value={i}>{i}</option>)}
-          </select>
-        </label>
-        <label className="text-sm">Puerto
-          <select value={puerto} onChange={(e) => setPuerto(e.target.value)} className="ml-2 rounded-lg border px-2 py-1" disabled={!puertos.length}>
-            {puertos.map(([code, label]) => <option key={code} value={code}>{label}</option>)}
-          </select>
-        </label>
-        {evaluaciones.length > 0 && (
-          <label className="text-sm">Sector
-            <select value={sector} onChange={(e) => setSector(e.target.value)} className="ml-2 rounded-lg border px-2 py-1">
-              {evaluaciones.map((e) => <option key={e.criterio.id} value={e.criterio.sector}>{e.criterio.sector}</option>)}
-            </select>
-          </label>
+function Decision({ result, simulacion, lluviaAlta, marAlto, consultado }: { result?: SimatEvaluacion; simulacion: boolean; lluviaAlta: boolean; marAlto: boolean; consultado: string }) {
+  const item = simulacion ? MATRIZ[Number(lluviaAlta) * 2 + Number(marAlto)] : MATRIZ.find((i) => i.name === result?.nivel);
+  const profile = result?.criterio;
+  const title = item?.name ?? (profile ? "Datos insuficientes" : "Sin evaluación");
+  const subtitle = item?.decision ?? (profile ? "Se requieren dos datos compatibles y vigentes." : "Falta un criterio local para la estación, puerto y sector elegidos.");
+  return (
+    <div className="decision">
+      <div className="decision-main">
+        <div className={`decision-state ${item?.code ?? "unavailable"}`}>
+          <div className="dial-wrap">
+            <Dial nivel={item ? MATRIZ.indexOf(item) : -1} />
+          </div>
+          <div>
+            <div className="mode-badge">
+              <Icono nombre={simulacion ? "flask" : "gauge"} />
+              {simulacion ? "Simulación de la matriz" : "Evaluación automática · piloto"}
+            </div>
+            <h2>
+              {item ? (
+                <>
+                  <Icono nombre={item.icon} />{" "}
+                </>
+              ) : null}
+              {title}
+            </h2>
+            <p>{subtitle}</p>
+            {profile && !simulacion ? (
+              <p className="meta">
+                {profile.sector} · {profile.puerto}
+              </p>
+            ) : null}
+            {result?.motivos.length && !simulacion ? (
+              <ul>
+                {result.motivos.map((m, i) => (
+                  <li key={i}>{m}</li>
+                ))}
+              </ul>
+            ) : null}
+          </div>
+        </div>
+        <p className="decision-note">{simulacion ? "Ejercicio con entradas manuales." : `Consulta ${fechaHora(consultado)} · Galápagos. La autoridad competente emite las alertas oficiales.`}</p>
+      </div>
+      <div className="decision-matrix">
+        <h3>Matriz de toma de decisiones</h3>
+        <TablaMatriz actual={item?.name} />
+      </div>
+    </div>
+  );
+}
+
+function MedidorUmbral({ valor, limite, unidad }: { valor: number | null | undefined; limite: number | null | undefined; unidad: string }) {
+  if (valor == null || !Number.isFinite(valor) || limite == null || !Number.isFinite(limite) || limite <= 0) return null;
+  const top = Math.max(valor, limite) * 1.2;
+  return (
+    <div className="threshold-meter">
+      <div className="meter-track" role="img" aria-label={`${medida(valor)} ${unidad} frente al umbral de ${medida(limite)} ${unidad}`}>
+        <span className="meter-fill" style={{ width: `${Math.min(100, (valor / top) * 100)}%`, background: valor >= limite ? "var(--critical)" : "var(--rain)" }} />
+        <span className="tm-mark" style={{ left: `calc(${(limite / top) * 100}% - 1px)` }} />
+      </div>
+      <div className="tm-cap">
+        <span>{numero((valor / limite) * 100)} % del umbral</span>
+        <span>
+          Umbral {medida(limite)} {unidad}
+        </span>
+      </div>
+    </div>
+  );
+}
+
+function Medicion({
+  kind,
+  titulo,
+  valor,
+  resumen,
+  lineas,
+  extra,
+  abierta,
+  onAlternar,
+}: {
+  kind: "rain" | "gauge";
+  titulo: string;
+  valor: string;
+  resumen: ReactNode;
+  lineas: [string, ReactNode][];
+  extra?: ReactNode;
+  abierta: boolean;
+  onAlternar: () => void;
+}) {
+  const m = /^(.*) (mm\/h|m)$/.exec(valor);
+  return (
+    <section
+      className="card risk-measure"
+      data-risk-chart={kind}
+      onClick={(e) => {
+        if ((e.target as HTMLElement).closest("a,input,select,textarea")) return;
+        onAlternar();
+      }}
+    >
+      <h2>
+        <button type="button" className="risk-measure-toggle" aria-controls={`${kind}-history`} aria-expanded={abierta}>
+          <span>
+            <span className={`measure-icon ${kind === "gauge" ? "sea" : ""}`}>
+              <Icono nombre={kind === "gauge" ? "waves" : "rain"} />
+            </span>
+            {titulo}
+          </span>
+          <span className="risk-chart-chevron" aria-hidden="true">
+            Gráfica
+            <Icono nombre="down" />
+          </span>
+        </button>
+      </h2>
+      <div className="risk-measure-value">
+        {m ? (
+          <>
+            {m[1]} <small>{m[2]}</small>
+          </>
+        ) : (
+          valor
         )}
       </div>
+      <p className="meta">{resumen}</p>
+      {extra}
+      <dl>
+        {lineas.map(([k, v]) => (
+          <Fragment key={k}>
+            <dt>{k}</dt>
+            <dd>{v}</dd>
+          </Fragment>
+        ))}
+      </dl>
+      <div className="measure-foot" />
+    </section>
+  );
+}
 
-      {editando && estado.puedeEditar && (
-        <CriterioForm
-          estado={estado}
-          isla={isla}
-          puerto={puerto}
-          criterio={criterio}
-          onListo={async () => { setEditando(false); await refrescar(); }}
-          onCancelar={() => setEditando(false)}
-        />
-      )}
+function tendencia(points: SeaPoint[], edad: number) {
+  const last = points[points.length - 1];
+  const sinTendencia = { title: "Tendencia reciente no disponible", tone: "steady" as const, detail: "Se requieren lecturas recientes y continuas para comparar los últimos 15 minutos." };
+  if (!last) return sinTendencia;
+  const start = last.time - 15 * 60000;
+  const recent = points.filter((p) => p.time >= start && p.time <= last.time);
+  if (edad > 30 || recent.length < 2 || recent[0].time !== start || recent.some((p, i) => i > 0 && p.time - recent[i - 1].time > 180000)) return sinTendencia;
+  const change = Math.round((last.level - recent[0].level) * 1e6) / 1e6;
+  const tone = change > 0 ? ("up" as const) : change < 0 ? ("down" as const) : ("steady" as const);
+  const title = { up: "Está subiendo", down: "Está bajando", steady: "Sin cambio neto" }[tone];
+  return { title, tone, detail: `${change > 0 ? "+" : ""}${medida(change)} m · últimos 15 min` };
+}
 
-      <section className="rounded-xl border bg-white p-4 shadow-sm grid md:grid-cols-[260px_1fr] gap-4 items-center">
-        <DialRiesgo nivel={evaluacion?.nivel ?? null} />
-        <div>
-          <h2 className="text-sm font-semibold text-slate-800 flex items-center gap-2"><Gauge className="w-4 h-4" /> Evaluación del sector</h2>
-          {!criterio ? (
-            <p className="mt-2 text-sm text-slate-500">No hay un criterio configurado para este puerto. {estado.puedeEditar ? "Usa «Configurar criterio»." : "Un técnico debe configurarlo."}</p>
-          ) : evaluacion?.nivel ? (
-            <p className="mt-2 text-sm text-slate-600">Sector <strong>{criterio.sector}</strong>: la matriz evalúa <strong>{evaluacion.nivel}</strong> con la lluvia observada y el nivel del mar validado.</p>
-          ) : (
-            <div className="mt-2 text-sm text-slate-600">
-              <p>Sin nivel automático todavía. Motivos:</p>
-              <ul className="list-disc ml-5 mt-1 text-xs text-slate-500">
-                {evaluacion?.motivos.map((m, i) => <li key={i}>{m}</li>)}
-              </ul>
+function HistoriaMareografo({ m }: { m: SimatMareografo }) {
+  const points = m.serie.map((p) => ({ time: Date.parse(p.fecha), level: p.valor }));
+  const edad = Math.max(0, Math.floor((Date.now() - Date.parse(m.fecha)) / 60000));
+  const t = tendencia(points, edad);
+  const hay = points.length > 1 && points[points.length - 1].time > points[0].time;
+  const ultimo = points[points.length - 1];
+  return (
+    <section className="card wide">
+      <CardHead
+        titulo="Evolución del nivel del mar observado"
+        descripcion={`${m.estacion} · Sensor RAS · Hora de Galápagos`}
+        extra={
+          <div className={`gauge-trend ${t.tone}`}>
+            <Icono nombre={t.tone === "up" ? "up" : t.tone === "down" ? "downTrend" : "steady"} />
+            <div>
+              <strong>{t.title}</strong>
+              <span>{t.detail}</span>
             </div>
-          )}
-          {criterio && (
-            <p className="mt-2 text-[11px] text-slate-400">
-              Ventana {criterio.ventanaMin} min · umbral lluvia {numero(criterio.lluviaMmH)} mm/h · umbral mar {numero(criterio.marM)} m ({criterio.datum}) · actualizado por {criterio.actualizadoPor}
+          </div>
+        }
+        icono="waves"
+      />
+      {hay ? (
+        <>
+          <div className="chart-body">
+            <Grafico id="gauge-chart" clave={`${m.codigo}|${m.fecha}|${points.length}`} dibujar={(el) => sea(el, { points, recentFrom: ultimo.time - 15 * 60000 })} />
+          </div>
+          <div className="chart-legend">
+            <span>
+              <i className="line" style={{ "--c": "#2a78d6" } as CSSProperties} />
+              Nivel observado
+            </span>
+            <span>
+              <i className="line" style={{ "--c": "#1c5cab", height: 4 } as CSSProperties} />
+              Últimos 15 min
+            </span>
+            <span>Los cortes indican falta de datos.</span>
+          </div>
+          <div className="card-foot meta">
+            De {fechaHora(new Date(points[0].time).toISOString())} a {fechaHora(m.fecha)} · Mediciones preliminares
+          </div>
+        </>
+      ) : (
+        <Vacio>Se necesitan al menos dos lecturas para graficar la evolución.</Vacio>
+      )}
+    </section>
+  );
+}
+
+function PanelPronostico({ estacion, lluvia }: { estacion: SimatEstacion; lluvia: SimatSerieLluvia | null }) {
+  const [data, setData] = useState<SimatPronostico | "cargando" | "error">("cargando");
+  useEffect(() => {
+    const ctrl = new AbortController();
+    setData("cargando");
+    obtenerPronostico(estacion.id, ctrl.signal).then(
+      (p) => !ctrl.signal.aborted && setData(p),
+      () => !ctrl.signal.aborted && setData("error"),
+    );
+    return () => ctrl.abort();
+  }, [estacion.id]);
+
+  const valida = [...(lluvia?.recent ?? [])].reverse().find((r) => r.quality === "válido");
+  const observacion = valida ? (
+    <p className="meta">
+      Última medición válida · {estacion.pasoMin === 1440 ? fechaDia(valida.time) : `${fechaHora(valida.time)} · Galápagos`} · {medida((valida.value * 60) / estacion.pasoMin)} mm/h en {duracion(estacion.pasoMin)} · {valida.source}
+    </p>
+  ) : (
+    <p className="meta">Sin medición real de lluvia en la serie seleccionada.</p>
+  );
+
+  let contenido: ReactNode;
+  if (data === "cargando") contenido = <Vacio>Consultando el pronóstico…</Vacio>;
+  else if (data === "error")
+    contenido = (
+      <div className="pad">
+        <p>Pronóstico temporalmente no disponible.</p>
+        {observacion}
+      </div>
+    );
+  else {
+    const actual = data.estimacion;
+    contenido = (
+      <>
+        <div className="rain-current">
+          <div className="big">
+            <strong>{actual ? medida(Number(actual.intensidad.toFixed(2))) : "—"}</strong>
+            <span>{actual ? "mm/h estimados" : "Sin estimación"}</span>
+          </div>
+          <span className="meta">Estimación del modelo · hora de Galápagos</span>
+          {actual ? (
+            <p>
+              <b>{medida(actual.mm)} mm</b> estimados en {duracion(actual.minutos)} · {fechaHora(actual.inicio)} → {fechaHora(actual.fin)}
+            </p>
+          ) : (
+            <p>
+              <b>Estimación actual no disponible</b>
             </p>
           )}
+          {observacion}
+          <p className="meta">Consultado {fechaHora(data.consultado)}</p>
+        </div>
+        {data.pronostico.length ? (
+          <>
+            <div className="chart-body">
+              <Grafico id="forecast-chart" clave={`${estacion.id}|${data.consultado}`} dibujar={(el) => forecast(el, { hours: data.pronostico })} />
+            </div>
+            <div className="chart-legend">
+              <span>
+                <i style={{ "--c": "#0d9488" } as CSSProperties} />
+                Precipitación prevista (mm por hora)
+              </span>
+              <span>
+                <i className="ramp" />
+                Probabilidad de 0 a 100 %
+              </span>
+            </div>
+            <details className="rain-forecast-details">
+              <summary>Pronóstico por hora · próximas 24 horas</summary>
+              <Tabla
+                cabeceras={["Intervalo en Galápagos", "Precipitación prevista", "Probabilidad"]}
+                filas={data.pronostico.map((h) => [`${fechaHora(h.inicio)} → ${fechaHora(h.fin)}`, h.mm === null ? "—" : `${medida(h.mm)} mm`, h.probabilidad === null ? "—" : `${medida(h.probabilidad)} %`])}
+              />
+            </details>
+          </>
+        ) : (
+          <Vacio>Sin horas previstas disponibles.</Vacio>
+        )}
+      </>
+    );
+  }
+
+  return (
+    <section id="rain-model" className="card wide">
+      <CardHead
+        titulo="Lluvia actual estimada y pronóstico"
+        descripcion={`Modelo meteorológico para las coordenadas de ${estacion.nombre}`}
+        extra={
+          <a className="text-link" href="https://open-meteo.com/" target="_blank" rel="noopener noreferrer">
+            Open-Meteo <Icono nombre="external" />
+          </a>
+        }
+        icono="rain"
+      />
+      <div id="rain-model-content" aria-live="polite">
+        {contenido}
+      </div>
+    </section>
+  );
+}
+
+/* ---------- vista ---------- */
+
+export default function VistaRiesgo() {
+  const { estado, isla, estacionId, estacion, lluvia, refrescar, notificar } = useSimat();
+  const [puerto, setPuerto] = useState("");
+  const [sector, setSector] = useState<string | null>(null);
+  const [simulacion, setSimulacion] = useState(false);
+  const [lluviaAlta, setLluviaAlta] = useState(false);
+  const [marAlto, setMarAlto] = useState(false);
+  const [grafica, setGrafica] = useState<Grafica>(null);
+  const [modal, setModal] = useState<"criterio" | "agregar" | "observado" | null>(null);
+  const [marinos, setMarinos] = useState<SimatNivelMar[]>([]);
+  const [mareografo, setMareografo] = useState<EstadoMareografo>(null);
+  const islaPrevia = useRef<string | undefined>(undefined);
+
+  const islaRiesgo = isla === TODAS_LAS_ISLAS ? estacion?.isla : isla;
+  const puertos = useMemo(() => (estado ? puertosIsla(estado.puertos, estado.riesgo, islaRiesgo) : new Map<string, string>()), [estado, islaRiesgo]);
+
+  // El puerto pertenece al ámbito; al cambiar de isla vuelve al primero.
+  useEffect(() => {
+    if (islaPrevia.current !== islaRiesgo || !puertos.has(puerto)) {
+      setPuerto(puertos.keys().next().value ?? "");
+      setSector(null);
+    }
+    islaPrevia.current = islaRiesgo;
+  }, [puertos, puerto, islaRiesgo]);
+
+  useEffect(() => {
+    if (!puerto || !estado) {
+      setMarinos([]);
+      return;
+    }
+    const ctrl = new AbortController();
+    obtenerMareas(puerto, ctrl.signal).then(
+      (rows) => !ctrl.signal.aborted && setMarinos(rows),
+      () => !ctrl.signal.aborted && setMarinos([]),
+    );
+    return () => ctrl.abort();
+  }, [puerto, estado]);
+
+  const codigoMareografo = MAREOGRAFO_POR_PUERTO[puerto];
+  useEffect(() => {
+    if (!codigoMareografo || !estado) {
+      setMareografo(null);
+      return;
+    }
+    const ctrl = new AbortController();
+    setMareografo((m) => (m && typeof m === "object" && m.codigo === codigoMareografo ? m : "cargando"));
+    obtenerMareografo(codigoMareografo, ctrl.signal).then(
+      (m) => !ctrl.signal.aborted && setMareografo(m),
+      (err) => !ctrl.signal.aborted && setMareografo((err as { status?: number })?.status === 404 ? "sin" : "error"),
+    );
+    return () => ctrl.abort();
+  }, [codigoMareografo, estado]);
+
+  if (!estado) return <Cargando />;
+
+  const mismaArea = (r: SimatEvaluacion) => isla === TODAS_LAS_ISLAS || r.criterio.isla === isla;
+  const perfiles = estado.riesgo.filter((r) => mismaArea(r) && r.criterio.estacion === estacionId && r.criterio.puerto === puerto);
+  const result = perfiles.find((r) => r.criterio.sector === sector) ?? perfiles[0];
+  const profile = result?.criterio;
+  const nombrePuerto = puertos.get(puerto) ?? puerto;
+  const rwin = profile?.ventanaMin ?? 60;
+  const raw = lluvia?.windows.find((w) => w.minutes === rwin);
+  const latest = lluvia?.latest;
+  const rain = result?.lluvia ?? { valor: raw?.intensity ?? null, fecha: latest?.time ?? null, fuente: latest?.source ?? null, intervalos: raw?.valid ?? null, esperados: raw?.expected ?? null };
+  const marObservado = profile ? result.mar : (observacionPuerto(marinos, puerto) ?? null);
+  const predicciones = prediccionesPuerto(marinos, puerto);
+  const limiteMar = profile ? `${medida(profile.marM)} m · ${profile.datum}` : "Por calibrar";
+  const limiteLluvia = profile ? `${medida(profile.lluviaMmH)} mm/h` : "Por calibrar";
+  const marComparable = !!profile && !!marObservado && marObservado.unidad === "m" && String(marObservado.referencia).trim().toLowerCase() === profile.datum.toLowerCase();
+  const aviso = avisoMarino(result, predicciones);
+  const alternar = (k: "rain" | "gauge") => setGrafica((g) => (g === k ? null : k));
+
+  /* mareas */
+  const extremos = extremosMarea(marinos, puerto);
+  const refMarea = extremos[0]?.ref.toLowerCase();
+  const umbralCompatible = !!profile?.activo && !!refMarea && profile.datum.toLowerCase() === refMarea;
+  const observadosMarea = marinos
+    .filter((r) => r.puerto === puerto && r.tipo === "Nivel observado" && r.unidad === "m" && String(r.referencia || "").trim().toLowerCase() === refMarea && Number.isFinite(r.valor))
+    .map((r) => ({ t: Date.parse(r.instante), h: r.valor }))
+    .filter((o) => Number.isFinite(o.t));
+
+  const editar = estado.puedeEditar;
+  const abrirCriterio = (tipo: "criterio" | "agregar") => {
+    if (!estacion) return notificar("Selecciona una estación del inventario.");
+    if (!ventanasCompatibles(estacion).length) return notificar("Selecciona una estación con resolución compatible con intensidad de lluvia.");
+    setModal(tipo);
+  };
+
+  /* evidencia: nivel del mar (mareógrafo si responde) */
+  const feedback =
+    codigoMareografo && (mareografo === "cargando" || mareografo === null)
+      ? "Consultando el mareógrafo de INOCAR…"
+      : mareografo === "sin"
+        ? "INOCAR no publicó una lectura utilizable en el periodo consultado."
+        : mareografo === "error"
+          ? "No se pudo consultar el mareógrafo de INOCAR. Puedes volver a intentar con Actualizar."
+          : "";
+  let medicionMar: ReactNode;
+  if (mareografo && typeof mareografo === "object") {
+    const edad = Math.max(0, Math.floor((Date.now() - Date.parse(mareografo.fecha)) / 60000));
+    medicionMar = (
+      <Medicion
+        kind="gauge"
+        titulo="Nivel del mar observado"
+        valor={`${medida(mareografo.valor)} m`}
+        resumen={`${mareografo.estacion} · ${edad > 30 ? "Última lectura disponible · dato atrasado" : `Última lectura disponible · hace ${edad} min`}`}
+        lineas={[
+          ["Hora de medición", `${fechaHora(mareografo.fecha)} · Galápagos`],
+          ["Sensor", mareografo.sensor],
+          ["Referencia vertical", mareografo.referencia],
+          [
+            "Calidad y fuente",
+            <>
+              {mareografo.calidad} ·{" "}
+              <a href={mareografo.enlace} target="_blank" rel="noopener noreferrer">
+                {mareografo.fuente}
+              </a>
+            </>,
+          ],
+          ["Uso en la matriz", "La lectura requiere validación y un datum compatible con el umbral del sector."],
+        ]}
+        abierta={grafica === "gauge"}
+        onAlternar={() => alternar("gauge")}
+      />
+    );
+  } else {
+    medicionMar = (
+      <Medicion
+        kind="gauge"
+        titulo="Nivel del mar observado"
+        valor={marObservado ? `${medida(marObservado.valor)} ${marObservado.unidad}` : "Sin medición"}
+        resumen={nombrePuerto}
+        lineas={[
+          ["Hora de medición", marObservado ? horaMarina(marObservado) : "—"],
+          ["Referencia vertical", marObservado?.referencia || "—"],
+          ["Calidad y fuente", marObservado ? `${marObservado.calidad} · ${marObservado.fuente}` : "—"],
+          ["Umbral de mar alto", limiteMar],
+        ]}
+        extra={
+          <>
+            {marComparable ? <MedidorUmbral valor={marObservado?.valor} limite={profile?.marM} unidad="m" /> : null}
+            {feedback ? (
+              <p className="meta gauge-feedback" role="status">
+                {feedback}
+              </p>
+            ) : null}
+          </>
+        }
+        abierta={grafica === "gauge"}
+        onAlternar={() => alternar("gauge")}
+      />
+    );
+  }
+
+  const tieneLluviaValida = !!lluvia?.recent.some((r) => r.quality === "válido");
+
+  return (
+    <>
+      <Cabecera
+        titulo="Riesgo por lluvia y mar"
+        descripcion="Consulta el nivel, las mediciones y el criterio de decisión para un sector costero."
+        icono="alert"
+        acciones={
+          <div className="toolbar">
+            <button type="button" className="button outline" onClick={() => void refrescar()}>
+              <Icono nombre="refresh" />
+              Actualizar
+            </button>
+            {editar ? (
+              <>
+                <button type="button" className="button" onClick={() => abrirCriterio("criterio")}>
+                  <Icono nombre="settings" />
+                  {profile ? "Editar criterio" : "Configurar criterio"}
+                </button>
+                {profile ? (
+                  <button type="button" className="button outline" onClick={() => abrirCriterio("agregar")}>
+                    <Icono nombre="plus" />
+                    Añadir sector
+                  </button>
+                ) : null}
+                <button type="button" className="button outline" onClick={() => setModal("observado")}>
+                  <Icono nombre="waves" />
+                  Registrar nivel observado
+                </button>
+              </>
+            ) : null}
+          </div>
+        }
+      />
+
+      <div className="filter-bar risk-filters">
+        <FiltroIsla />
+        <FiltroEstacion />
+        <label>
+          Puerto de referencia
+          <select
+            value={puerto}
+            onChange={(e) => {
+              setPuerto(e.target.value);
+              setSector(null);
+            }}
+          >
+            {Array.from(puertos).map(([codigo, etiqueta]) => (
+              <option key={codigo} value={codigo}>
+                {etiqueta}
+              </option>
+            ))}
+          </select>
+        </label>
+        {perfiles.length ? (
+          <label>
+            Sector costero
+            <select value={result?.criterio.sector} onChange={(e) => setSector(e.target.value)}>
+              {perfiles.map((r) => (
+                <option key={r.criterio.id} value={r.criterio.sector}>
+                  {r.criterio.sector}
+                </option>
+              ))}
+            </select>
+          </label>
+        ) : null}
+      </div>
+
+      <section className={`card wide risk-result ${aviso.tone}`} id="marine-advisory">
+        <div className="risk-result-main">
+          <span className="risk-result-icon">
+            <Icono nombre={aviso.tone === "caution" ? "alert" : "waves"} />
+          </span>
+          <div>
+            <div className="eyebrow">Aviso por nivel del mar · {nombrePuerto}</div>
+            <h2>{aviso.title}</h2>
+            {aviso.row ? (
+              <p>
+                <strong>
+                  {medida(aviso.row.valor)} {aviso.row.unidad}
+                </strong>{" "}
+                · {aviso.row.referencia} · {horaMarina(aviso.row)} · {aviso.row.fuente}
+              </p>
+            ) : null}
+            <p>{aviso.detail}</p>
+          </div>
         </div>
       </section>
 
-      <div className="grid lg:grid-cols-2 gap-4">
-        <section className="rounded-xl border bg-white p-4 shadow-sm">
-          <h2 className="text-sm font-semibold text-slate-800 flex items-center gap-2"><CloudRain className="w-4 h-4 text-teal-600" /> Precipitación {estacionLluvia ? `· ${estacionLluvia.nombre}` : ""}</h2>
-          {serie ? <div className="mt-2"><GraficoLluvia serie={serie} altura={180} /></div> : <p className="mt-2 text-sm text-slate-500">Sin serie de lluvia.</p>}
-          {evaluacion && (
-            <p className="mt-2 text-xs text-slate-500">
-              Intensidad ({criterio?.ventanaMin ?? 60} min): <strong>{evaluacion.lluvia.valor != null ? `${numero(evaluacion.lluvia.valor)} mm/h` : "sin dato"}</strong>
-              {evaluacion.lluvia.fecha ? ` · ${fechaHora(evaluacion.lluvia.fecha)}` : ""}
-            </p>
-          )}
-        </section>
+      <section className="card wide decision-card">
+        <div className="decision-top">
+          <h2 style={{ fontSize: 15.5, fontWeight: 600, display: "flex", alignItems: "center", gap: 8 }}>
+            <Icono nombre="gauge" />
+            Evaluación del sector
+          </h2>
+          <div className="risk-mode">
+            <label>
+              Modo de consulta
+              <select value={simulacion ? "simulate" : "automatic"} onChange={(e) => setSimulacion(e.target.value === "simulate")}>
+                <option value="automatic">Evaluación automática</option>
+                <option value="simulate">Simulación de la matriz</option>
+              </select>
+            </label>
+            {simulacion ? (
+              <>
+                <label>
+                  Intensidad de lluvia
+                  <select value={lluviaAlta ? "Alta" : "Baja"} onChange={(e) => setLluviaAlta(e.target.value === "Alta")}>
+                    <option>Baja</option>
+                    <option>Alta</option>
+                  </select>
+                </label>
+                <label>
+                  Nivel del mar
+                  <select value={marAlto ? "Alto" : "Bajo"} onChange={(e) => setMarAlto(e.target.value === "Alto")}>
+                    <option>Bajo</option>
+                    <option>Alto</option>
+                  </select>
+                </label>
+              </>
+            ) : null}
+          </div>
+        </div>
+        <div id="risk-decision">
+          <Decision result={result} simulacion={simulacion} lluviaAlta={lluviaAlta} marAlto={marAlto} consultado={estado.generadoEn} />
+        </div>
+      </section>
 
-        <section className="rounded-xl border bg-white p-4 shadow-sm">
-          <h2 className="text-sm font-semibold text-slate-800 flex items-center gap-2"><Waves className="w-4 h-4 text-sky-600" /> Nivel del mar</h2>
-          {mareografo ? (
-            <>
-              <div className="mt-2"><GraficoMareografo mareografo={mareografo} umbral={comparableMar ? criterio?.marM : null} /></div>
-              <p className="mt-1 text-xs text-slate-500">
-                Último: <strong>{numero(mareografo.valor)} m</strong> · {hace(mareografo.fecha)} · {mareografo.calidad}
-              </p>
-            </>
-          ) : (
-            <p className="mt-2 text-sm text-slate-500">No hay mareógrafo para este puerto.</p>
-          )}
-          {sea && (
-            <p className="mt-1 text-xs text-slate-500">
-              Nivel observado validado: {numero(sea.valor)} {sea.unidad} · {sea.referencia} · {hace(sea.instante)}
-            </p>
-          )}
-        </section>
+      <div className="grid risk-evidence">
+        <Medicion
+          kind="rain"
+          titulo="Intensidad de precipitación"
+          valor={rain.valor == null ? "Sin dato" : `${medida(rain.valor)} mm/h`}
+          resumen={`Promedio del intervalo de ${duracion(rwin)}`}
+          lineas={[
+            ["Fin del intervalo", rain.fecha ? `${fechaHora(rain.fecha)} · Galápagos` : "—"],
+            ["Fuente", rain.fuente || "—"],
+            ["Intervalos válidos", rain.esperados ? `${rain.intervalos} / ${rain.esperados}` : "—"],
+            ["Umbral de lluvia alta", limiteLluvia],
+          ]}
+          extra={profile ? <MedidorUmbral valor={rain.valor} limite={profile.lluviaMmH} unidad="mm/h" /> : null}
+          abierta={grafica === "rain"}
+          onAlternar={() => alternar("rain")}
+        />
+        <div id="marine-observed">{medicionMar}</div>
       </div>
 
-      <div className="grid lg:grid-cols-2 gap-4">
-        <section className="rounded-xl border bg-white p-4 shadow-sm">
-          <h2 className="text-sm font-semibold text-slate-800">Pronóstico de lluvia (Open-Meteo, modelo)</h2>
-          {pronostico ? <div className="mt-2"><GraficoPronostico pronostico={pronostico} /></div> : <p className="mt-2 text-sm text-slate-500">Sin pronóstico.</p>}
-        </section>
-        <section className="rounded-xl border bg-white p-4 shadow-sm">
-          <h2 className="text-sm font-semibold text-slate-800">Mareas (INOCAR)</h2>
-          {mareas.length ? (
-            <table className="w-full text-sm mt-2">
-              <tbody className="divide-y">
-                {mareas.slice(0, 8).map((m) => (
-                  <tr key={m.id}>
-                    <td className="py-1.5 text-slate-500">{horaPublicada(m.instante)}</td>
-                    <td className="py-1.5">{m.fase}</td>
-                    <td className="py-1.5 text-right font-medium">{numero(m.valor)} m</td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          ) : (
-            <p className="mt-2 text-sm text-slate-500">Sin predicciones para este puerto.</p>
-          )}
-        </section>
+      <div id="rain-history" hidden={grafica !== "rain"}>
+        {grafica === "rain" ? (
+          <>
+            <section className="card wide rain-explorer" id="rain-explorer">
+              <CardHead
+                titulo="Evolución de la intensidad de precipitación"
+                descripcion={estacion ? `${estacion.nombre} · ${duracion(estacion.pasoMin)} por intervalo · Hora de Galápagos · Serie registrada` : "Sin estación seleccionada"}
+                icono="activity"
+              />
+              {estacion && lluvia && tieneLluviaValida ? <ExploradorLluvia estacion={estacion} lluvia={lluvia} /> : <Vacio>No hay intervalos de lluvia válidos para esta estación.</Vacio>}
+            </section>
+            {estacion ? <PanelPronostico estacion={estacion} lluvia={lluvia} /> : null}
+          </>
+        ) : null}
       </div>
-    </div>
+
+      <div id="gauge-history" hidden={grafica !== "gauge"}>
+        {grafica === "gauge" ? (
+          mareografo && typeof mareografo === "object" ? (
+            <HistoriaMareografo m={mareografo} />
+          ) : (
+            <section className="card wide">
+              <CardHead titulo="Evolución del nivel del mar observado" icono="waves" />
+              <Vacio>{codigoMareografo ? feedback || "Consultando la serie del mareógrafo…" : "No hay una serie de mareógrafo disponible para este puerto."}</Vacio>
+            </section>
+          )
+        ) : null}
+      </div>
+
+      {profile ? (
+        <section className="card wide">
+          <div className="criteria-note">
+            <Icono nombre="info" />
+            <p>
+              Criterio de {profile.sector} · vigencia máxima {duracion(profile.vigenciaMin)} · desfase máximo {duracion(profile.desfaseMin)}
+              <br />
+              Respaldo técnico y de conexión con el drenaje · {profile.respaldo}
+            </p>
+          </div>
+        </section>
+      ) : null}
+
+      <section className="card wide">
+        <CardHead titulo={`Predicciones de marea · ${nombrePuerto}`} descripcion="Pleamares y bajamares publicadas. La evaluación automática usa mediciones observadas." icono="waves" />
+        {extremos.length >= 2 ? (
+          <>
+            <div className="chart-body">
+              <Grafico
+                id="tide-chart"
+                clave={`${puerto}|${extremos.length}|${extremos[0].t}|${observadosMarea.length}|${umbralCompatible ? profile?.marM : "-"}`}
+                dibujar={(el) => tide(el, { extremes: extremos, observed: observadosMarea, threshold: umbralCompatible && profile ? profile.marM : null })}
+              />
+            </div>
+            <div className="chart-legend">
+              <span>
+                <i className="line" style={{ "--c": "#2a78d6" } as CSSProperties} />
+                Curva estimada entre extremos publicados
+              </span>
+              <span>
+                <i className="dot" style={{ "--c": "#1c5cab" } as CSSProperties} />
+                Pleamar o bajamar publicada
+              </span>
+              {observadosMarea.length ? (
+                <span>
+                  <i className="dot" style={{ "--c": "#eb6834" } as CSSProperties} />
+                  Nivel observado
+                </span>
+              ) : null}
+              {umbralCompatible ? (
+                <span>
+                  <i className="thr" />
+                  Umbral de mar alto del sector
+                </span>
+              ) : null}
+              <span>Datum {extremos[0].ref || "—"} · hora publicada asumida en Galápagos</span>
+            </div>
+          </>
+        ) : null}
+        {predicciones.length ? (
+          <Tabla
+            cabeceras={["Fecha y hora", "Fase", "Altura", "Referencia", "Frente al umbral marino", "Fuente"]}
+            filas={predicciones.slice(0, 12).map((r) => [
+              horaMarina(r),
+              r.fase || "—",
+              `${medida(r.valor)} ${r.unidad}`,
+              r.referencia,
+              profile?.activo && r.unidad === "m" && String(r.referencia).trim().toLowerCase() === profile.datum.toLowerCase() ? (
+                <Pill color={r.valor >= profile.marM ? "amber" : "green"}>{r.valor >= profile.marM ? "Alto previsto" : "Bajo previsto"}</Pill>
+              ) : (
+                "—"
+              ),
+              r.fuente,
+            ])}
+          />
+        ) : (
+          <Vacio>Este puerto aún no tiene predicciones importadas.</Vacio>
+        )}
+      </section>
+
+      {modal === "criterio" || modal === "agregar" ? (
+        estacion ? (
+          <CriterioModal
+            estacion={estacion}
+            puerto={puerto}
+            criterio={modal === "criterio" ? (profile ?? null) : null}
+            onCerrar={() => setModal(null)}
+            onGuardado={async (p, s) => {
+              setPuerto(p);
+              setSector(s);
+              notificar("Criterio guardado.");
+              await refrescar();
+            }}
+          />
+        ) : null
+      ) : null}
+      {modal === "observado" ? (
+        <NivelObservadoModal
+          puerto={puerto}
+          datum={profile?.datum ?? ""}
+          onCerrar={() => setModal(null)}
+          onGuardado={async (p) => {
+            setPuerto(p);
+            notificar("Medición marina guardada.");
+            await refrescar();
+          }}
+        />
+      ) : null}
+    </>
   );
 }

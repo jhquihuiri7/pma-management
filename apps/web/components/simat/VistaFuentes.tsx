@@ -1,145 +1,153 @@
 "use client";
 
-import { useState } from "react";
-import { CheckCircle2, CircleAlert, CircleSlash, ExternalLink, RefreshCw } from "lucide-react";
-import type { SimatConector } from "@pma/types";
-import { useSimat } from "./contexto";
-import { sincronizarConector } from "@/lib/simat/api";
-import { fechaHora, hace } from "@/lib/simat/formato";
+// Estaciones y fuentes, con los componentes de la vista previa: cabecera,
+// filtros, visor del IGM, tablas y tarjetas del inventario de fuentes.
 
-function EstadoConector({ ok, habilitado }: { ok: boolean; habilitado: boolean }) {
-  if (!habilitado) return <span className="inline-flex items-center gap-1 text-slate-400"><CircleSlash className="w-4 h-4" /> Desactivado</span>;
-  if (ok) return <span className="inline-flex items-center gap-1 text-emerald-600"><CheckCircle2 className="w-4 h-4" /> En línea</span>;
-  return <span className="inline-flex items-center gap-1 text-red-600"><CircleAlert className="w-4 h-4" /> Con fallos</span>;
-}
+import { useState } from "react";
+import type { SimatConector } from "@pma/types";
+import { apiErrorMessage } from "@/lib/api-client";
+import { sincronizarConector } from "@/lib/simat/api";
+import { duracion, fechaHora, hace } from "@/lib/simat/formato";
+import { useSimat } from "./contexto";
+import { Icono } from "./iconos";
+import MapaGeo from "./MapaGeo";
+import { Cargando, frescura, PillConector } from "./VistaGeneral";
+import { Cabecera, CardHead, FiltroEstacion, FiltroIsla, Pill, Tabla, Vacio } from "./piezas";
 
 export default function VistaFuentes() {
-  const { estado, cargando, error, refrescar } = useSimat();
+  const { estado, isla, estacionesAmbito, estacionId, setEstacionId, estacion, lluvia, refrescar, notificar } = useSimat();
   const [sincronizando, setSincronizando] = useState<SimatConector | null>(null);
 
-  if (cargando && !estado) return <p className="text-sm text-slate-500">Cargando fuentes…</p>;
-  if (error && !estado) return <p className="text-sm text-red-600">{error}</p>;
-  if (!estado) return null;
+  if (!estado) return <Cargando />;
 
   const sincronizar = async (c: SimatConector) => {
     setSincronizando(c);
     try {
-      await sincronizarConector(c);
+      const r = await sincronizarConector(c);
+      notificar(r.mensaje || (r.ok ? "Sincronización completada." : "La fuente no respondió."), r.ok ? "" : "error");
       await refrescar();
+    } catch (err) {
+      notificar(apiErrorMessage(err, "No se pudo sincronizar la fuente."), "error");
     } finally {
       setSincronizando(null);
     }
   };
 
+  const latest = lluvia?.latest ?? null;
+  const f = frescura(lluvia, estacion);
+
   return (
-    <div className="space-y-6">
-      <header>
-        <h1 className="text-xl font-semibold text-slate-900">Estaciones y fuentes</h1>
-        <p className="text-sm text-slate-500">Estado de cada conexión, su último dato y su último error.</p>
-      </header>
+    <>
+      <Cabecera
+        titulo="Estaciones y fuentes"
+        descripcion="Estado de cada conexión, su último dato y su último error."
+        icono="tower"
+        acciones={
+          <div className="toolbar">
+            <button type="button" className="button outline" onClick={() => void refrescar()}>
+              <Icono nombre="refresh" />
+              Actualizar
+            </button>
+          </div>
+        }
+      />
 
-      <section className="rounded-xl border bg-white shadow-sm overflow-hidden">
-        <h2 className="px-4 py-3 text-sm font-semibold text-slate-800 border-b">Conectores</h2>
-        <div className="overflow-x-auto">
-          <table className="w-full text-sm">
-            <thead className="bg-slate-50 text-slate-500 text-xs uppercase">
-              <tr>
-                <th className="text-left px-4 py-2">Fuente</th>
-                <th className="text-left px-4 py-2">Estado</th>
-                <th className="text-left px-4 py-2">Último éxito</th>
-                <th className="text-left px-4 py-2">Resultado</th>
-                {estado.puedeEditar && <th className="px-4 py-2" />}
-              </tr>
-            </thead>
-            <tbody className="divide-y">
-              {estado.conectores.map((c) => (
-                <tr key={c.conector}>
-                  <td className="px-4 py-2">
-                    <div className="font-medium text-slate-800">{c.nombre}</div>
-                    <div className="text-xs text-slate-400">{c.descripcion}</div>
-                  </td>
-                  <td className="px-4 py-2"><EstadoConector ok={c.fallosSeguidos === 0 && !!c.ultimoExito} habilitado={c.habilitado} /></td>
-                  <td className="px-4 py-2 text-slate-600">{c.ultimoExito ? hace(c.ultimoExito) : "—"}</td>
-                  <td className="px-4 py-2 text-xs text-slate-500 max-w-[280px]">
-                    {c.error ? <span className="text-red-600">{c.error}</span> : c.resultado ?? "—"}
-                  </td>
-                  {estado.puedeEditar && (
-                    <td className="px-4 py-2 text-right">
-                      {c.habilitado && (
-                        <button
-                          type="button"
-                          onClick={() => void sincronizar(c.conector)}
-                          disabled={sincronizando === c.conector}
-                          className="inline-flex items-center gap-1 rounded-lg border px-2 py-1 text-xs hover:bg-slate-50 disabled:opacity-50"
-                        >
-                          <RefreshCw className={`w-3.5 h-3.5 ${sincronizando === c.conector ? "animate-spin" : ""}`} /> Sincronizar
-                        </button>
-                      )}
-                    </td>
-                  )}
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
+      <div className="filter-bar">
+        <FiltroIsla />
+        <FiltroEstacion />
+      </div>
+
+      <section className="card">
+        <CardHead titulo="Red de estaciones" descripcion="Inventario sobre la cartografía del IGM · selecciona una estación para ver su ficha" icono="pin" />
+        <MapaGeo
+          variant="visor"
+          island={isla}
+          stations={estacionesAmbito}
+          selected={estacionId}
+          live={!!f?.fresh}
+          latest={latest ? `${fechaHora(latest.time)}${latest.quality === "válido" ? ` · ${latest.value} mm` : ""}` : ""}
+          latestShort=""
+          onStation={setEstacionId}
+        />
       </section>
 
-      <section className="rounded-xl border bg-white shadow-sm overflow-hidden">
-        <h2 className="px-4 py-3 text-sm font-semibold text-slate-800 border-b">Estaciones ({estado.estaciones.length})</h2>
-        <div className="overflow-x-auto">
-          <table className="w-full text-sm">
-            <thead className="bg-slate-50 text-slate-500 text-xs uppercase">
-              <tr>
-                <th className="text-left px-4 py-2">Estación</th>
-                <th className="text-left px-4 py-2">Fuente</th>
-                <th className="text-left px-4 py-2">Isla</th>
-                <th className="text-left px-4 py-2">Estado</th>
-                <th className="text-left px-4 py-2">Variables</th>
-                <th className="text-left px-4 py-2">Última transmisión</th>
-              </tr>
-            </thead>
-            <tbody className="divide-y">
-              {estado.estaciones.map((e) => {
-                const ultimo = e.ultimoDato
-                  .map((u) => (u.instante ? new Date(u.instante).getTime() : 0))
-                  .reduce((a, b) => Math.max(a, b), 0);
-                return (
-                  <tr key={e.id}>
-                    <td className="px-4 py-2">
-                      <div className="font-medium text-slate-800">{e.nombre}</div>
-                      <div className="text-xs text-slate-400">{e.codigo} · {e.propietario}</div>
-                    </td>
-                    <td className="px-4 py-2">{e.fuente}</td>
-                    <td className="px-4 py-2">{e.isla}</td>
-                    <td className="px-4 py-2">
-                      <span className={e.activa ? "text-emerald-600" : "text-slate-400"}>{e.activa ? "Activa" : e.estado || "Inactiva"}</span>
-                    </td>
-                    <td className="px-4 py-2 text-xs text-slate-500">{e.variables.length ? e.variables.join(", ") : "—"}</td>
-                    <td className="px-4 py-2 text-slate-600">{ultimo ? fechaHora(new Date(ultimo).toISOString()) : "—"}</td>
-                  </tr>
-                );
-              })}
-            </tbody>
-          </table>
-        </div>
+      <section className="card">
+        <CardHead titulo="Conectores" descripcion="Sincronización programada del worker con cada fuente pública" icono="activity" />
+        <Tabla
+          cabeceras={["Fuente", "Estado", "Último éxito", "Resultado", ...(estado.puedeEditar ? [""] : [])]}
+          filas={estado.conectores.map((c) => [
+            <>
+              <strong>{c.nombre}</strong>
+              <div className="meta">{c.descripcion}</div>
+            </>,
+            <PillConector c={c} key="estado" />,
+            c.ultimoExito ? hace(c.ultimoExito) : "—",
+            c.error ? <span className="form-error">{c.error}</span> : (c.resultado ?? "—"),
+            ...(estado.puedeEditar
+              ? [
+                  c.habilitado ? (
+                    <button type="button" className={`button small outline${sincronizando === c.conector ? " is-loading" : ""}`} disabled={sincronizando === c.conector} onClick={() => void sincronizar(c.conector)}>
+                      <Icono nombre="refresh" />
+                      Sincronizar
+                    </button>
+                  ) : (
+                    "—"
+                  ),
+                ]
+              : []),
+          ])}
+        />
       </section>
 
-      <section className="rounded-xl border bg-white p-4 shadow-sm">
-        <h2 className="text-sm font-semibold text-slate-800 mb-3">Inventario de fuentes</h2>
-        <div className="grid sm:grid-cols-2 gap-3">
-          {estado.fuentes.map((f) => (
-            <div key={f.nombre} className="rounded-lg border p-3">
-              <div className="flex items-start justify-between gap-2">
-                <strong className="text-sm text-slate-800">{f.nombre}</strong>
-                <a href={f.url} target="_blank" rel="noopener noreferrer" className="text-slate-400 hover:text-teal-600"><ExternalLink className="w-4 h-4" /></a>
+      <section className="card">
+        <CardHead titulo={`Estaciones · ${estacionesAmbito.length}`} descripcion="Inventario del ámbito con su última transmisión" icono="tower" />
+        {estacionesAmbito.length ? (
+          <Tabla
+            cabeceras={["Estación", "Fuente", "Isla", "Estado", "Variables", "Última transmisión"]}
+            filas={estacionesAmbito.map((e) => {
+              const ultimo = e.ultimoDato.map((u) => (u.instante ? Date.parse(u.instante) : 0)).reduce((a, b) => Math.max(a, b), 0);
+              return [
+                <>
+                  <strong>{e.nombre}</strong>
+                  <div className="meta">
+                    {e.id} · {e.pasoMin >= 1440 ? "diaria" : `cada ${duracion(e.pasoMin)}`}
+                  </div>
+                </>,
+                e.propietario || e.fuente,
+                e.isla,
+                e.activa ? <Pill color="teal">Activa</Pill> : <Pill color="amber">{e.estado || "Inactiva"}</Pill>,
+                e.variables.length ? e.variables.join(", ") : "—",
+                ultimo ? fechaHora(new Date(ultimo).toISOString()) : "—",
+              ];
+            })}
+          />
+        ) : (
+          <Vacio>Sin estaciones en este ámbito.</Vacio>
+        )}
+      </section>
+
+      <section className="card">
+        <CardHead titulo="Inventario de fuentes" descripcion="Instituciones que publican los datos y lo pendiente con cada una" icono="database" />
+        <div className="fuentes-grid">
+          {estado.fuentes.map((fuente) => (
+            <article key={fuente.nombre} className="fuente-item">
+              <div className="fuente-top">
+                <strong>{fuente.nombre}</strong>
+                <a className="text-link" href={fuente.url} target="_blank" rel="noopener noreferrer">
+                  Sitio <Icono nombre="external" />
+                </a>
               </div>
-              <p className="text-xs text-slate-500 mt-1">{f.cobertura} · {f.descripcion}</p>
-              <p className="text-[11px] text-amber-700 mt-1">Pendiente: {f.pendiente}</p>
-              <p className="text-[11px] text-slate-400 mt-0.5">{f.licencia}</p>
-            </div>
+              <p className="meta">
+                {fuente.cobertura} · {fuente.descripcion}
+              </p>
+              <div className="chips">
+                <Pill color="amber">{`Pendiente: ${fuente.pendiente}`}</Pill>
+                <Pill className="outline">{fuente.licencia}</Pill>
+              </div>
+            </article>
           ))}
         </div>
       </section>
-    </div>
+    </>
   );
 }

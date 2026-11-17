@@ -5,7 +5,7 @@ import { authenticate, optionalAuthenticate, requireApp, requireRole } from "../
 import { BadRequest } from "../../lib/errors.js";
 import type { SimatConector } from "@pma/types";
 import { estado } from "../../modules/simat/estadoModule.js";
-import { mareografo, obtenerEstacion, serieLluvia, listarNivelMar } from "../../modules/simat/lecturas.js";
+import { mareografo, obtenerEstacion, serieLluvia, listarNivelMar, nivelMarPuerto } from "../../modules/simat/lecturas.js";
 import { pronosticoLluvia } from "../../modules/simat/conectores/openMeteo.js";
 import { guardarCriterio } from "../../modules/simat/criteriosModule.js";
 import { registrarNivelObservado } from "../../modules/simat/nivelModule.js";
@@ -39,6 +39,7 @@ const nivelSchema = z
     unidad: z.string().max(10).default("m"),
     referencia: z.string().min(1).max(80),
     calidad: z.string().max(80).default("validado"),
+    fuente: z.string().max(160).optional(),
   })
   .strict();
 
@@ -89,7 +90,10 @@ export async function simatRoutes(app: FastifyInstance) {
 
   app.get("/mareas", async (request) => {
     const { puerto } = mareasQuery.parse(request.query);
-    const rows = await listarNivelMar(puerto);
+    // With a port: its tide table plus recent observed levels (the panels split
+    // them by `tipo`). Without one: every published prediction, as before.
+    if (puerto) return nivelMarPuerto(puerto);
+    const rows = await listarNivelMar();
     return rows.filter((r) => r.tipo === "Predicción astronómica");
   });
 

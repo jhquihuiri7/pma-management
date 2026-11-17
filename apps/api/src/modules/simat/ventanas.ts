@@ -78,8 +78,9 @@ export function construirSerie(estacionId: string, lecturas: LecturaLluvia[], pa
     };
   });
 
-  // Recent readings for the sparkline / chart, oldest first, capped.
-  const limiteReciente = paso >= 1440 ? 30 : Math.max(1, Math.round((6 * 60) / paso));
+  // Recent readings for the sparkline / chart, oldest first, capped: 6 h of a
+  // 5-minute station, 24 h of an hourly one, 30 days of a daily one.
+  const limiteReciente = paso >= 1440 ? 30 : Math.max(24, Math.round((6 * 60) / paso));
   const recent: SimatMuestraLluvia[] = orden
     .slice(0, limiteReciente)
     .reverse()

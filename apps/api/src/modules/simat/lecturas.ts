@@ -79,6 +79,32 @@ function aNivel(row: NivelRow): SimatNivelMar {
 }
 
 /** Recent sea-level rows (observed + predictions), newest first. */
+/**
+ * Sea-level rows for one port, as the risk and overview panels need them: the
+ * published predictions (tide table) plus the most recent observed levels. The
+ * IOC gauge stores a reading per minute, so observations are capped to the
+ * latest 300 (about five hours); the panels only use the newest one and any
+ * manual reading in the datum of the predictions.
+ */
+export async function nivelMarPuerto(puerto: string): Promise<SimatNivelMar[]> {
+  const db = getDb();
+  const [predicciones, observados] = await Promise.all([
+    db
+      .select()
+      .from(simatNivelMar)
+      .where(and(eq(simatNivelMar.puerto, puerto), eq(simatNivelMar.tipo, "Predicción astronómica")))
+      .orderBy(desc(simatNivelMar.instante))
+      .limit(120),
+    db
+      .select()
+      .from(simatNivelMar)
+      .where(and(eq(simatNivelMar.puerto, puerto), eq(simatNivelMar.tipo, "Nivel observado")))
+      .orderBy(desc(simatNivelMar.instante))
+      .limit(300),
+  ]);
+  return [...predicciones, ...observados].map(aNivel);
+}
+
 export async function listarNivelMar(puerto?: string): Promise<SimatNivelMar[]> {
   const where = puerto ? eq(simatNivelMar.puerto, puerto) : undefined;
   const rows = await getDb()
