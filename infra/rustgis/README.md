@@ -1,11 +1,11 @@
 # RustGIS Web para el Workspace del Geoportal
 
 Imagen `pma-management/rustgis:<tag>`: la versión fijada de [RustGIS](https://github.com/opengeos/RustGIS)
-(`v0.5.0`, commit `a5603d1`) con un parche propio, servida por nginx en el puerto 8080. El nginx
-del geoportal la publica en `https://<dominio>/geo/workspace/app/` y la página `/geo/workspace`
-la embebe con `?embed` (ver `docs/plan-integracion-rustgis.md`).
+(`v0.5.0`, commit `a5603d1`) con parches propios (`patches/`, aplicados en orden), servida por
+nginx en el puerto 8080. El nginx del geoportal la publica en `https://<dominio>/geo/workspace/app/`
+y la página `/geo/workspace` la embebe con `?embed` (ver `docs/plan-integracion-rustgis.md`).
 
-## Qué cambia el parche (`patches/0001-sigtar-embed.patch`)
+## Qué cambia `patches/0001-sigtar-embed.patch`
 
 Solo `apps/rustgis-web/src/{embed,web}.rs`, en modo `?embed`:
 
@@ -22,7 +22,24 @@ Solo `apps/rustgis-web/src/{embed,web}.rs`, en modo `?embed`:
 3. **Acuse al abrir un proyecto.** `{"rustgis":"project","id":…,"text":…}` recibe
    `{"rustgis":"result","id":…,"ok":…}`, así la página sabe si el proyecto abrió.
 
-Los archivos modificados llevan comentarios «SIGTAR» y el parche se sirve junto a la app en
+## Qué cambia `patches/0002-sigtar-series-export.patch`
+
+Exportar e Imprimir un diseño con **serie de mapas** en el navegador (`crates/ui-egui/src/seriesexport.rs`,
+dos funciones públicas nuevas en `crates/engine/src/cmd/layout.rs`, textos en `i18n/es.tsv`).
+RustGIS 0.5 dibuja todas las páginas de la serie (hasta 500) de una vez en el único hilo de la
+página: con una serie sobre `Predios_PuertoAyora` (3885 predios) la pestaña, y el geoportal que la
+embebe, quedaron congelados 223 s, y los datos leídos por rango de cada página no podían llegar
+mientras tanto. Con el parche:
+
+- Un diálogo pregunta si exportar **solo la página actual** (inmediato, como antes) o la **serie
+  completa**.
+- La serie completa se dibuja una página por cuadro, cada una de nuevo cuando llegan los datos que
+  pidió (teselas, entidades por rango; hasta 20 s por página), con barra de progreso y «Cancelar».
+- Si se abre otro proyecto a mitad, la exportación se detiene sin tocarlo; si el PDF pasa del
+  límite de memoria (256 MB), se descarga con las páginas hechas y se avisa.
+- El diseño vuelve a quedar como estaba, termine como termine. La app de escritorio no cambia.
+
+Los archivos modificados llevan comentarios «SIGTAR» y los parches se sirven junto a la app en
 `/geo/workspace/app/sigtar-patches/` (Apache-2.0 §4). `LICENSE` y `THIRD-PARTY-LICENSES.txt` de
 RustGIS se sirven tal cual.
 
@@ -50,7 +67,7 @@ una máquina con ≥ 16 GB de RAM.
 ## Actualizar RustGIS
 
 1. Cambiar `RUSTGIS_REF`/`RUSTGIS_COMMIT` en `build.sh`, `Dockerfile` y `Dockerfile.ci`.
-2. Regenerar el parche sobre la nueva versión (o comprobar que `git apply --check` pasa) y revisar
+2. Regenerar los parches sobre la nueva versión (o comprobar que `git apply --check` pasa con cada uno) y revisar
    que `embed.rs` siga aceptando `ui.addUrl`/`ui.openUrl` desde la página.
 3. Revisar `apps/api/src/modules/geo/rustgisProject.ts` contra el formato de proyecto nuevo.
 4. Repetir las pruebas de `docs/plan-integracion-rustgis.md` §8.1 antes de desplegar.

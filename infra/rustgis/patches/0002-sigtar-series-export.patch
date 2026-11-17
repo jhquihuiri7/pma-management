@@ -1,0 +1,401 @@
+diff --git a/crates/engine/src/cmd/layout.rs b/crates/engine/src/cmd/layout.rs
+index 21b8816..27b9fa5 100644
+--- a/crates/engine/src/cmd/layout.rs
++++ b/crates/engine/src/cmd/layout.rs
+@@ -16,7 +16,7 @@ use super::{b, f, numbered, ps};
+ use crate::{CmdResult, CommandSpec as C, Session};
+ 
+ /// Most compressed page data a PDF export holds (less in the browser).
+-const PDF_BUDGET: usize = if cfg!(target_arch = "wasm32") { 256 << 20 } else { 1 << 30 };
++pub const PDF_BUDGET: usize = if cfg!(target_arch = "wasm32") { 256 << 20 } else { 1 << 30 };
+ 
+ /// Layout files: JSON with this extension.
+ pub const LAYOUT_EXTENSION: &str = "rgislayout";
+@@ -3224,6 +3224,24 @@ pub fn layout_bytes(s: &mut Session, li: usize, pdf: bool, dpi: f64, all: bool)
+     if pdf { Ok(rustgis_render::pdf::write(&pages, &saved.name)) } else { png.ok_or_else(|| "nothing to draw".to_string()) }
+ }
+ 
++/// SIGTAR (pma-management): moves a layout's map series to `page` (0-based), its frame to that
++/// page's feature, as [`layout_bytes`] does before drawing each page. For an export of the series
++/// spread over the interface's frames: in the browser a whole series drawn at once holds the page
++/// for minutes, and its features read by range can't arrive while it does.
++pub fn series_goto(s: &mut Session, li: usize, page: usize) -> Result<(), String> {
++    series_page(s, &json!({"layout": li, "page": page})).map(|_| ())
++}
++
++/// SIGTAR: the layout `li` as it is now, drawn as page `page` (0-based) of `pages`, named `name`,
++/// at `dpi`, as one page of a PDF (compressed already).
++pub fn layout_pdf_page(s: &mut Session, li: usize, dpi: f64, page: usize, pages: usize, name: String) -> Result<rustgis_render::pdf::Page, String> {
++    let dpi = if dpi.is_finite() { dpi.clamp(36.0, 600.0) } else { 150.0 };
++    let layout = s.project.layouts.get(li).ok_or("no layout")?;
++    let info = rustgis_render::layout::PageInfo { page: page + 1, pages, page_name: name };
++    let img = rustgis_render::layout::render(layout, &mut s.project.maps, dpi, &info).ok_or("the page is too large to draw")?;
++    Ok(rustgis_render::pdf::Page::new(&img, layout.width, layout.height))
++}
++
+ fn export(s: &mut Session, p: &Value) -> CmdResult {
+     let path = ps(p, "path").ok_or("path is required")?.to_string();
+     let li = index(s, p)?;
+diff --git a/crates/ui-egui/src/i18n/es.tsv b/crates/ui-egui/src/i18n/es.tsv
+index 812e12f..b481951 100644
+--- a/crates/ui-egui/src/i18n/es.tsv
++++ b/crates/ui-egui/src/i18n/es.tsv
+@@ -4024,3 +4024,16 @@ Zoom: the map's zoom level, as web maps count it. Bearing: the direction the top
+ ⌘+Enter	⌘+Enter
+ ⌘K	⌘K
+ ▶ Simulate	▶ Simular
++# SIGTAR (pma-management): seriesexport.rs
++a map series is being exported already	ya se está exportando una serie de mapas
++The map series export stopped: the project changed	La exportación de la serie de mapas se detuvo: el proyecto cambió
++Map series export cancelled	Exportación de la serie de mapas cancelada
++The PDF reached {mb} MB: it holds the first {count} pages	El PDF llegó a {mb} MB: contiene las primeras {count} páginas
++Export the map series	Exportar la serie de mapas
++This layout's map series has {n} pages.	La serie de mapas de este diseño tiene {n} páginas.
++The PDF holds the first {total}.	El PDF incluye las primeras {total}.
++The whole series is drawn one page at a time, each once its data has arrived: it can take several minutes.	La serie completa se dibuja página por página, cada una cuando han llegado sus datos: puede tardar varios minutos.
++Whole series	Serie completa
++Current page only	Solo la página actual
++Page {page} of {total}	Página {page} de {total}
++Waiting for the page's data…	Esperando los datos de la página…
+diff --git a/crates/ui-egui/src/lib.rs b/crates/ui-egui/src/lib.rs
+index d664a30..d930488 100644
+--- a/crates/ui-egui/src/lib.rs
++++ b/crates/ui-egui/src/lib.rs
+@@ -68,6 +68,8 @@ mod reportpane;
+ mod ribbon;
+ mod s3ui;
+ mod saveprompt;
++// SIGTAR (pma-management): a map series exported a page a frame in the browser.
++mod seriesexport;
+ mod scriptcolor;
+ mod scriptcomplete;
+ mod searchbox;
+@@ -2757,6 +2759,10 @@ impl RustGisApp {
+                 let print = id == "ui.printLayout";
+                 let pdf_only = print || p.get("format").and_then(Value::as_str) == Some("pdf");
+                 if self.services.download.is_some() {
++                    // SIGTAR: a map series asks what to export and is drawn a page a frame.
++                    if seriesexport::start(self, li, if print { 300.0 } else { 150.0 })? {
++                        return Ok(Value::Null);
++                    }
+                     let bytes = self.layout_bytes(li, true, if print { 300.0 } else { 150.0 })?;
+                     self.download(&format!("{name}.pdf"), bytes);
+                 } else if print {
+@@ -3745,6 +3751,7 @@ impl RustGisApp {
+         panes::poll_geolibre(self, ctx);
+         panes::poll_plugin_run(self, ctx);
+         self.poll_downloads();
++        seriesexport::drive(self, ctx);
+         let _ = self.deliver_gp_files(Ok(Value::Null));
+         // A value picked under Dynamic Text lasts while the text tool does, however the tool
+         // changes (Esc, another tool, a text placed without Keep Tool, a command).
+@@ -3980,6 +3987,7 @@ impl RustGisApp {
+         layoutview::save_drafts(self);
+         graphicformat::save_draft(self);
+         dialogs::show(self, &ctx);
++        seriesexport::show(self, &ctx);
+         layerchooser::show(self, &ctx);
+         mapview::confirm_delete(self, &ctx);
+         autosave::offer(self, &ctx);
+diff --git a/crates/ui-egui/src/seriesexport.rs b/crates/ui-egui/src/seriesexport.rs
+new file mode 100644
+index 0000000..1c28fad
+--- /dev/null
++++ b/crates/ui-egui/src/seriesexport.rs
+@@ -0,0 +1,296 @@
++//! SIGTAR (pma-management): Export Layout and Print Layout of a layout with a map series, in the
++//! browser.
++//!
++//! RustGIS draws every page of a series (up to 500) in one go, on the interface's thread. In the
++//! browser that thread is the page's only one: a series over thousands of parcels held the tab,
++//! and the geoportal page that embeds the app, for minutes, and the features each page needs, read
++//! by range from their address, couldn't arrive meanwhile (each page drew what had come).
++//!
++//! Here the user first picks the current page only (drawn at once, as before) or the whole series.
++//! The whole series is drawn one page a frame: each page is drawn, and drawn again once what that
++//! drawing asked for (tiles, features read by range) has come, up to [`PAGE_WAIT`]; a dialog shows
++//! the progress and can cancel. The layout is put back as it was however the export ends, as
++//! [`rustgis_engine::cmd::layout::layout_bytes`] does. The desktop app keeps the original export.
++
++use std::cell::RefCell;
++
++use egui::vec2;
++use rustgis_engine::cmd::layout::{PDF_BUDGET, layout_bytes, layout_pdf_page, series_goto, series_pages};
++use rustgis_engine::map::layout::Layout;
++use rustgis_engine::render::pdf::Page;
++use rustgis_engine::render::rustgis_tiles::cache;
++use web_time::{Duration, Instant};
++
++use crate::RustGisApp;
++use crate::theme::{Tokens, semibold};
++
++/// Pages a series PDF holds at most, as RustGIS's own export.
++const MAX_PAGES: usize = 500;
++/// The longest a page waits for its data before it is kept with what has come.
++const PAGE_WAIT: Duration = Duration::from_secs(20);
++/// Drawings of one page at most while its data keeps coming.
++const MAX_PASSES: u32 = 6;
++
++/// An export of a layout's map series, from the question to the download.
++struct Job {
++    /// The project it is of: another one opened ends it, without touching the new one.
++    opened: u64,
++    li: usize,
++    dpi: f64,
++    /// The layout as it was: put back when the export ends, however it ends.
++    saved: Layout,
++    /// Every page's name (the series' length), and how many go in the PDF.
++    names: Vec<String>,
++    total: usize,
++    stage: Stage,
++}
++
++enum Stage {
++    /// Asking: the current page or the whole series.
++    Ask,
++    Running(Run),
++}
++
++struct Run {
++    pages: Vec<Page>,
++    held: usize,
++    /// The page being drawn (0-based).
++    next: usize,
++    /// Whether the series is on `next` already.
++    stepped: bool,
++    /// Drawings of `next` so far.
++    passes: u32,
++    page_started: Instant,
++    started: Instant,
++    cancel: bool,
++}
++
++thread_local! {
++    static JOB: RefCell<Option<Job>> = const { RefCell::new(None) };
++}
++
++/// Whether an export of a map series is asking or under way.
++pub(crate) fn busy() -> bool {
++    JOB.with(|j| j.borrow().is_some())
++}
++
++/// Starts the export of layout `li` when it has a map series of more than one page (the dialog
++/// asks what to export, from the next frame): `Ok(false)` for a layout without one, which is
++/// exported as before.
++pub(crate) fn start(app: &mut RustGisApp, li: usize, dpi: f64) -> Result<bool, String> {
++    if busy() {
++        return Err(tl!("a map series is being exported already").into());
++    }
++    let Some(names) = series_pages(&app.session, li) else { return Ok(false) };
++    if names.len() < 2 {
++        return Ok(false);
++    }
++    let saved = app.session.project.layouts.get(li).cloned().ok_or("no layout")?;
++    let total = names.len().min(MAX_PAGES);
++    JOB.with(|j| *j.borrow_mut() = Some(Job { opened: app.session.opened, li, dpi, saved, names, total, stage: Stage::Ask }));
++    Ok(true)
++}
++
++/// The layout as it was before the export.
++fn restore(app: &mut RustGisApp, job: &Job) {
++    if let Some(cur) = app.session.project.layouts.get_mut(job.li) {
++        *cur = job.saved.clone();
++    }
++}
++
++/// Draws the next page of a running export, or finishes it: called every frame.
++pub(crate) fn drive(app: &mut RustGisApp, ctx: &egui::Context) {
++    JOB.with(|cell| {
++        let mut slot = cell.borrow_mut();
++        let Some(job) = slot.as_mut() else { return };
++        // Another project opened (the page sent one), or the layout is gone: the export ends and
++        // leaves the project alone.
++        if job.opened != app.session.opened || app.session.project.layouts.get(job.li).is_none_or(|l| l.name != job.saved.name) {
++            *slot = None;
++            app.session.notify(tl!("The map series export stopped: the project changed"), true);
++            return;
++        }
++        let Stage::Running(run) = &mut job.stage else { return };
++        if run.cancel {
++            restore(app, job);
++            *slot = None;
++            app.session.notify(tl!("Map series export cancelled"), false);
++            return;
++        }
++        // What the last drawing asked for is on its way: the page waits for it (not forever).
++        if run.passes > 0 && cache::in_flight() > 0 && run.page_started.elapsed() < PAGE_WAIT {
++            ctx.request_repaint_after(Duration::from_millis(50));
++            return;
++        }
++        if !run.stepped {
++            if let Err(e) = series_goto(&mut app.session, job.li, run.next) {
++                restore(app, job);
++                *slot = None;
++                app.session.notify(e, true);
++                return;
++            }
++            run.stepped = true;
++            run.passes = 0;
++            run.page_started = Instant::now();
++        }
++        let name = job.names.get(run.next).cloned().unwrap_or_default();
++        let page = match layout_pdf_page(&mut app.session, job.li, job.dpi, run.next, job.names.len(), name) {
++            Ok(page) => page,
++            Err(e) => {
++                restore(app, job);
++                *slot = None;
++                app.session.notify(e, true);
++                return;
++            }
++        };
++        run.passes += 1;
++        // The drawing asked for more (tiles, features read by range): the page is drawn again
++        // once it has come.
++        if cache::in_flight() > 0 && run.passes < MAX_PASSES && run.page_started.elapsed() < PAGE_WAIT {
++            ctx.request_repaint_after(Duration::from_millis(50));
++            return;
++        }
++        let over = run.held + page.len() > PDF_BUDGET && !run.pages.is_empty();
++        if !over {
++            run.held += page.len();
++            run.pages.push(page);
++            run.next += 1;
++            run.stepped = false;
++            run.passes = 0;
++        }
++        if run.next < job.total && !over {
++            ctx.request_repaint();
++            return;
++        }
++        // Done (or the PDF reached its budget: it keeps the pages drawn so far).
++        let bytes = rustgis_engine::render::pdf::write(&run.pages, &job.saved.name);
++        let (count, seconds) = (run.pages.len(), run.started.elapsed().as_secs());
++        restore(app, job);
++        let file = format!("{}.pdf", job.saved.name);
++        *slot = None;
++        drop(slot);
++        if over {
++            let note = crate::i18n::fmt(
++                "The PDF reached {mb} MB: it holds the first {count} pages",
++                &[("mb", &(PDF_BUDGET >> 20).to_string()), ("count", &count.to_string())],
++            );
++            app.session.notify(note, true);
++        }
++        log::info!("map series export: {count} pages in {seconds} s");
++        app.download_bytes(&file, bytes);
++        ctx.request_repaint();
++    });
++}
++
++/// The current page only, drawn at once as before.
++fn export_current(app: &mut RustGisApp, li: usize, dpi: f64, name: &str) {
++    let session = &mut app.session;
++    let r = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| layout_bytes(session, li, true, dpi, false)))
++        .unwrap_or_else(|_| Err("the layout export failed unexpectedly".into()));
++    match r {
++        Ok(bytes) => app.download_bytes(&format!("{name}.pdf"), bytes),
++        Err(e) => app.session.notify(e, true),
++    }
++}
++
++/// The dialog: the question, then the progress with Cancel.
++pub(crate) fn show(app: &mut RustGisApp, ctx: &egui::Context) {
++    enum Answer {
++        Whole,
++        Current,
++        Close,
++        Cancel,
++    }
++    let t = Tokens::get(ctx);
++    let mut answer = None;
++    let mut current = None;
++    JOB.with(|cell| {
++        let slot = cell.borrow();
++        let Some(job) = slot.as_ref() else { return };
++        let n = job.names.len();
++        egui::Modal::new(egui::Id::unique("sigtar_series_export")).show(ctx, |ui| {
++            ui.set_width(400.0);
++            ui.label(egui::RichText::new(tl!("Export the map series")).font(semibold(15.0)));
++            ui.add_space(6.0);
++            match &job.stage {
++                Stage::Ask => {
++                    ui.label(crate::i18n::fmt("This layout's map series has {n} pages.", &[("n", &n.to_string())]));
++                    if n > job.total {
++                        ui.label(crate::i18n::fmt("The PDF holds the first {total}.", &[("total", &job.total.to_string())]));
++                    }
++                    ui.add_space(4.0);
++                    ui.label(
++                        egui::RichText::new(tl!(
++                            "The whole series is drawn one page at a time, each once its data has arrived: it can take several minutes."
++                        ))
++                        .weak(),
++                    );
++                    ui.add_space(10.0);
++                    ui.with_layout(egui::Layout::right_to_left(egui::Align::Min), |ui| {
++                        if crate::widgets::dialog_button(ui, tl!("Whole series"), Some(t.accent), vec2(96.0, 28.0)).clicked() {
++                            answer = Some(Answer::Whole);
++                        }
++                        if crate::widgets::dialog_button(ui, tl!("Current page only"), None, vec2(96.0, 28.0)).clicked() {
++                            answer = Some(Answer::Current);
++                            current = Some((job.li, job.dpi, job.saved.name.clone()));
++                        }
++                        if crate::widgets::dialog_button(ui, tl!("Cancel"), None, vec2(84.0, 28.0)).clicked()
++                            || ui.input(|i| i.key_pressed(egui::Key::Escape))
++                        {
++                            answer = Some(Answer::Close);
++                        }
++                    });
++                }
++                Stage::Running(run) => {
++                    let done = run.next.min(job.total);
++                    ui.label(crate::i18n::fmt(
++                        "Page {page} of {total}",
++                        &[("page", &(done + 1).min(job.total).to_string()), ("total", &job.total.to_string())],
++                    ));
++                    ui.add_space(4.0);
++                    ui.add(egui::ProgressBar::new(done as f32 / job.total.max(1) as f32).show_percentage());
++                    if run.passes > 0 {
++                        ui.label(egui::RichText::new(tl!("Waiting for the page's data…")).weak());
++                    }
++                    ui.add_space(10.0);
++                    ui.with_layout(egui::Layout::right_to_left(egui::Align::Min), |ui| {
++                        if crate::widgets::dialog_button(ui, tl!("Cancel"), None, vec2(84.0, 28.0)).clicked() {
++                            answer = Some(Answer::Cancel);
++                        }
++                    });
++                }
++            }
++        });
++    });
++    let Some(answer) = answer else { return };
++    match answer {
++        Answer::Whole => JOB.with(|cell| {
++            if let Some(job) = cell.borrow_mut().as_mut() {
++                let now = Instant::now();
++                job.stage = Stage::Running(Run {
++                    pages: Vec::new(),
++                    held: 0,
++                    next: 0,
++                    stepped: false,
++                    passes: 0,
++                    page_started: now,
++                    started: now,
++                    cancel: false,
++                });
++            }
++        }),
++        Answer::Current => {
++            JOB.with(|cell| *cell.borrow_mut() = None);
++            if let Some((li, dpi, name)) = current {
++                export_current(app, li, dpi, &name);
++            }
++        }
++        Answer::Close => JOB.with(|cell| *cell.borrow_mut() = None),
++        Answer::Cancel => JOB.with(|cell| {
++            if let Some(Job { stage: Stage::Running(run), .. }) = cell.borrow_mut().as_mut() {
++                run.cancel = true;
++            }
++        }),
++    }
++    ctx.request_repaint();
++}

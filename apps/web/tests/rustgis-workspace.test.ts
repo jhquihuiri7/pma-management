@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import { BridgeError, parseBridgeMessage, RustgisBridge } from "../components/geo/rustgis/bridge";
+import { panicMessage, trapMessage, watchRustgisWindow, type WatchedWindow } from "../components/geo/rustgis/crashWatch";
 import { absoluteUrl, catalogKeyOfUrl, inspectProject, withTileLayer } from "../components/geo/rustgis/projectRefs";
 
 const ORIGIN = "https://sigtar.gobiernogalapagos.gob.ec";
@@ -131,4 +132,59 @@ test("a tile layer goes on top of the active map's tiles", () => {
   assert.equal(next.maps[0].tiles[0].kind, "raster");
   assert.throws(() => withTileLayer("{\"maps\":[]}", { name: "x", url: "u" }), /mapas/);
   assert.equal(absoluteUrl("http://localhost:3000/", "/api-proxy/x"), "http://localhost:3000/api-proxy/x");
+});
+
+class FakeFrameWindow implements WatchedWindow {
+  logged: unknown[][] = [];
+  errorListeners = new Set<(event: { error?: unknown; message?: string }) => void>();
+  console = { error: (...args: unknown[]) => { this.logged.push(args); } };
+  addEventListener(_type: "error", listener: (event: { error?: unknown; message?: string }) => void) { this.errorListeners.add(listener); }
+  removeEventListener(_type: "error", listener: (event: { error?: unknown; message?: string }) => void) { this.errorListeners.delete(listener); }
+  fail(error: unknown, message?: string) { this.errorListeners.forEach((l) => l({ error, message })); }
+}
+
+class RuntimeError extends Error {
+  override name = "RuntimeError";
+}
+
+test("a Rust panic or a WebAssembly trap is told apart from other errors", () => {
+  assert.equal(
+    panicMessage(["panicked at crates/render/src/pdf.rs:12:5:\ncalled `Option::unwrap()` on a `None` value"]),
+    "panicked at crates/render/src/pdf.rs:12:5:\ncalled `Option::unwrap()` on a `None` value",
+  );
+  assert.equal(panicMessage(["couldn't load font https://x/f.ttf: 404"]), null);
+  assert.equal(trapMessage({ error: new RuntimeError("unreachable") }), "RuntimeError: unreachable");
+  assert.equal(trapMessage({ message: "Uncaught RuntimeError: unreachable executed" }), "Uncaught RuntimeError: unreachable executed");
+  assert.equal(trapMessage({ error: new TypeError("x is undefined") }), null);
+  assert.equal(panicMessage(["x".repeat(10) + "panicked at " + "y".repeat(2000)])?.length, 601);
+});
+
+test("the watch reports RustGIS stopping once, with the panic's message, and leaves the console as it was", () => {
+  const win = new FakeFrameWindow();
+  const original = win.console.error;
+  const crashes: string[] = [];
+  const stop = watchRustgisWindow(win, (c) => crashes.push(c.message));
+
+  win.console.error("couldn't load font: 404");
+  win.fail(new TypeError("a script of the page"));
+  assert.deepEqual(crashes, []);
+
+  win.console.error("panicked at wgpu/src/backend/webgpu.rs:2461:63:\ncreateBuffer failed");
+  win.fail(new RuntimeError("unreachable"));
+  win.fail(new RuntimeError("unreachable"));
+  assert.deepEqual(crashes, ["panicked at wgpu/src/backend/webgpu.rs:2461:63:\ncreateBuffer failed"]);
+  // What RustGIS logs still reaches the console.
+  assert.equal(win.logged.length, 2);
+
+  stop();
+  assert.equal(win.console.error, original);
+  assert.equal(win.errorListeners.size, 0);
+});
+
+test("a trap without a panic report (memory ran out) is reported too", () => {
+  const win = new FakeFrameWindow();
+  const crashes: string[] = [];
+  watchRustgisWindow(win, (c) => crashes.push(c.message));
+  win.fail(new RuntimeError("unreachable"));
+  assert.deepEqual(crashes, ["RuntimeError: unreachable"]);
 });

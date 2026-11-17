@@ -2,12 +2,13 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
-  AlertTriangle, ArrowLeft, Bot, Download, FolderOpen, Loader2, PanelLeft, Save, SaveAll, X,
+  AlertTriangle, ArrowLeft, Bot, Download, FolderOpen, Loader2, PanelLeft, RotateCcw, Save, SaveAll, X,
 } from "lucide-react";
 import { toast } from "sonner";
 import { api, apiErrorMessage, ApiError, auth } from "@/lib/api-client";
 import { BridgeError, RustgisBridge } from "./bridge";
 import CatalogSearchPanel from "./CatalogSearchPanel";
+import { type RustgisCrash, type WatchedWindow, watchRustgisWindow } from "./crashWatch";
 import ProjectsDialog from "./ProjectsDialog";
 import { absoluteUrl, blankProject, inspectProject, withTileLayer } from "./projectRefs";
 import type { CatalogItem, OpenedProject, ProjectSummary, WorkspaceConfig, WorkspaceNotice } from "./types";
@@ -62,6 +63,12 @@ export default function RustgisWorkspace({ config }: { config: WorkspaceConfig }
   const [busy, setBusy] = useState<string | null>(null);
   const [pending, setPending] = useState<Map<string, number>>(new Map());
   const [sessionLost, setSessionLost] = useState(false);
+  // RustGIS stopped for good (a panic aborts its WebAssembly): see crashWatch.ts.
+  const [crash, setCrash] = useState<RustgisCrash | null>(null);
+  // Bumped to start RustGIS again in a new iframe.
+  const [frameKey, setFrameKey] = useState(0);
+  // The project to reopen when RustGIS starts again after stopping.
+  const recoverRef = useRef<{ text: string; meta: CurrentProject; dirty: boolean } | null>(null);
 
   useEffect(() => { projectRef.current = project; }, [project]);
   const setText = useCallback((text: string | null) => {
@@ -142,6 +149,19 @@ export default function RustgisWorkspace({ config }: { config: WorkspaceConfig }
       setText(text);
       markDirty(true);
     });
+    // Each document the iframe loads is watched for RustGIS stopping (same origin).
+    let unwatch: (() => void) | null = null;
+    const onLoad = () => {
+      unwatch?.();
+      unwatch = null;
+      try {
+        const win = iframe.contentWindow as unknown as WatchedWindow | null;
+        if (win) unwatch = watchRustgisWindow(win, (found) => setCrash(found));
+      } catch {
+        // Not readable (another origin): nothing to watch.
+      }
+    };
+    iframe.addEventListener("load", onLoad);
     iframe.src = `${config.appPath}index.html?embed&lang=es`;
     let cancelled = false;
     // RustGIS says `ready` once; if that went before we listened, any answer will do.
@@ -164,6 +184,21 @@ export default function RustgisWorkspace({ config }: { config: WorkspaceConfig }
         const params = new URLSearchParams(window.location.search);
         const projectId = params.get("proyecto");
         const mapId = params.get("map");
+        const recover = recoverRef.current;
+        recoverRef.current = null;
+        if (recover) {
+          // Started again after stopping: the page's copy of the project, as it was.
+          try {
+            await openText(recover.text, recover.meta, []);
+            markDirty(recover.dirty);
+            toast.success("RustGIS se reinició con el proyecto");
+          } catch (e) {
+            // The page keeps its copy, which is still what «Guardar» stores.
+            markDirty(recover.dirty);
+            toast.error(apiErrorMessage(e, "RustGIS no pudo reabrir el proyecto; guárdalo con «Guardar como» antes de seguir"));
+          }
+          return;
+        }
         try {
           if (projectId) await openSaved(projectId);
           else if (mapId) await openMap(mapId);
@@ -182,11 +217,25 @@ export default function RustgisWorkspace({ config }: { config: WorkspaceConfig }
       cancelled = true;
       window.clearInterval(probe);
       window.clearTimeout(slow);
+      iframe.removeEventListener("load", onLoad);
+      unwatch?.();
       offProject();
       bridge.close();
       bridgeRef.current = null;
     };
-  }, [config.appPath, markDirty, openMap, openSaved, openText, setText]);
+  }, [config.appPath, frameKey, markDirty, openMap, openSaved, openText, setText]);
+
+  /** Starts RustGIS again in a new iframe, with the last project it posted. */
+  function restartRustgis() {
+    const text = projectTextRef.current;
+    recoverRef.current = text ? { text, meta: projectRef.current, dirty: dirtyRef.current } : null;
+    setCrash(null);
+    setPending(new Map());
+    // A save under way finishes on its own; what waited on the stopped RustGIS doesn't.
+    setBusy((b) => (b === "save" ? b : null));
+    setAppStatus("loading");
+    setFrameKey((k) => k + 1);
+  }
 
   // The session cookie lasts 15 min and RustGIS can't renew it: the page does.
   useEffect(() => {
@@ -208,7 +257,7 @@ export default function RustgisWorkspace({ config }: { config: WorkspaceConfig }
 
   async function addItem(item: CatalogItem, mode: "stream" | "copy") {
     const bridge = bridgeRef.current;
-    if (!bridge || appStatus !== "ready") return;
+    if (!bridge || appStatus !== "ready" || crash) return;
     if (presentKeys.has(item.key)) {
       toast.info("Esa capa ya está en el mapa");
       return;
@@ -315,6 +364,8 @@ export default function RustgisWorkspace({ config }: { config: WorkspaceConfig }
   }
 
   const ready = appStatus === "ready";
+  // Saving needs only the page's copy of the project; everything else needs RustGIS running.
+  const usable = ready && !crash;
   const btn = "inline-flex h-8 items-center gap-1.5 rounded-md border border-slate-200 bg-white px-2.5 text-xs font-medium text-slate-700 hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-50";
 
   return (
@@ -334,7 +385,7 @@ export default function RustgisWorkspace({ config }: { config: WorkspaceConfig }
           </p>
         </div>
         <div className="ml-auto flex items-center gap-1.5">
-          <button type="button" className={btn} disabled={!ready || !!busy} onClick={() => setDialog("open")}>
+          <button type="button" className={btn} disabled={!usable || !!busy} onClick={() => setDialog("open")}>
             <FolderOpen className="h-4 w-4" /> Abrir
           </button>
           <button
@@ -354,7 +405,7 @@ export default function RustgisWorkspace({ config }: { config: WorkspaceConfig }
             </a>
           )}
           {config.ai.enabled && (
-            <button type="button" className={btn} disabled={!ready} onClick={() => void bridgeRef.current?.run("ui.pane.assistant", {}).catch(() => undefined)}>
+            <button type="button" className={btn} disabled={!usable} onClick={() => void bridgeRef.current?.run("ui.pane.assistant", {}).catch(() => undefined)}>
               <Bot className="h-4 w-4" /> Asistente
             </button>
           )}
@@ -389,11 +440,12 @@ export default function RustgisWorkspace({ config }: { config: WorkspaceConfig }
       <div className="flex min-h-0 flex-1">
         {showCatalog && (
           <aside className="w-[22rem] shrink-0 border-r border-slate-200 bg-white">
-            <CatalogSearchPanel presentKeys={presentKeys} pendingKeys={pendingKeys} disabled={!ready || busy === "save"} onAdd={(item, mode) => void addItem(item, mode)} />
+            <CatalogSearchPanel presentKeys={presentKeys} pendingKeys={pendingKeys} disabled={!usable || busy === "save"} onAdd={(item, mode) => void addItem(item, mode)} />
           </aside>
         )}
         <main className="relative min-w-0 flex-1">
           <iframe
+            key={frameKey}
             ref={iframeRef}
             title="RustGIS"
             className="h-full w-full border-0 bg-white"
@@ -419,6 +471,32 @@ export default function RustgisWorkspace({ config }: { config: WorkspaceConfig }
                 RustGIS está tardando en cargar. Necesita un navegador con WebGPU o WebGL2; si no aparece,{" "}
                 <a className="font-medium underline" href="/geo/workspace/clasico">abre el Workspace clásico</a>.
               </span>
+            </div>
+          )}
+          {crash && (
+            <div className="absolute inset-0 grid place-items-center bg-white/85 p-4">
+              <div role="alert" className="w-full max-w-md space-y-3 rounded-xl border border-red-200 bg-white p-5 text-sm text-slate-700 shadow-xl">
+                <p className="flex items-center gap-2 font-semibold text-red-700">
+                  <AlertTriangle className="h-5 w-5 shrink-0" /> RustGIS se detuvo por un error interno
+                </p>
+                <p>
+                  Ya no responde. La página conserva el proyecto hasta el último cambio que RustGIS alcanzó a enviar
+                  {dirty ? " (con cambios sin guardar)" : ""}: puedes guardarlo con «Guardar» o reiniciar RustGIS para seguir trabajando con él.
+                </p>
+                <details className="text-xs text-slate-500">
+                  <summary className="cursor-pointer select-none">Detalle técnico</summary>
+                  <pre className="mt-1 max-h-40 overflow-auto whitespace-pre-wrap break-words rounded bg-slate-50 p-2">{crash.message}</pre>
+                </details>
+                <div className="flex justify-end">
+                  <button
+                    type="button"
+                    className="inline-flex h-8 items-center gap-1.5 rounded-md bg-teal-600 px-3 text-xs font-medium text-white hover:bg-teal-700"
+                    onClick={restartRustgis}
+                  >
+                    <RotateCcw className="h-4 w-4" /> Reiniciar RustGIS
+                  </button>
+                </div>
+              </div>
             </div>
           )}
         </main>
