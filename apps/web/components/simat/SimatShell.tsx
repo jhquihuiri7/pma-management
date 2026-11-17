@@ -12,7 +12,6 @@ import { fmtReloj, hace } from "@/lib/simat/formato";
 const NAV: { href: string; label: string; icono: NombreIcono }[] = [
   { href: "/simat", label: "Vista general", icono: "layout" },
   { href: "/simat/riesgo", label: "Riesgo y nivel del mar", icono: "alert" },
-  { href: "/simat/fuentes", label: "Estaciones y fuentes", icono: "tower" },
 ];
 
 function activa(href: string, pathname: string) {
@@ -108,19 +107,6 @@ function Marco({ children }: { children: React.ReactNode }) {
             );
           })}
         </nav>
-        <div className="sidebar-foot">
-          <div className="system-card">
-            <div className="system-row">
-              <span className={`status-dot${off ? " off" : enLinea ? " ok" : ""}`} id="system-dot" />
-              <strong id="system-state">{off ? "Sin conexión con el servidor" : enLinea ? "Sistema en línea" : "Conectando…"}</strong>
-            </div>
-            <p>
-              Sistema Provincial de Monitoreo Hidrometeorológico
-              <br />
-              <span>Gobierno de Galápagos · SIGTAR</span>
-            </p>
-          </div>
-        </div>
       </aside>
       <div className="scrim" id="scrim" hidden={!menu} onClick={() => setMenu(false)} />
       <main>

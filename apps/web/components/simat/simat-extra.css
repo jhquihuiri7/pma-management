@@ -11,16 +11,5 @@
 /* La matriz de riesgo tiene 4 niveles (la escala interna de la vista previa, 5). */
 .simat .level-steps.cuatro{grid-template-columns:repeat(4,1fr)}
 
-/* Botones de sincronizar por fuente. */
-.simat .button.is-loading svg{animation:simat-spin 1s linear infinite}
-
-/* Inventario de fuentes (Estaciones y fuentes). */
-.simat .fuentes-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:12px;padding:0 18px 18px}
-.simat .fuente-item{display:flex;flex-direction:column;gap:8px;padding:14px 16px;border:1px solid var(--line-2);border-radius:var(--radius);background:var(--surface-2)}
-.simat .fuente-top{display:flex;align-items:flex-start;justify-content:space-between;gap:10px}
-.simat .fuente-top strong{font-size:13.5px;font-weight:600;color:var(--ink)}
-.simat .fuente-item .pill{white-space:normal}
+/* Segunda línea de las celdas de tabla. */
 .simat td .meta{margin-top:2px}
-@media (max-width:860px){
-  .simat .fuentes-grid{grid-template-columns:1fr}
-}

@@ -504,12 +504,6 @@ export default function VistaGeneral() {
           <CardHead
             titulo="Actividad de las fuentes"
             descripcion="Últimas sincronizaciones del worker"
-            extra={
-              <Link className="button small" href="/simat/fuentes">
-                <Icono nombre="tower" />
-                Ver fuentes
-              </Link>
-            }
             icono="activity"
           />
           {actividad.length ? (
