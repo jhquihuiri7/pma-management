@@ -5,7 +5,7 @@ import { CheckCircle2, CircleAlert, CircleSlash, ExternalLink, RefreshCw } from 
 import type { SimatConector } from "@pma/types";
 import { useSimat } from "./contexto";
 import { sincronizarConector } from "@/lib/simat/api";
-import { fechaHora, hace, horaCorta } from "@/lib/simat/formato";
+import { fechaHora, hace } from "@/lib/simat/formato";
 
 function EstadoConector({ ok, habilitado }: { ok: boolean; habilitado: boolean }) {
   if (!habilitado) return <span className="inline-flex items-center gap-1 text-slate-400"><CircleSlash className="w-4 h-4" /> Desactivado</span>;

@@ -29,8 +29,8 @@ export const FUENTES: SimatFuenteInventario[] = [
   {
     nombre: "INAMHI · Visor hidrometeorológico",
     cobertura: "Región insular",
-    descripcion: "Inventario de estaciones automáticas y hora de última transmisión. Las series horarias requieren autorización de INAMHI.",
-    pendiente: "Oficio a INAMHI para habilitar el acceso a station_data_automaticas.",
+    descripcion: "Inventario y lluvia horaria observada de las estaciones automáticas.",
+    pendiente: "Verificar continuidad y calidad de las mediciones.",
     licencia: "INAMHI · citar la fuente.",
     url: "https://inamhi.gob.ec/info/",
   },

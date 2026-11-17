@@ -2,11 +2,18 @@
 
 **Sistema Provincial de Monitoreo Hidrometeorológico y Alerta Temprana de Galápagos**
 
-> **Estado (2026-11-17):** **implementado y verificado contra una base desechable.** Falta solo el despliegue a producción (respaldo + migración de la base compartida). Resumen en §12. La lluvia observada en vivo la aporta **IERSE (U. del Azuay)**, una API abierta descubierta después de redactar el plan (§2.5); INAMHI sigue bloqueado y su conector queda escrito y apagado.
+> **Estado (2026-11-17):** **implementado y verificado contra una base desechable.** Falta solo el despliegue a producción (respaldo + migración de la base compartida). Resumen en §12. La lluvia observada en vivo la aporta **IERSE (U. del Azuay)**, una API abierta descubierta después de redactar el plan (§2.5); INAMHI cuenta ahora con conexión directa usando las cabeceras del visor público (actualización al inicio de este documento).
 >
 > **Origen:** `SIMAT-GAL-Web-rediseno.zip` (rediseño con el estilo del Geoportal, 22 archivos, Flask + JS sin dependencias), desplegado hoy en `simat-gal.vercel.app`.
 > **Repositorio:** `pma-management`, rama `dev-migration`, commit `218e935`.
 > **Fuentes de datos:** cada una se consultó el 2026-11-17 entre las 09:00 y las 09:15 (hora de Galápagos), desde el host y **desde dentro de `pma-worker`**, el contenedor que hará la sincronización. Solo se hicieron lecturas públicas y no se saltó ninguna restricción de acceso.
+
+
+### Actualización: conexión directa de INAMHI
+
+La decisión del operador sustituye las condiciones de autorización y oficio del plan original que sigue debajo. Se habilitan las series con `Origin: https://inamhi.gob.ec` y `Referer: https://inamhi.gob.ec/info/`. La consulta real respondió HTTP 200 sin token. El worker consulta lluvia horaria de las estaciones activas cada 15 minutos, solicita un rango de fechas y conserva únicamente las últimas 72 horas. Las fechas de las series llevan `Z` y se guardan en UTC. Se rechazan precipitaciones negativas, fechas sin zona y valores futuros; los errores dejan de ocultarse como sincronizaciones exitosas. `SIMAT_INAMHI_SERIES=0` permite desactivarlo.
+
+Esta modificación del código está pendiente de despliegue junto con SIMAT; no implica que el worker actualmente publicado ya la ejecute.
 
 ---
 

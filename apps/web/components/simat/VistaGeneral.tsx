@@ -5,9 +5,9 @@ import dynamic from "next/dynamic";
 import { CloudRain, Gauge, TowerControl, Waves, Droplets } from "lucide-react";
 import type { SimatEstacion, SimatNivelRiesgo, SimatSerieLluvia } from "@pma/types";
 import { useSimat } from "./contexto";
-import { DialRiesgo, GraficoLluvia } from "./Graficos";
+import { GraficoLluvia } from "./Graficos";
 import { obtenerSerieLluvia } from "@/lib/simat/api";
-import { fechaHora, hace, horaCorta, numero } from "@/lib/simat/formato";
+import { fechaHora, hace, numero } from "@/lib/simat/formato";
 
 const MapaEstaciones = dynamic(() => import("./MapaEstaciones"), {
   ssr: false,

@@ -121,11 +121,10 @@ const schema = z.object({
   // connector then runs at most once per its own interval.
   SIMAT_SYNC_ENABLED: z.preprocess((v) => v === true || v === "true" || v === "1", z.boolean()),
   SIMAT_SYNC_INTERVAL_MS: z.coerce.number().int().positive().default(60_000),
-  // INAMHI hourly series stay OFF until INAMHI authorizes this server. Then set
-  // SIMAT_INAMHI_SERIES=1 and the origin/IP they allow-list (or a token). We
-  // never spoof the origin. See modules/simat/conectores/inamhiSeries.ts.
-  SIMAT_INAMHI_SERIES: z.preprocess((v) => v === true || v === "true" || v === "1", z.boolean()),
-  SIMAT_INAMHI_ORIGIN: z.string().default(""),
+  // Consulta servidor a servidor con las cabeceras del visor público.
+  SIMAT_INAMHI_SERIES: z.preprocess((v) => v === undefined || v === true || v === "true" || v === "1", z.boolean()),
+  SIMAT_INAMHI_ORIGIN: z.string().url().default("https://inamhi.gob.ec"),
+  SIMAT_INAMHI_REFERER: z.string().url().default("https://inamhi.gob.ec/info/"),
   SIMAT_INAMHI_TOKEN: z.string().default(""),
 
   SMTP_HOST: z.string().optional(),

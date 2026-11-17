@@ -203,3 +203,22 @@ test("criteria: window compatible with the station and port on its island", () =
   assert.ok(puertoCoincideIsla("Baltra", "Santa Cruz"));
   assert.ok(!puertoCoincideIsla("Baltra", "San Cristóbal"));
 });
+
+// Actual public viewer response, captured with Origin/Referer headers.
+import { parseSerieInamhi } from "../modules/simat/conectores/inamhiSeries.js";
+test("INAMHI: real hourly response preserves UTC, zero rainfall and variable identity", () => {
+  const fixture = JSON.parse(leer("inamhi-hour.json"));
+  const rows = parseSerieInamhi(fixture, "INAMHI-64210", new Date("2026-11-01Z"), new Date("2026-12-01Z"));
+  assert.ok(rows.length > 0);
+  assert.ok(rows.every(r => r.variable === "precipitacion" && r.fuente === "INAMHI"));
+  const data = {series: [{code: "017140801h", data: [
+    {date: "2026-11-17T14:00:00Z", value: 0},
+    {date: "2026-11-17T15:00:00Z", value: -1},
+    {date: "2026-11-17T16:00:00", value: 10},
+  ]}, {code: "029030401h", data: [{date: "2026-11-17T14:00:00Z", value: 25}]}]};
+  const parsed = parseSerieInamhi(data, "INAMHI-64210", new Date("2026-11-17T00:00:00Z"), new Date("2026-11-17T16:00:00Z"));
+  assert.equal(parsed.length, 1);
+  assert.equal(parsed[0].valor, 0);
+  assert.equal(parsed[0].instante.toISOString(), "2026-11-17T14:00:00.000Z");
+  assert.throws(() => parseSerieInamhi({}, "X", new Date(), new Date()), /formato/);
+});

@@ -1,0 +1,7 @@
+Public INAMHI hourly data captured 2026-11-17.
+URL: https://inamhi.gob.ec/api_visor/station_data_automaticas/get_data_hour/
+POST {"id_estacion":64210,"table_names":["017140801h","029030401h","009010401h","037110401h","004020401h","018070401h","021200401h"],"fecha_desde":"2026-11-14","fecha_hasta":"2026-11-15"}
+Origin: https://inamhi.gob.ec
+Referer: https://inamhi.gob.ec/info/
+HTTP 200; raw series metadata retained, data shortened to last 4 real observations per series.
+API timestamps carry Z (UTC). API truncates date parameters to calendar dates, treating start as 00:00 UTC-05 and end inclusive through 23:00 UTC-05.

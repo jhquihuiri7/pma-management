@@ -62,6 +62,10 @@ services:
       PORT: 3001
       TRUST_PROXY_HOPS: ${TRUST_PROXY_HOPS:-1}
       FRONTEND_ORIGIN: ${FRONTEND_ORIGIN:-https://sigtar.gobiernogalapagos.gob.ec}
+      SIMAT_INAMHI_SERIES: ${SIMAT_INAMHI_SERIES:-1}
+      SIMAT_INAMHI_ORIGIN: ${SIMAT_INAMHI_ORIGIN:-https://inamhi.gob.ec}
+      SIMAT_INAMHI_REFERER: ${SIMAT_INAMHI_REFERER:-https://inamhi.gob.ec/info/}
+      SIMAT_INAMHI_TOKEN: ${SIMAT_INAMHI_TOKEN:-}
       JWT_ACCESS_SECRET: ${JWT_ACCESS_SECRET:?JWT_ACCESS_SECRET is required}
       JWT_REFRESH_SECRET: ${JWT_REFRESH_SECRET:?JWT_REFRESH_SECRET is required}
       STORAGE_ROOT: /data/storage
@@ -202,12 +206,11 @@ services:
       NVIDIA_API_KEY: ${NVIDIA_API_KEY:-}
       NVIDIA_MODEL: ${NVIDIA_MODEL:-deepseek-ai/deepseek-v4.1-flash}
       # SIMAT-GAL: only the production worker pulls the meteorological/sea-level
-      # sources into the database. INAMHI hourly series stay off until INAMHI
-      # authorizes this server (SIMAT_INAMHI_ORIGIN / SIMAT_INAMHI_TOKEN); we
-      # never spoof the origin.
+      # sources into the database, including the public INAMHI viewer series.
       SIMAT_SYNC_ENABLED: "true"
-      SIMAT_INAMHI_SERIES: ${SIMAT_INAMHI_SERIES:-0}
-      SIMAT_INAMHI_ORIGIN: ${SIMAT_INAMHI_ORIGIN:-}
+      SIMAT_INAMHI_SERIES: ${SIMAT_INAMHI_SERIES:-1}
+      SIMAT_INAMHI_ORIGIN: ${SIMAT_INAMHI_ORIGIN:-https://inamhi.gob.ec}
+      SIMAT_INAMHI_REFERER: ${SIMAT_INAMHI_REFERER:-https://inamhi.gob.ec/info/}
       SIMAT_INAMHI_TOKEN: ${SIMAT_INAMHI_TOKEN:-}
     networks:
       - default

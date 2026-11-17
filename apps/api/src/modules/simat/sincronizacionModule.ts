@@ -53,7 +53,7 @@ export const CONECTORES: Record<SimatConector, Definicion> = {
   },
   "inamhi-series": {
     nombre: "INAMHI · Series horarias",
-    descripcion: "Lluvia horaria de las estaciones INAMHI. Requiere autorización de INAMHI.",
+    descripcion: "Lluvia horaria observada del visor público de INAMHI.",
     intervaloMin: 15,
     habilitado: inamhiSeriesHabilitado,
     ejecutar: sincronizarInamhiSeries,
@@ -108,7 +108,7 @@ async function registrarFallo(conector: SimatConector, error: string): Promise<v
 export async function sincronizar(conector: SimatConector): Promise<{ ok: boolean; registros: number; mensaje: string }> {
   const def = CONECTORES[conector];
   if (!def) throw new Error(`Conector desconocido: ${conector}`);
-  // A deliberately disabled connector (INAMHI series) is not a failure.
+  // A connector disabled by configuration is not a failure.
   if (!def.habilitado()) return { ok: false, registros: 0, mensaje: "Conector desactivado." };
   try {
     const { registros, resumen } = await def.ejecutar();
