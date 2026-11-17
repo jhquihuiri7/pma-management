@@ -201,6 +201,14 @@ services:
       PG2030_JOBS_ENABLED: "true"
       NVIDIA_API_KEY: ${NVIDIA_API_KEY:-}
       NVIDIA_MODEL: ${NVIDIA_MODEL:-deepseek-ai/deepseek-v4.1-flash}
+      # SIMAT-GAL: only the production worker pulls the meteorological/sea-level
+      # sources into the database. INAMHI hourly series stay off until INAMHI
+      # authorizes this server (SIMAT_INAMHI_ORIGIN / SIMAT_INAMHI_TOKEN); we
+      # never spoof the origin.
+      SIMAT_SYNC_ENABLED: "true"
+      SIMAT_INAMHI_SERIES: ${SIMAT_INAMHI_SERIES:-0}
+      SIMAT_INAMHI_ORIGIN: ${SIMAT_INAMHI_ORIGIN:-}
+      SIMAT_INAMHI_TOKEN: ${SIMAT_INAMHI_TOKEN:-}
     networks:
       - default
       - previene-link

@@ -1,0 +1,279 @@
+// ---------------------------------------------------------------------------
+// SIMAT-GAL — Sistema Provincial de Monitoreo Hidrometeorológico y Alerta
+// Temprana de Galápagos (migration 0040).
+//
+// Ported from the standalone Flask app (SIMAT-GAL-Web-rediseno.zip). The data
+// flows from public sources into Postgres through connectors the worker runs on
+// a schedule (see apps/api/src/modules/simat/conectores). The web reads it
+// through GET /simat/*. See docs/plan-integracion-simat.md.
+// ---------------------------------------------------------------------------
+
+export const SIMAT_ISLAS = ["Santa Cruz", "San Cristóbal", "Isabela", "Floreana"] as const;
+export type SimatIsla = (typeof SIMAT_ISLAS)[number];
+
+/**
+ * A measured variable. `precipitacion` is the only one the risk matrix needs;
+ * the rest are shown as context. Units are fixed per variable (mm, °C, %, …).
+ */
+export const SIMAT_VARIABLES = [
+  "precipitacion",
+  "temperatura",
+  "humedad",
+  "presion",
+  "viento_vel",
+  "viento_dir",
+  "radiacion",
+  "uv",
+] as const;
+export type SimatVariable = (typeof SIMAT_VARIABLES)[number];
+
+/** Where a station or reading comes from. Drives attribution and trust. */
+export const SIMAT_FUENTES = ["IERSE", "INAMHI", "FCD", "METAR", "MANUAL"] as const;
+export type SimatFuente = (typeof SIMAT_FUENTES)[number];
+
+/** Quality flag carried with each observation, as the zip used it. */
+export const SIMAT_CALIDADES = ["válido", "sospechoso", "inválido"] as const;
+export type SimatCalidad = (typeof SIMAT_CALIDADES)[number];
+
+/** Last reading the inventory knows for one variable of a station. */
+export interface SimatUltimoDato {
+  variable: SimatVariable;
+  instante: string | null;
+  valor: number | null;
+  unidad: string;
+}
+
+export interface SimatEstacion {
+  /** e.g. "IERSE-n_glps06", "INAMHI-64210", "FCD-PA". */
+  id: string;
+  fuente: SimatFuente;
+  codigo: string;
+  nombre: string;
+  isla: SimatIsla;
+  lat: number;
+  lon: number;
+  altitud: number | null;
+  /** Nominal cadence in minutes (5 for IERSE, 60 INAMHI, 1440 FCD daily). */
+  pasoMin: number;
+  propietario: string;
+  /** What the source reports about transmission, e.g. "Operativo". */
+  estado: string;
+  activa: boolean;
+  variables: SimatVariable[];
+  ultimoDato: SimatUltimoDato[];
+  actualizadoEn: string;
+}
+
+/** One rolling accumulation window of rainfall. Mirrors the zip's `series()`. */
+export interface SimatVentana {
+  minutes: number;
+  /** Total mm over the window, or null when incomplete / mixed provenance. */
+  total: number | null;
+  /** Average intensity in mm/h, or null when `total` is null. */
+  intensity: number | null;
+  valid: number;
+  expected: number;
+  reason: string;
+}
+
+export interface SimatMuestraLluvia {
+  time: string;
+  value: number;
+  quality: SimatCalidad;
+  source: string;
+}
+
+/** Payload of GET /simat/estaciones/:id/lluvia. */
+export interface SimatSerieLluvia {
+  estacion: string;
+  paso: number;
+  windows: SimatVentana[];
+  recent: SimatMuestraLluvia[];
+  latest: SimatMuestraLluvia | null;
+}
+
+// ── Sea level ──────────────────────────────────────────────────────────────
+
+export const SIMAT_NIVEL_TIPOS = ["Predicción astronómica", "Nivel observado"] as const;
+export type SimatNivelTipo = (typeof SIMAT_NIVEL_TIPOS)[number];
+
+export interface SimatNivelMar {
+  id: string;
+  puerto: string;
+  tipo: SimatNivelTipo;
+  /** ISO instant for observed levels; for predictions it is the published local time. */
+  instante: string;
+  /** True when `instante` is a published local wall-clock time, not a true UTC instant. */
+  horaPublicada: boolean;
+  valor: number;
+  unidad: string;
+  referencia: string;
+  fase: string | null;
+  calidad: string;
+  fuente: string;
+}
+
+export interface SimatMareografoPunto {
+  fecha: string;
+  valor: number;
+}
+
+/** Payload of GET /simat/mareografos/:codigo. */
+export interface SimatMareografo {
+  codigo: string;
+  puerto: string;
+  estacion: string;
+  valor: number;
+  unidad: string;
+  fecha: string;
+  sensor: string;
+  referencia: string;
+  calidad: string;
+  fuente: string;
+  enlace: string;
+  serie: SimatMareografoPunto[];
+}
+
+// ── Rain forecast (Open-Meteo) ───────────────────────────────────────────────
+
+export interface SimatPronosticoHora {
+  inicio: string;
+  fin: string;
+  mm: number | null;
+  probabilidad: number | null;
+}
+
+export interface SimatPronostico {
+  estacion: string;
+  consultado: string;
+  estimacion: {
+    inicio: string;
+    fin: string;
+    mm: number;
+    minutos: number;
+    intensidad: number;
+  } | null;
+  pronostico: SimatPronosticoHora[];
+}
+
+// ── Risk matrix ──────────────────────────────────────────────────────────────
+
+/** Rain × sea matrix, exactly as riesgo.py's LEVELS. */
+export const SIMAT_NIVELES_RIESGO = ["Normal", "Precaución", "Alerta", "Emergencia"] as const;
+export type SimatNivelRiesgo = (typeof SIMAT_NIVELES_RIESGO)[number];
+
+export interface SimatCriterio {
+  id: string;
+  estacion: string;
+  isla: SimatIsla;
+  puerto: string;
+  datum: string;
+  sector: string;
+  respaldo: string;
+  ventanaMin: number;
+  vigenciaMin: number;
+  desfaseMin: number;
+  lluviaMmH: number;
+  marM: number;
+  activo: boolean;
+  actualizadoPor: string;
+  actualizadoEn: string;
+}
+
+/** Body of PUT /simat/criterios. */
+export interface SimatCriterioEntrada {
+  id?: string;
+  estacion: string;
+  puerto: string;
+  datum: string;
+  sector: string;
+  respaldo: string;
+  ventanaMin: number;
+  vigenciaMin: number;
+  desfaseMin: number;
+  lluviaMmH: number;
+  marM: number;
+  activo: boolean;
+}
+
+/** One evaluated sector, mirroring riesgo.py's evaluate(). */
+export interface SimatEvaluacion {
+  criterio: SimatCriterio;
+  /** null when any `motivos` block the evaluation. */
+  nivel: SimatNivelRiesgo | null;
+  motivos: string[];
+  lluvia: {
+    valor: number | null;
+    fecha: string | null;
+    fuente: string | null;
+    intervalos: number | null;
+    esperados: number | null;
+  };
+  mar: SimatNivelMar | null;
+}
+
+/** Body of POST /simat/nivel-observado. */
+export interface SimatNivelObservadoEntrada {
+  puerto: string;
+  instante: string;
+  valor: number;
+  unidad: string;
+  referencia: string;
+  calidad: string;
+}
+
+// ── Connector health ─────────────────────────────────────────────────────────
+
+export const SIMAT_CONECTORES = [
+  "ierse",
+  "ioc",
+  "inocar",
+  "inamhi-inventario",
+  "inamhi-series",
+  "fcd",
+  "metar",
+] as const;
+export type SimatConector = (typeof SIMAT_CONECTORES)[number];
+
+export interface SimatConectorEstado {
+  conector: SimatConector;
+  nombre: string;
+  descripcion: string;
+  /** Null until it has ever run. */
+  ultimoIntento: string | null;
+  ultimoExito: string | null;
+  resultado: string | null;
+  registros: number;
+  error: string | null;
+  fallosSeguidos: number;
+  /** False when the connector is deliberately turned off (INAMHI series). */
+  habilitado: boolean;
+  intervaloMin: number;
+}
+
+/** An entry of the source inventory shown on the Estaciones y fuentes page. */
+export interface SimatFuenteInventario {
+  nombre: string;
+  cobertura: string;
+  descripcion: string;
+  pendiente: string;
+  licencia: string;
+  url: string;
+}
+
+// ── /simat/estado ────────────────────────────────────────────────────────────
+
+/** Ports per island for the risk page (riesgo.py PORTS). */
+export type SimatPuertos = Record<string, Record<string, string>>;
+
+export interface SimatEstado {
+  generadoEn: string;
+  islas: readonly SimatIsla[];
+  estaciones: SimatEstacion[];
+  puertos: SimatPuertos;
+  riesgo: SimatEvaluacion[];
+  conectores: SimatConectorEstado[];
+  fuentes: SimatFuenteInventario[];
+  /** Whether the viewer may configure criteria / register observed levels. */
+  puedeEditar: boolean;
+}

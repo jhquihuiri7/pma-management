@@ -32,6 +32,7 @@ import { runPrevieneSync } from "./modules/previene/syncModule.js";
 import { isPrevieneConfigured } from "./modules/previene/client.js";
 import { closeMail } from "./mail/index.js";
 import { encolarFaltantes, procesarClasificaciones } from "./modules/pg2030/clasificacionModule.js";
+import { tickSincronizacion } from "./modules/simat/sincronizacionModule.js";
 import { closeDb } from "./db/client.js";
 
 const STORAGE_CLEANUP_INTERVAL_MS = 30_000;
@@ -59,6 +60,8 @@ let rasterReconcilePromise: Promise<void> | null = null;
 let previenePromise: Promise<void> | null = null;
 let pg2030Promise: Promise<void> | null = null;
 const PG2030_CLASIFICACION_INTERVAL_MS = 20_000;
+let simatTimer: NodeJS.Timeout | undefined;
+let simatPromise: Promise<void> | null = null;
 let shuttingDown = false;
 
 async function drainStorageCleanup(): Promise<void> {
@@ -300,7 +303,28 @@ async function main() {
     console.warn("[worker] pg2030 jobs disabled — PG2030_JOBS_ENABLED is not set");
   }
 
+  // Off by default: dev shares the production database (see lib/env.ts).
+  if (env.SIMAT_SYNC_ENABLED) {
+    await drainSimat().catch((err) => console.error("[worker] initial simat sync failed:", err));
+    simatTimer = setInterval(() => {
+      void drainSimat().catch((err) => console.error("[worker] simat sync failed:", err));
+    }, env.SIMAT_SYNC_INTERVAL_MS);
+    simatTimer.unref();
+    console.log(`[worker] simat sync tick every ${Math.round(env.SIMAT_SYNC_INTERVAL_MS / 1000)}s`);
+  } else {
+    console.warn("[worker] simat sync disabled — SIMAT_SYNC_ENABLED is not set");
+  }
+
   console.log(`[worker] listening on "${RASTER_QUEUE}" (batchSize=${env.WORKER_CONCURRENCY})`);
+}
+
+async function drainSimat(): Promise<void> {
+  if (simatPromise) return simatPromise;
+  simatPromise = (async () => {
+    const r = await tickSincronizacion();
+    if (r.ejecutados > 0) console.log(`[worker] simat sync: ${r.ok}/${r.ejecutados} connector(s) ok`);
+  })().finally(() => { simatPromise = null; });
+  return simatPromise;
 }
 
 async function shutdown(signal: string) {
@@ -314,9 +338,10 @@ async function shutdown(signal: string) {
   if (nubeReconcileTimer) clearInterval(nubeReconcileTimer);
   if (previeneTimer) clearInterval(previeneTimer);
   if (pg2030Timer) clearInterval(pg2030Timer);
+  if (simatTimer) clearInterval(simatTimer);
   await stopBoss().catch((error) => console.error("[worker] failed to stop pg-boss:", error));
   await Promise.allSettled(
-    [cleanupPromise, mailPromise, rasterReconcilePromise, nubeReconcilePromise, previenePromise, pg2030Promise].filter(Boolean) as Promise<void>[]
+    [cleanupPromise, mailPromise, rasterReconcilePromise, nubeReconcilePromise, previenePromise, pg2030Promise, simatPromise].filter(Boolean) as Promise<void>[]
   );
   await closeMail().catch((error) => console.error("[worker] failed to close SMTP:", error));
   await closeDb().catch((error) => console.error("[worker] failed to close database pool:", error));

@@ -4,7 +4,7 @@ import { useRouter } from "next/navigation";
 import { useEffect } from "react";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
-import { Leaf, Shield, LogOut, Map, Users, Siren, Target, Home, LifeBuoy } from "lucide-react";
+import { Leaf, Shield, LogOut, Map, Users, Siren, Target, Home, LifeBuoy, CloudRain } from "lucide-react";
 import { IconoLluvia } from "@/components/protocolo-limpieza/IconoLluvia";
 import { useAuth } from "@/lib/auth-context";
 import { APP_HOME } from "@/lib/app-homes";
@@ -89,6 +89,16 @@ const SUBSYSTEM_APPS = [
     color: "text-amber-700",
     border: "border-amber-200 hover:border-amber-400",
     bg: "hover:bg-amber-50",
+  },
+  {
+    key: "simat",
+    label: "Monitoreo Hidrometeorológico",
+    description: "Lluvia, nivel del mar y alerta temprana de Galápagos (SIMAT-GAL).",
+    href: APP_HOME.simat,
+    icon: CloudRain,
+    color: "text-teal-700",
+    border: "border-teal-200 hover:border-teal-400",
+    bg: "hover:bg-teal-50",
   },
 ] as const;
 

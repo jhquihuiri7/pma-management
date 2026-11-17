@@ -39,7 +39,7 @@ function isTokenPath(pathname: string) {
 // Sections browsable without a session. The Geoportal and the Gestión de
 // residuos module (/protocolo-limpieza, since 2026-11-15) are public in
 // read-only mode; edit/delete/add controls are gated client-side and on the API.
-const PUBLIC_PREFIX_PATHS = ["/geo", "/protocolo-limpieza"];
+const PUBLIC_PREFIX_PATHS = ["/geo", "/protocolo-limpieza", "/simat"];
 
 // Exact public pages. Keep the results subtree protected: using the prefix
 // matcher for /plan-familiar would also expose /plan-familiar/resultados, and

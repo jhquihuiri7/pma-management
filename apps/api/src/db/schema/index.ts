@@ -8,3 +8,4 @@ export * from "./pg2030.js";
 export * from "./planFamiliar.js";
 export * from "./riesgos.js";
 export * from "./protocoloLimpieza.js";
+export * from "./simat.js";

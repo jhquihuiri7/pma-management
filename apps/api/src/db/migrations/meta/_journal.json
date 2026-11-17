@@ -281,6 +281,13 @@
       "when": 1792277600000,
       "tag": "0039_protocolo_limpieza_nubes",
       "breakpoints": true
+    },
+    {
+      "idx": 40,
+      "version": "7",
+      "when": 1792377600000,
+      "tag": "0040_simat_module",
+      "breakpoints": true
     }
   ]
 }

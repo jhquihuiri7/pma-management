@@ -1,0 +1,46 @@
+/* SIMAT-GAL. Scoped under .simat; the rest of the layout uses Tailwind. Palette
+   follows the Geoportal SIGTAR: slate with teal/emerald. */
+.simat {
+  --simat-teal: #0f766e;
+  --simat-teal-strong: #0d5b55;
+  --simat-emerald: #10b981;
+  background: #f1f5f9;
+}
+
+.simat-hero {
+  position: relative;
+  overflow: hidden;
+  border-radius: 1rem;
+  color: #fff;
+  background:
+    linear-gradient(120deg, rgba(13, 91, 85, 0.92), rgba(15, 118, 110, 0.78)),
+    url("/simat/hero-galapagos.jpg") center/cover no-repeat;
+}
+
+.simat-live-dot {
+  width: 9px;
+  height: 9px;
+  border-radius: 999px;
+  background: var(--simat-emerald);
+  box-shadow: 0 0 0 0 rgba(16, 185, 129, 0.6);
+  animation: simat-pulse 2s infinite;
+}
+.simat-live-dot[data-off="true"] {
+  background: #ef4444;
+  animation: none;
+}
+@keyframes simat-pulse {
+  0% { box-shadow: 0 0 0 0 rgba(16, 185, 129, 0.5); }
+  70% { box-shadow: 0 0 0 7px rgba(16, 185, 129, 0); }
+  100% { box-shadow: 0 0 0 0 rgba(16, 185, 129, 0); }
+}
+
+/* Risk level colors (Normal → Emergencia). */
+.simat-nivel-normal { background: #ecfdf5; color: #047857; border-color: #a7f3d0; }
+.simat-nivel-precaucion { background: #fffbeb; color: #b45309; border-color: #fde68a; }
+.simat-nivel-alerta { background: #fff7ed; color: #c2410c; border-color: #fed7aa; }
+.simat-nivel-emergencia { background: #fef2f2; color: #b91c1c; border-color: #fecaca; }
+.simat-nivel-sindato { background: #f8fafc; color: #475569; border-color: #e2e8f0; }
+
+.simat-leaflet { height: 100%; width: 100%; border-radius: 0.75rem; z-index: 0; }
+.simat-leaflet .leaflet-popup-content { font-size: 13px; }

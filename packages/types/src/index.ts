@@ -1,5 +1,7 @@
 export type UserRole = 'ADMIN' | 'REPORTER' | 'VIEWER';
-export type AppKey = "pma" | "rgdp" | "geo" | "previene" | "pg2030" | "plan_familiar" | "riesgos" | "protocolo_limpieza";
+export type AppKey = "pma" | "rgdp" | "geo" | "previene" | "pg2030" | "plan_familiar" | "riesgos" | "protocolo_limpieza" | "simat";
+
+export * from "./simat.js";
 
 export type FamilyPlanPriority = "Alta" | "Media" | "Baja";
 export type FamilyPlanMoment = "Antes" | "Durante" | "Después";

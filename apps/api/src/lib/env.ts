@@ -115,6 +115,19 @@ const schema = z.object({
   WORKSPACE_AI_USER_PER_DAY: z.coerce.number().int().positive().default(500),
   WORKSPACE_AI_MAX_CONCURRENT: z.coerce.number().int().positive().default(4),
 
+  // SIMAT-GAL (docs/plan-integracion-simat.md). The sync writes to the shared
+  // database, so it is OFF by default and docker-compose.yml turns it on for the
+  // production worker only, like PG2030. The worker ticks on this interval; each
+  // connector then runs at most once per its own interval.
+  SIMAT_SYNC_ENABLED: z.preprocess((v) => v === true || v === "true" || v === "1", z.boolean()),
+  SIMAT_SYNC_INTERVAL_MS: z.coerce.number().int().positive().default(60_000),
+  // INAMHI hourly series stay OFF until INAMHI authorizes this server. Then set
+  // SIMAT_INAMHI_SERIES=1 and the origin/IP they allow-list (or a token). We
+  // never spoof the origin. See modules/simat/conectores/inamhiSeries.ts.
+  SIMAT_INAMHI_SERIES: z.preprocess((v) => v === true || v === "true" || v === "1", z.boolean()),
+  SIMAT_INAMHI_ORIGIN: z.string().default(""),
+  SIMAT_INAMHI_TOKEN: z.string().default(""),
+
   SMTP_HOST: z.string().optional(),
   SMTP_PORT: z.coerce.number().int().positive().default(587),
   SMTP_USER: z.string().optional(),
