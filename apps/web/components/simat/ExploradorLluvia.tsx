@@ -21,6 +21,7 @@ const TZ = "Pacific/Galapagos";
 const ejeHora = new Intl.DateTimeFormat("es-EC", { timeZone: TZ, hour: "2-digit", minute: "2-digit", hourCycle: "h23" });
 const ejeDiaHora = new Intl.DateTimeFormat("es-EC", { timeZone: TZ, day: "2-digit", month: "2-digit", hour: "2-digit", minute: "2-digit", hourCycle: "h23" });
 const ejeDia = new Intl.DateTimeFormat("es-EC", { timeZone: TZ, day: "2-digit", month: "2-digit" });
+const altura = new Intl.NumberFormat("es-EC", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
 
 const MIN = 60000;
 const HORA = 3600e3;
@@ -40,6 +41,8 @@ const C = {
   previsto: "rgba(13,148,136,.30)",
   ventana: "#0f172a",
   marea: "#2a78d6",
+  mareaArea: "rgba(42,120,214,.12)",
+  extremo: "#1c5cab",
   observado: "#eb6834",
   umbralLluvia: "#115e59",
   umbralMar: "#1c5cab",
@@ -289,6 +292,30 @@ export default function ExploradorLluvia({
       const ceiling = tick * marcas;
       const y = (v: number) => bottom - (v / ceiling) * (bottom - top);
 
+      // Escala de la marea (eje derecho): curva estimada entre las pleamares y
+      // bajamares publicadas, que pasa exactamente por ellas.
+      const mar = (() => {
+        if (!hayMarea || !marea) return null;
+        const extremos = marea.extremos.filter((e) => e.t >= t0 && e.t <= t1);
+        const curva: TidePoint[] = extremos.map((e) => ({ t: e.t, h: e.h }));
+        const paso = Math.max(MIN, (t1 - t0) / 400);
+        for (let t = t0; t <= t1; t += paso) {
+          const nivel = nivelMarea(marea.extremos, t);
+          if (nivel != null) curva.push({ t, h: nivel });
+        }
+        const fin = nivelMarea(marea.extremos, t1);
+        if (fin != null) curva.push({ t: t1, h: fin });
+        curva.sort((a, b) => a.t - b.t);
+        const obs = marea.observados.filter((o) => o.t >= t0 && o.t <= t1);
+        const valores = curva.map((p) => p.h).concat(obs.map((o) => o.h), datumCompatible && criterio ? [criterio.marM] : []);
+        if (!valores.length) return null;
+        const bajo = Math.min(...valores);
+        const alto = Math.max(...valores);
+        const yr = range(bajo, alto + (alto - bajo) * 0.15, 4);
+        const ym = (v: number) => bottom - ((v - yr.lo) / (yr.hi - yr.lo)) * (bottom - top);
+        return { extremos, curva, obs, yr, ym, ultimo: marea.extremos[marea.extremos.length - 1] };
+      })();
+
       // 1 · zonas de la matriz y cinta superior
       for (const z of tramos) {
         const x0 = x(z.desde);
@@ -330,7 +357,18 @@ export default function ExploradorLluvia({
       ctx.textAlign = "left";
       ctx.font = "600 11px Inter, system-ui, sans-serif";
       ctx.fillStyle = C.texto2;
-      ctx.fillText("mm/h", 10, 9);
+      ctx.fillText("Lluvia (mm/h)", 10, 9);
+
+      // 3b · área bajo la curva de marea
+      if (mar && mar.curva.length > 1) {
+        ctx.fillStyle = C.mareaArea;
+        ctx.beginPath();
+        mar.curva.forEach((p, i) => (i ? ctx.lineTo(x(p.t), mar.ym(p.h)) : ctx.moveTo(x(p.t), mar.ym(p.h))));
+        ctx.lineTo(x(mar.curva[mar.curva.length - 1].t), bottom);
+        ctx.lineTo(x(mar.curva[0].t), bottom);
+        ctx.closePath();
+        ctx.fill();
+      }
 
       // 4 · barras (observadas y previstas)
       filas.forEach((row, i) => {
@@ -399,58 +437,89 @@ export default function ExploradorLluvia({
         ctx.fillText(`Lluvia alta ≥ ${medida(criterio.lluviaMmH)} mm/h`, left + 6, debajo ? yy + 4 : yy - 3);
       }
 
-      // 7 · marea (eje derecho), umbral de mar alto y niveles observados
-      if (hayMarea && marea) {
-        const curva: TidePoint[] = [];
-        const paso = Math.max(MIN, (t1 - t0) / 400);
-        for (let t = t0; t <= t1; t += paso) {
-          const nivel = nivelMarea(marea.extremos, t);
-          if (nivel != null) curva.push({ t, h: nivel });
-        }
-        const obs = marea.observados.filter((o) => o.t >= t0 && o.t <= t1);
-        const valores = curva.map((p) => p.h).concat(obs.map((o) => o.h), datumCompatible && criterio ? [criterio.marM] : []);
-        if (valores.length) {
-          const bajo = Math.min(...valores);
-          const alto = Math.max(...valores);
-          const yr = range(bajo, alto + (alto - bajo) * 0.12, 4);
-          const ym = (v: number) => bottom - ((v - yr.lo) / (yr.hi - yr.lo)) * (bottom - top);
-          ctx.font = "500 10.5px Inter, system-ui, sans-serif";
-          ctx.fillStyle = C.marea;
-          ctx.textAlign = "left";
-          ctx.textBaseline = "middle";
-          for (let v = yr.lo; v <= yr.hi + 1e-9; v += yr.step) ctx.fillText(numero(v), right + 8, ym(v));
-          ctx.font = "600 11px Inter, system-ui, sans-serif";
-          ctx.textAlign = "right";
-          ctx.fillText(`m · ${refMarea || "—"}`, w - 6, 9);
-          if (datumCompatible && criterio) {
-            const yy = Math.round(ym(criterio.marM)) + 0.5;
-            ctx.strokeStyle = C.umbralMar;
-            ctx.lineWidth = 1.5;
-            ctx.setLineDash([2, 3]);
-            ctx.beginPath();
-            ctx.moveTo(left, yy);
-            ctx.lineTo(right, yy);
-            ctx.stroke();
-            ctx.setLineDash([]);
-            ctx.font = "600 10.5px Inter, system-ui, sans-serif";
-            ctx.fillStyle = C.umbralMar;
-            ctx.textAlign = "right";
-            const debajo = yy - 16 < top;
-            ctx.textBaseline = debajo ? "top" : "bottom";
-            ctx.fillText(`Mar alto ≥ ${medida(criterio.marM)} m`, right - 6, debajo ? yy + 4 : yy - 3);
-          }
-          ctx.strokeStyle = C.marea;
-          ctx.lineWidth = 2.25;
-          ctx.lineJoin = "round";
+      // 7 · marea (eje derecho): umbral de mar alto, curva, pleamares y
+      // bajamares publicadas con su hora y altura, y niveles observados
+      if (mar) {
+        const { yr, ym } = mar;
+        ctx.font = "500 10.5px Inter, system-ui, sans-serif";
+        ctx.fillStyle = C.marea;
+        ctx.textAlign = "left";
+        ctx.textBaseline = "middle";
+        for (let v = yr.lo; v <= yr.hi + 1e-9; v += yr.step) ctx.fillText(numero(v), right + 8, ym(v));
+        ctx.font = "600 11px Inter, system-ui, sans-serif";
+        ctx.textAlign = "right";
+        ctx.fillText(`${w < 560 ? "Marea" : "Marea prevista"} (m, ${refMarea || "—"})`, w - 6, 9);
+        if (datumCompatible && criterio) {
+          const yy = Math.round(ym(criterio.marM)) + 0.5;
+          ctx.strokeStyle = C.umbralMar;
+          ctx.lineWidth = 1.5;
+          ctx.setLineDash([2, 3]);
           ctx.beginPath();
-          curva.forEach((p, i) => (i ? ctx.lineTo(x(p.t), ym(p.h)) : ctx.moveTo(x(p.t), ym(p.h))));
+          ctx.moveTo(left, yy);
+          ctx.lineTo(right, yy);
           ctx.stroke();
+          ctx.setLineDash([]);
+          ctx.font = "600 10.5px Inter, system-ui, sans-serif";
+          ctx.fillStyle = C.umbralMar;
+          ctx.textAlign = "right";
+          const debajo = yy - 16 < top;
+          ctx.textBaseline = debajo ? "top" : "bottom";
+          ctx.fillText(`Mar alto ≥ ${medida(criterio.marM)} m`, right - 6, debajo ? yy + 4 : yy - 3);
+        }
+        ctx.strokeStyle = C.marea;
+        ctx.lineWidth = 2.25;
+        ctx.lineJoin = "round";
+        ctx.beginPath();
+        mar.curva.forEach((p, i) => (i ? ctx.lineTo(x(p.t), ym(p.h)) : ctx.moveTo(x(p.t), ym(p.h))));
+        ctx.stroke();
+
+        // Después de la última predicción publicada no se extrapola.
+        if (mar.ultimo.t < t1 && x(t1) - x(mar.ultimo.t) > 90) {
+          const cx = (x(Math.max(mar.ultimo.t, t0)) + right) / 2;
+          const cy = top + (bottom - top) * 0.45;
+          ctx.font = "italic 500 10.5px Inter, system-ui, sans-serif";
+          ctx.fillStyle = C.texto2;
+          ctx.textAlign = "center";
+          ctx.textBaseline = "middle";
+          ctx.fillText("Sin predicción", cx, cy);
+          ctx.fillText("de marea publicada", cx, cy + 14);
+        }
+
+        for (const o of mar.obs) {
+          ctx.beginPath();
+          ctx.arc(x(o.t), ym(o.h), 2.6, 0, Math.PI * 2);
           ctx.fillStyle = C.observado;
-          for (const o of obs) {
-            ctx.beginPath();
-            ctx.arc(x(o.t), ym(o.h), 2.6, 0, Math.PI * 2);
-            ctx.fill();
-          }
+          ctx.fill();
+        }
+
+        const angosto = w < 560;
+        ctx.font = "600 10.5px Inter, system-ui, sans-serif";
+        ctx.textAlign = "left";
+        for (const e of mar.extremos) {
+          const px = x(e.t);
+          const py = ym(e.h);
+          ctx.beginPath();
+          ctx.arc(px, py, 4, 0, Math.PI * 2);
+          ctx.fillStyle = C.extremo;
+          ctx.fill();
+          ctx.lineWidth = 2;
+          ctx.strokeStyle = "#fff";
+          ctx.stroke();
+          const pleamar = e.fase === "Pleamar";
+          const texto = angosto ? `${pleamar ? "PM" : "BM"} ${altura.format(e.h)}` : `${e.fase} ${ejeHora.format(e.t)} · ${altura.format(e.h)} m`;
+          const ancho = ctx.measureText(texto).width;
+          const lx = Math.max(left + 2, Math.min(right - ancho - 2, px - ancho / 2));
+          let arriba = pleamar;
+          if (arriba && py - 9 - 12 < top) arriba = false;
+          if (!arriba && py + 9 + 12 > bottom) arriba = true;
+          ctx.textBaseline = arriba ? "bottom" : "top";
+          const ly = arriba ? py - 8 : py + 8;
+          ctx.lineWidth = 3;
+          ctx.lineJoin = "round";
+          ctx.strokeStyle = "rgba(255,255,255,.92)";
+          ctx.strokeText(texto, lx, ly);
+          ctx.fillStyle = C.extremo;
+          ctx.fillText(texto, lx, ly);
         }
       }
 
@@ -594,7 +663,13 @@ export default function ExploradorLluvia({
         {hayMarea ? (
           <span>
             <i className="line" style={{ "--c": C.marea, height: 3 } as CSSProperties} />
-            Marea prevista ({refMarea})
+            Marea prevista · curva estimada ({refMarea})
+          </span>
+        ) : null}
+        {hayMarea ? (
+          <span>
+            <i className="dot" style={{ "--c": C.extremo } as CSSProperties} />
+            Pleamar (PM) y bajamar (BM) publicadas · INOCAR
           </span>
         ) : null}
         {hayMarea && marea?.observados.length ? (
