@@ -8,33 +8,16 @@
 import { useEffect, useState, type CSSProperties, type ReactNode } from "react";
 import type { SimatConectorEstado, SimatEstacion, SimatNivelMar, SimatSerieLluvia } from "@pma/types";
 import { obtenerMareas } from "@/lib/simat/api";
-import { rain, spark, COLORES, type RainSlot } from "@/lib/simat/graficos";
+import { spark, COLORES } from "@/lib/simat/graficos";
 import { extremosMarea, horaMarina, observacionPuerto } from "@/lib/simat/marinos";
 import { duracion, fechaDia, fechaHora, hace, horaCorta, medida, numero } from "@/lib/simat/formato";
 import { TODAS_LAS_ISLAS, useSimat } from "./contexto";
 import { Icono, type NombreIcono } from "./iconos";
 import { ESCALA, indiceNivel } from "./matriz";
 import MapaGeo from "./MapaGeo";
-import { CardHead, Dial, FiltroEstacion, FiltroIsla, Grafico, Pill, StatMini, Tabla, Vacio } from "./piezas";
+import { CardHead, Dial, FiltroEstacion, FiltroIsla, Grafico, Pill, Vacio } from "./piezas";
 
 /* ---------- serie de la estación ---------- */
-
-export function ranurasLluvia(lluvia: SimatSerieLluvia | null, estacion: SimatEstacion | undefined): RainSlot[] {
-  const rows = lluvia?.recent ?? [];
-  if (!rows.length || !estacion) return [];
-  const step = estacion.pasoMin * 60000;
-  const first = Date.parse(rows[0].time);
-  const last = Date.parse(rows[rows.length - 1].time);
-  const toSlot = (r: SimatSerieLluvia["recent"][number]): RainSlot => ({ t: Date.parse(r.time), v: r.quality === "válido" ? r.value : null, q: r.quality });
-  if ((last - first) / step + 1 > rows.length * 4) return rows.map(toSlot);
-  const byTime = new Map(rows.map((r) => [Date.parse(r.time), r]));
-  const out: RainSlot[] = [];
-  for (let t = first; t <= last; t += step) {
-    const r = byTime.get(t);
-    out.push(r ? toSlot(r) : { t, v: null, q: null });
-  }
-  return out;
-}
 
 export function frescura(lluvia: SimatSerieLluvia | null, estacion: SimatEstacion | undefined) {
   if (!estacion || !lluvia?.latest) return null;
@@ -269,11 +252,6 @@ export default function VistaGeneral({ riesgo }: { riesgo?: ReactNode }) {
   const experimentales = resultados.filter((r) => r.criterio.estadoValidacion === "experimental").length;
   const sinEstacion = resultados.filter((r) => !r.criterio.estacion).length;
 
-  /* precipitación reciente */
-  const slots = ranurasLluvia(lluvia, estacion);
-  const validos = slots.filter((s) => s.v != null);
-  const maximo = validos.length ? Math.max(...validos.map((s) => s.v as number)) : null;
-  const acumulado = validos.reduce((sum, s) => sum + (s.v as number), 0);
   const verHora = (iso?: string | null) => (daily ? fechaDia(iso) : fechaHora(iso));
 
   /* lluvia antecedente */
@@ -459,108 +437,8 @@ export default function VistaGeneral({ riesgo }: { riesgo?: ReactNode }) {
 
       {riesgo}
 
-      <div className="grid ancla" id="precipitacion">
-        <section className="card rain-card">
-          <CardHead
-            titulo="Precipitación reciente"
-            descripcion={latest && estacion ? `${estacion.nombre} · intervalos de ${duracion(estacion.pasoMin)} · ${latest.source}` : "Sin datos"}
-            extra={
-              f ? (
-                f.fresh ? (
-                  <Pill color="green" punto>{`Dato vigente · ${hace(latest?.time)}`}</Pill>
-                ) : (
-                  <Pill color="amber" punto>{`Último dato ${hace(latest?.time)}`}</Pill>
-                )
-              ) : null
-            }
-            icono="rain"
-          />
-          {validos.length && latest && estacion ? (
-            <>
-              <div className="chart-stats" style={{ padding: "0 18px 6px" }}>
-                <StatMini etiqueta="Último intervalo">
-                  {latest.quality === "válido" ? (
-                    <>
-                      {numero(latest.value)} <span>mm</span>
-                    </>
-                  ) : (
-                    latest.quality
-                  )}
-                </StatMini>
-                <StatMini etiqueta="Máximo visible">
-                  {numero(maximo)} <span>mm</span>
-                </StatMini>
-                <StatMini etiqueta="Acumulado visible">
-                  {numero(acumulado)} <span>mm</span>
-                </StatMini>
-              </div>
-              <div className="chart-body">
-                <Grafico id="chart" clave={`${estacion.id}|${latest.time}|${slots.length}`} dibujar={(el) => rain(el, { slots, step: estacion.pasoMin, compact: true })} />
-              </div>
-              <div className="chart-legend">
-                {slots.some((s) => s.v == null) ? (
-                  <span>
-                    <i className="gap" />
-                    Sin dato válido
-                  </span>
-                ) : null}
-                <span>
-                  {daily ? "Fecha diaria de la serie" : "Hora de Galápagos"} · {verHora(lluvia?.recent[0]?.time)} → {verHora(latest.time)}
-                </span>
-              </div>
-              <details className="table-toggle">
-                <summary>Ver los datos en tabla</summary>
-                <Tabla
-                  cabeceras={["Intervalo", "Lluvia", "Intensidad", "Calidad"]}
-                  filas={[...slots].reverse().map((s) => [
-                    verHora(new Date(s.t).toISOString()),
-                    s.v == null ? "—" : `${numero(s.v)} mm`,
-                    s.v == null ? "—" : `${numero((s.v * 60) / estacion.pasoMin)} mm/h`,
-                    s.q || "Sin registro",
-                  ])}
-                />
-              </details>
-            </>
-          ) : (
-            <Vacio>Sin intervalos válidos para la estación seleccionada.</Vacio>
-          )}
-        </section>
-
-        <section className="card">
-          <CardHead
-            titulo="Actividad de las fuentes"
-            descripcion="Últimas sincronizaciones del worker"
-            icono="activity"
-          />
-          {actividad.length ? (
-            <ol className="timeline">
-              {actividad.map((c) => {
-                const e = estadoConector(c);
-                const tono = e === "ok" ? "is-ok" : e === "fallos" ? "is-urgent" : e === "pendiente" ? "is-review" : "";
-                return (
-                  <li className="tl-item" key={c.conector}>
-                    <span className={`tl-node ${tono}`}>
-                      <Icono nombre={ICONO_CONECTOR[c.conector] ?? "pin"} />
-                    </span>
-                    <div>
-                      <div className="tl-top">
-                        <strong>{c.nombre}</strong>
-                        <PillConector c={c} />
-                      </div>
-                      <p className="tl-meta">{c.error ?? c.resultado ?? c.descripcion}</p>
-                      <p className="tl-time">{c.ultimoIntento ? `${fechaHora(c.ultimoIntento)} · ${hace(c.ultimoIntento)}` : "Sin ejecuciones"}</p>
-                    </div>
-                  </li>
-                );
-              })}
-            </ol>
-          ) : (
-            <Vacio>Sin conectores registrados.</Vacio>
-          )}
-        </section>
-      </div>
-
-      <div className="grid grid-even ancla" id="estaciones">
+      {/* La precipitación reciente se quitó: el gráfico de lluvia y marea ya la muestra. */}
+      <div className="grid grid-3 ancla" id="estaciones">
         <section className="card">
           <CardHead
             titulo="Lluvia antecedente"
@@ -598,6 +476,39 @@ export default function VistaGeneral({ riesgo }: { riesgo?: ReactNode }) {
             </ul>
           ) : (
             <Vacio>No hay series para el ámbito seleccionado.</Vacio>
+          )}
+        </section>
+
+        <section className="card">
+          <CardHead
+            titulo="Actividad de las fuentes"
+            descripcion="Últimas sincronizaciones del worker"
+            icono="activity"
+          />
+          {actividad.length ? (
+            <ol className="timeline">
+              {actividad.map((c) => {
+                const e = estadoConector(c);
+                const tono = e === "ok" ? "is-ok" : e === "fallos" ? "is-urgent" : e === "pendiente" ? "is-review" : "";
+                return (
+                  <li className="tl-item" key={c.conector}>
+                    <span className={`tl-node ${tono}`}>
+                      <Icono nombre={ICONO_CONECTOR[c.conector] ?? "pin"} />
+                    </span>
+                    <div>
+                      <div className="tl-top">
+                        <strong>{c.nombre}</strong>
+                        <PillConector c={c} />
+                      </div>
+                      <p className="tl-meta">{c.error ?? c.resultado ?? c.descripcion}</p>
+                      <p className="tl-time">{c.ultimoIntento ? `${fechaHora(c.ultimoIntento)} · ${hace(c.ultimoIntento)}` : "Sin ejecuciones"}</p>
+                    </div>
+                  </li>
+                );
+              })}
+            </ol>
+          ) : (
+            <Vacio>Sin conectores registrados.</Vacio>
           )}
         </section>
 

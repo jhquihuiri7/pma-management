@@ -20,7 +20,7 @@ import { ESCALA, indiceNivel, nivelConMar, rangoLluvia, type NivelEscala } from 
 import ExploradorLluvia, { type MareaExplorador } from "./ExploradorLluvia";
 import { CriterioModal, estacionesDeLluvia, NivelObservadoModal } from "./Formularios";
 import { Cargando } from "./VistaGeneral";
-import { CardHead, Dial, FiltroEstacion, FiltroIsla, Grafico, Pill, Tabla, Vacio } from "./piezas";
+import { CardHead, Dial, FiltroEstacion, FiltroIsla, Grafico, Tabla, Vacio } from "./piezas";
 
 type EstadoMareografo = SimatMareografo | "cargando" | "sin" | "error" | null;
 type EstadoPronostico = SimatPronostico | "cargando" | "error";
@@ -783,24 +783,9 @@ export default function VistaRiesgo() {
               <span>Datum {extremos[0].ref || "—"} · hora publicada asumida en Galápagos</span>
             </div>
           </>
-        ) : null}
-        {predicciones.length ? (
-          <Tabla
-            cabeceras={["Fecha y hora", "Fase", "Altura", "Referencia", "Frente al umbral marino", "Fuente"]}
-            filas={predicciones.slice(0, 12).map((r) => [
-              horaMarina(r),
-              r.fase || "—",
-              `${medida(r.valor)} ${r.unidad}`,
-              r.referencia,
-              profile?.activo && profile.marM != null && r.unidad === "m" && String(r.referencia).trim().toLowerCase() === profile.datum.toLowerCase() ? (
-                <Pill color={r.valor >= profile.marM ? "amber" : "green"}>{r.valor >= profile.marM ? "Alto previsto" : "Bajo previsto"}</Pill>
-              ) : (
-                "—"
-              ),
-              r.fuente,
-            ])}
-          />
         ) : (
+          // La tabla de pleamares y bajamares se quitó: el gráfico de lluvia y
+          // marea ya las rotula con su hora y altura.
           <Vacio>Este puerto aún no tiene predicciones importadas.</Vacio>
         )}
       </section>

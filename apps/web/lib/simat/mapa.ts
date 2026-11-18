@@ -150,8 +150,9 @@ const THEMES: Record<"oscuro" | "claro", Theme> = {
   },
 };
 
+// El mapa usa siempre el tema oscuro: el usuario pidió quitar el botón para
+// cambiarlo (2026-11-18). El tema claro se conserva por si se vuelve a ofrecer.
 const view: { zoom: number; dx: number; dy: number; theme: "oscuro" | "claro" } = { zoom: 1, dx: 0, dy: 0, theme: "oscuro" };
-let themeLoaded = false;
 let prepared: { key: string; data: Prepared } | null = null;
 let map: MapState | null = null;
 let pendingInfo: string | null = null;
@@ -716,17 +717,6 @@ function bind() {
       reset();
       schedule();
     }
-    if (b.dataset.map === "theme") {
-      view.theme = view.theme === "oscuro" ? "claro" : "oscuro";
-      try {
-        localStorage.setItem("simat-mapa-tema", view.theme);
-      } catch {
-        /* sin almacenamiento: el tema dura la sesión */
-      }
-      themeButton();
-      legend();
-      draw();
-    }
   });
   m.markers.addEventListener("click", (e) => {
     const node = (e.target as HTMLElement).closest<HTMLElement>(".mk");
@@ -736,15 +726,6 @@ function bind() {
   });
   m.ro = new ResizeObserver(schedule);
   m.ro.observe(el);
-}
-
-function themeButton() {
-  const b = map?.el.querySelector<HTMLElement>("[data-map=theme]");
-  if (!b) return;
-  const dark = view.theme === "oscuro";
-  b.innerHTML = dark ? ICON.sun : ICON.moon;
-  b.setAttribute("aria-label", dark ? "Cambiar a mapa claro" : "Cambiar a mapa oscuro");
-  b.title = dark ? "Mapa claro" : "Mapa oscuro";
 }
 
 function markersHtml(opts: MapaOpciones) {
@@ -791,14 +772,6 @@ export function desmontarMapa(el: HTMLElement | null) {
 
 export function montarMapa(el: HTMLElement | null, opts: MapaOpciones) {
   if (!el) return;
-  if (!themeLoaded) {
-    themeLoaded = true;
-    try {
-      if (localStorage.getItem("simat-mapa-tema") === "claro") view.theme = "claro";
-    } catch {
-      /* sin almacenamiento: tema oscuro */
-    }
-  }
   const same = map && map.el === el;
   if (!same) {
     destroy();
@@ -811,7 +784,7 @@ export function montarMapa(el: HTMLElement | null, opts: MapaOpciones) {
       '<canvas class="map-canvas" tabindex="0" role="img" aria-label="Mapa de Galápagos. Arrastra para desplazarte, usa los botones o las teclas más y menos para acercar o alejar."></canvas>' +
       '<div class="map-markers"></div>' +
       `<div class="map-tag">${ICON.layers}<span></span></div>` +
-      `<div class="map-tools"><div class="tool-card"><button type="button" data-map="in" aria-label="Acercar" title="Acercar">${ICON.plus}</button><button type="button" data-map="out" aria-label="Alejar" title="Alejar">${ICON.minus}</button><button type="button" data-map="reset" aria-label="Restablecer la vista" title="Restablecer la vista">${ICON.reset}</button></div><div class="tool-card"><button type="button" data-map="theme"></button></div></div>` +
+      `<div class="map-tools"><div class="tool-card"><button type="button" data-map="in" aria-label="Acercar" title="Acercar">${ICON.plus}</button><button type="button" data-map="out" aria-label="Alejar" title="Alejar">${ICON.minus}</button><button type="button" data-map="reset" aria-label="Restablecer la vista" title="Restablecer la vista">${ICON.reset}</button></div></div>` +
       '<div class="map-legend"></div>' +
       '<div class="map-info" role="status" hidden></div>' +
       '<div class="map-attr"></div>' +
@@ -844,7 +817,6 @@ export function montarMapa(el: HTMLElement | null, opts: MapaOpciones) {
   if (map) {
     map.markers.innerHTML = markersHtml(opts);
     legend();
-    themeButton();
     draw();
     if (pendingInfo) {
       const s = opts.stations.find((row) => row.id === pendingInfo);

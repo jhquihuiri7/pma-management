@@ -18,8 +18,7 @@ const SECCIONES: { id: string; label: string; icono: NombreIcono }[] = [
   { id: "rain-history", label: "Lluvia y marea", icono: "rain" },
   { id: "gauge-history", label: "Mareógrafo", icono: "waves" },
   { id: "mareas", label: "Predicciones de marea", icono: "activity" },
-  { id: "precipitacion", label: "Precipitación reciente", icono: "history" },
-  { id: "estaciones", label: "Estaciones", icono: "tower" },
+  { id: "estaciones", label: "Lluvia acumulada y estaciones", icono: "tower" },
 ];
 
 function activa(href: string, pathname: string) {
