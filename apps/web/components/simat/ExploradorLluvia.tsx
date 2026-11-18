@@ -1,83 +1,267 @@
 "use client";
 
-// Explorador interactivo de intensidad de lluvia (canvas), portado de la vista
-// previa (risk-ui.js: rainfallHistory / drawRainExplorer). Puntero, flechas
-// del teclado, periodo visible y salto al máximo.
+// Explorador interactivo de lluvia (canvas), portado de la vista previa
+// (risk-ui.js: rainfallHistory / drawRainExplorer) y ampliado con el riesgo del
+// sector: sobre las barras de intensidad se dibuja la marea astronómica del
+// puerto (eje derecho) y los umbrales del criterio, y de fondo se pinta el nivel
+// de la matriz de decisión (Normal, Precaución, Alerta, Emergencia) que resulta
+// en cada momento. Puede seguir con el pronóstico horario de lluvia para ver los
+// momentos de riesgo previstos. Puntero, flechas del teclado, periodo visible y
+// salto al máximo.
 
-import { useEffect, useMemo, useRef, useState } from "react";
-import type { SimatEstacion, SimatSerieLluvia } from "@pma/types";
+import { useEffect, useMemo, useRef, useState, type CSSProperties } from "react";
+import type { SimatCriterio, SimatEstacion, SimatPronosticoHora, SimatSerieLluvia } from "@pma/types";
+import { range, type TideExtreme, type TidePoint } from "@/lib/simat/graficos";
+import { nivelMarea } from "@/lib/simat/marinos";
 import { duracion, fechaDia, fechaHora, medida, numero } from "@/lib/simat/formato";
 import { Icono } from "./iconos";
+import { MATRIZ, type NivelMatriz } from "./matriz";
 
-const ejeHora = new Intl.DateTimeFormat("es-EC", { timeZone: "Pacific/Galapagos", hour: "2-digit", minute: "2-digit", hourCycle: "h23" });
+const TZ = "Pacific/Galapagos";
+const ejeHora = new Intl.DateTimeFormat("es-EC", { timeZone: TZ, hour: "2-digit", minute: "2-digit", hourCycle: "h23" });
+const ejeDiaHora = new Intl.DateTimeFormat("es-EC", { timeZone: TZ, day: "2-digit", month: "2-digit", hour: "2-digit", minute: "2-digit", hourCycle: "h23" });
+const ejeDia = new Intl.DateTimeFormat("es-EC", { timeZone: TZ, day: "2-digit", month: "2-digit" });
+
+const MIN = 60000;
+const HORA = 3600e3;
+/** Igual que la API (ventanas.ts): una ventana necesita el 90 % de las lecturas esperadas. */
+const COBERTURA_MINIMA = 0.9;
+
+/** Colores de los niveles: los de .simat .normal/.caution/.alert/.emergency. */
+const COLOR: Record<NivelMatriz["code"], { bg: string; stroke: string }> = {
+  normal: { bg: "#ecf9ee", stroke: "#0ca30c" },
+  caution: { bg: "#fff2c9", stroke: "#fab219" },
+  alert: { bg: "#fde3d5", stroke: "#ec835a" },
+  emergency: { bg: "#fbd9d9", stroke: "#d03b3b" },
+};
+const C = {
+  barra: "#0d9488",
+  pico: "#115e59",
+  previsto: "rgba(13,148,136,.30)",
+  ventana: "#0f172a",
+  marea: "#2a78d6",
+  observado: "#eb6834",
+  umbralLluvia: "#115e59",
+  umbralMar: "#1c5cab",
+  texto: "#94a3b8",
+  texto2: "#64748b",
+};
 
 type Muestra = SimatSerieLluvia["recent"][number];
 interface Fila {
-  time: number;
-  record: Muestra | undefined;
+  inicio: number;
+  fin: number;
+  record?: Muestra;
+  /** mm/h del intervalo (observado o previsto). */
   intensity: number | null;
+  previsto: boolean;
+  probabilidad?: number | null;
+  /** mm/h promedio en la ventana del criterio que termina en `fin`. */
+  ventana?: number | null;
+}
+interface Tramo {
+  desde: number;
+  hasta: number;
+  nivel: NivelMatriz;
+  previsto: boolean;
 }
 
-function etiquetaIntervalo(time: number, step: number) {
-  return step === 1440 ? fechaDia(new Date(time).toISOString()) : `${fechaHora(new Date(time - step * 60000).toISOString())} → ${fechaHora(new Date(time).toISOString())}`;
+export interface MareaExplorador {
+  extremos: TideExtreme[];
+  /** Niveles observados en el mismo datum que la predicción. */
+  observados: TidePoint[];
 }
 
-export default function ExploradorLluvia({ estacion, lluvia }: { estacion: SimatEstacion; lluvia: SimatSerieLluvia }) {
+function etiquetaIntervalo(f: Fila, step: number) {
+  return step === 1440 && !f.previsto ? fechaDia(new Date(f.fin).toISOString()) : `${fechaHora(new Date(f.inicio).toISOString())} → ${fechaHora(new Date(f.fin).toISOString())}`;
+}
+
+function rangoTramo(z: Tramo) {
+  const mismoDia = ejeDia.format(z.desde) === ejeDia.format(z.hasta);
+  return `${ejeDiaHora.format(z.desde)} → ${mismoDia ? ejeHora.format(z.hasta) : ejeDiaHora.format(z.hasta)}`;
+}
+
+/** Marea más alta en [a, b]: los dos bordes y cualquier pleamar publicada entre ellos. */
+function mareaMaxima(extremos: TideExtreme[], a: number, b: number): number | null {
+  const valores = [nivelMarea(extremos, a), nivelMarea(extremos, b)].concat(extremos.filter((e) => e.t >= a && e.t <= b).map((e) => e.h));
+  const validos = valores.filter((v): v is number => v != null);
+  return validos.length ? Math.max(...validos) : null;
+}
+
+function nivelDe(ventana: number | null | undefined, mar: number | null, criterio: SimatCriterio): NivelMatriz | null {
+  if (ventana == null || mar == null) return null;
+  return MATRIZ[Number(ventana >= criterio.lluviaMmH) * 2 + Number(mar >= criterio.marM)];
+}
+
+function ChipNivel({ nivel }: { nivel: NivelMatriz }) {
+  return (
+    <span className={`nivel-chip ${nivel.code}`}>
+      <Icono nombre={nivel.icon} />
+      {nivel.name}
+    </span>
+  );
+}
+
+export default function ExploradorLluvia({
+  estacion,
+  lluvia,
+  criterio = null,
+  marea = null,
+  pronostico = null,
+}: {
+  estacion: SimatEstacion;
+  lluvia: SimatSerieLluvia;
+  criterio?: SimatCriterio | null;
+  marea?: MareaExplorador | null;
+  pronostico?: SimatPronosticoHora[] | null;
+}) {
   const canvasRef = useRef<HTMLCanvasElement>(null);
-  const geometria = useRef<{ left: number; size: number } | null>(null);
+  const escala = useRef<{ left: number; right: number; t0: number; t1: number } | null>(null);
   const step = estacion.pasoMin;
+  const stepMs = step * MIN;
+  const horaria = step < 1440;
   const records = lluvia.recent;
   const end = Date.parse(records[records.length - 1].time);
   const start = Date.parse(records[0].time);
-  const span = (end - start) / 60000 + step;
+  const span = (end - start) / MIN + step;
 
   const periodos = useMemo(() => {
-    const w: [number, string][] =
-      step === 1440
-        ? [
-            [10080, "7 días"],
-            [43200, "30 días"],
-          ]
-        : ([
-            [60, "1 hora"],
-            [180, "3 horas"],
-            [360, "6 horas"],
-            [1440, "24 horas"],
-          ] as [number, string][]).filter(([m], i) => m >= step && (i === 0 || m <= span));
+    const w: [number, string][] = !horaria
+      ? [
+          [10080, "7 días"],
+          [43200, "30 días"],
+        ]
+      : ([
+          [60, "1 hora"],
+          [180, "3 horas"],
+          [360, "6 horas"],
+          [1440, "24 horas"],
+        ] as [number, string][]).filter(([m], i) => m >= step && (i === 0 || m <= span));
     if (!w.length) w.push([step, duracion(step)]);
     return w;
-  }, [step, span]);
+  }, [horaria, step, span]);
   const [periodo, setPeriodo] = useState(periodos[periodos.length - 1][0]);
   useEffect(() => {
     if (!periodos.some(([m]) => m === periodo)) setPeriodo(periodos[periodos.length - 1][0]);
   }, [periodos, periodo]);
 
-  const muestras = useMemo(() => new Map(records.map((r) => [Date.parse(r.time), r])), [records]);
-  const { filas, picos, maximo } = useMemo(() => {
-    const count = Math.max(1, Math.floor(periodo / step));
-    const stepMs = step * 60000;
-    const desde = Math.max(start, end - (count - 1) * stepMs);
-    const filas: Fila[] = [];
-    for (let time = desde; time <= end; time += stepMs) {
-      const record = muestras.get(time);
-      filas.push({ time, record, intensity: record?.quality === "válido" ? (record.value * 60) / step : null });
-    }
-    const validas = filas.filter((r) => r.intensity !== null);
-    const maximo = validas.length ? Math.max(...validas.map((r) => r.intensity as number)) : null;
-    const picos = new Set(filas.flatMap((r, i) => (maximo !== null && r.intensity === maximo ? [i] : [])));
-    return { filas, picos, maximo };
-  }, [periodo, step, start, end, muestras]);
+  const hayPronostico = horaria && !!pronostico?.some((h) => Date.parse(h.fin) > end);
+  const [conPronostico, setConPronostico] = useState(true);
+  const mostrarPronostico = hayPronostico && conPronostico;
 
+  // Marea y criterio: las zonas solo se pintan si el umbral de mar está en el
+  // mismo datum que la predicción publicada.
+  const hayMarea = horaria && !!marea && marea.extremos.length >= 2;
+  const refMarea = hayMarea ? (marea?.extremos[0]?.ref ?? "") : "";
+  const datumCompatible = !!criterio && hayMarea && criterio.datum.trim().toLowerCase() === refMarea.toLowerCase();
+  const conCriterio = horaria && !!criterio;
+  const conZonas = conCriterio && datumCompatible;
+  const ventanaMin = criterio?.ventanaMin ?? step;
+
+  // Intervalos observados de toda la serie: cada lectura cierra un intervalo y
+  // los huecos de la cadencia quedan como intervalos sin registro.
+  const observadas = useMemo(() => {
+    const filas: Fila[] = [];
+    let previo: number | null = null;
+    for (const r of records) {
+      const t = Date.parse(r.time);
+      if (!Number.isFinite(t)) continue;
+      if (previo !== null) {
+        for (let hueco = previo + stepMs, n = 0; t - hueco > stepMs / 2 && n < 2000; hueco += stepMs, n++) {
+          filas.push({ inicio: hueco - stepMs, fin: hueco, intensity: null, previsto: false });
+          previo = hueco;
+        }
+      }
+      const inicio = previo !== null && t - previo < stepMs * 1.5 ? previo : t - stepMs;
+      filas.push({ inicio, fin: t, record: r, intensity: r.quality === "válido" ? (r.value * 60) / step : null, previsto: false });
+      previo = t;
+    }
+    return filas;
+  }, [records, step, stepMs]);
+
+  const filas = useMemo(() => {
+    const desde = end - periodo * MIN;
+    const futuras: Fila[] = mostrarPronostico
+      ? (pronostico ?? [])
+          .filter((h) => Date.parse(h.fin) > end)
+          .map((h) => ({ inicio: Math.max(Date.parse(h.inicio), end), fin: Date.parse(h.fin), intensity: h.mm, previsto: true, probabilidad: h.probabilidad }))
+      : [];
+    const todas = observadas.filter((f) => f.fin > desde).concat(futuras);
+    if (!conCriterio) return todas;
+
+    // Lluvia promedio en la ventana del criterio que termina en T: lo observado
+    // con la regla de cobertura de la API y, después del último dato, lo previsto.
+    const lecturas = records.map((r) => ({ t: Date.parse(r.time), r }));
+    const ventanaMs = ventanaMin * MIN;
+    const intensidadVentana = (T: number): number | null => {
+      const a = T - ventanaMs;
+      let total = 0;
+      if (a < end) {
+        const hasta = Math.min(T, end);
+        const dentro = lecturas.filter((l) => l.t > a && l.t <= hasta);
+        const esperados = Math.max(1, Math.round((hasta - a) / stepMs));
+        if (dentro.some((l) => l.r.quality !== "válido") || dentro.length < Math.ceil(esperados * COBERTURA_MINIMA)) return null;
+        total += dentro.reduce((s, l) => s + l.r.value, 0);
+      }
+      if (T > end) {
+        const desdePrevisto = Math.max(a, end);
+        let cubierto = 0;
+        for (const f of futuras) {
+          const solape = Math.min(T, f.fin) - Math.max(desdePrevisto, f.inicio);
+          if (solape <= 0) continue;
+          if (f.intensity == null) return null;
+          total += (f.intensity * solape) / HORA;
+          cubierto += solape;
+        }
+        if (cubierto < (T - desdePrevisto) * COBERTURA_MINIMA) return null;
+      }
+      return (total * 60) / ventanaMin;
+    };
+    return todas.map((f) => ({ ...f, ventana: intensidadVentana(f.fin) }));
+  }, [observadas, records, periodo, end, stepMs, mostrarPronostico, pronostico, conCriterio, ventanaMin]);
+
+  // Tramos continuos de cada nivel de la matriz: la lluvia es la del intervalo
+  // que contiene el instante y el mar, la curva de marea en ese instante.
+  const tramos = useMemo<Tramo[]>(() => {
+    if (!conZonas || !criterio || !marea || !filas.length) return [];
+    const t0 = filas[0].inicio;
+    const t1 = filas[filas.length - 1].fin;
+    const paso = Math.max(MIN, Math.round((t1 - t0) / 1500));
+    const res: Tramo[] = [];
+    let j = 0;
+    for (let t = t0; t < t1; t += paso) {
+      while (j < filas.length - 1 && filas[j].fin <= t) j++;
+      const f = filas[j];
+      const nivel = f.inicio <= t && t < f.fin ? nivelDe(f.ventana, mareaMaxima(marea.extremos, t, t + paso), criterio) : null;
+      if (!nivel) continue;
+      const previsto = t >= end;
+      const hasta = Math.min(t + paso, t1);
+      const ultimo = res[res.length - 1];
+      if (ultimo && ultimo.nivel === nivel && ultimo.previsto === previsto && ultimo.hasta === t) ultimo.hasta = hasta;
+      else res.push({ desde: t, hasta, nivel, previsto });
+    }
+    return res;
+  }, [conZonas, criterio, marea, filas, end]);
+  const riesgosos = tramos.filter((z) => z.nivel.code !== "normal");
+
+  const { picos, maximo } = useMemo(() => {
+    const validas = filas.filter((r) => !r.previsto && r.intensity !== null);
+    const maximo = validas.length ? Math.max(...validas.map((r) => r.intensity as number)) : null;
+    const picos = new Set(filas.flatMap((r, i) => (!r.previsto && maximo !== null && r.intensity === maximo ? [i] : [])));
+    return { picos, maximo };
+  }, [filas]);
+
+  const ultimoObservado = filas.reduce((u, f, i) => (f.previsto ? u : i), filas.length - 1);
   const ultimoPico = Array.from(picos).pop();
-  const [indice, setIndice] = useState(ultimoPico ?? filas.length - 1);
+  const [indice, setIndice] = useState(ultimoPico ?? ultimoObservado);
   useEffect(() => {
-    setIndice(ultimoPico ?? filas.length - 1);
-  }, [filas, ultimoPico]);
+    setIndice(ultimoPico ?? ultimoObservado);
+  }, [filas, ultimoPico, ultimoObservado]);
 
   // Dibujo
   useEffect(() => {
     const canvas = canvasRef.current;
-    if (!canvas) return;
+    if (!canvas || !filas.length) return;
     const dibujar = () => {
       if (!canvas.isConnected || !canvas.clientWidth) return;
       const ratio = devicePixelRatio || 1;
@@ -88,87 +272,259 @@ export default function ExploradorLluvia({ estacion, lluvia }: { estacion: Simat
       const ctx = canvas.getContext("2d");
       if (!ctx) return;
       ctx.setTransform(ratio, 0, 0, ratio, 0, 0);
-      const left = 58;
-      const right = w - 18;
-      const top = 18;
+      const left = 54;
+      const right = w - (hayMarea ? 56 : 18);
+      const top = conZonas ? 40 : 24;
       const bottom = h - 32;
-      const size = (right - left) / filas.length;
-      geometria.current = { left, size };
-      const max = Math.max(0, ...filas.map((r) => r.intensity ?? 0));
-      const power = 10 ** Math.floor(Math.log10(max || 1));
-      const tick = ([0.2, 0.25, 0.5, 1, 2.5, 5, 10].find((n) => n * power >= (max || 1) / 4) ?? 10) * power;
-      const ceiling = tick * 4;
+      const t0 = filas[0].inicio;
+      const t1 = filas[filas.length - 1].fin;
+      const x = (t: number) => left + ((t - t0) / (t1 - t0 || 1)) * (right - left);
+      escala.current = { left, right, t0, t1 };
+
+      // Escala de lluvia (incluye el umbral del criterio para poder compararlo).
+      const max = 1.12 * Math.max(0, ...filas.map((r) => Math.max(r.intensity ?? 0, r.ventana ?? 0)), conCriterio && criterio ? criterio.lluviaMmH : 0);
+      const power = 10 ** Math.floor(Math.log10((max || 1) / 5));
+      const tick = ([0.2, 0.25, 0.5, 1, 2, 2.5, 5, 10].find((n) => n * power >= (max || 1) / 5) ?? 10) * power;
+      const marcas = Math.max(2, Math.ceil((max || 1) / tick - 1e-9));
+      const ceiling = tick * marcas;
       const y = (v: number) => bottom - (v / ceiling) * (bottom - top);
+
+      // 1 · zonas de la matriz y cinta superior
+      for (const z of tramos) {
+        const x0 = x(z.desde);
+        const ancho = Math.max(1, x(z.hasta) - x0);
+        ctx.globalAlpha = z.previsto ? 0.6 : 1;
+        ctx.fillStyle = COLOR[z.nivel.code].bg;
+        ctx.fillRect(x0, top, ancho, bottom - top);
+        ctx.globalAlpha = 1;
+        ctx.fillStyle = COLOR[z.nivel.code].stroke;
+        ctx.fillRect(x0, top - 12, ancho, 7);
+      }
+      if (conZonas) {
+        ctx.font = "600 10px Inter, system-ui, sans-serif";
+        ctx.fillStyle = C.texto2;
+        ctx.textAlign = "right";
+        ctx.textBaseline = "middle";
+        ctx.fillText("Matriz", left - 6, top - 8.5);
+      }
+
+      // 2 · intervalos observados sin dato válido
+      ctx.fillStyle = "rgba(148,163,184,.16)";
+      for (const r of filas) if (!r.previsto && r.intensity === null) ctx.fillRect(x(r.inicio) + 0.5, top, Math.max(1, x(r.fin) - x(r.inicio) - 1), bottom - top);
+
+      // 3 · rejilla y eje de lluvia
       ctx.font = "500 10.5px Inter, system-ui, sans-serif";
-      ctx.fillStyle = "#94a3b8";
       ctx.textBaseline = "middle";
       ctx.textAlign = "right";
-      for (let i = 0; i <= 4; i++) {
+      for (let i = 0; i <= marcas; i++) {
         const level = i * tick;
-        ctx.strokeStyle = i ? "#eef2f6" : "#cbd5e1";
+        ctx.strokeStyle = i ? "rgba(203,213,225,.55)" : "#cbd5e1";
         ctx.lineWidth = 1;
         ctx.beginPath();
         ctx.moveTo(left, Math.round(y(level)) + 0.5);
         ctx.lineTo(right, Math.round(y(level)) + 0.5);
         ctx.stroke();
+        ctx.fillStyle = C.texto;
         ctx.fillText(numero(level), left - 8, y(level));
       }
       ctx.textAlign = "left";
       ctx.font = "600 11px Inter, system-ui, sans-serif";
-      ctx.fillStyle = "#64748b";
-      ctx.fillText("mm/h", 12, 9);
-      ctx.font = "500 10.5px Inter, system-ui, sans-serif";
-      const barWidth = Math.max(1, Math.min(24, size - 2));
+      ctx.fillStyle = C.texto2;
+      ctx.fillText("mm/h", 10, 9);
+
+      // 4 · barras (observadas y previstas)
       filas.forEach((row, i) => {
-        const x = left + i * size;
-        if (row.intensity === null) {
-          ctx.fillStyle = "#f1f5f9";
-          ctx.fillRect(x + 0.5, top, Math.max(1, size - 1), bottom - top);
-        } else if (row.intensity > 0) {
-          ctx.fillStyle = picos.has(i) ? "#115e59" : "#0d9488";
-          if (indice >= 0 && i !== indice) ctx.globalAlpha = 0.55;
-          const height = bottom - y(row.intensity);
-          const bx = x + (size - barWidth) / 2;
-          const r = Math.min(4, barWidth / 2, height);
-          ctx.beginPath();
-          if (ctx.roundRect && barWidth > 6) ctx.roundRect(bx, bottom - height, barWidth, height, [r, r, 0, 0]);
-          else ctx.rect(bx, bottom - height, barWidth, height);
+        if (row.intensity === null || row.intensity <= 0) return;
+        const x0 = x(row.inicio);
+        const ancho = x(row.fin) - x0;
+        const barWidth = Math.max(1, Math.min(24, ancho - 2));
+        const bx = x0 + (ancho - barWidth) / 2;
+        const height = bottom - y(row.intensity);
+        const r = Math.min(4, barWidth / 2, height);
+        ctx.beginPath();
+        if (ctx.roundRect && barWidth > 6) ctx.roundRect(bx, bottom - height, barWidth, height, [r, r, 0, 0]);
+        else ctx.rect(bx, bottom - height, barWidth, height);
+        if (row.previsto) {
+          ctx.fillStyle = C.previsto;
+          ctx.fill();
+          ctx.strokeStyle = C.barra;
+          ctx.lineWidth = 1;
+          ctx.setLineDash([3, 2]);
+          ctx.stroke();
+          ctx.setLineDash([]);
+        } else {
+          ctx.fillStyle = picos.has(i) ? C.pico : C.barra;
+          if (indice >= 0 && i !== indice) ctx.globalAlpha = 0.6;
           ctx.fill();
           ctx.globalAlpha = 1;
         }
       });
-      if (indice >= 0) {
-        const x = left + indice * size;
+
+      // 5 · lluvia en la ventana del criterio (si no coincide con la cadencia)
+      if (conCriterio && ventanaMin !== step) {
+        ctx.strokeStyle = C.ventana;
+        ctx.lineWidth = 1.5;
+        ctx.beginPath();
+        let abierto = false;
+        for (const r of filas) {
+          if (r.ventana == null) {
+            abierto = false;
+            continue;
+          }
+          const yy = y(r.ventana);
+          if (!abierto) ctx.moveTo(x(r.inicio), yy);
+          else ctx.lineTo(x(r.inicio), yy);
+          ctx.lineTo(x(r.fin), yy);
+          abierto = true;
+        }
+        ctx.stroke();
+      }
+
+      // 6 · umbral de lluvia alta
+      if (conCriterio && criterio) {
+        const yy = Math.round(y(criterio.lluviaMmH)) + 0.5;
+        ctx.strokeStyle = C.umbralLluvia;
+        ctx.lineWidth = 1.5;
+        ctx.setLineDash([6, 4]);
+        ctx.beginPath();
+        ctx.moveTo(left, yy);
+        ctx.lineTo(right, yy);
+        ctx.stroke();
+        ctx.setLineDash([]);
+        ctx.font = "600 10.5px Inter, system-ui, sans-serif";
+        ctx.fillStyle = C.umbralLluvia;
+        ctx.textAlign = "left";
+        const debajo = yy - 16 < top;
+        ctx.textBaseline = debajo ? "top" : "bottom";
+        ctx.fillText(`Lluvia alta ≥ ${medida(criterio.lluviaMmH)} mm/h`, left + 6, debajo ? yy + 4 : yy - 3);
+      }
+
+      // 7 · marea (eje derecho), umbral de mar alto y niveles observados
+      if (hayMarea && marea) {
+        const curva: TidePoint[] = [];
+        const paso = Math.max(MIN, (t1 - t0) / 400);
+        for (let t = t0; t <= t1; t += paso) {
+          const nivel = nivelMarea(marea.extremos, t);
+          if (nivel != null) curva.push({ t, h: nivel });
+        }
+        const obs = marea.observados.filter((o) => o.t >= t0 && o.t <= t1);
+        const valores = curva.map((p) => p.h).concat(obs.map((o) => o.h), datumCompatible && criterio ? [criterio.marM] : []);
+        if (valores.length) {
+          const bajo = Math.min(...valores);
+          const alto = Math.max(...valores);
+          const yr = range(bajo, alto + (alto - bajo) * 0.12, 4);
+          const ym = (v: number) => bottom - ((v - yr.lo) / (yr.hi - yr.lo)) * (bottom - top);
+          ctx.font = "500 10.5px Inter, system-ui, sans-serif";
+          ctx.fillStyle = C.marea;
+          ctx.textAlign = "left";
+          ctx.textBaseline = "middle";
+          for (let v = yr.lo; v <= yr.hi + 1e-9; v += yr.step) ctx.fillText(numero(v), right + 8, ym(v));
+          ctx.font = "600 11px Inter, system-ui, sans-serif";
+          ctx.textAlign = "right";
+          ctx.fillText(`m · ${refMarea || "—"}`, w - 6, 9);
+          if (datumCompatible && criterio) {
+            const yy = Math.round(ym(criterio.marM)) + 0.5;
+            ctx.strokeStyle = C.umbralMar;
+            ctx.lineWidth = 1.5;
+            ctx.setLineDash([2, 3]);
+            ctx.beginPath();
+            ctx.moveTo(left, yy);
+            ctx.lineTo(right, yy);
+            ctx.stroke();
+            ctx.setLineDash([]);
+            ctx.font = "600 10.5px Inter, system-ui, sans-serif";
+            ctx.fillStyle = C.umbralMar;
+            ctx.textAlign = "right";
+            const debajo = yy - 16 < top;
+            ctx.textBaseline = debajo ? "top" : "bottom";
+            ctx.fillText(`Mar alto ≥ ${medida(criterio.marM)} m`, right - 6, debajo ? yy + 4 : yy - 3);
+          }
+          ctx.strokeStyle = C.marea;
+          ctx.lineWidth = 2.25;
+          ctx.lineJoin = "round";
+          ctx.beginPath();
+          curva.forEach((p, i) => (i ? ctx.lineTo(x(p.t), ym(p.h)) : ctx.moveTo(x(p.t), ym(p.h))));
+          ctx.stroke();
+          ctx.fillStyle = C.observado;
+          for (const o of obs) {
+            ctx.beginPath();
+            ctx.arc(x(o.t), ym(o.h), 2.6, 0, Math.PI * 2);
+            ctx.fill();
+          }
+        }
+      }
+
+      // 8 · separación entre lo observado y lo previsto
+      if (mostrarPronostico && end > t0 && end < t1) {
+        const xx = Math.round(x(end)) + 0.5;
+        ctx.strokeStyle = "#475569";
+        ctx.lineWidth = 1;
+        ctx.setLineDash([4, 3]);
+        ctx.beginPath();
+        ctx.moveTo(xx, top);
+        ctx.lineTo(xx, bottom);
+        ctx.stroke();
+        ctx.setLineDash([]);
+        ctx.font = "600 10.5px Inter, system-ui, sans-serif";
+        ctx.fillStyle = "#475569";
+        ctx.textBaseline = "top";
+        ctx.textAlign = "right";
+        ctx.fillText("Observado", xx - 5, top + 5);
+        ctx.textAlign = "left";
+        ctx.fillText("Pronóstico", xx + 5, top + 5);
+      }
+
+      // 9 · intervalo seleccionado
+      const sel = filas[indice];
+      if (sel) {
+        const x0 = x(sel.inicio);
         ctx.strokeStyle = "#0f172a";
         ctx.lineWidth = 1.5;
-        ctx.strokeRect(x + 1, top + 1, Math.max(1, size - 2), bottom - top - 2);
+        ctx.strokeRect(x0 + 1, top + 1, Math.max(1, x(sel.fin) - x0 - 2), bottom - top - 2);
       }
-      const labels = Math.min(w < 530 ? 3 : 6, filas.length);
-      ctx.fillStyle = "#94a3b8";
+
+      // 10 · eje de tiempo
+      const labels = w < 530 ? 3 : 6;
+      const largo = t1 - t0 > 20 * HORA;
+      ctx.font = "500 10.5px Inter, system-ui, sans-serif";
+      ctx.fillStyle = C.texto;
+      ctx.textBaseline = "middle";
       for (let i = 0; i < labels; i++) {
-        const j = labels === 1 ? 0 : Math.round((i * (filas.length - 1)) / (labels - 1));
-        const time = filas[j].time;
+        const t = t0 + ((t1 - t0) * i) / (labels - 1);
         ctx.textAlign = i === 0 ? "left" : i === labels - 1 ? "right" : "center";
-        const label = step === 1440 ? fechaDia(new Date(time).toISOString()).slice(5) : ejeHora.format(time);
-        ctx.fillText(label, left + (j + 0.5) * size, bottom + 18);
+        const label = !horaria ? fechaDia(new Date(t).toISOString()).slice(5) : largo ? ejeDiaHora.format(t) : ejeHora.format(t);
+        ctx.fillText(label, x(t), bottom + 18);
       }
     };
     dibujar();
     const ro = new ResizeObserver(dibujar);
     ro.observe(canvas);
     return () => ro.disconnect();
-  }, [filas, picos, indice, step]);
+  }, [filas, tramos, picos, indice, step, horaria, hayMarea, marea, refMarea, datumCompatible, conCriterio, conZonas, criterio, ventanaMin, mostrarPronostico, end]);
 
   const seleccionar = (i: number) => setIndice(Math.max(0, Math.min(filas.length - 1, i)));
+  const filaEn = (t: number) => {
+    const dentro = filas.findIndex((f) => f.inicio <= t && t < f.fin);
+    if (dentro >= 0) return dentro;
+    let mejor = 0;
+    filas.forEach((f, i) => {
+      if (Math.abs((f.inicio + f.fin) / 2 - t) < Math.abs((filas[mejor].inicio + filas[mejor].fin) / 2 - t)) mejor = i;
+    });
+    return mejor;
+  };
   const desdePuntero = (e: React.PointerEvent<HTMLCanvasElement>) => {
-    const g = geometria.current;
+    const g = escala.current;
     const canvas = canvasRef.current;
     if (!g || !canvas) return;
-    const i = Math.floor((e.clientX - canvas.getBoundingClientRect().left - g.left) / g.size);
-    if (i >= 0 && i < filas.length && i !== indice) seleccionar(i);
+    const px = e.clientX - canvas.getBoundingClientRect().left;
+    if (px < g.left || px > g.right) return;
+    const i = filaEn(g.t0 + ((px - g.left) / (g.right - g.left)) * (g.t1 - g.t0));
+    if (i !== indice) seleccionar(i);
   };
   const fila = filas[indice];
   const picoFila = ultimoPico !== undefined ? filas[ultimoPico] : undefined;
+  const marFila = fila && hayMarea && marea ? nivelMarea(marea.extremos, fila.fin) : null;
+  const nivelFila = fila && conZonas && criterio ? nivelDe(fila.ventana, marFila, criterio) : null;
 
   return (
     <>
@@ -183,10 +539,17 @@ export default function ExploradorLluvia({ estacion, lluvia }: { estacion: Simat
             ))}
           </select>
         </label>
+        {hayPronostico ? (
+          <label className="auto-toggle rain-forecast-toggle" title="Añadir las próximas 24 horas del pronóstico de lluvia (Open-Meteo)">
+            <input type="checkbox" checked={conPronostico} onChange={(e) => setConPronostico(e.target.checked)} />
+            <span className="switch" aria-hidden="true" />
+            <span>Pronóstico 24 h</span>
+          </label>
+        ) : null}
         <div className="rain-peak">
-          <small>Máximo visible</small>
+          <small>Máximo observado</small>
           <strong>{maximo === null ? "Sin datos válidos" : `${medida(maximo)} mm/h`}</strong>
-          <span>{picoFila ? `${picos.size > 1 ? `${picos.size} intervalos empatados · último: ` : ""}${etiquetaIntervalo(picoFila.time, step)}` : ""}</span>
+          <span>{picoFila ? `${picos.size > 1 ? `${picos.size} intervalos empatados · último: ` : ""}${etiquetaIntervalo(picoFila, step)}` : ""}</span>
         </div>
         <button type="button" className="button secondary" disabled={maximo === null} onClick={() => ultimoPico !== undefined && seleccionar(ultimoPico)}>
           Ir al máximo
@@ -197,9 +560,9 @@ export default function ExploradorLluvia({ estacion, lluvia }: { estacion: Simat
       </p>
       <canvas
         ref={canvasRef}
-        className="rain-interactive-chart"
+        className={`rain-interactive-chart${hayMarea ? " con-marea" : ""}`}
         tabIndex={0}
-        aria-label="Gráfica interactiva de lluvia en milímetros por hora"
+        aria-label={hayMarea ? "Gráfica interactiva de lluvia en milímetros por hora, marea y niveles de la matriz de riesgo" : "Gráfica interactiva de lluvia en milímetros por hora"}
         aria-describedby="rain-help rain-selection"
         onPointerMove={(e) => (e.pointerType === "mouse" || e.pointerType === "pen") && desdePuntero(e)}
         onPointerUp={desdePuntero}
@@ -213,25 +576,123 @@ export default function ExploradorLluvia({ estacion, lluvia }: { estacion: Simat
       />
       <div className="chart-legend rain-legend">
         <span>
-          <i style={{ "--c": "#0d9488" } as React.CSSProperties} />
-          Intensidad media
+          <i style={{ "--c": C.barra } as CSSProperties} />
+          Intensidad observada
         </span>
-        <span>
-          <i style={{ "--c": "#115e59" } as React.CSSProperties} />
-          Máximo visible
-        </span>
+        {mostrarPronostico ? (
+          <span>
+            <i className="previsto" />
+            Lluvia prevista
+          </span>
+        ) : null}
+        {conCriterio && ventanaMin !== step ? (
+          <span>
+            <i className="line" style={{ "--c": C.ventana } as CSSProperties} />
+            Promedio en {duracion(ventanaMin)}
+          </span>
+        ) : null}
+        {hayMarea ? (
+          <span>
+            <i className="line" style={{ "--c": C.marea, height: 3 } as CSSProperties} />
+            Marea prevista ({refMarea})
+          </span>
+        ) : null}
+        {hayMarea && marea?.observados.length ? (
+          <span>
+            <i className="dot" style={{ "--c": C.observado } as CSSProperties} />
+            Nivel observado
+          </span>
+        ) : null}
+        {conCriterio ? (
+          <span>
+            <i className="umbral" style={{ "--c": C.umbralLluvia } as CSSProperties} />
+            Umbral de lluvia
+          </span>
+        ) : null}
+        {conZonas ? (
+          <span>
+            <i className="umbral punteado" style={{ "--c": C.umbralMar } as CSSProperties} />
+            Umbral de mar
+          </span>
+        ) : null}
         <span>
           <i className="gap" />
           Sin dato válido
         </span>
       </div>
+      {conZonas ? (
+        <div className="chart-legend rain-legend zonas-legend">
+          <span className="meta">Zonas de la matriz:</span>
+          {MATRIZ.map((n) => (
+            <span key={n.code}>
+              <i style={{ "--c": COLOR[n.code].bg, boxShadow: `inset 0 3px 0 ${COLOR[n.code].stroke}` } as CSSProperties} />
+              {n.name}
+            </span>
+          ))}
+        </div>
+      ) : null}
+      <div className="riesgo-notas">
+        {!horaria ? null : !criterio ? (
+          <p className="meta">Este sector no tiene criterio configurado: se muestran la lluvia y la marea, sin zonas de riesgo.</p>
+        ) : !hayMarea ? (
+          <p className="meta">El puerto no tiene predicciones de marea en el periodo: no se pueden pintar las zonas de riesgo.</p>
+        ) : !datumCompatible ? (
+          <p className="meta">
+            El umbral de mar del criterio está en «{criterio.datum}» y la marea en «{refMarea}»: no son comparables, por eso no se pintan zonas.
+          </p>
+        ) : (
+          <>
+            {!criterio.activo ? (
+              <p className="riesgo-provisional">
+                <Icono nombre="alert" />
+                Umbrales provisionales del sector {criterio.sector} (criterio desactivado): las zonas son orientativas hasta que se calibren.
+              </p>
+            ) : null}
+            <p className="meta">
+              Cada zona cruza la lluvia promedio en {duracion(ventanaMin)} (alta desde {medida(criterio.lluviaMmH)} mm/h) con la marea astronómica prevista por INOCAR (alta desde {medida(criterio.marM)} m {criterio.datum}). La
+              evaluación oficial del sector usa el nivel del mar observado.
+            </p>
+          </>
+        )}
+      </div>
+      {conZonas ? (
+        <div className="riesgo-tramos">
+          <strong>Momentos de riesgo en el periodo</strong>
+          {riesgosos.length ? (
+            <ul>
+              {riesgosos.map((z) => (
+                <li key={`${z.desde}-${z.nivel.code}`}>
+                  <button type="button" onClick={() => seleccionar(filaEn(z.desde))}>
+                    <ChipNivel nivel={z.nivel} />
+                    <span>{rangoTramo(z)}</span>
+                    {z.previsto ? <em>previsto</em> : null}
+                  </button>
+                </li>
+              ))}
+            </ul>
+          ) : (
+            <p className="meta">Sin precaución, alerta ni emergencia en el periodo visible.</p>
+          )}
+        </div>
+      ) : null}
       <div className="rain-inspector">
         <div id="rain-selection" role="status">
           {fila ? (
             <>
-              <strong>{etiquetaIntervalo(fila.time, step)}</strong>
+              <strong>
+                {etiquetaIntervalo(fila, step)}
+                {fila.previsto ? " · pronóstico" : ""}
+              </strong>
               <p data-rain-detail="">
-                {fila.intensity === null ? (
+                {fila.previsto ? (
+                  fila.intensity === null ? (
+                    "Sin precipitación prevista para esta hora."
+                  ) : (
+                    <>
+                      <b>{medida(fila.intensity)} mm/h</b> previstos{fila.probabilidad != null ? ` · probabilidad ${medida(fila.probabilidad)} %` : ""} · Open-Meteo
+                    </>
+                  )
+                ) : fila.intensity === null ? (
                   fila.record ? (
                     `Dato sin validar · ${fila.record.quality}`
                   ) : (
@@ -243,6 +704,22 @@ export default function ExploradorLluvia({ estacion, lluvia }: { estacion: Simat
                   </>
                 )}
               </p>
+              {conCriterio ? (
+                <p className="riesgo-fila">
+                  {ventanaMin !== step ? (
+                    <>
+                      Promedio en {duracion(ventanaMin)}: <b>{fila.ventana == null ? "sin dato completo" : `${medida(Math.round(fila.ventana * 100) / 100)} mm/h`}</b>
+                      {" · "}
+                    </>
+                  ) : null}
+                  {hayMarea ? (
+                    <>
+                      Marea al cierre: <b>{marFila == null ? "—" : `${medida(Math.round(marFila * 100) / 100)} m ${refMarea}`}</b>
+                    </>
+                  ) : null}
+                  {nivelFila ? <ChipNivel nivel={nivelFila} /> : conZonas ? <span className="meta"> · nivel no determinable</span> : null}
+                </p>
+              ) : null}
             </>
           ) : null}
         </div>

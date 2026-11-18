@@ -42,6 +42,21 @@ export function extremosMarea(rows: SimatNivelMar[], puerto: string, clock = Dat
   return near.length >= 2 ? near : all.slice(-8);
 }
 
+/**
+ * Altura de la marea astronómica en el instante `t`: la misma curva coseno entre
+ * pleamares y bajamares publicadas que dibuja la gráfica de mareas. Fuera de los
+ * extremos disponibles no se extrapola (null).
+ */
+export function nivelMarea(extremos: TideExtreme[], t: number): number | null {
+  if (extremos.length < 2 || t < extremos[0].t || t > extremos[extremos.length - 1].t) return null;
+  const i = extremos.findIndex((e) => e.t >= t);
+  if (i <= 0) return extremos[0].h;
+  const a = extremos[i - 1];
+  const b = extremos[i];
+  const f = (t - a.t) / (b.t - a.t);
+  return (a.h + b.h) / 2 + ((a.h - b.h) / 2) * Math.cos(Math.PI * f);
+}
+
 export interface AvisoMarino {
   title: string;
   tone: "caution" | "unavailable";

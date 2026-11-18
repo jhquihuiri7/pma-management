@@ -3,10 +3,11 @@
 // Riesgo por lluvia y mar, réplica de la vista previa (risk-ui.js, riskPage()):
 // filtros, aviso costero, evaluación del sector con dial y matriz (y modo de
 // simulación), evidencia de lluvia y mar con medidores de umbral y gráficas
-// desplegables, nota del criterio y predicciones de marea.
+// desplegables (la de lluvia, con la marea y las zonas de la matriz), nota del
+// criterio y predicciones de marea.
 
 import { Fragment, useEffect, useMemo, useRef, useState, type CSSProperties, type ReactNode } from "react";
-import type { SimatEstacion, SimatEvaluacion, SimatMareografo, SimatNivelMar, SimatPronostico, SimatSerieLluvia } from "@pma/types";
+import type { SimatCriterio, SimatEstacion, SimatEvaluacion, SimatMareografo, SimatNivelMar, SimatPronostico, SimatSerieLluvia } from "@pma/types";
 import { obtenerMareas, obtenerMareografo, obtenerPronostico } from "@/lib/simat/api";
 import { forecast, sea, tide, type SeaPoint } from "@/lib/simat/graficos";
 import { avisoMarino, extremosMarea, horaMarina, MAREOGRAFO_POR_PUERTO, observacionPuerto, prediccionesPuerto, puertosIsla } from "@/lib/simat/marinos";
@@ -14,13 +15,14 @@ import { duracion, fechaDia, fechaHora, medida, numero } from "@/lib/simat/forma
 import { TODAS_LAS_ISLAS, useSimat } from "./contexto";
 import { Icono } from "./iconos";
 import { MATRIZ, type NivelMatriz } from "./matriz";
-import ExploradorLluvia from "./ExploradorLluvia";
+import ExploradorLluvia, { type MareaExplorador } from "./ExploradorLluvia";
 import { CriterioModal, NivelObservadoModal, ventanasCompatibles } from "./Formularios";
 import { Cargando } from "./VistaGeneral";
 import { Cabecera, CardHead, Dial, FiltroEstacion, FiltroIsla, Grafico, Pill, Tabla, Vacio } from "./piezas";
 
 type Grafica = "rain" | "gauge" | null;
 type EstadoMareografo = SimatMareografo | "cargando" | "sin" | "error" | null;
+type EstadoPronostico = SimatPronostico | "cargando" | "error";
 
 /* ---------- piezas ---------- */
 
@@ -267,17 +269,48 @@ function HistoriaMareografo({ m }: { m: SimatMareografo }) {
   );
 }
 
-function PanelPronostico({ estacion, lluvia }: { estacion: SimatEstacion; lluvia: SimatSerieLluvia | null }) {
-  const [data, setData] = useState<SimatPronostico | "cargando" | "error">("cargando");
+/** Pronóstico de lluvia de Open-Meteo para la estación (una consulta por estación). */
+function usePronostico(id: string): EstadoPronostico {
+  const [data, setData] = useState<EstadoPronostico>("cargando");
   useEffect(() => {
     const ctrl = new AbortController();
     setData("cargando");
-    obtenerPronostico(estacion.id, ctrl.signal).then(
+    obtenerPronostico(id, ctrl.signal).then(
       (p) => !ctrl.signal.aborted && setData(p),
       () => !ctrl.signal.aborted && setData("error"),
     );
     return () => ctrl.abort();
-  }, [estacion.id]);
+  }, [id]);
+  return data;
+}
+
+/**
+ * Historia de la lluvia: el explorador (con la marea del puerto, los umbrales
+ * del sector y las zonas de la matriz) y el panel del modelo meteorológico.
+ */
+function HistoriaLluvia({ estacion, lluvia, criterio, marea }: { estacion: SimatEstacion; lluvia: SimatSerieLluvia | null; criterio: SimatCriterio | null; marea: MareaExplorador | null }) {
+  const pronostico = usePronostico(estacion.id);
+  const tieneLluviaValida = !!lluvia?.recent.some((r) => r.quality === "válido");
+  return (
+    <>
+      <section className="card wide rain-explorer" id="rain-explorer">
+        <CardHead
+          titulo={criterio ? `Lluvia, marea y riesgo · ${criterio.sector}` : "Evolución de la lluvia y la marea"}
+          descripcion={`${estacion.nombre} · ${duracion(estacion.pasoMin)} por intervalo · Hora de Galápagos · Serie registrada${typeof pronostico === "object" ? " y pronóstico" : ""}`}
+          icono="activity"
+        />
+        {lluvia && tieneLluviaValida ? (
+          <ExploradorLluvia estacion={estacion} lluvia={lluvia} criterio={criterio} marea={marea} pronostico={typeof pronostico === "object" ? pronostico.pronostico : null} />
+        ) : (
+          <Vacio>No hay intervalos de lluvia válidos para esta estación.</Vacio>
+        )}
+      </section>
+      <PanelPronostico estacion={estacion} lluvia={lluvia} data={pronostico} />
+    </>
+  );
+}
+
+function PanelPronostico({ estacion, lluvia, data }: { estacion: SimatEstacion; lluvia: SimatSerieLluvia | null; data: EstadoPronostico }) {
 
   const valida = [...(lluvia?.recent ?? [])].reverse().find((r) => r.quality === "válido");
   const observacion = valida ? (
@@ -524,8 +557,6 @@ export default function VistaRiesgo() {
     );
   }
 
-  const tieneLluviaValida = !!lluvia?.recent.some((r) => r.quality === "válido");
-
   return (
     <>
       <Cabecera
@@ -674,17 +705,14 @@ export default function VistaRiesgo() {
 
       <div id="rain-history" hidden={grafica !== "rain"}>
         {grafica === "rain" ? (
-          <>
+          estacion ? (
+            <HistoriaLluvia estacion={estacion} lluvia={lluvia} criterio={profile ?? null} marea={extremos.length >= 2 ? { extremos, observados: observadosMarea } : null} />
+          ) : (
             <section className="card wide rain-explorer" id="rain-explorer">
-              <CardHead
-                titulo="Evolución de la intensidad de precipitación"
-                descripcion={estacion ? `${estacion.nombre} · ${duracion(estacion.pasoMin)} por intervalo · Hora de Galápagos · Serie registrada` : "Sin estación seleccionada"}
-                icono="activity"
-              />
-              {estacion && lluvia && tieneLluviaValida ? <ExploradorLluvia estacion={estacion} lluvia={lluvia} /> : <Vacio>No hay intervalos de lluvia válidos para esta estación.</Vacio>}
+              <CardHead titulo="Evolución de la lluvia y la marea" descripcion="Sin estación seleccionada" icono="activity" />
+              <Vacio>Selecciona una estación del inventario.</Vacio>
             </section>
-            {estacion ? <PanelPronostico estacion={estacion} lluvia={lluvia} /> : null}
-          </>
+          )
         ) : null}
       </div>
 

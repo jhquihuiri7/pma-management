@@ -71,7 +71,8 @@ function nice(max: number, ticks = 4) {
   const step = ([1, 2, 2.5, 5, 10].find((m) => m * pow >= raw) ?? 10) * pow;
   return { top: step * ticks, step };
 }
-function range(min: number, max: number, ticks = 4) {
+/** Eje «redondo»: límites y paso de las marcas para un rango de valores. */
+export function range(min: number, max: number, ticks = 4) {
   if (!(max > min)) {
     min -= 0.5;
     max += 0.5;
