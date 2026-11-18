@@ -1,25 +1,29 @@
-// Rain × sea risk matrix. Ported from the Flask app's riesgo.py, keeping the
-// same levels, ports and decision rules. Nothing emits a level until a sector's
-// criterion is configured and both a valid rain window and a valid observed sea
-// level are in force; otherwise `motivos` explains why.
+// Riesgo por lluvia y mar. Portado de riesgo.py (puertos, ventanas, reglas de
+// vigencia y desfase) y adaptado a la escala del equipo técnico (0044): la
+// lluvia promedio en la ventana del criterio frente a tres umbrales da Normal,
+// Vigilancia, Preparación o Respuesta; si el sector tiene umbral de mar y el
+// mar observado lo alcanza, el nivel sube uno. El nivel oficial exige el
+// criterio activo; desactivado (experimental) se calcula como orientativo.
+// Si faltan datos de lluvia vigentes no hay nivel y `motivos` explica por qué.
 
 import type {
   SimatCriterio,
   SimatEstacion,
+  SimatEstadoValidacion,
   SimatEvaluacion,
   SimatIsla,
   SimatNivelMar,
   SimatNivelRiesgo,
   SimatPuertos,
   SimatSerieLluvia,
+  SimatUmbralesLluvia,
 } from "@pma/types";
 
-const LEVELS: Record<string, SimatNivelRiesgo> = {
-  "false,false": "Normal",
-  "false,true": "Precaución",
-  "true,false": "Alerta",
-  "true,true": "Emergencia",
-};
+// Copias de SIMAT_NIVELES_RIESGO y SIMAT_ESTADOS_VALIDACION (@pma/types): en
+// tiempo de ejecución la API no ve los valores que el barril reexporta desde
+// simat.ts (el paquete se resuelve como CommonJS); los tipos sí son comunes.
+export const NIVELES_RIESGO: readonly SimatNivelRiesgo[] = ["Normal", "Vigilancia", "Preparación", "Respuesta"];
+export const ESTADOS_VALIDACION = ["experimental", "validado"] as const satisfies readonly SimatEstadoValidacion[];
 
 export const PUERTOS: SimatPuertos = {
   "Santa Cruz": { "Isla Santa Cruz": "Puerto Ayora", "Isla Baltra": "Baltra · Puerto Seymour" },
@@ -65,50 +69,83 @@ export function nivelObservado(
   );
 }
 
+/** Índice 0–3 de la escala por la intensidad de lluvia (mm/h) en la ventana. */
+export function indiceLluvia(intensidad: number, umbrales: SimatUmbralesLluvia): number {
+  if (intensidad >= umbrales.respuesta) return 3;
+  if (intensidad >= umbrales.preparacion) return 2;
+  if (intensidad >= umbrales.vigilancia) return 1;
+  return 0;
+}
+
+/** Nivel de la escala: el de la lluvia, uno más si el mar está alto. */
+export function nivelEscala(indice: number, marAlto: boolean | null): SimatNivelRiesgo {
+  return NIVELES_RIESGO[Math.min(3, indice + (marAlto ? 1 : 0))];
+}
+
 export function evaluar(
   criterio: SimatCriterio,
   estacion: SimatEstacion | undefined,
-  rain: SimatSerieLluvia,
+  rain: SimatSerieLluvia | null,
   marine: SimatNivelMar[],
   clock: Date,
 ): SimatEvaluacion {
-  const latest = rain.latest;
-  const window = rain.windows.find((w) => w.minutes === criterio.ventanaMin);
+  const latest = rain?.latest ?? null;
+  const window = rain?.windows.find((w) => w.minutes === criterio.ventanaMin);
   const sea = nivelObservado(marine, criterio.puerto, criterio.datum);
   const motivos: string[] = [];
+  const avisos: string[] = [];
   const edadMs = criterio.vigenciaMin * 60_000;
   const desfaseMs = criterio.desfaseMin * 60_000;
   const rainTime = latest ? Date.parse(latest.time) : null;
   const seaTime = sea ? Date.parse(sea.instante) : null;
+  const vigente = (t: number | null) => t != null && clock.getTime() - t >= 0 && clock.getTime() - t <= edadMs;
 
-  if (!criterio.activo) motivos.push("El criterio está desactivado.");
-  if (!estacion || !estacion.activa) {
+  // Lluvia: sin ella no hay nivel.
+  if (!criterio.estacion) {
+    motivos.push("El sector no tiene estación de lluvia asignada.");
+  } else if (!estacion || !estacion.activa) {
     motivos.push("La estación no está activa.");
   } else if (!window || window.intensity == null) {
     motivos.push("Falta una ventana de lluvia completa y válida.");
-  } else if (rainTime == null || !(clock.getTime() - rainTime >= 0 && clock.getTime() - rainTime <= edadMs)) {
+  } else if (!vigente(rainTime)) {
     motivos.push("La ventana de lluvia está fuera de vigencia.");
   }
-  if (!sea) {
-    motivos.push("Falta un nivel observado en metros con el datum configurado.");
-  } else if (!esValida(sea)) {
-    motivos.push("La observación marina más reciente carece de calidad validada.");
-  } else if (seaTime == null || !(clock.getTime() - seaTime >= 0 && clock.getTime() - seaTime <= edadMs)) {
-    motivos.push("La observación marina está fuera de vigencia.");
-  }
-  if (rainTime != null && seaTime != null && Math.abs(rainTime - seaTime) > desfaseMs) {
-    motivos.push("Las horas de lluvia y mar superan el desfase permitido.");
+  const lluviaLista = motivos.length === 0 && window?.intensity != null;
+  const indice = lluviaLista ? indiceLluvia(window!.intensity!, criterio.lluvia) : null;
+
+  // Mar: solo si el sector tiene umbral; si falta el dato, el nivel queda por lluvia.
+  let marAlto: boolean | null = null;
+  if (criterio.marM != null) {
+    if (!sea) {
+      avisos.push("Falta un nivel del mar observado con el datum configurado: el nivel se calcula solo con la lluvia.");
+    } else if (!esValida(sea)) {
+      avisos.push("La observación marina más reciente carece de calidad validada: el nivel se calcula solo con la lluvia.");
+    } else if (!vigente(seaTime)) {
+      avisos.push("La observación marina está fuera de vigencia: el nivel se calcula solo con la lluvia.");
+    } else if (rainTime != null && seaTime != null && Math.abs(rainTime - seaTime) > desfaseMs) {
+      avisos.push("Las horas de lluvia y mar superan el desfase permitido: el nivel se calcula solo con la lluvia.");
+    } else {
+      marAlto = sea.valor >= criterio.marM;
+    }
   }
 
-  const sinProblemas = motivos.length === 0;
-  const rainHigh = sinProblemas && window ? window.intensity! >= criterio.lluviaMmH : null;
-  const seaHigh = sinProblemas && sea ? sea.valor >= criterio.marM : null;
-  const nivel = rainHigh != null && seaHigh != null ? LEVELS[`${rainHigh},${seaHigh}`] ?? null : null;
+  const nivelOrientativo = indice != null ? nivelEscala(indice, marAlto) : null;
+  if (!criterio.activo) {
+    motivos.push(
+      criterio.estadoValidacion === "experimental"
+        ? "Umbrales experimentales: el criterio está desactivado y el nivel es solo orientativo."
+        : "El criterio está desactivado: el nivel es solo orientativo.",
+    );
+  }
 
   return {
     criterio,
-    nivel,
+    nivel: criterio.activo ? nivelOrientativo : null,
+    nivelOrientativo,
+    nivelLluvia: indice != null ? NIVELES_RIESGO[indice] : null,
+    marAlto,
     motivos,
+    avisos,
     lluvia: {
       valor: window?.intensity ?? null,
       fecha: latest?.time ?? null,
@@ -121,7 +158,7 @@ export function evaluar(
 }
 
 export interface CriterioValidado {
-  estacion: string;
+  estacion: string | null;
   isla: SimatIsla;
   puerto: string;
   datum: string;
@@ -130,15 +167,24 @@ export interface CriterioValidado {
   ventanaMin: number;
   vigenciaMin: number;
   desfaseMin: number;
-  lluviaMmH: number;
-  marM: number;
+  lluvia: SimatUmbralesLluvia;
+  marM: number | null;
+  estadoValidacion: SimatEstadoValidacion;
+  alertasPublicas: boolean;
   activo: boolean;
 }
 
+/** Isla a la que pertenece un puerto (por clave o nombre), si es solo una. */
+export function islaDePuerto(puerto: string): SimatIsla | null {
+  const islas = (Object.keys(PUERTOS) as SimatIsla[]).filter((isla) => puertoCoincideIsla(puerto, isla));
+  return islas.length === 1 ? islas[0] : null;
+}
+
 /**
- * Validate a criterion against its station. Ported from build_criteria: the
- * window must be a risk window compatible with the station's cadence, the port
- * must belong to the station's island, and the thresholds must be finite.
+ * Valida un criterio. Portado de build_criteria: la ventana debe ser una de
+ * riesgo y compatible con la cadencia de la estación, y el puerto, de la isla
+ * de la estación. Sin estación, la isla es la del puerto. Los umbrales de
+ * lluvia deben ir de menor a mayor; el de mar es opcional.
  */
 export function construirCriterio(
   entrada: {
@@ -149,11 +195,13 @@ export function construirCriterio(
     ventanaMin: number;
     vigenciaMin: number;
     desfaseMin: number;
-    lluviaMmH: number;
-    marM: number;
+    lluvia: SimatUmbralesLluvia;
+    marM: number | null;
+    estadoValidacion: SimatEstadoValidacion;
+    alertasPublicas: boolean;
     activo: boolean;
   },
-  estacion: SimatEstacion,
+  estacion: SimatEstacion | null,
 ): CriterioValidado {
   const etiqueta = (valor: string, limite: number, nombre: string): string => {
     const v = (valor ?? "").trim();
@@ -172,16 +220,31 @@ export function construirCriterio(
   };
 
   const ventanaMin = entero(entrada.ventanaMin, 5, 720, "ventana_min");
-  if (!VENTANAS_RIESGO.includes(ventanaMin as (typeof VENTANAS_RIESGO)[number]) || ventanaMin % estacion.pasoMin !== 0) {
+  if (!VENTANAS_RIESGO.includes(ventanaMin as (typeof VENTANAS_RIESGO)[number]) || (estacion && ventanaMin % estacion.pasoMin !== 0)) {
     throw new Error("La ventana debe ser compatible con la resolución de la estación.");
   }
   const puerto = etiqueta(entrada.puerto, 100, "puerto");
-  if (!puertoCoincideIsla(puerto, estacion.isla)) {
-    throw new Error("El puerto de referencia debe corresponder a la isla de la estación.");
+  let isla: SimatIsla;
+  if (estacion) {
+    if (!puertoCoincideIsla(puerto, estacion.isla)) {
+      throw new Error("El puerto de referencia debe corresponder a la isla de la estación.");
+    }
+    isla = estacion.isla;
+  } else {
+    const delPuerto = islaDePuerto(puerto);
+    if (!delPuerto) throw new Error("Seleccione un puerto de referencia del inventario.");
+    isla = delPuerto;
   }
+  const vigilancia = metrica(entrada.lluvia?.vigilancia, 0, "lluvia_vigilancia");
+  const preparacion = metrica(entrada.lluvia?.preparacion, 0, "lluvia_preparacion");
+  const respuesta = metrica(entrada.lluvia?.respuesta, 0, "lluvia_respuesta");
+  if (!(vigilancia <= preparacion && preparacion <= respuesta)) {
+    throw new Error("Los umbrales de lluvia deben ir de menor a mayor: vigilancia ≤ preparación ≤ respuesta.");
+  }
+  if (!(ESTADOS_VALIDACION as readonly string[]).includes(entrada.estadoValidacion)) throw new Error("Revise el estado de validación.");
   return {
-    estacion: estacion.id,
-    isla: estacion.isla,
+    estacion: estacion?.id ?? null,
+    isla,
     puerto,
     datum: etiqueta(entrada.datum, 80, "datum"),
     sector: etiqueta(entrada.sector, 120, "sector"),
@@ -189,8 +252,10 @@ export function construirCriterio(
     ventanaMin,
     vigenciaMin: entero(entrada.vigenciaMin, 1, 1440, "vigencia_min"),
     desfaseMin: entero(entrada.desfaseMin, 0, 1440, "desfase_min"),
-    lluviaMmH: metrica(entrada.lluviaMmH, 0, "lluvia_mm_h"),
-    marM: metrica(entrada.marM, null, "mar_m"),
+    lluvia: { vigilancia, preparacion, respuesta },
+    marM: entrada.marM == null ? null : metrica(entrada.marM, null, "mar_m"),
+    estadoValidacion: entrada.estadoValidacion,
+    alertasPublicas: entrada.alertasPublicas === true,
     activo: entrada.activo === true,
   };
 }

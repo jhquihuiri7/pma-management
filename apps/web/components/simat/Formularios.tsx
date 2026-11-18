@@ -3,35 +3,48 @@
 // Formularios modales de la vista previa (risk-ui.js: riskCriteriaForm,
 // observedForm) sobre PUT /simat/criterios y POST /simat/nivel-observado.
 
-import type { SimatCriterio, SimatEstacion } from "@pma/types";
+import { useState } from "react";
+import type { SimatCriterio, SimatEstacion, SimatEstadoValidacion } from "@pma/types";
 import { guardarCriterio, registrarNivelObservado } from "@/lib/simat/api";
 import { Modal } from "./piezas";
 
 const VENTANAS = [5, 15, 30, 60, 180, 360, 720];
 
-/** Ventanas de intensidad compatibles con la resolución de la estación. */
-export function ventanasCompatibles(estacion: SimatEstacion | undefined) {
-  return estacion ? VENTANAS.filter((w) => w % estacion.pasoMin === 0) : [];
+/** Ventanas de intensidad compatibles con la resolución de la estación (todas sin estación). */
+export function ventanasCompatibles(estacion: SimatEstacion | undefined | null) {
+  return estacion ? VENTANAS.filter((w) => w % estacion.pasoMin === 0) : VENTANAS;
+}
+
+/** Estaciones que pueden dar la lluvia de un criterio: con precipitación y sub-diarias. */
+export function estacionesDeLluvia(estaciones: SimatEstacion[], isla: string | undefined) {
+  return estaciones.filter((e) => e.isla === isla && e.pasoMin < 1440 && e.variables.includes("precipitacion"));
 }
 
 const texto = (d: FormData, k: string) => String(d.get(k) ?? "").trim();
 const numeroCampo = (d: FormData, k: string) => Number(texto(d, k));
 
 export function CriterioModal({
-  estacion,
+  estaciones,
+  estacionInicial,
   puerto,
   criterio,
   onGuardado,
   onCerrar,
 }: {
-  estacion: SimatEstacion;
+  /** Estaciones de lluvia de la isla del puerto. */
+  estaciones: SimatEstacion[];
+  /** Estación propuesta para un sector nuevo. */
+  estacionInicial: string | null;
   puerto: string;
-  /** null crea un sector nuevo para la estación y el puerto. */
+  /** null crea un sector nuevo para el puerto. */
   criterio: SimatCriterio | null;
   onGuardado: (puerto: string, sector: string) => Promise<void>;
   onCerrar: () => void;
 }) {
+  const [estacionId, setEstacionId] = useState<string>(criterio ? (criterio.estacion ?? "") : (estacionInicial ?? ""));
+  const estacion = estaciones.find((e) => e.id === estacionId) ?? null;
   const ventanas = ventanasCompatibles(estacion);
+  const ventanaInicial = criterio && ventanas.includes(criterio.ventanaMin) ? criterio.ventanaMin : ventanas.includes(60) ? 60 : ventanas[0];
   return (
     <Modal
       titulo={criterio ? "Editar criterio local" : "Configurar criterio local"}
@@ -39,8 +52,10 @@ export function CriterioModal({
       onEnviar={async (d) => {
         const sector = texto(d, "sector");
         const p = texto(d, "puerto");
+        const mar = texto(d, "mar_m");
         await guardarCriterio({
-          estacion: estacion.id,
+          id: criterio?.id,
+          estacion: estacionId || null,
           puerto: p,
           datum: texto(d, "datum"),
           sector,
@@ -48,14 +63,23 @@ export function CriterioModal({
           ventanaMin: numeroCampo(d, "ventana_min"),
           vigenciaMin: numeroCampo(d, "vigencia_min"),
           desfaseMin: numeroCampo(d, "desfase_min"),
-          lluviaMmH: numeroCampo(d, "lluvia_mm_h"),
-          marM: numeroCampo(d, "mar_m"),
+          lluvia: {
+            vigilancia: numeroCampo(d, "lluvia_vigilancia"),
+            preparacion: numeroCampo(d, "lluvia_preparacion"),
+            respuesta: numeroCampo(d, "lluvia_respuesta"),
+          },
+          marM: mar === "" ? null : Number(mar),
+          estadoValidacion: texto(d, "estado_validacion") as SimatEstadoValidacion,
+          alertasPublicas: d.get("alertas_publicas") === "on",
           activo: d.get("activo") === "on",
         });
         await onGuardado(p, sector);
       }}
     >
-      <p className="meta">Usa umbrales sustentados para este sector y su drenaje costero. Los valores iguales o superiores al umbral se clasifican como altos.</p>
+      <p className="meta">
+        Cada umbral de lluvia (mm/h en la ventana) da su nivel: desde vigilancia es Vigilancia, desde preparación es Preparación y desde respuesta es Respuesta. Si el sector desagua al mar, el mar alto sube un nivel; deja el
+        umbral de mar vacío si no influye.
+      </p>
       <div className="field-grid">
         <label>
           Sector costero
@@ -66,8 +90,19 @@ export function CriterioModal({
           <input name="puerto" required maxLength={100} readOnly defaultValue={criterio?.puerto ?? puerto} />
         </label>
         <label>
+          Estación de lluvia
+          <select value={estacionId} onChange={(e) => setEstacionId(e.target.value)}>
+            <option value="">Sin estación (no se evalúa)</option>
+            {estaciones.map((e) => (
+              <option key={e.id} value={e.id}>
+                {e.nombre} · cada {e.pasoMin < 60 ? `${e.pasoMin} min` : `${e.pasoMin / 60} h`}
+              </option>
+            ))}
+          </select>
+        </label>
+        <label>
           Ventana de intensidad (min)
-          <select name="ventana_min" defaultValue={String(criterio?.ventanaMin ?? (ventanas.includes(60) ? 60 : ventanas[0]))}>
+          <select key={estacionId} name="ventana_min" defaultValue={String(ventanaInicial)}>
             {ventanas.map((w) => (
               <option key={w} value={w}>
                 {w}
@@ -76,16 +111,31 @@ export function CriterioModal({
           </select>
         </label>
         <label>
+          Umbral de vigilancia (mm/h)
+          <input name="lluvia_vigilancia" type="number" min={0} step="any" required defaultValue={criterio?.lluvia.vigilancia ?? ""} />
+        </label>
+        <label>
+          Umbral de preparación (mm/h)
+          <input name="lluvia_preparacion" type="number" min={0} step="any" required defaultValue={criterio?.lluvia.preparacion ?? ""} />
+        </label>
+        <label>
+          Umbral de respuesta (mm/h)
+          <input name="lluvia_respuesta" type="number" min={0} step="any" required defaultValue={criterio?.lluvia.respuesta ?? ""} />
+        </label>
+        <label>
+          Umbral de mar alto (m) · opcional
+          <input name="mar_m" type="number" step="any" placeholder="Sin umbral" defaultValue={criterio?.marM ?? ""} />
+        </label>
+        <label>
           Referencia vertical de la medición
-          <input name="datum" required maxLength={80} defaultValue={criterio?.datum ?? ""} />
+          <input name="datum" required maxLength={80} defaultValue={criterio?.datum ?? "MLWS"} />
         </label>
         <label>
-          Umbral de lluvia alta (mm/h)
-          <input name="lluvia_mm_h" type="number" min={0} step="any" required defaultValue={criterio?.lluviaMmH ?? ""} />
-        </label>
-        <label>
-          Umbral de mar alto (m)
-          <input name="mar_m" type="number" step="any" required defaultValue={criterio?.marM ?? ""} />
+          Estado de validación
+          <select name="estado_validacion" defaultValue={criterio?.estadoValidacion ?? "experimental"}>
+            <option value="experimental">Experimental</option>
+            <option value="validado">Validado</option>
+          </select>
         </label>
         <label>
           Vigencia máxima (min)
@@ -101,7 +151,10 @@ export function CriterioModal({
         <textarea name="respaldo" rows={3} required maxLength={500} defaultValue={criterio?.respaldo ?? ""} />
       </label>
       <label className="inline">
-        <input name="activo" type="checkbox" defaultChecked={criterio ? criterio.activo : true} /> Habilitar evaluación automática
+        <input name="alertas_publicas" type="checkbox" defaultChecked={criterio ? criterio.alertasPublicas : false} /> Alertas públicas habilitadas
+      </label>
+      <label className="inline">
+        <input name="activo" type="checkbox" defaultChecked={criterio ? criterio.activo : false} /> Habilitar el nivel oficial (sin marcar, el nivel es orientativo)
       </label>
     </Modal>
   );

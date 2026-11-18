@@ -5,7 +5,7 @@
 // vista:
 // filtros, aviso costero, evaluación del sector con dial y matriz (y modo de
 // simulación), evidencia de lluvia y mar con medidores de umbral y gráficas
-// desplegables (la de lluvia, con la marea y las zonas de la matriz), nota del
+// desplegables (la de lluvia, con la marea y las zonas de la escala), nota del
 // criterio y predicciones de marea.
 
 import { Fragment, useEffect, useMemo, useRef, useState, type CSSProperties, type ReactNode } from "react";
@@ -16,9 +16,9 @@ import { avisoMarino, extremosMarea, horaMarina, MAREOGRAFO_POR_PUERTO, observac
 import { duracion, fechaDia, fechaHora, medida, numero } from "@/lib/simat/formato";
 import { TODAS_LAS_ISLAS, useSimat } from "./contexto";
 import { Icono } from "./iconos";
-import { MATRIZ, type NivelMatriz } from "./matriz";
+import { ESCALA, indiceNivel, nivelConMar, rangoLluvia, type NivelEscala } from "./matriz";
 import ExploradorLluvia, { type MareaExplorador } from "./ExploradorLluvia";
-import { CriterioModal, NivelObservadoModal, ventanasCompatibles } from "./Formularios";
+import { CriterioModal, estacionesDeLluvia, NivelObservadoModal } from "./Formularios";
 import { Cargando } from "./VistaGeneral";
 import { CardHead, Dial, FiltroEstacion, FiltroIsla, Grafico, Pill, Tabla, Vacio } from "./piezas";
 
@@ -27,9 +27,10 @@ type EstadoPronostico = SimatPronostico | "cargando" | "error";
 
 /* ---------- piezas ---------- */
 
-function TablaMatriz({ actual }: { actual?: string }) {
-  const celda = (item: NivelMatriz) => (
-    <td key={item.name} className={`matrix-cell ${item.code}${actual === item.name ? " is-current" : ""}`}>
+/** La escala del sector: rango de lluvia, nivel y acción, con el resultado marcado. */
+function TablaEscala({ actual, criterio }: { actual?: string; criterio?: SimatCriterio }) {
+  const celda = (item: NivelEscala) => (
+    <td className={`matrix-cell ${item.code}${actual === item.name ? " is-current" : ""}`}>
       <strong>
         <Icono nombre={item.icon} />
         {item.name}
@@ -39,55 +40,55 @@ function TablaMatriz({ actual }: { actual?: string }) {
       <small>{item.decision}</small>
     </td>
   );
-  const dos = (largo: string, corto: string) => (
-    <>
-      <span className="long">{largo}</span>
-      <span className="short" aria-hidden="true">
-        {corto}
-      </span>
-    </>
-  );
   return (
     <div className="table-wrap matrix-wrap">
-      <table className="risk-matrix">
+      <table className="risk-matrix escala">
         <thead>
           <tr>
-            <th scope="col">{dos("Intensidad de lluvia", "Lluvia")}</th>
-            <th scope="col">{dos("Nivel del mar bajo", "Mar bajo")}</th>
-            <th scope="col">{dos("Nivel del mar alto", "Mar alto")}</th>
+            <th scope="col">Lluvia{criterio ? ` · ${duracion(criterio.ventanaMin)}` : ""}</th>
+            <th scope="col">Nivel y acción</th>
           </tr>
         </thead>
         <tbody>
-          <tr>
-            <th scope="row">Baja</th>
-            {MATRIZ.slice(0, 2).map(celda)}
-          </tr>
-          <tr>
-            <th scope="row">Alta</th>
-            {MATRIZ.slice(2).map(celda)}
-          </tr>
+          {ESCALA.map((item, i) => (
+            <tr key={item.name}>
+              <th scope="row">{criterio ? rangoLluvia(i, criterio.lluvia) : "—"}</th>
+              {celda(item)}
+            </tr>
+          ))}
         </tbody>
       </table>
+      <p className="meta escala-mar">
+        <Icono nombre="waves" />
+        {criterio?.marM != null
+          ? `Mar alto (≥ ${medida(criterio.marM)} m ${criterio.datum}) sube un nivel.`
+          : criterio
+            ? "Sin umbral de mar: el nivel del mar no modifica el nivel."
+            : "Configura un criterio para ver los umbrales del sector."}
+      </p>
     </div>
   );
 }
 
-function Decision({ result, simulacion, lluviaAlta, marAlto, consultado }: { result?: SimatEvaluacion; simulacion: boolean; lluviaAlta: boolean; marAlto: boolean; consultado: string }) {
-  const item = simulacion ? MATRIZ[Number(lluviaAlta) * 2 + Number(marAlto)] : MATRIZ.find((i) => i.name === result?.nivel);
+function Decision({ result, simulacion, nivelSim, marAlto, consultado }: { result?: SimatEvaluacion; simulacion: boolean; nivelSim: number; marAlto: boolean; consultado: string }) {
+  const oficial = !simulacion && result?.nivel ? ESCALA[indiceNivel(result.nivel)] : undefined;
+  const orientativo = !simulacion && !oficial && result?.nivelOrientativo ? ESCALA[indiceNivel(result.nivelOrientativo)] : undefined;
+  const item = simulacion ? nivelConMar(nivelSim, marAlto) : (oficial ?? orientativo);
   const profile = result?.criterio;
   const title = item?.name ?? (profile ? "Datos insuficientes" : "Sin evaluación");
-  const subtitle = item?.decision ?? (profile ? "Se requieren dos datos compatibles y vigentes." : "Falta un criterio local para la estación, puerto y sector elegidos.");
+  const subtitle = item?.decision ?? (profile ? "Se requiere una ventana de lluvia completa y vigente." : "Falta un criterio local para la estación, puerto y sector elegidos.");
+  const notas = simulacion ? [] : [...(result?.motivos ?? []), ...(result?.avisos ?? [])];
   return (
     <div className="decision">
       <div className="decision-main">
-        <div className={`decision-state ${item?.code ?? "unavailable"}`}>
+        <div className={`decision-state ${item?.code ?? "unavailable"}${orientativo ? " es-orientativo" : ""}`}>
           <div className="dial-wrap">
-            <Dial nivel={item ? MATRIZ.indexOf(item) : -1} />
+            <Dial nivel={item ? ESCALA.indexOf(item) : -1} />
           </div>
           <div>
             <div className="mode-badge">
-              <Icono nombre={simulacion ? "flask" : "gauge"} />
-              {simulacion ? "Simulación de la matriz" : "Evaluación automática · piloto"}
+              <Icono nombre={simulacion ? "flask" : orientativo ? "info" : "gauge"} />
+              {simulacion ? "Simulación de la escala" : orientativo ? "Experimental · orientativo, no oficial" : "Evaluación automática · piloto"}
             </div>
             <h2>
               {item ? (
@@ -101,11 +102,12 @@ function Decision({ result, simulacion, lluviaAlta, marAlto, consultado }: { res
             {profile && !simulacion ? (
               <p className="meta">
                 {profile.sector} · {profile.puerto}
+                {profile.estadoValidacion === "experimental" ? " · umbrales experimentales" : ""}
               </p>
             ) : null}
-            {result?.motivos.length && !simulacion ? (
+            {notas.length ? (
               <ul>
-                {result.motivos.map((m, i) => (
+                {notas.map((m, i) => (
                   <li key={i}>{m}</li>
                 ))}
               </ul>
@@ -115,8 +117,33 @@ function Decision({ result, simulacion, lluviaAlta, marAlto, consultado }: { res
         <p className="decision-note">{simulacion ? "Ejercicio con entradas manuales." : `Consulta ${fechaHora(consultado)} · Galápagos. La autoridad competente emite las alertas oficiales.`}</p>
       </div>
       <div className="decision-matrix">
-        <h3>Matriz de toma de decisiones</h3>
-        <TablaMatriz actual={item?.name} />
+        <h3>Escala de riesgo del sector</h3>
+        <TablaEscala actual={item?.name} criterio={profile} />
+      </div>
+    </div>
+  );
+}
+
+/** Medidor de lluvia con las tres marcas de la escala (vigilancia, preparación, respuesta). */
+function MedidorEscala({ valor, criterio }: { valor: number | null | undefined; criterio: SimatCriterio }) {
+  if (valor == null || !Number.isFinite(valor)) return null;
+  const marcas = [criterio.lluvia.vigilancia, criterio.lluvia.preparacion, criterio.lluvia.respuesta];
+  const tope = Math.max(valor, marcas[2]) * 1.15 || 1;
+  const item = ESCALA[Math.min(3, marcas.filter((m) => valor >= m).length)];
+  const color = { normal: "var(--rain)", caution: "#fab219", alert: "#ec835a", emergency: "var(--critical)" }[item.code];
+  return (
+    <div className="threshold-meter">
+      <div className="meter-track" role="img" aria-label={`${medida(valor)} mm/h: nivel ${item.name}`}>
+        <span className="meter-fill" style={{ width: `${Math.min(100, (valor / tope) * 100)}%`, background: color }} />
+        {marcas.map((m, i) => (
+          <span key={i} className="tm-mark" style={{ left: `calc(${(m / tope) * 100}% - 1px)`, background: ["#fab219", "#ec835a", "var(--critical)"][i] }} title={`${ESCALA[i + 1].name} ≥ ${medida(m)} mm/h`} />
+        ))}
+      </div>
+      <div className="tm-cap">
+        <span>Nivel por lluvia: {item.name}</span>
+        <span>
+          {marcas.map((m) => medida(m)).join(" · ")} mm/h
+        </span>
       </div>
     </div>
   );
@@ -276,7 +303,7 @@ function usePronostico(id: string): EstadoPronostico {
 
 /**
  * Historia de la lluvia: el explorador (con la marea del puerto, los umbrales
- * del sector y las zonas de la matriz) y el panel del modelo meteorológico.
+ * del sector y las zonas de la escala) y el panel del modelo meteorológico.
  */
 function HistoriaLluvia({ estacion, lluvia, criterio, marea }: { estacion: SimatEstacion; lluvia: SimatSerieLluvia | null; criterio: SimatCriterio | null; marea: MareaExplorador | null }) {
   const pronostico = usePronostico(estacion.id);
@@ -398,7 +425,7 @@ export default function VistaRiesgo() {
   const [puerto, setPuerto] = useState("");
   const [sector, setSector] = useState<string | null>(null);
   const [simulacion, setSimulacion] = useState(false);
-  const [lluviaAlta, setLluviaAlta] = useState(false);
+  const [nivelSim, setNivelSim] = useState(0);
   const [marAlto, setMarAlto] = useState(false);
   const [modal, setModal] = useState<"criterio" | "agregar" | "observado" | null>(null);
   const [marinos, setMarinos] = useState<SimatNivelMar[]>([]);
@@ -448,7 +475,8 @@ export default function VistaRiesgo() {
   if (!estado) return <Cargando />;
 
   const mismaArea = (r: SimatEvaluacion) => isla === TODAS_LAS_ISLAS || r.criterio.isla === isla;
-  const perfiles = estado.riesgo.filter((r) => mismaArea(r) && r.criterio.estacion === estacionId && r.criterio.puerto === puerto);
+  // Los sectores sin estación (p. ej. Isabela, Floreana, Baltra) se listan con cualquier estación.
+  const perfiles = estado.riesgo.filter((r) => mismaArea(r) && (r.criterio.estacion === estacionId || r.criterio.estacion === null) && r.criterio.puerto === puerto);
   const result = perfiles.find((r) => r.criterio.sector === sector) ?? perfiles[0];
   const profile = result?.criterio;
   const nombrePuerto = puertos.get(puerto) ?? puerto;
@@ -458,24 +486,24 @@ export default function VistaRiesgo() {
   const rain = result?.lluvia ?? { valor: raw?.intensity ?? null, fecha: latest?.time ?? null, fuente: latest?.source ?? null, intervalos: raw?.valid ?? null, esperados: raw?.expected ?? null };
   const marObservado = profile ? result.mar : (observacionPuerto(marinos, puerto) ?? null);
   const predicciones = prediccionesPuerto(marinos, puerto);
-  const limiteMar = profile ? `${medida(profile.marM)} m · ${profile.datum}` : "Por calibrar";
-  const limiteLluvia = profile ? `${medida(profile.lluviaMmH)} mm/h` : "Por calibrar";
-  const marComparable = !!profile && !!marObservado && marObservado.unidad === "m" && String(marObservado.referencia).trim().toLowerCase() === profile.datum.toLowerCase();
+  const limiteMar = profile ? (profile.marM != null ? `${medida(profile.marM)} m · ${profile.datum} (sube un nivel)` : "Sin umbral: no modifica el nivel") : "Por calibrar";
+  const limiteLluvia = profile ? `${medida(profile.lluvia.vigilancia)} · ${medida(profile.lluvia.preparacion)} · ${medida(profile.lluvia.respuesta)} mm/h` : "Por calibrar";
+  const marComparable = !!profile && profile.marM != null && !!marObservado && marObservado.unidad === "m" && String(marObservado.referencia).trim().toLowerCase() === profile.datum.toLowerCase();
   const aviso = avisoMarino(result, predicciones);
 
   /* mareas */
   const extremos = extremosMarea(marinos, puerto);
   const refMarea = extremos[0]?.ref.toLowerCase();
-  const umbralCompatible = !!profile?.activo && !!refMarea && profile.datum.toLowerCase() === refMarea;
+  const umbralCompatible = !!profile?.activo && profile.marM != null && !!refMarea && profile.datum.toLowerCase() === refMarea;
   const observadosMarea = marinos
     .filter((r) => r.puerto === puerto && r.tipo === "Nivel observado" && r.unidad === "m" && String(r.referencia || "").trim().toLowerCase() === refMarea && Number.isFinite(r.valor))
     .map((r) => ({ t: Date.parse(r.instante), h: r.valor }))
     .filter((o) => Number.isFinite(o.t));
 
   const editar = estado.puedeEditar;
+  const estacionesLluvia = estacionesDeLluvia(estado.estaciones, profile?.isla ?? islaRiesgo);
   const abrirCriterio = (tipo: "criterio" | "agregar") => {
-    if (!estacion) return notificar("Selecciona una estación del inventario.");
-    if (!ventanasCompatibles(estacion).length) return notificar("Selecciona una estación con resolución compatible con intensidad de lluvia.");
+    if (!puerto) return notificar("Selecciona un puerto de referencia.");
     setModal(tipo);
   };
 
@@ -510,7 +538,7 @@ export default function VistaRiesgo() {
               </a>
             </>,
           ],
-          ["Uso en la matriz", "La lectura requiere validación y un datum compatible con el umbral del sector."],
+          ["Uso en la escala", "Sube un nivel solo con umbral de mar en el sector, lectura validada y datum compatible."],
         ]}
       />
     );
@@ -525,11 +553,11 @@ export default function VistaRiesgo() {
           ["Hora de medición", marObservado ? horaMarina(marObservado) : "—"],
           ["Referencia vertical", marObservado?.referencia || "—"],
           ["Calidad y fuente", marObservado ? `${marObservado.calidad} · ${marObservado.fuente}` : "—"],
-          ["Umbral de mar alto", limiteMar],
+          ["Umbral de mar", limiteMar],
         ]}
         extra={
           <>
-            {marComparable ? <MedidorUmbral valor={marObservado?.valor} limite={profile?.marM} unidad="m" /> : null}
+            {marComparable ? <MedidorUmbral valor={marObservado?.valor} limite={profile?.marM ?? null} unidad="m" /> : null}
             {feedback ? (
               <p className="meta gauge-feedback" role="status">
                 {feedback}
@@ -637,16 +665,19 @@ export default function VistaRiesgo() {
               Modo de consulta
               <select value={simulacion ? "simulate" : "automatic"} onChange={(e) => setSimulacion(e.target.value === "simulate")}>
                 <option value="automatic">Evaluación automática</option>
-                <option value="simulate">Simulación de la matriz</option>
+                <option value="simulate">Simulación de la escala</option>
               </select>
             </label>
             {simulacion ? (
               <>
                 <label>
-                  Intensidad de lluvia
-                  <select value={lluviaAlta ? "Alta" : "Baja"} onChange={(e) => setLluviaAlta(e.target.value === "Alta")}>
-                    <option>Baja</option>
-                    <option>Alta</option>
+                  Lluvia
+                  <select value={nivelSim} onChange={(e) => setNivelSim(Number(e.target.value))}>
+                    {ESCALA.map((n, i) => (
+                      <option key={n.name} value={i}>
+                        {profile ? `${rangoLluvia(i, profile.lluvia)} · ${n.name}` : n.name}
+                      </option>
+                    ))}
                   </select>
                 </label>
                 <label>
@@ -661,7 +692,7 @@ export default function VistaRiesgo() {
           </div>
         </div>
         <div id="risk-decision">
-          <Decision result={result} simulacion={simulacion} lluviaAlta={lluviaAlta} marAlto={marAlto} consultado={estado.generadoEn} />
+          <Decision result={result} simulacion={simulacion} nivelSim={nivelSim} marAlto={marAlto} consultado={estado.generadoEn} />
         </div>
       </section>
 
@@ -675,9 +706,9 @@ export default function VistaRiesgo() {
             ["Fin del intervalo", rain.fecha ? `${fechaHora(rain.fecha)} · Galápagos` : "—"],
             ["Fuente", rain.fuente || "—"],
             ["Intervalos válidos", rain.esperados ? `${rain.intervalos} / ${rain.esperados}` : "—"],
-            ["Umbral de lluvia alta", limiteLluvia],
+            ["Umbrales de lluvia", limiteLluvia],
           ]}
-          extra={profile ? <MedidorUmbral valor={rain.valor} limite={profile.lluviaMmH} unidad="mm/h" /> : null}
+          extra={profile ? <MedidorEscala valor={rain.valor} criterio={profile} /> : null}
         />
         <div id="marine-observed">{medicionMar}</div>
       </div>
@@ -761,7 +792,7 @@ export default function VistaRiesgo() {
               r.fase || "—",
               `${medida(r.valor)} ${r.unidad}`,
               r.referencia,
-              profile?.activo && r.unidad === "m" && String(r.referencia).trim().toLowerCase() === profile.datum.toLowerCase() ? (
+              profile?.activo && profile.marM != null && r.unidad === "m" && String(r.referencia).trim().toLowerCase() === profile.datum.toLowerCase() ? (
                 <Pill color={r.valor >= profile.marM ? "amber" : "green"}>{r.valor >= profile.marM ? "Alto previsto" : "Bajo previsto"}</Pill>
               ) : (
                 "—"
@@ -775,9 +806,10 @@ export default function VistaRiesgo() {
       </section>
 
       {modal === "criterio" || modal === "agregar" ? (
-        estacion ? (
+        puerto ? (
           <CriterioModal
-            estacion={estacion}
+            estaciones={estacionesLluvia}
+            estacionInicial={estacion && estacionesLluvia.some((e) => e.id === estacion.id) ? estacion.id : null}
             puerto={puerto}
             criterio={modal === "criterio" ? (profile ?? null) : null}
             onCerrar={() => setModal(null)}

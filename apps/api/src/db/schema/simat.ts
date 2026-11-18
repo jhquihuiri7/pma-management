@@ -76,9 +76,8 @@ export const simatCriterios = pgTable(
   "simat_criterios",
   {
     id: uuid("id").primaryKey().defaultRandom(),
-    estacionId: text("estacion_id")
-      .notNull()
-      .references(() => simatEstaciones.id, { onDelete: "cascade" }),
+    /** Estación de lluvia; nula en sectores que aún no tienen una (no se evalúan). */
+    estacionId: text("estacion_id").references(() => simatEstaciones.id, { onDelete: "cascade" }),
     isla: text("isla").notNull(),
     puerto: text("puerto").notNull(),
     datum: text("datum").notNull(),
@@ -87,8 +86,16 @@ export const simatCriterios = pgTable(
     ventanaMin: integer("ventana_min").notNull(),
     vigenciaMin: integer("vigencia_min").notNull(),
     desfaseMin: integer("desfase_min").notNull(),
-    lluviaMmH: doublePrecision("lluvia_mm_h").notNull(),
-    marM: doublePrecision("mar_m").notNull(),
+    /** Umbral único anterior a 0043; se conserva sin uso. */
+    lluviaMmH: doublePrecision("lluvia_mm_h"),
+    /** Escala de lluvia (mm/h en la ventana): vigilancia ≤ preparación ≤ respuesta. */
+    lluviaVigilancia: doublePrecision("lluvia_vigilancia_mm_h").notNull(),
+    lluviaPreparacion: doublePrecision("lluvia_preparacion_mm_h").notNull(),
+    lluviaRespuesta: doublePrecision("lluvia_respuesta_mm_h").notNull(),
+    /** Umbral de mar alto en `datum`; nulo = el mar no modifica el nivel. */
+    marM: doublePrecision("mar_m"),
+    estadoValidacion: text("estado_validacion").notNull().default("experimental"),
+    alertasPublicas: boolean("alertas_publicas").notNull().default(false),
     activo: boolean("activo").notNull().default(false),
     version: integer("version").notNull().default(1),
     actualizadoPor: uuid("actualizado_por").references(() => users.id, { onDelete: "set null" }),

@@ -8,6 +8,7 @@ import { estado } from "../../modules/simat/estadoModule.js";
 import { mareografo, obtenerEstacion, serieLluvia, listarNivelMar, nivelMarPuerto } from "../../modules/simat/lecturas.js";
 import { pronosticoLluvia } from "../../modules/simat/conectores/openMeteo.js";
 import { guardarCriterio } from "../../modules/simat/criteriosModule.js";
+import { ESTADOS_VALIDACION } from "../../modules/simat/riesgo.js";
 import { registrarNivelObservado } from "../../modules/simat/nivelModule.js";
 import { CONECTORES_KEYS, sincronizar } from "../../modules/simat/sincronizacionModule.js";
 
@@ -17,7 +18,8 @@ const mareasQuery = z.object({ puerto: z.string().min(1).max(100).optional() }).
 
 const criterioSchema = z
   .object({
-    estacion: z.string().min(1).max(60),
+    id: z.string().uuid().optional(),
+    estacion: z.string().min(1).max(60).nullable(),
     puerto: z.string().min(1).max(100),
     datum: z.string().min(1).max(80),
     sector: z.string().min(1).max(120),
@@ -25,8 +27,12 @@ const criterioSchema = z
     ventanaMin: z.number().int(),
     vigenciaMin: z.number().int(),
     desfaseMin: z.number().int(),
-    lluviaMmH: z.number().finite(),
-    marM: z.number().finite(),
+    lluvia: z
+      .object({ vigilancia: z.number().finite(), preparacion: z.number().finite(), respuesta: z.number().finite() })
+      .strict(),
+    marM: z.number().finite().nullable(),
+    estadoValidacion: z.enum(ESTADOS_VALIDACION),
+    alertasPublicas: z.boolean(),
     activo: z.boolean(),
   })
   .strict();

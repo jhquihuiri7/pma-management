@@ -156,15 +156,31 @@ export interface SimatPronostico {
   pronostico: SimatPronosticoHora[];
 }
 
-// ── Risk matrix ──────────────────────────────────────────────────────────────
+// ── Risk scale ───────────────────────────────────────────────────────────────
 
-/** Rain × sea matrix, exactly as riesgo.py's LEVELS. */
-export const SIMAT_NIVELES_RIESGO = ["Normal", "Precaución", "Alerta", "Emergencia"] as const;
+/**
+ * Escala de riesgo por lluvia (umbrales del equipo técnico, migración 0044):
+ * la lluvia promedio en la ventana del criterio frente a tres umbrales da el
+ * nivel; si el sector tiene umbral de mar y el mar observado lo alcanza, el
+ * nivel sube uno (hasta Respuesta).
+ */
+export const SIMAT_NIVELES_RIESGO = ["Normal", "Vigilancia", "Preparación", "Respuesta"] as const;
 export type SimatNivelRiesgo = (typeof SIMAT_NIVELES_RIESGO)[number];
+
+export const SIMAT_ESTADOS_VALIDACION = ["experimental", "validado"] as const;
+export type SimatEstadoValidacion = (typeof SIMAT_ESTADOS_VALIDACION)[number];
+
+/** Umbrales de lluvia en mm/h (vigilancia ≤ preparación ≤ respuesta). */
+export interface SimatUmbralesLluvia {
+  vigilancia: number;
+  preparacion: number;
+  respuesta: number;
+}
 
 export interface SimatCriterio {
   id: string;
-  estacion: string;
+  /** null: el sector aún no tiene estación de lluvia y no se evalúa. */
+  estacion: string | null;
   isla: SimatIsla;
   puerto: string;
   datum: string;
@@ -173,8 +189,12 @@ export interface SimatCriterio {
   ventanaMin: number;
   vigenciaMin: number;
   desfaseMin: number;
-  lluviaMmH: number;
-  marM: number;
+  lluvia: SimatUmbralesLluvia;
+  /** Umbral de mar alto en `datum`; null = el mar no modifica el nivel. */
+  marM: number | null;
+  estadoValidacion: SimatEstadoValidacion;
+  alertasPublicas: boolean;
+  /** Habilita el nivel oficial; desactivado, el nivel es solo orientativo. */
   activo: boolean;
   actualizadoPor: string;
   actualizadoEn: string;
@@ -183,7 +203,7 @@ export interface SimatCriterio {
 /** Body of PUT /simat/criterios. */
 export interface SimatCriterioEntrada {
   id?: string;
-  estacion: string;
+  estacion: string | null;
   puerto: string;
   datum: string;
   sector: string;
@@ -191,17 +211,28 @@ export interface SimatCriterioEntrada {
   ventanaMin: number;
   vigenciaMin: number;
   desfaseMin: number;
-  lluviaMmH: number;
-  marM: number;
+  lluvia: SimatUmbralesLluvia;
+  marM: number | null;
+  estadoValidacion: SimatEstadoValidacion;
+  alertasPublicas: boolean;
   activo: boolean;
 }
 
-/** One evaluated sector, mirroring riesgo.py's evaluate(). */
+/** One evaluated sector. */
 export interface SimatEvaluacion {
   criterio: SimatCriterio;
-  /** null when any `motivos` block the evaluation. */
+  /** Nivel oficial: solo con el criterio activo y sin `motivos` que lo impidan. */
   nivel: SimatNivelRiesgo | null;
+  /** El mismo cálculo aunque el criterio no esté activo (experimental, orientativo). */
+  nivelOrientativo: SimatNivelRiesgo | null;
+  /** Nivel que da solo la lluvia, antes de considerar el mar. */
+  nivelLluvia: SimatNivelRiesgo | null;
+  /** true/false si el mar se comparó con su umbral; null si no hay umbral o dato. */
+  marAlto: boolean | null;
+  /** Por qué no hay nivel oficial (o tampoco orientativo). */
   motivos: string[];
+  /** Notas que no impiden el nivel (p. ej. falta el dato de mar). */
+  avisos: string[];
   lluvia: {
     valor: number | null;
     fecha: string | null;

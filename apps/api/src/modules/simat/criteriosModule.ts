@@ -1,5 +1,5 @@
 import { desc, eq, sql } from "drizzle-orm";
-import type { SimatCriterio, SimatCriterioEntrada, SimatIsla } from "@pma/types";
+import type { SimatCriterio, SimatCriterioEntrada, SimatEstadoValidacion, SimatIsla } from "@pma/types";
 import { getDb } from "../../db/client.js";
 import { simatCriterios } from "../../db/schema/simat.js";
 import { BadRequest, NotFound } from "../../lib/errors.js";
@@ -20,8 +20,10 @@ function aCriterio(row: CriterioRow): SimatCriterio {
     ventanaMin: row.ventanaMin,
     vigenciaMin: row.vigenciaMin,
     desfaseMin: row.desfaseMin,
-    lluviaMmH: row.lluviaMmH,
+    lluvia: { vigilancia: row.lluviaVigilancia, preparacion: row.lluviaPreparacion, respuesta: row.lluviaRespuesta },
     marM: row.marM,
+    estadoValidacion: row.estadoValidacion as SimatEstadoValidacion,
+    alertasPublicas: row.alertasPublicas,
     activo: row.activo,
     actualizadoPor: row.actualizadoPorNombre,
     actualizadoEn: row.actualizadoEn.toISOString(),
@@ -33,9 +35,14 @@ export async function listarCriterios(): Promise<SimatCriterio[]> {
   return rows.map(aCriterio);
 }
 
+/**
+ * Crea o actualiza un criterio. Con `id` se edita esa fila (también la de un
+ * sector sin estación, que el índice único no distingue); sin `id`, la clave
+ * estación · puerto · sector decide si es nuevo.
+ */
 export async function guardarCriterio(entrada: SimatCriterioEntrada, usuario: { id: string; name: string }): Promise<SimatCriterio> {
-  const estacion = await obtenerEstacion(entrada.estacion);
-  if (!estacion) throw NotFound("Seleccione una estación del inventario.");
+  const estacion = entrada.estacion ? await obtenerEstacion(entrada.estacion) : null;
+  if (entrada.estacion && !estacion) throw NotFound("Seleccione una estación del inventario.");
   let validado;
   try {
     validado = construirCriterio(entrada, estacion);
@@ -43,42 +50,48 @@ export async function guardarCriterio(entrada: SimatCriterioEntrada, usuario: { 
     throw BadRequest(err instanceof Error ? err.message : "Criterio inválido.");
   }
   const ahora = new Date();
+  const valores = {
+    estacionId: validado.estacion,
+    isla: validado.isla,
+    puerto: validado.puerto,
+    datum: validado.datum,
+    sector: validado.sector,
+    respaldo: validado.respaldo,
+    ventanaMin: validado.ventanaMin,
+    vigenciaMin: validado.vigenciaMin,
+    desfaseMin: validado.desfaseMin,
+    lluviaVigilancia: validado.lluvia.vigilancia,
+    lluviaPreparacion: validado.lluvia.preparacion,
+    lluviaRespuesta: validado.lluvia.respuesta,
+    marM: validado.marM,
+    estadoValidacion: validado.estadoValidacion,
+    alertasPublicas: validado.alertasPublicas,
+    activo: validado.activo,
+    actualizadoPor: usuario.id,
+    actualizadoPorNombre: usuario.name,
+    actualizadoEn: ahora,
+  };
+
+  if (entrada.id) {
+    const [row] = await getDb()
+      .update(simatCriterios)
+      .set({ ...valores, version: sql`${simatCriterios.version} + 1` })
+      .where(eq(simatCriterios.id, entrada.id))
+      .returning();
+    if (!row) throw NotFound("El criterio ya no existe.");
+    return aCriterio(row);
+  }
+
+  const { estacionId: _estacion, puerto: _puerto, sector: _sector, ...cambios } = valores;
+  void _estacion;
+  void _puerto;
+  void _sector;
   const [row] = await getDb()
     .insert(simatCriterios)
-    .values({
-      estacionId: validado.estacion,
-      isla: validado.isla,
-      puerto: validado.puerto,
-      datum: validado.datum,
-      sector: validado.sector,
-      respaldo: validado.respaldo,
-      ventanaMin: validado.ventanaMin,
-      vigenciaMin: validado.vigenciaMin,
-      desfaseMin: validado.desfaseMin,
-      lluviaMmH: validado.lluviaMmH,
-      marM: validado.marM,
-      activo: validado.activo,
-      actualizadoPor: usuario.id,
-      actualizadoPorNombre: usuario.name,
-      actualizadoEn: ahora,
-    })
+    .values(valores)
     .onConflictDoUpdate({
       target: [simatCriterios.estacionId, simatCriterios.puerto, simatCriterios.sector],
-      set: {
-        isla: validado.isla,
-        datum: validado.datum,
-        respaldo: validado.respaldo,
-        ventanaMin: validado.ventanaMin,
-        vigenciaMin: validado.vigenciaMin,
-        desfaseMin: validado.desfaseMin,
-        lluviaMmH: validado.lluviaMmH,
-        marM: validado.marM,
-        activo: validado.activo,
-        version: sql`${simatCriterios.version} + 1`,
-        actualizadoPor: usuario.id,
-        actualizadoPorNombre: usuario.name,
-        actualizadoEn: ahora,
-      },
+      set: { ...cambios, version: sql`${simatCriterios.version} + 1` },
     })
     .returning();
   return aCriterio(row);

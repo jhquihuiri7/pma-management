@@ -1,6 +1,6 @@
 // SIMAT-GAL: parsers (with fixtures captured from the live sources on
-// 2026-11-17), rolling rain windows and the rain × sea risk matrix. Pure
-// functions only: no database, no network.
+// 2026-11-17), rolling rain windows and the rain risk scale (with the sea
+// raising one level). Pure functions only: no database, no network.
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
@@ -130,7 +130,7 @@ test("mixed sources or an invalid reading void the window; coarse stations skip 
   assert.equal(horaria.windows.find((w) => w.minutes === 30)!.reason, "Resolución insuficiente");
 });
 
-// ── Risk matrix ──────────────────────────────────────────────────────────────
+// ── Risk scale ───────────────────────────────────────────────────────────────
 
 const ESTACION: SimatEstacion = {
   id: "IERSE-n_glps06", fuente: "IERSE", codigo: "n_glps06", nombre: "Militar", isla: "Santa Cruz",
@@ -141,7 +141,8 @@ const ESTACION: SimatEstacion = {
 const CRITERIO: SimatCriterio = {
   id: "c1", estacion: ESTACION.id, isla: "Santa Cruz", puerto: "Isla Santa Cruz", datum: "MLWS",
   sector: "Malecón", respaldo: "Estudio de drenaje", ventanaMin: 60, vigenciaMin: 60, desfaseMin: 30,
-  lluviaMmH: 10, marM: 2, activo: true, actualizadoPor: "técnico", actualizadoEn: "2026-11-17T15:00:00Z",
+  lluvia: { vigilancia: 5, preparacion: 15, respuesta: 25 }, marM: 2, estadoValidacion: "validado",
+  alertasPublicas: false, activo: true, actualizadoPor: "técnico", actualizadoEn: "2026-11-17T15:00:00Z",
 };
 
 function lluvia(intensidad: number, fin = "2026-11-17T15:55:00Z"): SimatSerieLluvia {
@@ -162,44 +163,70 @@ function mar(valor: number, calidad = "validado", instante = "2026-11-17T15:50:0
 
 const RELOJ = new Date("2026-11-17T16:00:00Z");
 
-test("matrix: the four levels of riesgo.py", () => {
+test("scale: rain thresholds give the level and a high sea raises it one step", () => {
   assert.equal(evaluar(CRITERIO, ESTACION, lluvia(2), mar(1), RELOJ).nivel, "Normal");
-  assert.equal(evaluar(CRITERIO, ESTACION, lluvia(2), mar(2.5), RELOJ).nivel, "Precaución");
-  assert.equal(evaluar(CRITERIO, ESTACION, lluvia(15), mar(1), RELOJ).nivel, "Alerta");
-  const emergencia = evaluar(CRITERIO, ESTACION, lluvia(15), mar(2.5), RELOJ);
-  assert.equal(emergencia.nivel, "Emergencia");
-  assert.deepEqual(emergencia.motivos, []);
-  assert.equal(emergencia.lluvia.valor, 15);
+  assert.equal(evaluar(CRITERIO, ESTACION, lluvia(5), mar(1), RELOJ).nivel, "Vigilancia");
+  assert.equal(evaluar(CRITERIO, ESTACION, lluvia(15), mar(1), RELOJ).nivel, "Preparación");
+  assert.equal(evaluar(CRITERIO, ESTACION, lluvia(30), mar(1), RELOJ).nivel, "Respuesta");
+  const subeMar = evaluar(CRITERIO, ESTACION, lluvia(2), mar(2.5), RELOJ);
+  assert.equal(subeMar.nivel, "Vigilancia");
+  assert.equal(subeMar.nivelLluvia, "Normal");
+  assert.equal(subeMar.marAlto, true);
+  assert.deepEqual(subeMar.motivos, []);
+  // The sea cannot go past the top of the scale.
+  assert.equal(evaluar(CRITERIO, ESTACION, lluvia(30), mar(2.5), RELOJ).nivel, "Respuesta");
+  // Without a sea threshold the sea is ignored.
+  const sinMar = evaluar({ ...CRITERIO, marM: null }, ESTACION, lluvia(16), [], RELOJ);
+  assert.equal(sinMar.nivel, "Preparación");
+  assert.equal(sinMar.marAlto, null);
+  assert.deepEqual(sinMar.avisos, []);
 });
 
-test("matrix: no level without valid, current and synchronous inputs", () => {
-  const preliminar = evaluar(CRITERIO, ESTACION, lluvia(15), mar(2.5, "Dato preliminar sin control de calidad"), RELOJ);
-  assert.equal(preliminar.nivel, null);
-  assert.match(preliminar.motivos.join(" "), /calidad validada/);
-
+test("scale: rain is required; missing sea data only leaves the rain level", () => {
   const vieja = evaluar(CRITERIO, ESTACION, lluvia(15, "2026-11-17T13:00:00Z"), mar(2.5), RELOJ);
   assert.equal(vieja.nivel, null);
+  assert.equal(vieja.nivelOrientativo, null);
   assert.match(vieja.motivos.join(" "), /lluvia está fuera de vigencia/);
-  assert.match(vieja.motivos.join(" "), /desfase/);
+
+  const preliminar = evaluar(CRITERIO, ESTACION, lluvia(15), mar(2.5, "Dato preliminar sin control de calidad"), RELOJ);
+  assert.equal(preliminar.nivel, "Preparación");
+  assert.equal(preliminar.marAlto, null);
+  assert.match(preliminar.avisos.join(" "), /calidad validada/);
 
   const otroDatum = evaluar({ ...CRITERIO, datum: "NMM" }, ESTACION, lluvia(15), mar(2.5), RELOJ);
-  assert.match(otroDatum.motivos.join(" "), /datum configurado/);
+  assert.equal(otroDatum.nivel, "Preparación");
+  assert.match(otroDatum.avisos.join(" "), /datum configurado/);
 
-  const inactivo = evaluar({ ...CRITERIO, activo: false }, ESTACION, lluvia(15), mar(2.5), RELOJ);
-  assert.equal(inactivo.nivel, null);
-  assert.match(inactivo.motivos.join(" "), /desactivado/);
+  const sinEstacion = evaluar({ ...CRITERIO, estacion: null }, undefined, null, mar(2.5), RELOJ);
+  assert.equal(sinEstacion.nivelOrientativo, null);
+  assert.match(sinEstacion.motivos.join(" "), /no tiene estación/);
+});
+
+test("scale: an inactive (experimental) criterion is only indicative", () => {
+  const experimental = evaluar({ ...CRITERIO, activo: false, estadoValidacion: "experimental" }, ESTACION, lluvia(26), mar(1), RELOJ);
+  assert.equal(experimental.nivel, null);
+  assert.equal(experimental.nivelOrientativo, "Respuesta");
+  assert.match(experimental.motivos.join(" "), /experimentales/);
 });
 
 test("criteria: window compatible with the station and port on its island", () => {
   const base = {
     puerto: "Isla Santa Cruz", datum: "MLWS", sector: "Malecón", respaldo: "Estudio",
-    ventanaMin: 60, vigenciaMin: 60, desfaseMin: 30, lluviaMmH: 10, marM: 2, activo: true,
+    ventanaMin: 60, vigenciaMin: 60, desfaseMin: 30, lluvia: { vigilancia: 5, preparacion: 15, respuesta: 25 },
+    marM: 2 as number | null, estadoValidacion: "experimental" as const, alertasPublicas: false, activo: true,
   };
   assert.equal(construirCriterio(base, ESTACION).ventanaMin, 60);
   assert.throws(() => construirCriterio({ ...base, ventanaMin: 90 }, ESTACION), /compatible/);
   assert.throws(() => construirCriterio({ ...base, ventanaMin: 30 }, { ...ESTACION, pasoMin: 60 }), /compatible/);
   assert.throws(() => construirCriterio({ ...base, puerto: "Puerto Villamil" }, ESTACION), /isla de la estación/);
-  assert.throws(() => construirCriterio({ ...base, lluviaMmH: -1 }, ESTACION), /lluvia_mm_h/);
+  assert.throws(() => construirCriterio({ ...base, lluvia: { vigilancia: -1, preparacion: 15, respuesta: 25 } }, ESTACION), /lluvia_vigilancia/);
+  assert.throws(() => construirCriterio({ ...base, lluvia: { vigilancia: 5, preparacion: 30, respuesta: 25 } }, ESTACION), /menor a mayor/);
+  assert.equal(construirCriterio({ ...base, marM: null }, ESTACION).marM, null);
+  // Without a station the island comes from the port.
+  const isabela = construirCriterio({ ...base, puerto: "Puerto Villamil", ventanaMin: 60 }, null);
+  assert.equal(isabela.isla, "Isabela");
+  assert.equal(isabela.estacion, null);
+  assert.throws(() => construirCriterio({ ...base, puerto: "Puerto Inventado" }, null), /inventario/);
   assert.ok(puertoCoincideIsla("Baltra", "Santa Cruz"));
   assert.ok(!puertoCoincideIsla("Baltra", "San Cristóbal"));
 });

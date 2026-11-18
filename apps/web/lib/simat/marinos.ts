@@ -71,13 +71,14 @@ export function avisoMarino(result: SimatEvaluacion | undefined, forecasts: Sima
   const observed = result?.mar ?? undefined;
   const compatible = (row?: SimatNivelMar | null) =>
     !!criteria?.activo &&
+    criteria.marM != null &&
     row?.unidad === "m" &&
     String(row.referencia).trim().toLowerCase() === criteria.datum.toLowerCase() &&
     Number.isFinite(row.valor);
   if (criteria && observed && compatible(observed)) {
     const age = clock - Date.parse(observed.instante);
     if (age >= 0 && age <= criteria.vigenciaMin * 60000 && CALIDADES.includes(String(observed.calidad).trim().toLowerCase())) {
-      const high = observed.valor >= criteria.marM;
+      const high = observed.valor >= (criteria.marM ?? Infinity);
       return {
         title: high ? "Precaución costera · mar alto observado" : "Umbral marino no alcanzado",
         tone: high ? "caution" : "unavailable",
@@ -98,7 +99,7 @@ export function avisoMarino(result: SimatEvaluacion | undefined, forecasts: Sima
   const row = highest(comparable) || highest(today);
   if (!row) return { title: "Pronóstico de pleamar no disponible para hoy", tone: "unavailable", detail: "Consulta la fecha de los registros en la tabla de mareas." };
   if (criteria && compatible(row)) {
-    const high = row.valor >= criteria.marM;
+    const high = row.valor >= (criteria.marM ?? Infinity);
     return {
       row,
       title: high ? "Precaución costera · mar alto previsto" : "Pleamar prevista bajo el umbral del sector",

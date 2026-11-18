@@ -13,7 +13,7 @@ import { extremosMarea, horaMarina, observacionPuerto } from "@/lib/simat/marino
 import { duracion, fechaDia, fechaHora, hace, horaCorta, medida, numero } from "@/lib/simat/formato";
 import { TODAS_LAS_ISLAS, useSimat } from "./contexto";
 import { Icono, type NombreIcono } from "./iconos";
-import { MATRIZ } from "./matriz";
+import { ESCALA, indiceNivel } from "./matriz";
 import MapaGeo from "./MapaGeo";
 import { CardHead, Dial, FiltroEstacion, FiltroIsla, Grafico, Pill, StatMini, Tabla, Vacio } from "./piezas";
 
@@ -165,17 +165,25 @@ export default function VistaGeneral({ riesgo }: { riesgo?: ReactNode }) {
 
   /* indicadores */
   const resultados = estado.riesgo.filter((r) => isla === TODAS_LAS_ISLAS || r.criterio.isla === isla);
+  // Nivel oficial (criterios activos) y, si no hay, el orientativo de los
+  // criterios experimentales, que el panel muestra marcado como no oficial.
   const evaluados = resultados.filter((r) => r.nivel);
-  const peor = evaluados.reduce((max, r) => Math.max(max, MATRIZ.findIndex((i) => i.name === r.nivel)), -1);
-  const nivelPeor = MATRIZ[peor];
+  const peor = evaluados.reduce((max, r) => Math.max(max, indiceNivel(r.nivel)), -1);
+  const nivelPeor = ESCALA[peor];
+  const orientativos = resultados.filter((r) => !r.nivel && r.nivelOrientativo);
+  const peorOrientativo = orientativos.reduce((max, r) => Math.max(max, indiceNivel(r.nivelOrientativo)), -1);
+  const nivelOrientativo = peor < 0 ? ESCALA[peorOrientativo] : undefined;
+  const indiceKpi = peor >= 0 ? peor : peorOrientativo;
   const pasos = (
     <>
-      <div className="level-steps cuatro" role="img" aria-label={peor >= 0 ? `Nivel ${peor + 1} de 4: ${nivelPeor.name}` : "Sin nivel evaluado"}>
-        {MATRIZ.map((n, i) => (
-          <span key={n.name} className={peor >= 0 && i <= peor ? "on" : undefined} style={peor >= 0 && i <= peor ? ({ "--lvl": COLORES.status[peor] } as CSSProperties) : undefined} title={n.name} />
+      <div className={`level-steps cuatro${peor < 0 ? " orientativo" : ""}`} role="img" aria-label={indiceKpi >= 0 ? `Nivel ${indiceKpi + 1} de 4: ${ESCALA[indiceKpi].name}${peor < 0 ? " (orientativo)" : ""}` : "Sin nivel evaluado"}>
+        {ESCALA.map((n, i) => (
+          <span key={n.name} className={indiceKpi >= 0 && i <= indiceKpi ? "on" : undefined} style={indiceKpi >= 0 && i <= indiceKpi ? ({ "--lvl": COLORES.status[indiceKpi] } as CSSProperties) : undefined} title={n.name} />
         ))}
       </div>
-      <p className="level-caption">{peor >= 0 ? `Nivel ${peor + 1} de 4 · ${nivelPeor.decision}` : "Escala de 4 niveles de la matriz"}</p>
+      <p className="level-caption">
+        {peor >= 0 ? `Nivel ${peor + 1} de 4 · ${nivelPeor.decision}` : nivelOrientativo ? `Orientativo · ${nivelOrientativo.name} · no oficial` : "Escala de 4 niveles por lluvia"}
+      </p>
     </>
   );
   const activas = estacionesAmbito.filter((s) => s.activa).length;
@@ -258,6 +266,8 @@ export default function VistaGeneral({ riesgo }: { riesgo?: ReactNode }) {
   const hora = lluvia?.windows.find((w) => w.minutes === 60);
   const observado = puerto ? observacionPuerto(marinos, puerto) : undefined;
   const provisionales = resultados.length > 0 && resultados.every((r) => !r.criterio.activo);
+  const experimentales = resultados.filter((r) => r.criterio.estadoValidacion === "experimental").length;
+  const sinEstacion = resultados.filter((r) => !r.criterio.estacion).length;
 
   /* precipitación reciente */
   const slots = ranurasLluvia(lluvia, estacion);
@@ -308,8 +318,16 @@ export default function VistaGeneral({ riesgo }: { riesgo?: ReactNode }) {
       <div className="kpis">
         <Kpi
           etiqueta="Nivel de riesgo"
-          valor={nivelPeor?.name ?? "Sin evaluación"}
-          detalle={evaluados.length ? `${evaluados.length} de ${resultados.length} sectores evaluados` : resultados.length ? `${resultados.length} criterios · sin evaluación vigente` : "Sin criterios en el ámbito"}
+          valor={nivelPeor?.name ?? (resultados.length ? "Sin nivel oficial" : "Sin evaluación")}
+          detalle={
+            evaluados.length
+              ? `${evaluados.length} de ${resultados.length} sectores evaluados`
+              : orientativos.length
+                ? `${orientativos.length} de ${resultados.length} sectores con nivel orientativo (experimental)`
+                : resultados.length
+                  ? `${resultados.length} sectores · sin datos de lluvia vigentes`
+                  : "Sin criterios en el ámbito"
+          }
           icono="gauge"
           visual={pasos}
           texto
@@ -338,7 +356,8 @@ export default function VistaGeneral({ riesgo }: { riesgo?: ReactNode }) {
         <div className="banner">
           <Icono nombre="alert" />
           <div>
-            <strong>Criterios de riesgo por calibrar</strong> · Los {resultados.length} criterios del ámbito son provisionales y están desactivados: la matriz no emite niveles hasta que un técnico calibre sus umbrales y los active.
+            <strong>Umbrales experimentales</strong> · {experimentales === resultados.length ? `Los ${resultados.length} sectores del ámbito usan` : `${experimentales} de ${resultados.length} sectores usan`} umbrales experimentales con las alertas públicas deshabilitadas: los
+            niveles del panel son orientativos, no oficiales.{sinEstacion ? ` ${sinEstacion === 1 ? "Un sector no tiene" : `${sinEstacion} sectores no tienen`} estación de lluvia y no se evalúa${sinEstacion === 1 ? "" : "n"}.` : ""}
           </div>
         </div>
       ) : (
@@ -350,41 +369,42 @@ export default function VistaGeneral({ riesgo }: { riesgo?: ReactNode }) {
         </div>
       )}
 
-      <section className={`card risk-band ${nivelPeor?.code ?? "unavailable"}`}>
+      <section className={`card risk-band ${(nivelPeor ?? nivelOrientativo)?.code ?? "unavailable"}${!nivelPeor && nivelOrientativo ? " es-orientativo" : ""}`}>
         <div className="risk-band-dial">
-          <Dial nivel={peor} />
+          <Dial nivel={indiceKpi} />
           <div className="dial-caption">
             <strong>
-              {nivelPeor ? (
+              {nivelPeor ?? nivelOrientativo ? (
                 <>
-                  <Icono nombre={nivelPeor.icon} />
-                  {nivelPeor.name}
+                  <Icono nombre={(nivelPeor ?? nivelOrientativo)!.icon} />
+                  {(nivelPeor ?? nivelOrientativo)!.name}
                 </>
               ) : (
                 "Sin evaluación"
               )}
             </strong>
-            <span>{nivelPeor ? nivelPeor.decision : "Sin criterio vigente en el ámbito"}</span>
+            <span>{nivelPeor ? nivelPeor.decision : nivelOrientativo ? "Orientativo · experimental, no oficial" : "Sin criterio vigente en el ámbito"}</span>
           </div>
         </div>
         <div className="risk-band-body">
           <h2>Riesgo por lluvia y nivel del mar</h2>
-          <p className="meta">Matriz de decisión para sectores con influencia costera</p>
-          {evaluados.length ? (
+          <p className="meta">Escala por lluvia de cada sector (Normal, Vigilancia, Preparación, Respuesta); el mar alto sube un nivel donde hay umbral</p>
+          {evaluados.length || orientativos.length ? (
             <div className="risk-summary">
-              {evaluados.map((r) => {
-                const n = MATRIZ.find((i) => i.name === r.nivel);
+              {evaluados.concat(orientativos).map((r) => {
+                const n = ESCALA[indiceNivel(r.nivel ?? r.nivelOrientativo)];
                 return n ? (
-                  <span key={r.criterio.id} className={`risk-status ${n.code}`}>
+                  <span key={r.criterio.id} className={`risk-status ${n.code}${r.nivel ? "" : " es-orientativo"}`} title={r.nivel ? "Nivel oficial" : "Nivel orientativo (umbrales experimentales)"}>
                     <Icono nombre={n.icon} />
                     {r.criterio.sector} · {n.name}
+                    {r.nivel ? "" : " · orientativo"}
                   </span>
                 ) : null;
               })}
             </div>
           ) : (
             <p className="meta" style={{ marginTop: 10 }}>
-              {resultados.length ? "Sin evaluación vigente. Consulta los datos y criterios de cada sector." : "Sin evaluación automática. Consulta la matriz y las predicciones de marea por puerto."}
+              {resultados.length ? "Sin evaluación vigente. Consulta los datos y criterios de cada sector." : "Sin evaluación automática. Consulta la escala y las predicciones de marea por puerto."}
             </p>
           )}
           <div className="risk-facts">
@@ -432,7 +452,7 @@ export default function VistaGeneral({ riesgo }: { riesgo?: ReactNode }) {
           </div>
         </div>
         <a className="button secondary" href="#riesgo-sector">
-          Ver matriz y evidencia
+          Ver escala y evidencia
           <Icono nombre="arrow" />
         </a>
       </section>

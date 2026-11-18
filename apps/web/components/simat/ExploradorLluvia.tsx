@@ -4,7 +4,7 @@
 // (risk-ui.js: rainfallHistory / drawRainExplorer) y ampliado con el riesgo del
 // sector: sobre las barras de intensidad se dibuja la marea astronómica del
 // puerto (eje derecho) y los umbrales del criterio, y de fondo se pinta el nivel
-// de la matriz de decisión (Normal, Precaución, Alerta, Emergencia) que resulta
+// de la escala de riesgo (Normal, Vigilancia, Preparación, Respuesta) que resulta
 // en cada momento. Puede seguir con el pronóstico horario de lluvia para ver los
 // momentos de riesgo previstos. Puntero, flechas del teclado, periodo visible y
 // salto al máximo.
@@ -15,7 +15,7 @@ import { range, type TideExtreme, type TidePoint } from "@/lib/simat/graficos";
 import { nivelMarea } from "@/lib/simat/marinos";
 import { duracion, fechaDia, fechaHora, medida, numero } from "@/lib/simat/formato";
 import { Icono } from "./iconos";
-import { MATRIZ, type NivelMatriz } from "./matriz";
+import { ESCALA, indiceLluvia, nivelConMar, type NivelEscala } from "./matriz";
 
 const TZ = "Pacific/Galapagos";
 const ejeHora = new Intl.DateTimeFormat("es-EC", { timeZone: TZ, hour: "2-digit", minute: "2-digit", hourCycle: "h23" });
@@ -29,7 +29,7 @@ const HORA = 3600e3;
 const COBERTURA_MINIMA = 0.9;
 
 /** Colores de los niveles: los de .simat .normal/.caution/.alert/.emergency. */
-const COLOR: Record<NivelMatriz["code"], { bg: string; stroke: string }> = {
+const COLOR: Record<NivelEscala["code"], { bg: string; stroke: string }> = {
   normal: { bg: "#ecf9ee", stroke: "#0ca30c" },
   caution: { bg: "#fff2c9", stroke: "#fab219" },
   alert: { bg: "#fde3d5", stroke: "#ec835a" },
@@ -44,7 +44,6 @@ const C = {
   mareaArea: "rgba(42,120,214,.12)",
   extremo: "#1c5cab",
   observado: "#eb6834",
-  umbralLluvia: "#115e59",
   umbralMar: "#1c5cab",
   texto: "#94a3b8",
   texto2: "#64748b",
@@ -65,7 +64,7 @@ interface Fila {
 interface Tramo {
   desde: number;
   hasta: number;
-  nivel: NivelMatriz;
+  nivel: NivelEscala;
   previsto: boolean;
 }
 
@@ -91,12 +90,18 @@ function mareaMaxima(extremos: TideExtreme[], a: number, b: number): number | nu
   return validos.length ? Math.max(...validos) : null;
 }
 
-function nivelDe(ventana: number | null | undefined, mar: number | null, criterio: SimatCriterio): NivelMatriz | null {
-  if (ventana == null || mar == null) return null;
-  return MATRIZ[Number(ventana >= criterio.lluviaMmH) * 2 + Number(mar >= criterio.marM)];
+/**
+ * Nivel de la escala en un instante: el de la lluvia en la ventana y, si el
+ * sector tiene umbral de mar comparable, uno más donde la marea lo alcanza
+ * (sin dato de marea queda el de la lluvia, como en la API).
+ */
+function nivelDe(ventana: number | null | undefined, mar: number | null, criterio: SimatCriterio, conMar: boolean): NivelEscala | null {
+  if (ventana == null) return null;
+  const indice = indiceLluvia(ventana, criterio.lluvia);
+  return conMar && criterio.marM != null && mar != null ? nivelConMar(indice, mar >= criterio.marM) : ESCALA[indice];
 }
 
-function ChipNivel({ nivel }: { nivel: NivelMatriz }) {
+function ChipNivel({ nivel }: { nivel: NivelEscala }) {
   return (
     <span className={`nivel-chip ${nivel.code}`}>
       <Icono nombre={nivel.icon} />
@@ -158,7 +163,9 @@ export default function ExploradorLluvia({
   const refMarea = hayMarea ? (marea?.extremos[0]?.ref ?? "") : "";
   const datumCompatible = !!criterio && hayMarea && criterio.datum.trim().toLowerCase() === refMarea.toLowerCase();
   const conCriterio = horaria && !!criterio;
-  const conZonas = conCriterio && datumCompatible;
+  // Las zonas salen de la lluvia; el mar solo cuenta con umbral y datum comparable.
+  const conZonas = conCriterio;
+  const marAplica = conCriterio && criterio?.marM != null && datumCompatible;
   const ventanaMin = criterio?.ventanaMin ?? step;
 
   // Intervalos observados de toda la serie: cada lectura cierra un intervalo y
@@ -226,7 +233,7 @@ export default function ExploradorLluvia({
   // Tramos continuos de cada nivel de la matriz: la lluvia es la del intervalo
   // que contiene el instante y el mar, la curva de marea en ese instante.
   const tramos = useMemo<Tramo[]>(() => {
-    if (!conZonas || !criterio || !marea || !filas.length) return [];
+    if (!conZonas || !criterio || !filas.length) return [];
     const t0 = filas[0].inicio;
     const t1 = filas[filas.length - 1].fin;
     const paso = Math.max(MIN, Math.round((t1 - t0) / 1500));
@@ -235,7 +242,8 @@ export default function ExploradorLluvia({
     for (let t = t0; t < t1; t += paso) {
       while (j < filas.length - 1 && filas[j].fin <= t) j++;
       const f = filas[j];
-      const nivel = f.inicio <= t && t < f.fin ? nivelDe(f.ventana, mareaMaxima(marea.extremos, t, t + paso), criterio) : null;
+      const mar = marAplica && marea ? mareaMaxima(marea.extremos, t, t + paso) : null;
+      const nivel = f.inicio <= t && t < f.fin ? nivelDe(f.ventana, mar, criterio, marAplica) : null;
       if (!nivel) continue;
       const previsto = t >= end;
       const hasta = Math.min(t + paso, t1);
@@ -244,7 +252,7 @@ export default function ExploradorLluvia({
       else res.push({ desde: t, hasta, nivel, previsto });
     }
     return res;
-  }, [conZonas, criterio, marea, filas, end]);
+  }, [conZonas, marAplica, criterio, marea, filas, end]);
   const riesgosos = tramos.filter((z) => z.nivel.code !== "normal");
 
   const { picos, maximo } = useMemo(() => {
@@ -285,7 +293,7 @@ export default function ExploradorLluvia({
       escala.current = { left, right, t0, t1 };
 
       // Escala de lluvia (incluye el umbral del criterio para poder compararlo).
-      const max = 1.12 * Math.max(0, ...filas.map((r) => Math.max(r.intensity ?? 0, r.ventana ?? 0)), conCriterio && criterio ? criterio.lluviaMmH : 0);
+      const max = 1.12 * Math.max(0, ...filas.map((r) => Math.max(r.intensity ?? 0, r.ventana ?? 0)), conCriterio && criterio ? criterio.lluvia.respuesta : 0);
       const power = 10 ** Math.floor(Math.log10((max || 1) / 5));
       const tick = ([0.2, 0.25, 0.5, 1, 2, 2.5, 5, 10].find((n) => n * power >= (max || 1) / 5) ?? 10) * power;
       const marcas = Math.max(2, Math.ceil((max || 1) / tick - 1e-9));
@@ -307,7 +315,7 @@ export default function ExploradorLluvia({
         if (fin != null) curva.push({ t: t1, h: fin });
         curva.sort((a, b) => a.t - b.t);
         const obs = marea.observados.filter((o) => o.t >= t0 && o.t <= t1);
-        const valores = curva.map((p) => p.h).concat(obs.map((o) => o.h), datumCompatible && criterio ? [criterio.marM] : []);
+        const valores = curva.map((p) => p.h).concat(obs.map((o) => o.h), marAplica && criterio?.marM != null ? [criterio.marM] : []);
         if (!valores.length) return null;
         const bajo = Math.min(...valores);
         const alto = Math.max(...valores);
@@ -316,7 +324,7 @@ export default function ExploradorLluvia({
         return { extremos, curva, obs, yr, ym, ultimo: marea.extremos[marea.extremos.length - 1] };
       })();
 
-      // 1 · zonas de la matriz y cinta superior
+      // 1 · zonas de la escala y cinta superior
       for (const z of tramos) {
         const x0 = x(z.desde);
         const ancho = Math.max(1, x(z.hasta) - x0);
@@ -332,7 +340,7 @@ export default function ExploradorLluvia({
         ctx.fillStyle = C.texto2;
         ctx.textAlign = "right";
         ctx.textBaseline = "middle";
-        ctx.fillText("Matriz", left - 6, top - 8.5);
+        ctx.fillText("Nivel", left - 6, top - 8.5);
       }
 
       // 2 · intervalos observados sin dato válido
@@ -418,23 +426,38 @@ export default function ExploradorLluvia({
         ctx.stroke();
       }
 
-      // 6 · umbral de lluvia alta
+      // 6 · umbrales de lluvia de la escala (vigilancia, preparación, respuesta)
       if (conCriterio && criterio) {
-        const yy = Math.round(y(criterio.lluviaMmH)) + 0.5;
-        ctx.strokeStyle = C.umbralLluvia;
-        ctx.lineWidth = 1.5;
-        ctx.setLineDash([6, 4]);
-        ctx.beginPath();
-        ctx.moveTo(left, yy);
-        ctx.lineTo(right, yy);
-        ctx.stroke();
-        ctx.setLineDash([]);
+        const umbrales: [number, NivelEscala][] = [
+          [criterio.lluvia.vigilancia, ESCALA[1]],
+          [criterio.lluvia.preparacion, ESCALA[2]],
+          [criterio.lluvia.respuesta, ESCALA[3]],
+        ];
         ctx.font = "600 10.5px Inter, system-ui, sans-serif";
-        ctx.fillStyle = C.umbralLluvia;
         ctx.textAlign = "left";
-        const debajo = yy - 16 < top;
-        ctx.textBaseline = debajo ? "top" : "bottom";
-        ctx.fillText(`Lluvia alta ≥ ${medida(criterio.lluviaMmH)} mm/h`, left + 6, debajo ? yy + 4 : yy - 3);
+        let ultimaEtiqueta = Infinity;
+        for (const [valor, nivel] of umbrales) {
+          const yy = Math.round(y(valor)) + 0.5;
+          ctx.strokeStyle = COLOR[nivel.code].stroke;
+          ctx.lineWidth = 1.5;
+          ctx.setLineDash([6, 4]);
+          ctx.beginPath();
+          ctx.moveTo(left, yy);
+          ctx.lineTo(right, yy);
+          ctx.stroke();
+          ctx.setLineDash([]);
+          // Etiqueta sobre la línea; si choca con la anterior o con el borde, debajo.
+          const debajo = yy - 16 < top || ultimaEtiqueta - yy < 14;
+          ctx.textBaseline = debajo ? "top" : "bottom";
+          const ly = debajo ? yy + 4 : yy - 3;
+          const texto = `${nivel.name} ≥ ${medida(valor)} mm/h`;
+          ctx.lineWidth = 3;
+          ctx.strokeStyle = "rgba(255,255,255,.9)";
+          ctx.strokeText(texto, left + 6, ly);
+          ctx.fillStyle = COLOR[nivel.code].stroke === "#fab219" ? "#a16207" : COLOR[nivel.code].stroke;
+          ctx.fillText(texto, left + 6, ly);
+          ultimaEtiqueta = yy;
+        }
       }
 
       // 7 · marea (eje derecho): umbral de mar alto, curva, pleamares y
@@ -449,7 +472,7 @@ export default function ExploradorLluvia({
         ctx.font = "600 11px Inter, system-ui, sans-serif";
         ctx.textAlign = "right";
         ctx.fillText(`${w < 560 ? "Marea" : "Marea prevista"} (m, ${refMarea || "—"})`, w - 6, 9);
-        if (datumCompatible && criterio) {
+        if (marAplica && criterio?.marM != null) {
           const yy = Math.round(ym(criterio.marM)) + 0.5;
           ctx.strokeStyle = C.umbralMar;
           ctx.lineWidth = 1.5;
@@ -569,7 +592,7 @@ export default function ExploradorLluvia({
     const ro = new ResizeObserver(dibujar);
     ro.observe(canvas);
     return () => ro.disconnect();
-  }, [filas, tramos, picos, indice, step, horaria, hayMarea, marea, refMarea, datumCompatible, conCriterio, conZonas, criterio, ventanaMin, mostrarPronostico, end]);
+  }, [filas, tramos, picos, indice, step, horaria, hayMarea, marea, refMarea, datumCompatible, marAplica, conCriterio, conZonas, criterio, ventanaMin, mostrarPronostico, end]);
 
   const seleccionar = (i: number) => setIndice(Math.max(0, Math.min(filas.length - 1, i)));
   const filaEn = (t: number) => {
@@ -593,7 +616,7 @@ export default function ExploradorLluvia({
   const fila = filas[indice];
   const picoFila = ultimoPico !== undefined ? filas[ultimoPico] : undefined;
   const marFila = fila && hayMarea && marea ? nivelMarea(marea.extremos, fila.fin) : null;
-  const nivelFila = fila && conZonas && criterio ? nivelDe(fila.ventana, marFila, criterio) : null;
+  const nivelFila = fila && conZonas && criterio ? nivelDe(fila.ventana, marFila, criterio, marAplica) : null;
 
   return (
     <>
@@ -631,7 +654,7 @@ export default function ExploradorLluvia({
         ref={canvasRef}
         className={`rain-interactive-chart${hayMarea ? " con-marea" : ""}`}
         tabIndex={0}
-        aria-label={hayMarea ? "Gráfica interactiva de lluvia en milímetros por hora, marea y niveles de la matriz de riesgo" : "Gráfica interactiva de lluvia en milímetros por hora"}
+        aria-label={hayMarea ? "Gráfica interactiva de lluvia en milímetros por hora, marea y niveles de la escala de riesgo" : "Gráfica interactiva de lluvia en milímetros por hora"}
         aria-describedby="rain-help rain-selection"
         onPointerMove={(e) => (e.pointerType === "mouse" || e.pointerType === "pen") && desdePuntero(e)}
         onPointerUp={desdePuntero}
@@ -680,11 +703,11 @@ export default function ExploradorLluvia({
         ) : null}
         {conCriterio ? (
           <span>
-            <i className="umbral" style={{ "--c": C.umbralLluvia } as CSSProperties} />
-            Umbral de lluvia
+            <i className="umbral" style={{ "--c": COLOR.alert.stroke } as CSSProperties} />
+            Umbrales de lluvia (vigilancia · preparación · respuesta)
           </span>
         ) : null}
-        {conZonas ? (
+        {marAplica ? (
           <span>
             <i className="umbral punteado" style={{ "--c": C.umbralMar } as CSSProperties} />
             Umbral de mar
@@ -697,8 +720,8 @@ export default function ExploradorLluvia({
       </div>
       {conZonas ? (
         <div className="chart-legend rain-legend zonas-legend">
-          <span className="meta">Zonas de la matriz:</span>
-          {MATRIZ.map((n) => (
+          <span className="meta">Zonas de la escala:</span>
+          {ESCALA.map((n) => (
             <span key={n.code}>
               <i style={{ "--c": COLOR[n.code].bg, boxShadow: `inset 0 3px 0 ${COLOR[n.code].stroke}` } as CSSProperties} />
               {n.name}
@@ -709,23 +732,24 @@ export default function ExploradorLluvia({
       <div className="riesgo-notas">
         {!horaria ? null : !criterio ? (
           <p className="meta">Este sector no tiene criterio configurado: se muestran la lluvia y la marea, sin zonas de riesgo.</p>
-        ) : !hayMarea ? (
-          <p className="meta">El puerto no tiene predicciones de marea en el periodo: no se pueden pintar las zonas de riesgo.</p>
-        ) : !datumCompatible ? (
-          <p className="meta">
-            El umbral de mar del criterio está en «{criterio.datum}» y la marea en «{refMarea}»: no son comparables, por eso no se pintan zonas.
-          </p>
         ) : (
           <>
-            {!criterio.activo ? (
+            {!criterio.activo || criterio.estadoValidacion === "experimental" ? (
               <p className="riesgo-provisional">
                 <Icono nombre="alert" />
-                Umbrales provisionales del sector {criterio.sector} (criterio desactivado): las zonas son orientativas hasta que se calibren.
+                Umbrales {criterio.estadoValidacion === "experimental" ? "experimentales" : "sin activar"} del sector {criterio.sector}: las zonas son orientativas, no un nivel oficial.
               </p>
             ) : null}
             <p className="meta">
-              Cada zona cruza la lluvia promedio en {duracion(ventanaMin)} (alta desde {medida(criterio.lluviaMmH)} mm/h) con la marea astronómica prevista por INOCAR (alta desde {medida(criterio.marM)} m {criterio.datum}). La
-              evaluación oficial del sector usa el nivel del mar observado.
+              Cada zona compara la lluvia promedio en {duracion(ventanaMin)} con los umbrales del sector: vigilancia desde {medida(criterio.lluvia.vigilancia)}, preparación desde {medida(criterio.lluvia.preparacion)} y respuesta
+              desde {medida(criterio.lluvia.respuesta)} mm/h.{" "}
+              {criterio.marM == null
+                ? "El sector no tiene umbral de mar: la marea se muestra como referencia y no cambia el nivel."
+                : !hayMarea
+                  ? "El puerto no tiene predicción de marea en el periodo: el nivel queda solo por la lluvia."
+                  : !datumCompatible
+                    ? `El umbral de mar está en «${criterio.datum}» y la marea en «${refMarea}»: no se comparan y el nivel queda solo por la lluvia.`
+                    : `Donde la marea prevista por INOCAR alcanza ${medida(criterio.marM)} m ${criterio.datum}, el nivel sube uno. La evaluación del sector usa el nivel del mar observado.`}
             </p>
           </>
         )}

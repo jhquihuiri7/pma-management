@@ -24,7 +24,21 @@
 .simat .risk-measure.fija:hover{border-color:var(--line);box-shadow:none}
 .simat .risk-measure.fija .risk-chart-chevron{text-decoration:none}
 
-/* Explorador de lluvia con marea y zonas de la matriz (Riesgo y nivel del mar). */
+/* Escala de riesgo por lluvia (0044): tabla del sector y niveles orientativos
+   (umbrales experimentales), que se distinguen del nivel oficial. */
+.simat .risk-matrix.escala thead th:first-child{width:108px}
+.simat .risk-matrix.escala th[scope=row]{font-variant-numeric:tabular-nums;white-space:nowrap}
+.simat .escala-mar{display:flex;align-items:center;gap:6px;margin-top:10px;font-size:12px}
+.simat .decision-state.es-orientativo .mode-badge{background:#fff7df;color:#7a5200}
+.simat .level-steps.orientativo span.on{opacity:.5}
+.simat .risk-status.es-orientativo{background:transparent;box-shadow:inset 0 0 0 1px var(--risk-stroke);border-style:dashed}
+.simat .risk-band.es-orientativo .dial-caption span{color:#7a5200;font-weight:600}
+@media (max-width:560px){
+  .simat .risk-matrix.escala thead th:first-child{width:84px}
+  .simat .risk-matrix.escala th[scope=row]{white-space:normal}
+}
+
+/* Explorador de lluvia con marea y zonas de la escala (Riesgo y nivel del mar). */
 .simat .rain-interactive-chart.con-marea{height:320px}
 .simat .rain-tools .rain-forecast-toggle{min-width:0;align-self:center;height:auto;padding:0}
 .simat .rain-tools .rain-forecast-toggle span:last-child{display:inline}

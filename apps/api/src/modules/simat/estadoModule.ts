@@ -19,9 +19,10 @@ export async function estado(puedeEditar: boolean): Promise<SimatEstado> {
 
   const riesgo: SimatEvaluacion[] = [];
   for (const criterio of criterios) {
-    const estacion = porId.get(criterio.estacion);
-    if (!estacion || !puertoCoincideIsla(criterio.puerto, estacion.isla)) continue;
-    const rain = await serieLluvia(estacion.id);
+    // Un sector sin estación se lista igual (sin nivel, con el motivo).
+    const estacion = criterio.estacion ? porId.get(criterio.estacion) : undefined;
+    if (criterio.estacion && (!estacion || !puertoCoincideIsla(criterio.puerto, estacion.isla))) continue;
+    const rain = estacion ? await serieLluvia(estacion.id) : null;
     riesgo.push(evaluar(criterio, estacion, rain, marine, clock));
   }
 
