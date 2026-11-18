@@ -27,6 +27,24 @@
 /* Escala de riesgo por lluvia (0044): tabla del sector y niveles orientativos
    (umbrales experimentales), que se distinguen del nivel oficial. */
 .simat .risk-matrix.escala thead th:first-child{width:108px}
+/* Tarjeta de decisión con la matriz lluvia × mar: columna izquierda más
+   estrecha, dial más chico y celdas compactas (nombre y acción). */
+.simat .decision.con-matriz{grid-template-columns:minmax(0,.8fr) minmax(0,1.2fr)}
+.simat .decision.con-matriz .decision-state{grid-template-columns:120px minmax(0,1fr);gap:16px}
+.simat .risk-matrix.escala .matrix-cell{padding:9px 11px}
+.simat .risk-matrix.escala .matrix-cell strong{font-size:13.5px}
+.simat .risk-matrix.escala .matrix-cell small{margin-top:3px;font-weight:600;opacity:.9}
+.simat .risk-matrix.escala .matrix-cell.inactiva{opacity:.35;filter:saturate(.5)}
+.simat .risk-matrix.escala .matrix-cell.inactiva.is-current{opacity:1;filter:none}
+.simat .risk-matrix.escala th.col-inactiva{color:var(--faint)}
+/* Mismos cortes que la vista previa: una columna en pantallas medianas y el
+   dial sobre el texto en móviles. */
+@media (max-width:1180px) and (min-width:1101px),(max-width:900px){
+  .simat .decision.con-matriz{grid-template-columns:1fr}
+}
+@media (max-width:860px){
+  .simat .decision.con-matriz .decision-state{grid-template-columns:1fr}
+}
 .simat .risk-matrix.escala th[scope=row]{font-variant-numeric:tabular-nums;white-space:nowrap}
 .simat .escala-mar{display:flex;align-items:center;gap:6px;margin-top:10px;font-size:12px}
 .simat .decision-state.es-orientativo .mode-badge{background:#fff7df;color:#7a5200}
