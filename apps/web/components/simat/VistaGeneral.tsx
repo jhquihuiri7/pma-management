@@ -5,8 +5,7 @@
 // banda de riesgo, precipitación reciente, actividad de las fuentes, lluvia
 // antecedente e inventario de estaciones.
 
-import Link from "next/link";
-import { useEffect, useState, type CSSProperties } from "react";
+import { useEffect, useState, type CSSProperties, type ReactNode } from "react";
 import type { SimatConectorEstado, SimatEstacion, SimatNivelMar, SimatSerieLluvia } from "@pma/types";
 import { obtenerMareas } from "@/lib/simat/api";
 import { rain, spark, COLORES, type RainSlot } from "@/lib/simat/graficos";
@@ -131,7 +130,12 @@ export function Cargando() {
   );
 }
 
-export default function VistaGeneral() {
+/**
+ * Panel único del módulo: resumen (mapa, indicadores y banda de riesgo), la
+ * sección de riesgo por sector que recibe en `riesgo` y, al final, la
+ * precipitación reciente, la actividad de las fuentes y las estaciones.
+ */
+export default function VistaGeneral({ riesgo }: { riesgo?: ReactNode }) {
   const { estado, isla, estacionesAmbito, estacionId, setEstacionId, estacion, lluvia } = useSimat();
   const [marinos, setMarinos] = useState<SimatNivelMar[]>([]);
 
@@ -273,7 +277,7 @@ export default function VistaGeneral() {
 
   return (
     <>
-      <section className="hero hero-map" aria-labelledby="hero-title">
+      <section className="hero hero-map ancla" id="resumen" aria-labelledby="hero-title">
         <MapaGeo
           variant="hero"
           island={isla}
@@ -427,13 +431,15 @@ export default function VistaGeneral() {
             ) : null}
           </div>
         </div>
-        <Link className="button secondary" href="/simat/riesgo">
+        <a className="button secondary" href="#riesgo-sector">
           Ver matriz y evidencia
           <Icono nombre="arrow" />
-        </Link>
+        </a>
       </section>
 
-      <div className="grid">
+      {riesgo}
+
+      <div className="grid ancla" id="precipitacion">
         <section className="card rain-card">
           <CardHead
             titulo="Precipitación reciente"
@@ -534,7 +540,7 @@ export default function VistaGeneral() {
         </section>
       </div>
 
-      <div className="grid grid-even">
+      <div className="grid grid-even ancla" id="estaciones">
         <section className="card">
           <CardHead
             titulo="Lluvia antecedente"

@@ -1,6 +1,8 @@
 "use client";
 
-// Riesgo por lluvia y mar, réplica de la vista previa (risk-ui.js, riskPage()):
+// Riesgo por lluvia y mar, réplica de la vista previa (risk-ui.js, riskPage()),
+// integrada como sección del panel único (/simat), con todas las gráficas a la
+// vista:
 // filtros, aviso costero, evaluación del sector con dial y matriz (y modo de
 // simulación), evidencia de lluvia y mar con medidores de umbral y gráficas
 // desplegables (la de lluvia, con la marea y las zonas de la matriz), nota del
@@ -18,9 +20,8 @@ import { MATRIZ, type NivelMatriz } from "./matriz";
 import ExploradorLluvia, { type MareaExplorador } from "./ExploradorLluvia";
 import { CriterioModal, NivelObservadoModal, ventanasCompatibles } from "./Formularios";
 import { Cargando } from "./VistaGeneral";
-import { Cabecera, CardHead, Dial, FiltroEstacion, FiltroIsla, Grafico, Pill, Tabla, Vacio } from "./piezas";
+import { CardHead, Dial, FiltroEstacion, FiltroIsla, Grafico, Pill, Tabla, Vacio } from "./piezas";
 
-type Grafica = "rain" | "gauge" | null;
 type EstadoMareografo = SimatMareografo | "cargando" | "sin" | "error" | null;
 type EstadoPronostico = SimatPronostico | "cargando" | "error";
 
@@ -147,8 +148,6 @@ function Medicion({
   resumen,
   lineas,
   extra,
-  abierta,
-  onAlternar,
 }: {
   kind: "rain" | "gauge";
   titulo: string;
@@ -156,32 +155,23 @@ function Medicion({
   resumen: ReactNode;
   lineas: [string, ReactNode][];
   extra?: ReactNode;
-  abierta: boolean;
-  onAlternar: () => void;
 }) {
   const m = /^(.*) (mm\/h|m)$/.exec(valor);
   return (
-    <section
-      className="card risk-measure"
-      data-risk-chart={kind}
-      onClick={(e) => {
-        if ((e.target as HTMLElement).closest("a,input,select,textarea")) return;
-        onAlternar();
-      }}
-    >
+    <section className="card risk-measure fija" data-risk-chart={kind}>
       <h2>
-        <button type="button" className="risk-measure-toggle" aria-controls={`${kind}-history`} aria-expanded={abierta}>
+        <span className="risk-measure-toggle">
           <span>
             <span className={`measure-icon ${kind === "gauge" ? "sea" : ""}`}>
               <Icono nombre={kind === "gauge" ? "waves" : "rain"} />
             </span>
             {titulo}
           </span>
-          <span className="risk-chart-chevron" aria-hidden="true">
-            Gráfica
+          <a className="risk-chart-chevron" href={`#${kind}-history`}>
+            Ver gráfica
             <Icono nombre="down" />
-          </span>
-        </button>
+          </a>
+        </span>
       </h2>
       <div className="risk-measure-value">
         {m ? (
@@ -410,7 +400,6 @@ export default function VistaRiesgo() {
   const [simulacion, setSimulacion] = useState(false);
   const [lluviaAlta, setLluviaAlta] = useState(false);
   const [marAlto, setMarAlto] = useState(false);
-  const [grafica, setGrafica] = useState<Grafica>(null);
   const [modal, setModal] = useState<"criterio" | "agregar" | "observado" | null>(null);
   const [marinos, setMarinos] = useState<SimatNivelMar[]>([]);
   const [mareografo, setMareografo] = useState<EstadoMareografo>(null);
@@ -473,7 +462,6 @@ export default function VistaRiesgo() {
   const limiteLluvia = profile ? `${medida(profile.lluviaMmH)} mm/h` : "Por calibrar";
   const marComparable = !!profile && !!marObservado && marObservado.unidad === "m" && String(marObservado.referencia).trim().toLowerCase() === profile.datum.toLowerCase();
   const aviso = avisoMarino(result, predicciones);
-  const alternar = (k: "rain" | "gauge") => setGrafica((g) => (g === k ? null : k));
 
   /* mareas */
   const extremos = extremosMarea(marinos, puerto);
@@ -524,8 +512,6 @@ export default function VistaRiesgo() {
           ],
           ["Uso en la matriz", "La lectura requiere validación y un datum compatible con el umbral del sector."],
         ]}
-        abierta={grafica === "gauge"}
-        onAlternar={() => alternar("gauge")}
       />
     );
   } else {
@@ -551,45 +537,40 @@ export default function VistaRiesgo() {
             ) : null}
           </>
         }
-        abierta={grafica === "gauge"}
-        onAlternar={() => alternar("gauge")}
       />
     );
   }
 
   return (
     <>
-      <Cabecera
-        titulo="Riesgo por lluvia y mar"
-        descripcion="Consulta el nivel, las mediciones y el criterio de decisión para un sector costero."
-        icono="alert"
-        acciones={
-          <div className="toolbar">
-            <button type="button" className="button outline" onClick={() => void refrescar()}>
-              <Icono nombre="refresh" />
-              Actualizar
-            </button>
-            {editar ? (
-              <>
-                <button type="button" className="button" onClick={() => abrirCriterio("criterio")}>
-                  <Icono nombre="settings" />
-                  {profile ? "Editar criterio" : "Configurar criterio"}
-                </button>
-                {profile ? (
-                  <button type="button" className="button outline" onClick={() => abrirCriterio("agregar")}>
-                    <Icono nombre="plus" />
-                    Añadir sector
-                  </button>
-                ) : null}
-                <button type="button" className="button outline" onClick={() => setModal("observado")}>
-                  <Icono nombre="waves" />
-                  Registrar nivel observado
-                </button>
-              </>
-            ) : null}
+      <div className="section-head ancla" id="riesgo-sector">
+        <div>
+          <div className="eyebrow">
+            <Icono nombre="alert" />
+            Riesgo por lluvia y mar
           </div>
-        }
-      />
+          <h2>Riesgo por sector costero</h2>
+          <p className="meta">Nivel, mediciones y criterio de decisión del sector, con la lluvia, la marea y el mareógrafo.</p>
+        </div>
+        {editar ? (
+          <div className="toolbar">
+            <button type="button" className="button" onClick={() => abrirCriterio("criterio")}>
+              <Icono nombre="settings" />
+              {profile ? "Editar criterio" : "Configurar criterio"}
+            </button>
+            {profile ? (
+              <button type="button" className="button outline" onClick={() => abrirCriterio("agregar")}>
+                <Icono nombre="plus" />
+                Añadir sector
+              </button>
+            ) : null}
+            <button type="button" className="button outline" onClick={() => setModal("observado")}>
+              <Icono nombre="waves" />
+              Registrar nivel observado
+            </button>
+          </div>
+        ) : null}
+      </div>
 
       <div className="filter-bar risk-filters">
         <FiltroIsla />
@@ -697,36 +678,30 @@ export default function VistaRiesgo() {
             ["Umbral de lluvia alta", limiteLluvia],
           ]}
           extra={profile ? <MedidorUmbral valor={rain.valor} limite={profile.lluviaMmH} unidad="mm/h" /> : null}
-          abierta={grafica === "rain"}
-          onAlternar={() => alternar("rain")}
         />
         <div id="marine-observed">{medicionMar}</div>
       </div>
 
-      <div id="rain-history" hidden={grafica !== "rain"}>
-        {grafica === "rain" ? (
-          estacion ? (
+      <div id="rain-history" className="ancla">
+        {estacion ? (
             <HistoriaLluvia estacion={estacion} lluvia={lluvia} criterio={profile ?? null} marea={extremos.length >= 2 ? { extremos, observados: observadosMarea } : null} />
           ) : (
             <section className="card wide rain-explorer" id="rain-explorer">
               <CardHead titulo="Evolución de la lluvia y la marea" descripcion="Sin estación seleccionada" icono="activity" />
               <Vacio>Selecciona una estación del inventario.</Vacio>
             </section>
-          )
-        ) : null}
+          )}
       </div>
 
-      <div id="gauge-history" hidden={grafica !== "gauge"}>
-        {grafica === "gauge" ? (
-          mareografo && typeof mareografo === "object" ? (
+      <div id="gauge-history" className="ancla">
+        {mareografo && typeof mareografo === "object" ? (
             <HistoriaMareografo m={mareografo} />
           ) : (
             <section className="card wide">
               <CardHead titulo="Evolución del nivel del mar observado" icono="waves" />
               <Vacio>{codigoMareografo ? feedback || "Consultando la serie del mareógrafo…" : "No hay una serie de mareógrafo disponible para este puerto."}</Vacio>
             </section>
-          )
-        ) : null}
+          )}
       </div>
 
       {profile ? (
@@ -742,7 +717,7 @@ export default function VistaRiesgo() {
         </section>
       ) : null}
 
-      <section className="card wide">
+      <section className="card wide ancla" id="mareas">
         <CardHead titulo={`Predicciones de marea · ${nombrePuerto}`} descripcion="Pleamares y bajamares publicadas. La evaluación automática usa mediciones observadas." icono="waves" />
         {extremos.length >= 2 ? (
           <>

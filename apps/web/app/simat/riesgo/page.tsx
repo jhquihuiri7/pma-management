@@ -1,5 +1,6 @@
-import VistaRiesgo from "@/components/simat/VistaRiesgo";
+import { redirect } from "next/navigation";
 
+/** La antigua pestaña de riesgo ahora es una sección del panel único. */
 export default function SimatRiesgoPage() {
-  return <VistaRiesgo />;
+  redirect("/simat#riesgo-sector");
 }

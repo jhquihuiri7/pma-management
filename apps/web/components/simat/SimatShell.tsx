@@ -9,9 +9,17 @@ import { SimatProvider, useSimat } from "./contexto";
 import { Icono, type NombreIcono } from "./iconos";
 import { fmtReloj, hace } from "@/lib/simat/formato";
 
-const NAV: { href: string; label: string; icono: NombreIcono }[] = [
-  { href: "/simat", label: "Vista general", icono: "layout" },
-  { href: "/simat/riesgo", label: "Riesgo y nivel del mar", icono: "alert" },
+const NAV: { href: string; label: string; icono: NombreIcono }[] = [{ href: "/simat", label: "Panel de vigilancia", icono: "layout" }];
+
+/** Secciones del panel único, para saltar dentro de la página. */
+const SECCIONES: { id: string; label: string; icono: NombreIcono }[] = [
+  { id: "resumen", label: "Resumen", icono: "gauge" },
+  { id: "riesgo-sector", label: "Riesgo por sector", icono: "alert" },
+  { id: "rain-history", label: "Lluvia y marea", icono: "rain" },
+  { id: "gauge-history", label: "Mareógrafo", icono: "waves" },
+  { id: "mareas", label: "Predicciones de marea", icono: "activity" },
+  { id: "precipitacion", label: "Precipitación reciente", icono: "history" },
+  { id: "estaciones", label: "Estaciones", icono: "tower" },
 ];
 
 function activa(href: string, pathname: string) {
@@ -57,7 +65,7 @@ function Marco({ children }: { children: React.ReactNode }) {
   const pathname = usePathname();
   const { enLinea, auto, setAuto, aviso } = useSimat();
   const [menu, setMenu] = useState(false);
-  const actual = NAV.find((n) => activa(n.href, pathname))?.label ?? "Vista general";
+  const actual = NAV.find((n) => activa(n.href, pathname))?.label ?? NAV[0].label;
   const off = enLinea === false;
 
   useEffect(() => setMenu(false), [pathname]);
@@ -106,6 +114,13 @@ function Marco({ children }: { children: React.ReactNode }) {
               </Link>
             );
           })}
+          <p className="nav-caption">En esta página</p>
+          {SECCIONES.map(({ id, label, icono }) => (
+            <a key={id} href={`#${id}`} className="nav-seccion" onClick={() => setMenu(false)}>
+              <Icono nombre={icono} />
+              {label}
+            </a>
+          ))}
         </nav>
       </aside>
       <div className="scrim" id="scrim" hidden={!menu} onClick={() => setMenu(false)} />
