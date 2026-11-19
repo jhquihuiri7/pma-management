@@ -1,7 +1,7 @@
 import type { SimatEstado, SimatEvaluacion, SimatMonitoreoMarea } from "@pma/types";
 import { ISLAS } from "./geografia.js";
 import { PUERTOS, evaluar, puertoCoincideIsla } from "./riesgo.js";
-import { listarEstaciones, listarNivelMar, nivelMarPuerto, serieLluvia } from "./lecturas.js";
+import { listarEstaciones, listarNivelMar, listarUmbralesMarea, nivelMarPuerto, serieLluvia } from "./lecturas.js";
 import { monitoreoPuerto } from "./marea.js";
 import { listarCriterios } from "./criteriosModule.js";
 import { estadoConectores } from "./sincronizacionModule.js";
@@ -9,11 +9,12 @@ import { FUENTES } from "./fuentes.js";
 
 /** Full snapshot the web reads on load (GET /simat/estado). */
 export async function estado(puedeEditar: boolean): Promise<SimatEstado> {
-  const [estaciones, criterios, marine, conectores] = await Promise.all([
+  const [estaciones, criterios, marine, conectores, umbralesMarea] = await Promise.all([
     listarEstaciones(),
     listarCriterios(),
     listarNivelMar(),
     estadoConectores(),
+    listarUmbralesMarea(),
   ]);
   const porId = new Map(estaciones.map((e) => [e.id, e]));
   const clock = new Date();
@@ -41,6 +42,7 @@ export async function estado(puedeEditar: boolean): Promise<SimatEstado> {
     puertos: PUERTOS,
     riesgo,
     monitoreoMarea,
+    umbralesMarea,
     conectores,
     fuentes: FUENTES,
     puedeEditar,

@@ -57,6 +57,28 @@ export function nivelMarea(extremos: TideExtreme[], t: number): number | null {
   return (a.h + b.h) / 2 + ((a.h - b.h) / 2) * Math.cos(Math.PI * f);
 }
 
+/**
+ * ¿Se pueden comparar unos percentiles con la predicción de INOCAR? «si» con
+ * el mismo datum; «no_confirmado» cuando vienen marcados como ese datum sin
+ * confirmar (p. ej. «MLWS_NO_CONFIRMADO» frente a «MLWS»); «no» en otro caso.
+ */
+export function comparacionDatum(datumUmbral: string, datumPrediccion: string | undefined): "si" | "no_confirmado" | "no" {
+  const u = datumUmbral.trim().toUpperCase();
+  const p = (datumPrediccion ?? "").trim().toUpperCase();
+  if (!p) return "no";
+  if (u === p) return "si";
+  if (u === `${p}_NO_CONFIRMADO`) return "no_confirmado";
+  return "no";
+}
+
+/** Dónde queda una altura frente a los percentiles de marea alta. */
+export function clasificarPercentil(h: number, u: { p90: number; p95: number; p99: number }): { texto: string; nivel: 0 | 1 | 2 | 3 } {
+  if (h >= u.p99) return { texto: "sobre el p99", nivel: 3 };
+  if (h >= u.p95) return { texto: "sobre el p95", nivel: 2 };
+  if (h >= u.p90) return { texto: "sobre el p90", nivel: 1 };
+  return { texto: "bajo el p90", nivel: 0 };
+}
+
 export interface AvisoMarino {
   title: string;
   tone: "caution" | "unavailable";

@@ -446,7 +446,20 @@ export function dialSegments(level: number) {
 /* ---------- 4. Curva de marea (predicción) con observaciones y umbral ---------- */
 export function tide(
   el: HTMLElement | null,
-  { extremes, observed = [], threshold = null, now = Date.now() }: { extremes: TideExtreme[]; observed?: TidePoint[]; threshold?: number | null; now?: number },
+  {
+    extremes,
+    observed = [],
+    threshold = null,
+    referencias = [],
+    now = Date.now(),
+  }: {
+    extremes: TideExtreme[];
+    observed?: TidePoint[];
+    threshold?: number | null;
+    /** Líneas de referencia (p. ej. percentiles de marea alta p90/p95/p99). */
+    referencias?: { valor: number; etiqueta: string }[];
+    now?: number;
+  },
 ) {
   mount(el, (width) => {
     if (!el) return;
@@ -473,7 +486,7 @@ export function tide(
     const samples: TidePoint[] = [];
     for (let t = start; t <= end; t += stepMs) samples.push({ t, h: level(t) });
     const obs = observed.filter((o) => o.t >= start && o.t <= end);
-    const values = samples.map((s) => s.h).concat(obs.map((o) => o.h), threshold != null ? [threshold] : []);
+    const values = samples.map((s) => s.h).concat(obs.map((o) => o.h), threshold != null ? [threshold] : [], referencias.map((r) => r.valor));
     const yr = range(Math.min(...values), Math.max(...values), 4);
     const padL = 50;
     const padR = 18;
@@ -516,6 +529,11 @@ export function tide(
     area += `L${r1(x(end))},${padT + plotH}L${r1(x(start))},${padT + plotH}Z`;
     svg += `<path d="${area}" fill="${C.seaWash}"/>`;
     svg += `<path d="${d}" fill="none" stroke="${C.sea}" stroke-width="2" stroke-linejoin="round" stroke-linecap="round"/>`;
+    referencias.forEach((ref, k) => {
+      const yy = r1(y(ref.valor));
+      svg += `<line class="pct" x1="${padL}" x2="${width - padR}" y1="${yy}" y2="${yy}"/>`;
+      svg += `<text class="lbl pct-lbl" x="${padL + 6 + k * 92}" y="${yy - 5}">${X(ref.etiqueta)}</text>`;
+    });
     if (threshold != null) {
       const yy = r1(y(threshold));
       svg += `<line class="threshold" x1="${padL}" x2="${width - padR}" y1="${yy}" y2="${yy}"/>`;

@@ -280,6 +280,27 @@ export interface SimatMonitoreoMarea {
   umbralInundacionValidado: boolean;
 }
 
+/**
+ * Percentiles de marea alta de un puerto (equipo técnico, migración 0046):
+ * referencia de monitoreo experimental; no son umbrales de inundación.
+ */
+export interface SimatUmbralMarea {
+  /** Clave del puerto en el sistema. */
+  puerto: string;
+  /** Nombre del puerto tal como se recibió. */
+  nombre: string;
+  p90: number;
+  p95: number;
+  p99: number;
+  /** Tal como se recibió (p. ej. «MLWS_NO_CONFIRMADO», «MLLW»). */
+  datum: string;
+  periodo: string;
+  metodo: string;
+  validado: boolean;
+  uso: string;
+  alertasOficiales: boolean;
+}
+
 /** Body of POST /simat/nivel-observado. */
 export interface SimatNivelObservadoEntrada {
   puerto: string;
@@ -344,6 +365,8 @@ export interface SimatEstado {
   riesgo: SimatEvaluacion[];
   /** Monitoreo de marea por puerto (evaluar_marea). */
   monitoreoMarea: SimatMonitoreoMarea[];
+  /** Percentiles de marea alta por puerto (monitoreo experimental). */
+  umbralesMarea: SimatUmbralMarea[];
   conectores: SimatConectorEstado[];
   fuentes: SimatFuenteInventario[];
   /** Whether the viewer may configure criteria / register observed levels. */

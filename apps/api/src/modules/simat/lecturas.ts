@@ -2,9 +2,9 @@
 // mapped from the database rows to the shared types.
 
 import { and, desc, eq, gte } from "drizzle-orm";
-import type { SimatEstacion, SimatIsla, SimatMareografo, SimatNivelMar, SimatSerieLluvia, SimatVariable } from "@pma/types";
+import type { SimatEstacion, SimatIsla, SimatMareografo, SimatNivelMar, SimatSerieLluvia, SimatUmbralMarea, SimatVariable } from "@pma/types";
 import { getDb } from "../../db/client.js";
-import { simatEstaciones, simatNivelMar, simatObservaciones } from "../../db/schema/simat.js";
+import { simatEstaciones, simatNivelMar, simatObservaciones, simatUmbralesMarea } from "../../db/schema/simat.js";
 import { NotFound } from "../../lib/errors.js";
 import { construirSerie, type LecturaLluvia } from "./ventanas.js";
 import { GAUGES } from "./conectores/ioc.js";
@@ -114,6 +114,24 @@ export async function listarNivelMar(puerto?: string): Promise<SimatNivelMar[]> 
     .orderBy(desc(simatNivelMar.createdAt))
     .limit(4000);
   return rows.map(aNivel);
+}
+
+/** Percentiles de marea alta por puerto (0046). */
+export async function listarUmbralesMarea(): Promise<SimatUmbralMarea[]> {
+  const rows = await getDb().select().from(simatUmbralesMarea).orderBy(simatUmbralesMarea.puerto);
+  return rows.map((r) => ({
+    puerto: r.puerto,
+    nombre: r.nombre,
+    p90: r.p90,
+    p95: r.p95,
+    p99: r.p99,
+    datum: r.datum,
+    periodo: r.periodo,
+    metodo: r.metodo,
+    validado: r.validado,
+    uso: r.uso,
+    alertasOficiales: r.alertasOficiales,
+  }));
 }
 
 const IOC = "https://www.ioc-sealevelmonitoring.org";

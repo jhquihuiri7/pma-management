@@ -9,10 +9,10 @@
 // criterio y predicciones de marea.
 
 import { Fragment, useEffect, useMemo, useRef, useState, type CSSProperties, type ReactNode } from "react";
-import type { SimatCriterio, SimatEstacion, SimatEvaluacion, SimatMonitoreoMarea, SimatMareografo, SimatNivelMar, SimatPronostico, SimatSerieLluvia } from "@pma/types";
+import type { SimatCriterio, SimatEstacion, SimatEvaluacion, SimatMonitoreoMarea, SimatUmbralMarea, SimatMareografo, SimatNivelMar, SimatPronostico, SimatSerieLluvia } from "@pma/types";
 import { obtenerMareas, obtenerMareografo, obtenerPronostico } from "@/lib/simat/api";
-import { forecast, sea, tide, type SeaPoint } from "@/lib/simat/graficos";
-import { extremosMarea, horaMarina, MAREOGRAFO_POR_PUERTO, observacionPuerto, puertosIsla } from "@/lib/simat/marinos";
+import { forecast, sea, tide, type SeaPoint, type TideExtreme } from "@/lib/simat/graficos";
+import { clasificarPercentil, comparacionDatum, extremosMarea, horaMarina, MAREOGRAFO_POR_PUERTO, observacionPuerto, puertosIsla } from "@/lib/simat/marinos";
 import { duracion, fechaDia, fechaHora, medida, numero } from "@/lib/simat/formato";
 import { TODAS_LAS_ISLAS, useSimat } from "./contexto";
 import { Icono } from "./iconos";
@@ -317,6 +317,46 @@ function MonitoreoMarea({ m }: { m: SimatMonitoreoMarea }) {
   );
 }
 
+const dosDecimales = new Intl.NumberFormat("es-EC", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+const horaGal = new Intl.DateTimeFormat("es-EC", { timeZone: "Pacific/Galapagos", day: "2-digit", month: "2-digit", hour: "2-digit", minute: "2-digit", hourCycle: "h23" });
+
+/**
+ * Percentiles de marea alta del puerto (equipo técnico, 0046): referencia de
+ * monitoreo experimental. Si son comparables con la predicción de INOCAR,
+ * clasifica la próxima pleamar; no es un umbral de inundación.
+ */
+function PercentilesMarea({ u, comparable, proxima }: { u: SimatUmbralMarea; comparable: "si" | "no_confirmado" | "no"; proxima?: TideExtreme }) {
+  const clase = comparable !== "no" && proxima ? clasificarPercentil(proxima.h, u) : null;
+  const datum = u.datum.replace(/_NO_CONFIRMADO$/i, " (no confirmado)");
+  return (
+    <div className="percentiles-marea">
+      <div className="mm-top">
+        <strong>Marea alta de referencia · {u.nombre}</strong>
+        <Pill color={u.validado ? "green" : ""}>{u.validado ? "Validado" : "Monitoreo experimental"}</Pill>
+      </div>
+      <div className="pct-fila">
+        {(["p90", "p95", "p99"] as const).map((k) => (
+          <span key={k}>
+            {k}
+            <b>{dosDecimales.format(u[k])} m</b>
+          </span>
+        ))}
+      </div>
+      {clase && proxima ? (
+        <p>
+          Próxima pleamar prevista <b>{dosDecimales.format(proxima.h)} m</b> · {horaGal.format(proxima.t)} → <b>{clase.texto}</b>
+          {comparable === "no_confirmado" ? " (datum MLWS no confirmado)" : ""}
+        </p>
+      ) : comparable === "no" ? (
+        <p className="meta">No hay predicciones de marea comparables en el sistema para este puerto.</p>
+      ) : null}
+      <p className="meta">
+        Datum {datum} · periodo {u.periodo} · método {u.metodo.replace(/_/g, " ")}. {u.alertasOficiales ? "" : "Sin alertas oficiales: "}son percentiles de las pleamares, no un umbral de inundación.
+      </p>
+    </div>
+  );
+}
+
 function tendencia(points: SeaPoint[], edad: number) {
   const last = points[points.length - 1];
   const sinTendencia = { title: "Tendencia reciente no disponible", tone: "steady" as const, detail: "Se requieren lecturas recientes y continuas para comparar los últimos 15 minutos." };
@@ -605,6 +645,16 @@ export default function VistaRiesgo() {
           ? "No se pudo consultar el mareógrafo de INOCAR. Puedes volver a intentar con Actualizar."
           : "";
   const monitoreo = estado.monitoreoMarea?.find((m) => m.puerto === puerto);
+  const umbralMarea = estado.umbralesMarea?.find((u) => u.puerto === puerto);
+  const comparablePct = umbralMarea ? comparacionDatum(umbralMarea.datum, extremos[0]?.ref) : "no";
+  const percentiles = umbralMarea && comparablePct !== "no" ? { p90: umbralMarea.p90, p95: umbralMarea.p95, p99: umbralMarea.p99, confirmado: comparablePct === "si" } : null;
+  const proximaPleamar = extremos.find((e) => e.t >= Date.now() && e.fase === "Pleamar");
+  const pieMar = (
+    <>
+      {monitoreo ? <MonitoreoMarea m={monitoreo} /> : null}
+      {umbralMarea ? <PercentilesMarea u={umbralMarea} comparable={comparablePct} proxima={proximaPleamar} /> : null}
+    </>
+  );
   let medicionMar: ReactNode;
   if (mareografo && typeof mareografo === "object") {
     const edad = Math.max(0, Math.floor((Date.now() - Date.parse(mareografo.fecha)) / 60000));
@@ -629,7 +679,7 @@ export default function VistaRiesgo() {
           ],
           ["Uso en la escala", "Sube un nivel solo con umbral de mar en el sector, lectura validada y datum compatible."],
         ]}
-        pie={monitoreo ? <MonitoreoMarea m={monitoreo} /> : null}
+        pie={pieMar}
       />
     );
   } else {
@@ -645,7 +695,7 @@ export default function VistaRiesgo() {
           ["Calidad y fuente", marObservado ? `${marObservado.calidad} · ${marObservado.fuente}` : "—"],
           ["Umbral de mar", limiteMar],
         ]}
-        pie={monitoreo ? <MonitoreoMarea m={monitoreo} /> : null}
+        pie={pieMar}
         extra={
           <>
             {marComparable ? <MedidorUmbral valor={marObservado?.valor} limite={profile?.marM ?? null} unidad="m" /> : null}
@@ -760,7 +810,7 @@ export default function VistaRiesgo() {
 
       <div id="rain-history" className="ancla">
         {estacion ? (
-            <HistoriaLluvia estacion={estacion} lluvia={lluvia} criterio={profile ?? null} marea={extremos.length >= 2 ? { extremos, observados: observadosMarea } : null} />
+            <HistoriaLluvia estacion={estacion} lluvia={lluvia} criterio={profile ?? null} marea={extremos.length >= 2 ? { extremos, observados: observadosMarea, percentiles } : null} />
           ) : (
             <section className="card wide rain-explorer" id="rain-explorer">
               <CardHead titulo="Evolución de la lluvia y la marea" descripcion="Sin estación seleccionada" icono="activity" />
@@ -800,8 +850,21 @@ export default function VistaRiesgo() {
             <div className="chart-body">
               <Grafico
                 id="tide-chart"
-                clave={`${puerto}|${extremos.length}|${extremos[0].t}|${observadosMarea.length}|${umbralCompatible ? profile?.marM : "-"}`}
-                dibujar={(el) => tide(el, { extremes: extremos, observed: observadosMarea, threshold: umbralCompatible && profile ? profile.marM : null })}
+                clave={`${puerto}|${extremos.length}|${extremos[0].t}|${observadosMarea.length}|${umbralCompatible ? profile?.marM : "-"}|${percentiles ? percentiles.p90 : "-"}`}
+                dibujar={(el) =>
+                  tide(el, {
+                    extremes: extremos,
+                    observed: observadosMarea,
+                    threshold: umbralCompatible && profile ? profile.marM : null,
+                    referencias: percentiles
+                      ? [
+                          { valor: percentiles.p90, etiqueta: `p90 ${dosDecimales.format(percentiles.p90)} m` },
+                          { valor: percentiles.p95, etiqueta: `p95 ${dosDecimales.format(percentiles.p95)} m` },
+                          { valor: percentiles.p99, etiqueta: `p99 ${dosDecimales.format(percentiles.p99)} m` },
+                        ]
+                      : [],
+                  })
+                }
               />
             </div>
             <div className="chart-legend">
@@ -823,6 +886,12 @@ export default function VistaRiesgo() {
                 <span>
                   <i className="thr" />
                   Umbral de mar alto del sector
+                </span>
+              ) : null}
+              {percentiles ? (
+                <span>
+                  <i className="pct" />
+                  Percentiles de marea alta{percentiles.confirmado ? "" : " · datum MLWS no confirmado"}
                 </span>
               ) : null}
               <span>Datum {extremos[0].ref || "—"} · hora publicada asumida en Galápagos</span>

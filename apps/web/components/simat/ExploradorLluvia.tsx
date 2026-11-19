@@ -43,6 +43,7 @@ const C = {
   marea: "#2a78d6",
   mareaArea: "rgba(42,120,214,.12)",
   extremo: "#1c5cab",
+  percentil: "#7c3aed",
   observado: "#eb6834",
   umbralMar: "#1c5cab",
   texto: "#94a3b8",
@@ -72,6 +73,8 @@ export interface MareaExplorador {
   extremos: TideExtreme[];
   /** Niveles observados en el mismo datum que la predicción. */
   observados: TidePoint[];
+  /** Percentiles de marea alta del puerto, si son comparables con la predicción. */
+  percentiles?: { p90: number; p95: number; p99: number; confirmado: boolean } | null;
 }
 
 function etiquetaIntervalo(f: Fila, step: number) {
@@ -315,13 +318,14 @@ export default function ExploradorLluvia({
         if (fin != null) curva.push({ t: t1, h: fin });
         curva.sort((a, b) => a.t - b.t);
         const obs = marea.observados.filter((o) => o.t >= t0 && o.t <= t1);
-        const valores = curva.map((p) => p.h).concat(obs.map((o) => o.h), marAplica && criterio?.marM != null ? [criterio.marM] : []);
+        const pct = marea.percentiles ?? null;
+        const valores = curva.map((p) => p.h).concat(obs.map((o) => o.h), marAplica && criterio?.marM != null ? [criterio.marM] : [], pct ? [pct.p90, pct.p95, pct.p99] : []);
         if (!valores.length) return null;
         const bajo = Math.min(...valores);
         const alto = Math.max(...valores);
         const yr = range(bajo, alto + (alto - bajo) * 0.15, 4);
         const ym = (v: number) => bottom - ((v - yr.lo) / (yr.hi - yr.lo)) * (bottom - top);
-        return { extremos, curva, obs, yr, ym, ultimo: marea.extremos[marea.extremos.length - 1] };
+        return { extremos, curva, obs, yr, ym, pct, ultimo: marea.extremos[marea.extremos.length - 1] };
       })();
 
       // 1 · zonas de la escala y cinta superior
@@ -489,6 +493,42 @@ export default function ExploradorLluvia({
           ctx.textBaseline = debajo ? "top" : "bottom";
           ctx.fillText(`Mar alto ≥ ${medida(criterio.marM)} m`, right - 6, debajo ? yy + 4 : yy - 3);
         }
+        // Percentiles de marea alta (referencia de monitoreo, no cambian el nivel).
+        if (mar.pct) {
+          const lineas: [string, number][] = [
+            ["p90", mar.pct.p90],
+            ["p95", mar.pct.p95],
+            ["p99", mar.pct.p99],
+          ];
+          ctx.font = "600 10px Inter, system-ui, sans-serif";
+          ctx.textAlign = "right";
+          let previa = -Infinity;
+          for (const [nombre, valor] of lineas) {
+            const yy = Math.round(ym(valor)) + 0.5;
+            ctx.strokeStyle = C.percentil;
+            ctx.globalAlpha = 0.8;
+            ctx.lineWidth = 1.2;
+            ctx.setLineDash([2, 3]);
+            ctx.beginPath();
+            ctx.moveTo(left, yy);
+            ctx.lineTo(right, yy);
+            ctx.stroke();
+            ctx.setLineDash([]);
+            ctx.globalAlpha = 1;
+            // Las etiquetas muy juntas (p95 y p99 iguales) se escriben una vez.
+            if (Math.abs(yy - previa) >= 11) {
+              const texto = `${nombre} ${altura.format(valor)} m`;
+              ctx.textBaseline = "bottom";
+              ctx.lineWidth = 3;
+              ctx.strokeStyle = "rgba(255,255,255,.92)";
+              ctx.strokeText(texto, right - 4, yy - 2);
+              ctx.fillStyle = C.percentil;
+              ctx.fillText(texto, right - 4, yy - 2);
+              previa = yy;
+            }
+          }
+        }
+
         ctx.strokeStyle = C.marea;
         ctx.lineWidth = 2.25;
         ctx.lineJoin = "round";
@@ -693,6 +733,12 @@ export default function ExploradorLluvia({
           <span>
             <i className="dot" style={{ "--c": C.extremo } as CSSProperties} />
             Pleamar (PM) y bajamar (BM) publicadas · INOCAR
+          </span>
+        ) : null}
+        {hayMarea && marea?.percentiles ? (
+          <span>
+            <i className="pct" />
+            Percentiles de marea alta (p90 · p95 · p99){marea.percentiles.confirmado ? "" : " · datum MLWS no confirmado"}
           </span>
         ) : null}
         {hayMarea && marea?.observados.length ? (

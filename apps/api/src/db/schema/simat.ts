@@ -107,6 +107,25 @@ export const simatCriterios = pgTable(
   })
 );
 
+/**
+ * Percentiles de marea alta por puerto (0046): monitoreo experimental, no son
+ * umbrales de inundación ni cambian la escala de riesgo.
+ */
+export const simatUmbralesMarea = pgTable("simat_umbrales_marea", {
+  puerto: text("puerto").primaryKey(),
+  nombre: text("nombre").notNull(),
+  p90: doublePrecision("p90").notNull(),
+  p95: doublePrecision("p95").notNull(),
+  p99: doublePrecision("p99").notNull(),
+  datum: text("datum").notNull(),
+  periodo: text("periodo").notNull(),
+  metodo: text("metodo").notNull(),
+  validado: boolean("validado").notNull().default(false),
+  uso: text("uso").notNull().default("monitoreo_experimental"),
+  alertasOficiales: boolean("alertas_oficiales").notNull().default(false),
+  actualizadoEn: timestamp("actualizado_en", { withTimezone: true }).defaultNow().notNull(),
+});
+
 export const simatSincronizaciones = pgTable("simat_sincronizaciones", {
   conector: text("conector").primaryKey(),
   ultimoIntento: timestamp("ultimo_intento", { withTimezone: true }),
