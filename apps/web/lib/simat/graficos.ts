@@ -444,6 +444,33 @@ export function dialSegments(level: number) {
 }
 
 /* ---------- 4. Curva de marea (predicción) con observaciones y umbral ---------- */
+/** Rango de tiempo común para que varios gráficos compartan el mismo eje x. */
+export interface RangoTiempo {
+  start: number;
+  end: number;
+}
+
+/** Márgenes horizontales comunes de los gráficos que comparten eje de tiempo. */
+const EJE_PAD_L = 50;
+const EJE_PAD_R = 18;
+
+/**
+ * Marcas del eje de tiempo en horas redondas de Galápagos (UTC−6), cada 1, 2,
+ * 3, 4, 6, 8, 12 o 24 h según el ancho: con el mismo rango y ancho, todos los
+ * gráficos ponen las marcas en las mismas horas y posiciones.
+ */
+export function marcasTiempo(start: number, end: number, width: number): number[] {
+  const H = 3600e3;
+  const horas = (end - start) / H;
+  const maximo = width < 560 ? 4 : 8;
+  const paso = [1, 2, 3, 4, 6, 8, 12, 24].find((p) => horas / p <= maximo) ?? 24;
+  let t = Math.ceil(start / H) * H;
+  while ((((t / H - 6) % paso) + paso) % paso !== 0) t += H;
+  const marcas: number[] = [];
+  for (; t <= end; t += paso * H) marcas.push(t);
+  return marcas;
+}
+
 export function tide(
   el: HTMLElement | null,
   {
@@ -451,6 +478,7 @@ export function tide(
     observed = [],
     threshold = null,
     referencias = [],
+    rango = null,
     now = Date.now(),
   }: {
     extremes: TideExtreme[];
@@ -458,6 +486,8 @@ export function tide(
     threshold?: number | null;
     /** Líneas de referencia (p. ej. percentiles de marea alta p90/p95/p99). */
     referencias?: { valor: number; etiqueta: string }[];
+    /** Eje de tiempo fijo (el del pronóstico de lluvia) para alinear ambos gráficos. */
+    rango?: RangoTiempo | null;
     now?: number;
   },
 ) {
@@ -470,10 +500,16 @@ export function tide(
     const narrow = width < 560;
     let start = Math.max(extremes[0].t, now - (narrow ? 4 : 8) * 3600e3);
     let end = Math.min(extremes[extremes.length - 1].t, now + (narrow ? 20 : 30) * 3600e3);
-    if (end - start < 6 * 3600e3) {
+    if (rango) {
+      start = rango.start;
+      end = rango.end;
+    } else if (end - start < 6 * 3600e3) {
       start = extremes[0].t;
       end = extremes[extremes.length - 1].t;
     }
+    // La curva solo existe entre las pleamares y bajamares publicadas: no se extrapola.
+    const desde = Math.max(start, extremes[0].t);
+    const hasta = Math.min(end, extremes[extremes.length - 1].t);
     const level = (t: number) => {
       const i = extremes.findIndex((e) => e.t >= t);
       if (i <= 0) return i === 0 ? extremes[0].h : extremes[extremes.length - 1].h;
@@ -484,12 +520,14 @@ export function tide(
     };
     const stepMs = 10 * 60000;
     const samples: TidePoint[] = [];
-    for (let t = start; t <= end; t += stepMs) samples.push({ t, h: level(t) });
+    for (let t = desde; t <= hasta; t += stepMs) samples.push({ t, h: level(t) });
+    if (samples.length && samples[samples.length - 1].t < hasta) samples.push({ t: hasta, h: level(hasta) });
     const obs = observed.filter((o) => o.t >= start && o.t <= end);
     const values = samples.map((s) => s.h).concat(obs.map((o) => o.h), threshold != null ? [threshold] : [], referencias.map((r) => r.valor));
+    if (!values.length) values.push(0, 1);
     const yr = range(Math.min(...values), Math.max(...values), 4);
-    const padL = 50;
-    const padR = 18;
+    const padL = EJE_PAD_L;
+    const padR = EJE_PAD_R;
     const padT = 30;
     const plotH = 210;
     const axis = 28;
@@ -514,10 +552,17 @@ export function tide(
       svg += `<line class="day" x1="${xx}" x2="${xx}" y1="${padT}" y2="${padT + plotH}"/>`;
       svg += `<text class="tick-strong" x="${xx + 5}" y="${padT + 12}">${X(dayLong.format(d))}</text>`;
     }
-    const tickCount = width < 560 ? 4 : 7;
-    for (let k = 0; k <= tickCount; k++) {
-      const t = start + ((end - start) * k) / tickCount;
-      svg += `<text class="tick" x="${r1(x(t))}" y="${padT + plotH + 18}" text-anchor="${k === 0 ? "start" : k === tickCount ? "end" : "middle"}">${hhmm.format(t)}</text>`;
+    if (rango) {
+      for (const t of marcasTiempo(start, end, width)) {
+        const xx = x(t);
+        svg += `<text class="tick" x="${r1(xx)}" y="${padT + plotH + 18}" text-anchor="${xx < padL + 18 ? "start" : xx > width - padR - 18 ? "end" : "middle"}">${hhmm.format(t)}</text>`;
+      }
+    } else {
+      const tickCount = width < 560 ? 4 : 7;
+      for (let k = 0; k <= tickCount; k++) {
+        const t = start + ((end - start) * k) / tickCount;
+        svg += `<text class="tick" x="${r1(x(t))}" y="${padT + plotH + 18}" text-anchor="${k === 0 ? "start" : k === tickCount ? "end" : "middle"}">${hhmm.format(t)}</text>`;
+      }
     }
     let d = "";
     let area = "";
@@ -526,9 +571,18 @@ export function tide(
       d += (i ? "L" : "M") + p;
       area += (i ? "L" : "M") + p;
     });
-    area += `L${r1(x(end))},${padT + plotH}L${r1(x(start))},${padT + plotH}Z`;
-    svg += `<path d="${area}" fill="${C.seaWash}"/>`;
-    svg += `<path d="${d}" fill="none" stroke="${C.sea}" stroke-width="2" stroke-linejoin="round" stroke-linecap="round"/>`;
+    if (samples.length > 1) {
+      area += `L${r1(x(samples[samples.length - 1].t))},${padT + plotH}L${r1(x(samples[0].t))},${padT + plotH}Z`;
+      svg += `<path d="${area}" fill="${C.seaWash}"/>`;
+      svg += `<path d="${d}" fill="none" stroke="${C.sea}" stroke-width="2" stroke-linejoin="round" stroke-linecap="round"/>`;
+    }
+    // Tramo del eje sin predicción publicada.
+    const sinPred = (a: number, b: number) => {
+      if (x(b) - x(a) < 90) return;
+      svg += `<text class="lbl-muted" x="${r1((x(a) + x(b)) / 2)}" y="${padT + plotH / 2}" text-anchor="middle">Sin predicción publicada</text>`;
+    };
+    if (hasta < end) sinPred(Math.max(hasta, start), end);
+    if (desde > start) sinPred(start, Math.min(desde, end));
     referencias.forEach((ref, k) => {
       const yy = r1(y(ref.valor));
       svg += `<line class="pct" x1="${padL}" x2="${width - padR}" y1="${yy}" y2="${yy}"/>`;
@@ -574,6 +628,7 @@ export function tide(
     el.innerHTML = svg;
     const node = el.querySelector("svg");
     if (!node) return;
+    if (!samples.length) return;
     crosshair(node, {
       count: samples.length,
       xAt: (i) => x(samples[i].t),
@@ -669,7 +724,7 @@ export function sea(el: HTMLElement | null, { points, recentFrom }: { points: Se
 }
 
 /* ---------- 6. Pronóstico por hora: lámina prevista + franja de probabilidad ---------- */
-export function forecast(el: HTMLElement | null, { hours }: { hours: ForecastHour[] }) {
+export function forecast(el: HTMLElement | null, { hours, rango = null }: { hours: ForecastHour[]; rango?: RangoTiempo | null }) {
   mount(el, (width) => {
     if (!el) return;
     const n = hours.length;
@@ -677,14 +732,20 @@ export function forecast(el: HTMLElement | null, { hours }: { hours: ForecastHou
       el.innerHTML = "";
       return;
     }
-    const padL = 44;
-    const padR = 16;
+    const padL = EJE_PAD_L;
+    const padR = EJE_PAD_R;
     const padT = 22;
     const plotH = 130;
     const stripGap = 12;
     const stripH = 16;
     const axis = 26;
     const plotW = width - padL - padR;
+    // Eje por tiempo: con `rango`, el mismo que el gráfico de mareas.
+    const start = rango?.start ?? Date.parse(hours[0].inicio);
+    const end = rango?.end ?? Date.parse(hours[n - 1].fin);
+    const xt = (t: number) => padL + ((t - start) / (end - start || 1)) * plotW;
+    const ini = (i: number) => xt(Date.parse(hours[i].inicio));
+    const ancho = (i: number) => Math.max(1, xt(Date.parse(hours[i].fin)) - ini(i));
     const slot = plotW / n;
     const bw = Math.max(2, Math.min(24, slot - 2));
     const max = Math.max(0, ...hours.map((h) => h.mm ?? 0));
@@ -693,7 +754,7 @@ export function forecast(el: HTMLElement | null, { hours }: { hours: ForecastHou
     const bottom = padT + plotH;
     const sy = bottom + stripGap;
     const height = sy + stripH + axis;
-    const xc = (i: number) => padL + slot * (i + 0.5);
+    const xc = (i: number) => ini(i) + ancho(i) / 2;
     const y = (v: number) => bottom - (v / ya.top) * plotH;
     const probColor = (p: number | null) => (p == null ? null : C.prob[Math.min(4, Math.floor(p / 20))]);
     let svg = `<svg viewBox="0 0 ${width} ${height}" role="img" tabindex="0" aria-label="${X(
@@ -711,22 +772,21 @@ export function forecast(el: HTMLElement | null, { hours }: { hours: ForecastHou
       if (h.mm != null && (peak < 0 || h.mm > (hours[peak].mm as number))) peak = i;
     });
     hours.forEach((h, i) => {
-      const x = r1(padL + slot * i + (slot - bw) / 2);
+      const x = r1(ini(i) + (ancho(i) - Math.min(bw, ancho(i) - 1)) / 2);
       if (h.mm != null && h.mm > 0) {
         svg += `<path class="bar" data-i="${i}" fill="${i === peak ? C.rainStrong : C.rain}" d="${barTop(x, r1(y(h.mm)), r1(bw), r1(bottom - y(h.mm)), bw > 6 ? 4 : 1)}"/>`;
       }
       const pc = probColor(h.probabilidad);
-      svg += `<rect x="${r1(padL + slot * i + 1)}" y="${sy}" width="${Math.max(1, r1(slot - 2))}" height="${stripH}" rx="3" fill="${pc || "#f1f5f9"}"/>`;
+      svg += `<rect x="${r1(ini(i) + 1)}" y="${sy}" width="${Math.max(1, r1(ancho(i) - 2))}" height="${stripH}" rx="3" fill="${pc || "#f1f5f9"}"/>`;
     });
     if (peak >= 0 && (hours[peak].mm as number) > 0) {
       const px = xc(peak);
       svg += `<text class="lbl" x="${r1(px)}" y="${r1(y(hours[peak].mm as number) - 7)}" text-anchor="${px > width - 80 ? "end" : px < padL + 40 ? "start" : "middle"}">${nf(hours[peak].mm)} mm</text>`;
     }
     svg += `<text class="tick" x="${padL - 8}" y="${sy + 11.5}" text-anchor="end">prob.</text>`;
-    const labels = Math.min(width < 520 ? 4 : 7, n);
-    for (let k = 0; k < labels; k++) {
-      const i = Math.round((k * (n - 1)) / Math.max(1, labels - 1));
-      svg += `<text class="tick" x="${r1(xc(i))}" y="${sy + stripH + 17}" text-anchor="${k === 0 ? "start" : k === labels - 1 ? "end" : "middle"}">${hhmm.format(Date.parse(hours[i].inicio))}</text>`;
+    for (const t of marcasTiempo(start, end, width)) {
+      const xx = xt(t);
+      svg += `<text class="tick" x="${r1(xx)}" y="${sy + stripH + 17}" text-anchor="${xx < padL + 18 ? "start" : xx > width - padR - 18 ? "end" : "middle"}">${hhmm.format(t)}</text>`;
     }
     svg += `<line class="cross" x1="0" x2="0" y1="0" y2="0"/>`;
     svg += `<rect class="hit" x="${padL}" y="0" width="${plotW}" height="${sy + stripH}"/></svg>`;

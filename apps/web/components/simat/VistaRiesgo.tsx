@@ -11,7 +11,7 @@
 import { Fragment, useEffect, useMemo, useRef, useState, type CSSProperties, type ReactNode } from "react";
 import type { SimatCriterio, SimatEstacion, SimatEvaluacion, SimatMonitoreoMarea, SimatUmbralMarea, SimatMareografo, SimatNivelMar, SimatPronostico, SimatSerieLluvia } from "@pma/types";
 import { obtenerMareas, obtenerMareografo, obtenerPronostico } from "@/lib/simat/api";
-import { forecast, sea, tide, type SeaPoint, type TideExtreme } from "@/lib/simat/graficos";
+import { forecast, sea, tide, type RangoTiempo, type SeaPoint, type TideExtreme } from "@/lib/simat/graficos";
 import { clasificarPercentil, comparacionDatum, extremosMarea, horaMarina, MAREOGRAFO_POR_PUERTO, observacionPuerto, puertosIsla } from "@/lib/simat/marinos";
 import { duracion, fechaDia, fechaHora, medida, numero } from "@/lib/simat/formato";
 import { TODAS_LAS_ISLAS, useSimat } from "./contexto";
@@ -416,9 +416,13 @@ function HistoriaMareografo({ m }: { m: SimatMareografo }) {
 }
 
 /** Pronóstico de lluvia de Open-Meteo para la estación (una consulta por estación). */
-function usePronostico(id: string): EstadoPronostico {
+function usePronostico(id: string | undefined): EstadoPronostico {
   const [data, setData] = useState<EstadoPronostico>("cargando");
   useEffect(() => {
+    if (!id) {
+      setData("error");
+      return;
+    }
     const ctrl = new AbortController();
     setData("cargando");
     obtenerPronostico(id, ctrl.signal).then(
@@ -440,14 +444,18 @@ function HistoriaLluvia({
   criterio,
   marea,
   codigoMareografo,
+  pronostico,
+  rango,
 }: {
   estacion: SimatEstacion;
   lluvia: SimatSerieLluvia | null;
   criterio: SimatCriterio | null;
   marea: MareaExplorador | null;
   codigoMareografo?: string;
+  pronostico: EstadoPronostico;
+  /** Eje de tiempo común de los gráficos de lluvia prevista y de marea prevista. */
+  rango: RangoTiempo;
 }) {
-  const pronostico = usePronostico(estacion.id);
   // Serie del mareógrafo de las últimas 48 h (una lectura cada 5 min) para
   // compararla con la marea prevista en la parte ya transcurrida.
   const [serieMedida, setSerieMedida] = useState<SimatMareografo | null>(null);
@@ -500,12 +508,12 @@ function HistoriaLluvia({
           <Vacio>No hay intervalos de lluvia válidos para esta estación.</Vacio>
         )}
       </section>
-      <PanelPronostico estacion={estacion} lluvia={lluvia} data={pronostico} />
+      <PanelPronostico estacion={estacion} lluvia={lluvia} data={pronostico} rango={rango} />
     </>
   );
 }
 
-function PanelPronostico({ estacion, lluvia, data }: { estacion: SimatEstacion; lluvia: SimatSerieLluvia | null; data: EstadoPronostico }) {
+function PanelPronostico({ estacion, lluvia, data, rango }: { estacion: SimatEstacion; lluvia: SimatSerieLluvia | null; data: EstadoPronostico; rango: RangoTiempo }) {
 
   const valida = [...(lluvia?.recent ?? [])].reverse().find((r) => r.quality === "válido");
   const observacion = valida ? (
@@ -550,7 +558,7 @@ function PanelPronostico({ estacion, lluvia, data }: { estacion: SimatEstacion; 
         {data.pronostico.length ? (
           <>
             <div className="chart-body">
-              <Grafico id="forecast-chart" clave={`${estacion.id}|${data.consultado}`} dibujar={(el) => forecast(el, { hours: data.pronostico })} />
+              <Grafico id="forecast-chart" clave={`${estacion.id}|${data.consultado}|${rango.start}`} dibujar={(el) => forecast(el, { hours: data.pronostico, rango })} />
             </div>
             <div className="chart-legend">
               <span>
@@ -605,6 +613,9 @@ export default function VistaRiesgo() {
   const [modal, setModal] = useState<"criterio" | "agregar" | "observado" | null>(null);
   const [marinos, setMarinos] = useState<SimatNivelMar[]>([]);
   const [mareografo, setMareografo] = useState<EstadoMareografo>(null);
+  // Pronóstico de lluvia de la estación: lo usan el explorador, el panel del
+  // modelo y, por su periodo, el eje de tiempo del gráfico de mareas.
+  const pronostico = usePronostico(estacion?.id);
   const islaPrevia = useRef<string | undefined>(undefined);
 
   const islaRiesgo = isla === TODAS_LAS_ISLAS ? estacion?.isla : isla;
@@ -648,6 +659,14 @@ export default function VistaRiesgo() {
   }, [codigoMareografo, estado]);
 
   if (!estado) return <Cargando />;
+
+  // Eje de tiempo común de «Lluvia actual estimada y pronóstico» y «Predicciones
+  // de marea»: el periodo del pronóstico (o, sin él, desde la hora actual 24 h).
+  const horaActual = Math.floor(Date.now() / 3600e3) * 3600e3;
+  const horasPronostico = typeof pronostico === "object" ? pronostico.pronostico : [];
+  const rangoPronostico: RangoTiempo = horasPronostico.length
+    ? { start: Date.parse(horasPronostico[0].inicio), end: Date.parse(horasPronostico[horasPronostico.length - 1].fin) }
+    : { start: horaActual, end: horaActual + 24 * 3600e3 };
 
   const mismaArea = (r: SimatEvaluacion) => isla === TODAS_LAS_ISLAS || r.criterio.isla === isla;
   // Los sectores sin estación (p. ej. Isabela, Floreana, Baltra) se listan con cualquier estación.
@@ -861,6 +880,8 @@ export default function VistaRiesgo() {
               criterio={profile ?? null}
               marea={extremos.length >= 2 ? { extremos, observados: observadosMarea, percentiles } : null}
               codigoMareografo={codigoMareografo}
+              pronostico={pronostico}
+              rango={rangoPronostico}
             />
           ) : (
             <section className="card wide rain-explorer" id="rain-explorer">
@@ -901,12 +922,13 @@ export default function VistaRiesgo() {
             <div className="chart-body">
               <Grafico
                 id="tide-chart"
-                clave={`${puerto}|${extremos.length}|${extremos[0].t}|${observadosMarea.length}|${umbralCompatible ? profile?.marM : "-"}|${percentiles ? percentiles.p90 : "-"}`}
+                clave={`${puerto}|${extremos.length}|${extremos[0].t}|${observadosMarea.length}|${umbralCompatible ? profile?.marM : "-"}|${percentiles ? percentiles.p90 : "-"}|${rangoPronostico.start}|${rangoPronostico.end}`}
                 dibujar={(el) =>
                   tide(el, {
                     extremes: extremos,
                     observed: observadosMarea,
                     threshold: umbralCompatible && profile ? profile.marM : null,
+                    rango: rangoPronostico,
                     referencias: percentiles
                       ? [
                           { valor: percentiles.p90, etiqueta: `p90 ${dosDecimales.format(percentiles.p90)} m` },
