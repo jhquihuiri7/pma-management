@@ -27,8 +27,12 @@ export function obtenerPronostico(id: string, signal?: AbortSignal): Promise<Sim
   return api.get<SimatPronostico>(`${BASE}/estaciones/${encodeURIComponent(id)}/pronostico`, { signal });
 }
 
-export function obtenerMareografo(codigo: string, signal?: AbortSignal): Promise<SimatMareografo> {
-  return api.get<SimatMareografo>(`${BASE}/mareografos/${encodeURIComponent(codigo)}`, { signal, cache: "no-store" });
+export function obtenerMareografo(codigo: string, signal?: AbortSignal, opciones: { horas?: number; paso?: number } = {}): Promise<SimatMareografo> {
+  const q = new URLSearchParams();
+  if (opciones.horas) q.set("horas", String(opciones.horas));
+  if (opciones.paso) q.set("paso", String(opciones.paso));
+  const extra = q.toString() ? `?${q.toString()}` : "";
+  return api.get<SimatMareografo>(`${BASE}/mareografos/${encodeURIComponent(codigo)}${extra}`, { signal, cache: "no-store" });
 }
 
 export function obtenerMareas(puerto: string, signal?: AbortSignal): Promise<SimatNivelMar[]> {

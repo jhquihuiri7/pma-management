@@ -15,6 +15,10 @@ import { CONECTORES_KEYS, sincronizar } from "../../modules/simat/sincronizacion
 const idParams = z.object({ id: z.string().min(1).max(60) }).strict();
 const codigoParams = z.object({ codigo: z.string().min(1).max(20) }).strict();
 const mareasQuery = z.object({ puerto: z.string().min(1).max(100).optional() }).strict();
+// Período (h) y paso (min) de la serie del mareógrafo; por defecto 12 h minuto a minuto.
+const mareografoQuery = z
+  .object({ horas: z.coerce.number().int().min(1).max(72).optional(), paso: z.coerce.number().int().min(1).max(30).optional() })
+  .strict();
 
 const criterioSchema = z
   .object({
@@ -89,7 +93,8 @@ export async function simatRoutes(app: FastifyInstance) {
 
   app.get("/mareografos/:codigo", async (request, reply) => {
     const { codigo } = codigoParams.parse(request.params);
-    const data = await mareografo(codigo);
+    const { horas, paso } = mareografoQuery.parse(request.query);
+    const data = await mareografo(codigo, { horas, pasoMin: paso });
     reply.header("Cache-Control", "public, max-age=300");
     return data;
   });

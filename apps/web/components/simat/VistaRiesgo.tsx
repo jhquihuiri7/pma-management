@@ -434,8 +434,51 @@ function usePronostico(id: string): EstadoPronostico {
  * Historia de la lluvia: el explorador (con la marea del puerto, los umbrales
  * del sector y las zonas de la escala) y el panel del modelo meteorológico.
  */
-function HistoriaLluvia({ estacion, lluvia, criterio, marea }: { estacion: SimatEstacion; lluvia: SimatSerieLluvia | null; criterio: SimatCriterio | null; marea: MareaExplorador | null }) {
+function HistoriaLluvia({
+  estacion,
+  lluvia,
+  criterio,
+  marea,
+  codigoMareografo,
+}: {
+  estacion: SimatEstacion;
+  lluvia: SimatSerieLluvia | null;
+  criterio: SimatCriterio | null;
+  marea: MareaExplorador | null;
+  codigoMareografo?: string;
+}) {
   const pronostico = usePronostico(estacion.id);
+  // Serie del mareógrafo de las últimas 48 h (una lectura cada 5 min) para
+  // compararla con la marea prevista en la parte ya transcurrida.
+  const [serieMedida, setSerieMedida] = useState<SimatMareografo | null>(null);
+  useEffect(() => {
+    if (!codigoMareografo) {
+      setSerieMedida(null);
+      return;
+    }
+    const ctrl = new AbortController();
+    obtenerMareografo(codigoMareografo, ctrl.signal, { horas: 48, paso: 5 }).then(
+      (m) => !ctrl.signal.aborted && setSerieMedida(m),
+      () => !ctrl.signal.aborted && setSerieMedida(null),
+    );
+    return () => ctrl.abort();
+  }, [codigoMareografo]);
+  const mareaConMedida = useMemo(
+    () =>
+      marea
+        ? {
+            ...marea,
+            medida: serieMedida
+              ? {
+                  puntos: serieMedida.serie.map((p) => ({ t: Date.parse(p.fecha), h: p.valor })).filter((p) => Number.isFinite(p.t)),
+                  referencia: serieMedida.referencia,
+                  estacion: serieMedida.estacion,
+                }
+              : null,
+          }
+        : null,
+    [marea, serieMedida],
+  );
   const tieneLluviaValida = !!lluvia?.recent.some((r) => r.quality === "válido");
   return (
     <>
@@ -446,7 +489,14 @@ function HistoriaLluvia({ estacion, lluvia, criterio, marea }: { estacion: Simat
           icono="activity"
         />
         {lluvia && tieneLluviaValida ? (
-          <ExploradorLluvia estacion={estacion} lluvia={lluvia} criterio={criterio} marea={marea} pronostico={typeof pronostico === "object" ? pronostico.pronostico : null} />
+          <ExploradorLluvia
+            estacion={estacion}
+            lluvia={lluvia}
+            criterio={criterio}
+            marea={mareaConMedida}
+            pronostico={typeof pronostico === "object" ? pronostico.pronostico : null}
+            pronosticoPasado={typeof pronostico === "object" ? (pronostico.pasado ?? []) : null}
+          />
         ) : (
           <Vacio>No hay intervalos de lluvia válidos para esta estación.</Vacio>
         )}
@@ -806,7 +856,13 @@ export default function VistaRiesgo() {
 
       <div id="rain-history" className="ancla">
         {estacion ? (
-            <HistoriaLluvia estacion={estacion} lluvia={lluvia} criterio={profile ?? null} marea={extremos.length >= 2 ? { extremos, observados: observadosMarea, percentiles } : null} />
+            <HistoriaLluvia
+              estacion={estacion}
+              lluvia={lluvia}
+              criterio={profile ?? null}
+              marea={extremos.length >= 2 ? { extremos, observados: observadosMarea, percentiles } : null}
+              codigoMareografo={codigoMareografo}
+            />
           ) : (
             <section className="card wide rain-explorer" id="rain-explorer">
               <CardHead titulo="Evolución de la lluvia y la marea" descripcion="Sin estación seleccionada" icono="activity" />

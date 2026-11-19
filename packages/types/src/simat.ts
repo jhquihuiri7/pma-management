@@ -154,6 +154,8 @@ export interface SimatPronostico {
     intensidad: number;
   } | null;
   pronostico: SimatPronosticoHora[];
+  /** Las últimas 24 h según el mismo modelo, para compararlas con la lluvia medida. */
+  pasado: SimatPronosticoHora[];
 }
 
 // ── Risk scale ───────────────────────────────────────────────────────────────

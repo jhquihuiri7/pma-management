@@ -136,18 +136,29 @@ export async function listarUmbralesMarea(): Promise<SimatUmbralMarea[]> {
 
 const IOC = "https://www.ioc-sealevelmonitoring.org";
 
-/** The gauge series (last 12 h) and latest level for a port, from the database. */
-export async function mareografo(codigo: string): Promise<SimatMareografo> {
+/**
+ * The gauge series and latest level for a port, from the database. By default
+ * the last 12 h minute by minute; `horas` widens the period and `pasoMin` keeps
+ * one reading per interval (the last one) so a 48 h series stays light.
+ */
+export async function mareografo(codigo: string, opciones: { horas?: number; pasoMin?: number } = {}): Promise<SimatMareografo> {
   const gauge = GAUGES[codigo];
   if (!gauge) throw NotFound("Mareógrafo no disponible.");
-  const desde = new Date(Date.now() - 12 * 60 * 60 * 1000).toISOString();
+  const horas = opciones.horas ?? 12;
+  const pasoMin = opciones.pasoMin ?? 1;
+  const desde = new Date(Date.now() - horas * 60 * 60 * 1000).toISOString();
   const rows = await getDb()
     .select({ instante: simatNivelMar.instante, valor: simatNivelMar.valor })
     .from(simatNivelMar)
     .where(and(eq(simatNivelMar.puerto, gauge.puerto), eq(simatNivelMar.tipo, "Nivel observado"), gte(simatNivelMar.instante, desde)))
     .orderBy(simatNivelMar.instante);
   if (!rows.length) throw NotFound("Sin lecturas recientes del mareógrafo.");
-  const serie = rows.map((r) => ({ fecha: r.instante, valor: r.valor }));
+  let serie = rows.map((r) => ({ fecha: r.instante, valor: r.valor }));
+  if (pasoMin > 1) {
+    const porIntervalo = new Map<number, { fecha: string; valor: number }>();
+    for (const punto of serie) porIntervalo.set(Math.floor(Date.parse(punto.fecha) / (pasoMin * 60_000)), punto);
+    serie = Array.from(porIntervalo.values());
+  }
   const ultimo = serie[serie.length - 1];
   return {
     codigo,

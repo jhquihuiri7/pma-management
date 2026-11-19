@@ -32,6 +32,8 @@ export async function pronosticoLluvia(estacion: { id: string; lat: number; lon:
     current: "precipitation",
     hourly: "precipitation,precipitation_probability",
     forecast_hours: "25",
+    // Las 24 h ya transcurridas del mismo modelo, para compararlas con la lluvia medida.
+    past_hours: "24",
     timeformat: "unixtime",
     precipitation_unit: "mm",
     cell_selection: "land",
@@ -56,10 +58,17 @@ export async function pronosticoLluvia(estacion: { id: string; lat: number; lon:
   }
 
   const pronostico: SimatPronostico["pronostico"] = [];
+  const pasado: SimatPronostico["pasado"] = [];
   const hourly = data.hourly;
   if (hourly) {
     for (let i = 0; i < hourly.time.length; i += 1) {
       const t = hourly.time[i];
+      if (t <= ahora && t > ahora - 24 * 3600) {
+        // Hora ya transcurrida: lo que el modelo da para ella.
+        const prob = cantidad(hourly.precipitation_probability[i]);
+        pasado.push({ inicio: iso(t - 3600), fin: iso(t), mm: cantidad(hourly.precipitation[i]), probabilidad: prob != null && prob <= 100 ? prob : null });
+        continue;
+      }
       if (ahora < t && t <= ahora + 24 * 3600) {
         const prob = cantidad(hourly.precipitation_probability[i]);
         pronostico.push({
@@ -73,7 +82,7 @@ export async function pronosticoLluvia(estacion: { id: string; lat: number; lon:
   }
   if (!estimacion && !pronostico.length) throw new FuenteError("No hay estimaciones vigentes para esta ubicación.");
 
-  const valor: SimatPronostico = { estacion: estacion.id, consultado: new Date().toISOString(), estimacion, pronostico };
+  const valor: SimatPronostico = { estacion: estacion.id, consultado: new Date().toISOString(), estimacion, pronostico, pasado };
   cache.set(clave, { expira: Date.now() + CACHE_MS, valor });
   return valor;
 }
