@@ -46,7 +46,6 @@ const C = {
   percentil: "#7c3aed",
   observado: "#eb6834",
   medida: "#ea580c",
-  modelo: "#334155",
   umbralMar: "#1c5cab",
   texto: "#94a3b8",
   texto2: "#64748b",
@@ -126,15 +125,12 @@ export default function ExploradorLluvia({
   criterio = null,
   marea = null,
   pronostico = null,
-  pronosticoPasado = null,
 }: {
   estacion: SimatEstacion;
   lluvia: SimatSerieLluvia;
   criterio?: SimatCriterio | null;
   marea?: MareaExplorador | null;
   pronostico?: SimatPronosticoHora[] | null;
-  /** Lo que el modelo da para las horas ya transcurridas (para comparar con lo medido). */
-  pronosticoPasado?: SimatPronosticoHora[] | null;
 }) {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const escala = useRef<{ left: number; right: number; t0: number; t1: number } | null>(null);
@@ -169,16 +165,6 @@ export default function ExploradorLluvia({
   const hayPronostico = horaria && !!pronostico?.some((h) => Date.parse(h.fin) > end);
   const [conPronostico, setConPronostico] = useState(true);
   const mostrarPronostico = hayPronostico && conPronostico;
-  // Pronóstico del modelo para las horas ya medidas (con el mismo interruptor).
-  const modeloPasado = useMemo(
-    () =>
-      horaria && conPronostico && pronosticoPasado
-        ? pronosticoPasado
-            .map((h) => ({ inicio: Date.parse(h.inicio), fin: Date.parse(h.fin), mm: h.mm }))
-            .filter((h) => h.mm != null && Number.isFinite(h.inicio) && Number.isFinite(h.fin) && h.fin <= end + 30 * MIN)
-        : [],
-    [horaria, conPronostico, pronosticoPasado, end],
-  );
 
   // Marea y criterio: las zonas solo se pintan si el umbral de mar está en el
   // mismo datum que la predicción publicada.
@@ -316,8 +302,7 @@ export default function ExploradorLluvia({
       escala.current = { left, right, t0, t1 };
 
       // Escala de lluvia (incluye el umbral del criterio para poder compararlo).
-      const modeloVisible = modeloPasado.filter((h) => h.fin > t0 && h.inicio < t1);
-      const max = 1.12 * Math.max(0, ...filas.map((r) => Math.max(r.intensity ?? 0, r.ventana ?? 0)), ...modeloVisible.map((h) => h.mm ?? 0), conCriterio && criterio ? criterio.lluvia.respuesta : 0);
+      const max = 1.12 * Math.max(0, ...filas.map((r) => Math.max(r.intensity ?? 0, r.ventana ?? 0)), conCriterio && criterio ? criterio.lluvia.respuesta : 0);
       const power = 10 ** Math.floor(Math.log10((max || 1) / 5));
       const tick = ([0.2, 0.25, 0.5, 1, 2, 2.5, 5, 10].find((n) => n * power >= (max || 1) / 5) ?? 10) * power;
       const marcas = Math.max(2, Math.ceil((max || 1) / tick - 1e-9));
@@ -368,7 +353,12 @@ export default function ExploradorLluvia({
           }
           return { puntos, desfase, omitidas };
         })();
-        const valores = curva
+        // En lo ya transcurrido solo va lo medido: la curva prevista arranca en la
+        // última lectura del mareógrafo (si la hay) y sigue desde ahí.
+        const corte = medidaAlineada?.puntos.length ? medidaAlineada.puntos[medidaAlineada.puntos.length - 1].t : null;
+        const enCorte = corte == null ? null : nivelMarea(marea.extremos, corte);
+        const curvaPrevista: TidePoint[] = corte == null ? curva : (enCorte == null ? [] : [{ t: corte, h: enCorte }]).concat(curva.filter((p) => p.t > corte));
+        const valores = curvaPrevista
           .map((p) => p.h)
           .concat(obs.map((o) => o.h), marAplica && criterio?.marM != null ? [criterio.marM] : [], pct ? [pct.p90, pct.p95, pct.p99] : [], medidaAlineada ? medidaAlineada.puntos.map((p) => p.h) : []);
         if (!valores.length) return null;
@@ -376,7 +366,17 @@ export default function ExploradorLluvia({
         const alto = Math.max(...valores);
         const yr = range(bajo, alto + (alto - bajo) * 0.15, 4);
         const ym = (v: number) => bottom - ((v - yr.lo) / (yr.hi - yr.lo)) * (bottom - top);
-        return { extremos, curva, obs, yr, ym, pct, medida: medidaAlineada, ultimo: marea.extremos[marea.extremos.length - 1] };
+        return {
+          extremos: corte == null ? extremos : extremos.filter((e) => e.t >= corte),
+          curva: curvaPrevista,
+          obs,
+          yr,
+          ym,
+          pct,
+          medida: medidaAlineada,
+          corte,
+          ultimo: marea.extremos[marea.extremos.length - 1],
+        };
       })();
 
       // 1 · zonas de la escala y cinta superior
@@ -422,15 +422,31 @@ export default function ExploradorLluvia({
       ctx.fillStyle = C.texto2;
       ctx.fillText("Lluvia (mm/h)", 10, 9);
 
-      // 3b · área bajo la curva de marea
-      if (mar && mar.curva.length > 1) {
+      // 3b · área bajo la marea (la medida en lo transcurrido y la prevista después)
+      if (mar) {
+        const rellenar = (puntos: TidePoint[]) => {
+          // Un tramo por cada serie continua (sin huecos de más de 20 min).
+          let tramo: TidePoint[] = [];
+          const cerrar = () => {
+            if (tramo.length > 1) {
+              ctx.beginPath();
+              tramo.forEach((p, i) => (i ? ctx.lineTo(x(p.t), mar.ym(p.h)) : ctx.moveTo(x(p.t), mar.ym(p.h))));
+              ctx.lineTo(x(tramo[tramo.length - 1].t), bottom);
+              ctx.lineTo(x(tramo[0].t), bottom);
+              ctx.closePath();
+              ctx.fill();
+            }
+            tramo = [];
+          };
+          for (const p of puntos) {
+            if (tramo.length && p.t - tramo[tramo.length - 1].t > 20 * MIN) cerrar();
+            tramo.push(p);
+          }
+          cerrar();
+        };
         ctx.fillStyle = C.mareaArea;
-        ctx.beginPath();
-        mar.curva.forEach((p, i) => (i ? ctx.lineTo(x(p.t), mar.ym(p.h)) : ctx.moveTo(x(p.t), mar.ym(p.h))));
-        ctx.lineTo(x(mar.curva[mar.curva.length - 1].t), bottom);
-        ctx.lineTo(x(mar.curva[0].t), bottom);
-        ctx.closePath();
-        ctx.fill();
+        if (mar.medida?.puntos.length) rellenar(mar.medida.puntos);
+        if (mar.curva.length > 1) rellenar(mar.curva);
       }
 
       // 4 · barras (observadas y previstas)
@@ -460,26 +476,6 @@ export default function ExploradorLluvia({
           ctx.globalAlpha = 1;
         }
       });
-
-      // 4b · pronóstico del modelo para las horas ya medidas (línea escalonada)
-      if (modeloVisible.length) {
-        ctx.strokeStyle = C.modelo;
-        ctx.lineWidth = 1.6;
-        ctx.setLineDash([5, 3]);
-        ctx.beginPath();
-        let previo: number | null = null;
-        for (const h of modeloVisible) {
-          const x0 = x(Math.max(h.inicio, t0));
-          const x1 = x(Math.min(h.fin, t1));
-          const yy = y(h.mm ?? 0);
-          if (previo !== null && Math.abs(previo - h.inicio) < MIN) ctx.lineTo(x0, yy);
-          else ctx.moveTo(x0, yy);
-          ctx.lineTo(x1, yy);
-          previo = h.fin;
-        }
-        ctx.stroke();
-        ctx.setLineDash([]);
-      }
 
       // 5 · lluvia en la ventana del criterio (si no coincide con la cadencia)
       if (conCriterio && ventanaMin !== step) {
@@ -546,7 +542,7 @@ export default function ExploradorLluvia({
         for (let v = yr.lo; v <= yr.hi + 1e-9; v += yr.step) ctx.fillText(numero(v), right + 8, ym(v));
         ctx.font = "600 11px Inter, system-ui, sans-serif";
         ctx.textAlign = "right";
-        ctx.fillText(`${w < 560 ? "Marea" : "Marea prevista"} (m, ${refMarea || "—"})`, w - 6, 9);
+        ctx.fillText(`${w < 560 ? "Marea" : mar.medida?.puntos.length ? "Marea medida y prevista" : "Marea prevista"} (m, ${refMarea || "—"})`, w - 6, 9);
         if (marAplica && criterio?.marM != null) {
           const yy = Math.round(ym(criterio.marM)) + 0.5;
           ctx.strokeStyle = C.umbralMar;
@@ -717,7 +713,7 @@ export default function ExploradorLluvia({
     const ro = new ResizeObserver(dibujar);
     ro.observe(canvas);
     return () => ro.disconnect();
-  }, [filas, tramos, picos, indice, step, horaria, hayMarea, marea, refMarea, datumCompatible, marAplica, conCriterio, conZonas, criterio, ventanaMin, mostrarPronostico, modeloPasado, end]);
+  }, [filas, tramos, picos, indice, step, horaria, hayMarea, marea, refMarea, datumCompatible, marAplica, conCriterio, conZonas, criterio, ventanaMin, mostrarPronostico, end]);
 
   const seleccionar = (i: number) => setIndice(Math.max(0, Math.min(filas.length - 1, i)));
   const filaEn = (t: number) => {
@@ -746,7 +742,6 @@ export default function ExploradorLluvia({
     fila && marea?.medida
       ? marea.medida.puntos.reduce<TidePoint | null>((mejor, p) => (Math.abs(p.t - fila.fin) <= 10 * MIN && (!mejor || Math.abs(p.t - fila.fin) < Math.abs(mejor.t - fila.fin)) ? p : mejor), null)
       : null;
-  const modeloFila = fila && !fila.previsto ? modeloPasado.find((h) => h.inicio < fila.fin && fila.fin <= h.fin) : undefined;
   // Desfase mediano entre el mareógrafo y la curva prevista (para la leyenda).
   const desfaseMedida = useMemo(() => {
     if (!marea?.medida || marea.extremos.length < 2) return null;
@@ -829,7 +824,7 @@ export default function ExploradorLluvia({
         {hayMarea ? (
           <span>
             <i className="line" style={{ "--c": C.marea, height: 3 } as CSSProperties} />
-            Marea prevista · curva estimada ({refMarea})
+            Marea prevista · curva estimada ({refMarea}){marea?.medida?.puntos.length ? ", desde la última lectura del mareógrafo" : ""}
           </span>
         ) : null}
         {hayMarea ? (
@@ -843,12 +838,6 @@ export default function ExploradorLluvia({
             <i className="line" style={{ "--c": C.medida, height: 2 } as CSSProperties} />
             Marea medida · mareógrafo (referencia instrumental, dibujada {desfaseMedida >= 0 ? "−" : "+"}
             {altura.format(Math.abs(desfaseMedida))} m para compararla con la prevista)
-          </span>
-        ) : null}
-        {modeloPasado.length ? (
-          <span>
-            <i className="umbral" style={{ "--c": C.modelo } as CSSProperties} />
-            Pronóstico del modelo en las horas medidas · Open-Meteo
           </span>
         ) : null}
         {hayMarea && marea?.percentiles ? (
@@ -964,11 +953,6 @@ export default function ExploradorLluvia({
                     <b>{medida(fila.intensity)} mm/h</b> · {medida(fila.record?.value)} mm acumulados · {fila.record?.source}
                   </>
                 )}
-                {modeloFila ? (
-                  <>
-                    {" · "}pronóstico del modelo <b>{medida(modeloFila.mm)} mm/h</b>
-                  </>
-                ) : null}
               </p>
               {conCriterio ? (
                 <p className="riesgo-fila">
@@ -980,12 +964,15 @@ export default function ExploradorLluvia({
                   ) : null}
                   {hayMarea ? (
                     <>
-                      Marea prevista al cierre: <b>{marFila == null ? "—" : `${medida(Math.round(marFila * 100) / 100)} m ${refMarea}`}</b>
-                      {medidaFila ? (
+                      {!fila.previsto && medidaFila ? (
                         <>
-                          {" · "}medida <b>{medida(medidaFila.h)} m</b> (ref. instrumental)
+                          Marea medida al cierre: <b>{medida(medidaFila.h)} m</b> (ref. instrumental)
                         </>
-                      ) : null}
+                      ) : (
+                        <>
+                          Marea prevista al cierre: <b>{marFila == null ? "—" : `${medida(Math.round(marFila * 100) / 100)} m ${refMarea}`}</b>
+                        </>
+                      )}
                     </>
                   ) : null}
                   {nivelFila ? <ChipNivel nivel={nivelFila} /> : conZonas ? <span className="meta"> · nivel no determinable</span> : null}

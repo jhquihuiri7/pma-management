@@ -495,7 +495,6 @@ function HistoriaLluvia({
             criterio={criterio}
             marea={mareaConMedida}
             pronostico={typeof pronostico === "object" ? pronostico.pronostico : null}
-            pronosticoPasado={typeof pronostico === "object" ? (pronostico.pasado ?? []) : null}
           />
         ) : (
           <Vacio>No hay intervalos de lluvia válidos para esta estación.</Vacio>
