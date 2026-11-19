@@ -14,6 +14,7 @@ import { parseCsvFcd } from "../modules/simat/conectores/fcd.js";
 import { instanteInamhi } from "../modules/simat/conectores/inamhiInventario.js";
 import { construirSerie, type LecturaLluvia } from "../modules/simat/ventanas.js";
 import { construirCriterio, evaluar, puertoCoincideIsla } from "../modules/simat/riesgo.js";
+import { evaluarMarea, monitoreoPuerto } from "../modules/simat/marea.js";
 import { fechaGalapagos, instanteGalapagos, islaDeCoordenada } from "../modules/simat/geografia.js";
 
 const fixtures = join(dirname(fileURLToPath(import.meta.url)), "fixtures", "simat");
@@ -229,6 +230,56 @@ test("criteria: window compatible with the station and port on its island", () =
   assert.throws(() => construirCriterio({ ...base, puerto: "Puerto Inventado" }, null), /inventario/);
   assert.ok(puertoCoincideIsla("Baltra", "Santa Cruz"));
   assert.ok(!puertoCoincideIsla("Baltra", "San Cristóbal"));
+});
+
+// ── Tide monitoring (port of evaluar_marea) ──────────────────────────────────
+
+test("evaluar_marea: every state in the same order as the Python original", () => {
+  const ahora = new Date("2026-11-18T16:00:00Z");
+  const base = {
+    predichaM: 1.2, observadaM: 1.35, fechaObservacion: "2026-11-18T15:30:00Z",
+    datumPredicho: "MLWS", datumObservado: "MLWS", fechaPrediccion: "2026-11-18T15:40:00Z",
+  };
+  assert.deepEqual(evaluarMarea({ ...base, predichaM: null }, ahora), { estado: "SIN_PREDICCION", anomaliaMarM: null });
+  assert.deepEqual(evaluarMarea({ ...base, observadaM: null }, ahora), { estado: "SOLO_PREDICCION", mareaPredichaM: 1.2, anomaliaMarM: null });
+  assert.equal(evaluarMarea({ ...base, datumObservado: "Referencia instrumental sin datum publicado" }, ahora).estado, "DATUM_INCOMPATIBLE");
+  assert.equal(evaluarMarea({ ...base, fechaObservacion: "2026-11-18T15:30:00" }, ahora).estado, "HORA_SIN_ZONA");
+  assert.equal(evaluarMarea({ ...base, fechaObservacion: "2026-11-18T13:00:00Z" }, ahora).estado, "DATO_NO_VIGENTE");
+  assert.equal(evaluarMarea({ ...base, fechaObservacion: "2026-11-18T16:05:00Z" }, ahora).estado, "DATO_NO_VIGENTE");
+  assert.equal(evaluarMarea({ ...base, fechaPrediccion: "2026-11-18T15:40:00" }, ahora).estado, "HORA_SIN_ZONA");
+  assert.equal(evaluarMarea({ ...base, fechaPrediccion: null }, ahora).estado, "SIN_HORA_PREDICCION");
+  assert.equal(evaluarMarea({ ...base, fechaPrediccion: "2026-11-18T16:10:00Z" }, ahora).estado, "DATOS_DESFASADOS");
+  assert.deepEqual(evaluarMarea(base, ahora), {
+    estado: "MONITOREO_VALIDO", mareaPredichaM: 1.2, mareaObservadaM: 1.35, anomaliaMarM: 0.15,
+    datum: "MLWS", alertaInundacion: false, umbralInundacionValidado: false,
+  });
+});
+
+test("tide monitoring of a port: curve at the observation time, compatible datum first", () => {
+  const pred = (instante: string, valor: number, fase: string): SimatNivelMar => ({
+    id: instante, puerto: "Isla Santa Cruz", tipo: "Predicción astronómica", instante, horaPublicada: true,
+    valor, unidad: "m", referencia: "MLWS", fase, calidad: "Predicción", fuente: "INOCAR",
+  });
+  const obs = (instante: string, valor: number, referencia: string): SimatNivelMar => ({
+    id: instante + referencia, puerto: "Isla Santa Cruz", tipo: "Nivel observado", instante, horaPublicada: false,
+    valor, unidad: "m", referencia, fase: null, calidad: "validado", fuente: "X",
+  });
+  // Bajamar 0,6 m a las 08:00 y pleamar 1,6 m a las 14:00 (Galápagos): a las 11:00 la curva da 1,1 m.
+  const filas = [pred("2026-11-18 08:00", 0.6, "Bajamar"), pred("2026-11-18 14:00", 1.6, "Pleamar")];
+  const ahora = new Date("2026-11-18T17:30:00Z");
+  const soloIoc = monitoreoPuerto([...filas, obs("2026-11-18T17:00:00Z", 2.3, "Referencia instrumental sin datum publicado")], "Isla Santa Cruz", ahora);
+  assert.equal(soloIoc.estado, "DATUM_INCOMPATIBLE");
+  assert.equal(soloIoc.anomaliaMarM, null);
+  const conMlws = monitoreoPuerto(
+    [...filas, obs("2026-11-18T17:20:00Z", 2.4, "Referencia instrumental sin datum publicado"), obs("2026-11-18T17:00:00Z", 1.25, "MLWS")],
+    "Isla Santa Cruz",
+    ahora,
+  );
+  assert.equal(conMlws.estado, "MONITOREO_VALIDO");
+  assert.equal(conMlws.mareaPredichaM, 1.1);
+  assert.equal(conMlws.anomaliaMarM, 0.15);
+  assert.equal(monitoreoPuerto(filas, "Isla Santa Cruz", ahora).estado, "SOLO_PREDICCION");
+  assert.equal(monitoreoPuerto([], "Puerto Villamil", ahora).estado, "SIN_PREDICCION");
 });
 
 // Actual public viewer response, captured with Origin/Referer headers.

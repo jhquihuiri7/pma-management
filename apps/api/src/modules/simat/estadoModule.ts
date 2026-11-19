@@ -1,7 +1,8 @@
-import type { SimatEstado, SimatEvaluacion } from "@pma/types";
+import type { SimatEstado, SimatEvaluacion, SimatMonitoreoMarea } from "@pma/types";
 import { ISLAS } from "./geografia.js";
 import { PUERTOS, evaluar, puertoCoincideIsla } from "./riesgo.js";
-import { listarEstaciones, listarNivelMar, serieLluvia } from "./lecturas.js";
+import { listarEstaciones, listarNivelMar, nivelMarPuerto, serieLluvia } from "./lecturas.js";
+import { monitoreoPuerto } from "./marea.js";
 import { listarCriterios } from "./criteriosModule.js";
 import { estadoConectores } from "./sincronizacionModule.js";
 import { FUENTES } from "./fuentes.js";
@@ -26,12 +27,20 @@ export async function estado(puedeEditar: boolean): Promise<SimatEstado> {
     riesgo.push(evaluar(criterio, estacion, rain, marine, clock));
   }
 
+  // Monitoreo de marea (evaluar_marea) de cada puerto con predicciones u observaciones.
+  const monitoreoMarea: SimatMonitoreoMarea[] = [];
+  for (const puerto of Object.values(PUERTOS).flatMap((p) => Object.keys(p))) {
+    const filas = await nivelMarPuerto(puerto);
+    if (filas.length) monitoreoMarea.push(monitoreoPuerto(filas, puerto, clock));
+  }
+
   return {
     generadoEn: clock.toISOString(),
     islas: ISLAS,
     estaciones,
     puertos: PUERTOS,
     riesgo,
+    monitoreoMarea,
     conectores,
     fuentes: FUENTES,
     puedeEditar,

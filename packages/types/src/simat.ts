@@ -243,6 +243,43 @@ export interface SimatEvaluacion {
   mar: SimatNivelMar | null;
 }
 
+// ── Tide monitoring (evaluar_marea) ─────────────────────────────────────────
+
+/**
+ * Estados de evaluar_marea() (función del equipo técnico): solo con predicción
+ * y observación compatibles, vigentes y sincrónicas hay anomalía.
+ */
+export type SimatEstadoMarea =
+  | "SIN_PREDICCION"
+  | "SOLO_PREDICCION"
+  | "DATUM_INCOMPATIBLE"
+  | "HORA_SIN_ZONA"
+  | "DATO_NO_VIGENTE"
+  | "SIN_HORA_PREDICCION"
+  | "DATOS_DESFASADOS"
+  | "MONITOREO_VALIDO";
+
+/** Monitoreo de marea de un puerto: marea prevista frente a la observada. */
+export interface SimatMonitoreoMarea {
+  puerto: string;
+  estado: SimatEstadoMarea;
+  /** Marea prevista (curva entre las pleamares y bajamares publicadas) a la hora de la observación. */
+  mareaPredichaM: number | null;
+  fechaPrediccion: string | null;
+  mareaObservadaM: number | null;
+  fechaObservacion: string | null;
+  /** Observada − predicha (m, 3 decimales); solo con estado MONITOREO_VALIDO. */
+  anomaliaMarM: number | null;
+  datum: string | null;
+  datumObservado: string | null;
+  fuenteObservada: string | null;
+  vigenciaMin: number;
+  desfaseMin: number;
+  /** Siempre false: no hay umbral de inundación validado. */
+  alertaInundacion: boolean;
+  umbralInundacionValidado: boolean;
+}
+
 /** Body of POST /simat/nivel-observado. */
 export interface SimatNivelObservadoEntrada {
   puerto: string;
@@ -305,6 +342,8 @@ export interface SimatEstado {
   estaciones: SimatEstacion[];
   puertos: SimatPuertos;
   riesgo: SimatEvaluacion[];
+  /** Monitoreo de marea por puerto (evaluar_marea). */
+  monitoreoMarea: SimatMonitoreoMarea[];
   conectores: SimatConectorEstado[];
   fuentes: SimatFuenteInventario[];
   /** Whether the viewer may configure criteria / register observed levels. */

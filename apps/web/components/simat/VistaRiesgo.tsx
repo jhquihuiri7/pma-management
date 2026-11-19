@@ -9,7 +9,7 @@
 // criterio y predicciones de marea.
 
 import { Fragment, useEffect, useMemo, useRef, useState, type CSSProperties, type ReactNode } from "react";
-import type { SimatCriterio, SimatEstacion, SimatEvaluacion, SimatMareografo, SimatNivelMar, SimatPronostico, SimatSerieLluvia } from "@pma/types";
+import type { SimatCriterio, SimatEstacion, SimatEvaluacion, SimatMonitoreoMarea, SimatMareografo, SimatNivelMar, SimatPronostico, SimatSerieLluvia } from "@pma/types";
 import { obtenerMareas, obtenerMareografo, obtenerPronostico } from "@/lib/simat/api";
 import { forecast, sea, tide, type SeaPoint } from "@/lib/simat/graficos";
 import { avisoMarino, extremosMarea, horaMarina, MAREOGRAFO_POR_PUERTO, observacionPuerto, prediccionesPuerto, puertosIsla } from "@/lib/simat/marinos";
@@ -20,7 +20,7 @@ import { ESCALA, indiceNivel, nivelConMar, rangoLluvia } from "./matriz";
 import ExploradorLluvia, { type MareaExplorador } from "./ExploradorLluvia";
 import { CriterioModal, estacionesDeLluvia, NivelObservadoModal } from "./Formularios";
 import { Cargando } from "./VistaGeneral";
-import { CardHead, Dial, FiltroEstacion, FiltroIsla, Grafico, Tabla, Vacio } from "./piezas";
+import { CardHead, Dial, FiltroEstacion, FiltroIsla, Grafico, Pill, Tabla, Vacio } from "./piezas";
 
 type EstadoMareografo = SimatMareografo | "cargando" | "sin" | "error" | null;
 type EstadoPronostico = SimatPronostico | "cargando" | "error";
@@ -89,20 +89,19 @@ function MatrizEscala({ fila, columna, criterio }: { fila: number | null; column
   );
 }
 
-function Decision({ result, simulacion, nivelSim, marAlto, consultado }: { result?: SimatEvaluacion; simulacion: boolean; nivelSim: number; marAlto: boolean; consultado: string }) {
+/** Evaluación automática del sector (el modo de simulación se quitó a pedido del usuario). */
+function Decision({ result, consultado }: { result?: SimatEvaluacion; consultado: string }) {
   const profile = result?.criterio;
   const conMar = profile?.marM != null;
-  const oficial = !simulacion && result?.nivel ? ESCALA[indiceNivel(result.nivel)] : undefined;
-  const orientativo = !simulacion && !oficial && result?.nivelOrientativo ? ESCALA[indiceNivel(result.nivelOrientativo)] : undefined;
-  // En simulación el mar solo cuenta si el sector tiene umbral de mar.
-  const marSim = conMar && marAlto;
-  const item = simulacion ? nivelConMar(nivelSim, marSim) : (oficial ?? orientativo);
-  const filaLluvia = simulacion ? nivelSim : indiceNivel(result?.nivelLluvia);
+  const oficial = result?.nivel ? ESCALA[indiceNivel(result.nivel)] : undefined;
+  const orientativo = !oficial && result?.nivelOrientativo ? ESCALA[indiceNivel(result.nivelOrientativo)] : undefined;
+  const item = oficial ?? orientativo;
+  const filaLluvia = indiceNivel(result?.nivelLluvia);
   const fila = item && filaLluvia >= 0 ? filaLluvia : null;
-  const columna = fila == null ? null : simulacion ? Number(marSim) : Number(result?.marAlto === true);
+  const columna = fila == null ? null : Number(conMar && result?.marAlto === true);
   const title = item?.name ?? (profile ? "Datos insuficientes" : "Sin evaluación");
   const subtitle = item?.decision ?? (profile ? "Se requiere una ventana de lluvia completa y vigente." : "Falta un criterio local para la estación, puerto y sector elegidos.");
-  const notas = simulacion ? [] : [...(result?.motivos ?? []), ...(result?.avisos ?? [])];
+  const notas = [...(result?.motivos ?? []), ...(result?.avisos ?? [])];
   return (
     <div className="decision con-matriz">
       <div className="decision-main">
@@ -112,8 +111,8 @@ function Decision({ result, simulacion, nivelSim, marAlto, consultado }: { resul
           </div>
           <div>
             <div className="mode-badge">
-              <Icono nombre={simulacion ? "flask" : orientativo ? "info" : "gauge"} />
-              {simulacion ? "Simulación de la matriz" : orientativo ? "Experimental · orientativo, no oficial" : "Evaluación automática · piloto"}
+              <Icono nombre={orientativo ? "info" : "gauge"} />
+              {orientativo ? "Experimental · orientativo, no oficial" : "Evaluación automática"}
             </div>
             <h2>
               {item ? (
@@ -124,7 +123,7 @@ function Decision({ result, simulacion, nivelSim, marAlto, consultado }: { resul
               {title}
             </h2>
             <p>{subtitle}</p>
-            {profile && !simulacion ? (
+            {profile ? (
               <p className="meta">
                 {profile.sector} · {profile.puerto}
                 {result?.lluvia.valor != null ? ` · ${medida(result.lluvia.valor)} mm/h en ${duracion(profile.ventanaMin)}` : ""}
@@ -140,7 +139,7 @@ function Decision({ result, simulacion, nivelSim, marAlto, consultado }: { resul
             ) : null}
           </div>
         </div>
-        <p className="decision-note">{simulacion ? "Ejercicio con entradas manuales." : `Consulta ${fechaHora(consultado)} · Galápagos. La autoridad competente emite las alertas oficiales.`}</p>
+        <p className="decision-note">{`Consulta ${fechaHora(consultado)} · Galápagos. La autoridad competente emite las alertas oficiales.`}</p>
       </div>
       <div className="decision-matrix">
         <h3>Matriz de decisión · lluvia × mar</h3>
@@ -201,6 +200,7 @@ function Medicion({
   resumen,
   lineas,
   extra,
+  pie,
 }: {
   kind: "rain" | "gauge";
   titulo: string;
@@ -208,6 +208,8 @@ function Medicion({
   resumen: ReactNode;
   lineas: [string, ReactNode][];
   extra?: ReactNode;
+  /** Bloque al final de la tarjeta, después de los datos. */
+  pie?: ReactNode;
 }) {
   const m = /^(.*) (mm\/h|m)$/.exec(valor);
   return (
@@ -245,8 +247,67 @@ function Medicion({
           </Fragment>
         ))}
       </dl>
+      {pie}
       <div className="measure-foot" />
     </section>
+  );
+}
+
+const ESTADO_MAREA: Record<SimatMonitoreoMarea["estado"], { etiqueta: string; color: string }> = {
+  MONITOREO_VALIDO: { etiqueta: "Monitoreo válido", color: "green" },
+  SOLO_PREDICCION: { etiqueta: "Solo predicción", color: "" },
+  SIN_PREDICCION: { etiqueta: "Sin predicción", color: "" },
+  DATUM_INCOMPATIBLE: { etiqueta: "Datum incompatible", color: "amber" },
+  HORA_SIN_ZONA: { etiqueta: "Hora sin zona", color: "amber" },
+  DATO_NO_VIGENTE: { etiqueta: "Dato no vigente", color: "amber" },
+  SIN_HORA_PREDICCION: { etiqueta: "Predicción sin hora", color: "amber" },
+  DATOS_DESFASADOS: { etiqueta: "Datos desfasados", color: "amber" },
+};
+
+function explicarMarea(m: SimatMonitoreoMarea): string {
+  switch (m.estado) {
+    case "MONITOREO_VALIDO":
+      return "Anomalía = observada − predicha. Positiva: el mar está más alto de lo previsto.";
+    case "SOLO_PREDICCION":
+      return "Hay predicción, pero ninguna observación del nivel del mar para comparar.";
+    case "SIN_PREDICCION":
+      return "No hay predicción de marea publicada para este puerto a esa hora.";
+    case "DATUM_INCOMPATIBLE":
+      return `La predicción está en ${m.datum ?? "—"} y la observación en «${m.datumObservado ?? "—"}»: no se pueden comparar hasta tener el desfase entre ambas referencias o una medición en ${m.datum ?? "el mismo datum"}.`;
+    case "HORA_SIN_ZONA":
+      return "Una de las horas no indica su zona horaria.";
+    case "DATO_NO_VIGENTE":
+      return `La última observación compatible tiene más de ${m.vigenciaMin} min (o es posterior a la consulta).`;
+    case "SIN_HORA_PREDICCION":
+      return "La predicción no tiene hora.";
+    case "DATOS_DESFASADOS":
+      return `La predicción y la observación están separadas más de ${m.desfaseMin} min.`;
+  }
+}
+
+/** Monitoreo de marea del puerto (evaluar_marea del equipo técnico): prevista frente a observada. */
+function MonitoreoMarea({ m }: { m: SimatMonitoreoMarea }) {
+  const e = ESTADO_MAREA[m.estado];
+  const a = m.anomaliaMarM;
+  return (
+    <div className="monitoreo-marea">
+      <div className="mm-top">
+        <strong>Monitoreo de marea</strong>
+        <Pill color={e.color}>{e.etiqueta}</Pill>
+      </div>
+      <dl>
+        <dt>Prevista · INOCAR</dt>
+        <dd>{m.mareaPredichaM == null ? "—" : `${medida(m.mareaPredichaM)} m ${m.datum ?? ""} · ${fechaHora(m.fechaPrediccion)}`}</dd>
+        <dt>Observada</dt>
+        <dd>{m.mareaObservadaM == null ? "—" : `${medida(m.mareaObservadaM)} m · ${m.datumObservado ?? "—"}`}</dd>
+        <dt>Anomalía</dt>
+        <dd>
+          <b>{a == null ? "—" : `${a > 0 ? "+" : ""}${medida(a)} m`}</b>
+        </dd>
+      </dl>
+      <p className="meta">{explicarMarea(m)}</p>
+      <p className="meta">Sin alerta de inundación: no hay un umbral de inundación validado.</p>
+    </div>
   );
 }
 
@@ -450,9 +511,6 @@ export default function VistaRiesgo() {
   const { estado, isla, estacionId, estacion, lluvia, refrescar, notificar } = useSimat();
   const [puerto, setPuerto] = useState("");
   const [sector, setSector] = useState<string | null>(null);
-  const [simulacion, setSimulacion] = useState(false);
-  const [nivelSim, setNivelSim] = useState(0);
-  const [marAlto, setMarAlto] = useState(false);
   const [modal, setModal] = useState<"criterio" | "agregar" | "observado" | null>(null);
   const [marinos, setMarinos] = useState<SimatNivelMar[]>([]);
   const [mareografo, setMareografo] = useState<EstadoMareografo>(null);
@@ -542,6 +600,7 @@ export default function VistaRiesgo() {
         : mareografo === "error"
           ? "No se pudo consultar el mareógrafo de INOCAR. Puedes volver a intentar con Actualizar."
           : "";
+  const monitoreo = estado.monitoreoMarea?.find((m) => m.puerto === puerto);
   let medicionMar: ReactNode;
   if (mareografo && typeof mareografo === "object") {
     const edad = Math.max(0, Math.floor((Date.now() - Date.parse(mareografo.fecha)) / 60000));
@@ -566,6 +625,7 @@ export default function VistaRiesgo() {
           ],
           ["Uso en la escala", "Sube un nivel solo con umbral de mar en el sector, lectura validada y datum compatible."],
         ]}
+        pie={monitoreo ? <MonitoreoMarea m={monitoreo} /> : null}
       />
     );
   } else {
@@ -581,6 +641,7 @@ export default function VistaRiesgo() {
           ["Calidad y fuente", marObservado ? `${marObservado.calidad} · ${marObservado.fuente}` : "—"],
           ["Umbral de mar", limiteMar],
         ]}
+        pie={monitoreo ? <MonitoreoMarea m={monitoreo} /> : null}
         extra={
           <>
             {marComparable ? <MedidorUmbral valor={marObservado?.valor} limite={profile?.marM ?? null} unidad="m" /> : null}
@@ -686,39 +747,13 @@ export default function VistaRiesgo() {
             <Icono nombre="gauge" />
             Evaluación del sector
           </h2>
-          <div className="risk-mode">
-            <label>
-              Modo de consulta
-              <select value={simulacion ? "simulate" : "automatic"} onChange={(e) => setSimulacion(e.target.value === "simulate")}>
-                <option value="automatic">Evaluación automática</option>
-                <option value="simulate">Simulación de la matriz</option>
-              </select>
-            </label>
-            {simulacion ? (
-              <>
-                <label>
-                  Lluvia
-                  <select value={nivelSim} onChange={(e) => setNivelSim(Number(e.target.value))}>
-                    {ESCALA.map((n, i) => (
-                      <option key={n.name} value={i}>
-                        {profile ? `${rangoLluvia(i, profile.lluvia)} · ${n.name}` : n.name}
-                      </option>
-                    ))}
-                  </select>
-                </label>
-                <label title={profile?.marM == null ? "El sector no tiene umbral de mar: el mar no modifica el nivel." : undefined}>
-                  {profile?.marM == null ? "Nivel del mar · sin umbral" : "Nivel del mar"}
-                  <select value={profile?.marM != null && marAlto ? "Alto" : "Bajo"} disabled={profile?.marM == null} onChange={(e) => setMarAlto(e.target.value === "Alto")}>
-                    <option>Bajo</option>
-                    <option>Alto</option>
-                  </select>
-                </label>
-              </>
-            ) : null}
-          </div>
+          <span className="mode-badge">
+            <Icono nombre="clock" />
+            Evaluación automática con el último dato
+          </span>
         </div>
         <div id="risk-decision">
-          <Decision result={result} simulacion={simulacion} nivelSim={nivelSim} marAlto={marAlto} consultado={estado.generadoEn} />
+          <Decision result={result} consultado={estado.generadoEn} />
         </div>
       </section>
 

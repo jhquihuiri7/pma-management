@@ -56,6 +56,15 @@
   .simat .risk-matrix.escala th[scope=row]{white-space:normal}
 }
 
+/* Monitoreo de marea (evaluar_marea) al pie de la tarjeta del nivel del mar. */
+.simat .monitoreo-marea{margin:12px 18px 0;padding:11px 13px;border:1px solid var(--line-2);border-radius:var(--radius);background:var(--surface-2)}
+.simat .monitoreo-marea .mm-top{display:flex;align-items:center;justify-content:space-between;gap:10px;margin-bottom:6px}
+.simat .monitoreo-marea .mm-top strong{font-size:13px;font-weight:600;color:var(--ink)}
+.simat .monitoreo-marea dl{display:grid;grid-template-columns:auto minmax(0,1fr);gap:3px 12px;margin:0;padding:0;border:0;font-size:12.5px}
+.simat .monitoreo-marea dt{color:var(--muted)}
+.simat .monitoreo-marea dd{margin:0;color:var(--ink-2);font-variant-numeric:tabular-nums}
+.simat .monitoreo-marea .meta{margin-top:6px;font-size:11.5px;line-height:1.45}
+
 /* Explorador de lluvia con marea y zonas de la escala (Riesgo y nivel del mar). */
 .simat .rain-interactive-chart.con-marea{height:320px}
 .simat .rain-tools .rain-forecast-toggle{min-width:0;align-self:center;height:auto;padding:0}
