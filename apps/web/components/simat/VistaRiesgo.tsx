@@ -3,7 +3,7 @@
 // Riesgo por lluvia y mar, réplica de la vista previa (risk-ui.js, riskPage()),
 // integrada como sección del panel único (/simat), con todas las gráficas a la
 // vista:
-// filtros, aviso costero, evaluación del sector con dial y matriz (y modo de
+// filtros, evaluación del sector con dial y matriz (y modo de
 // simulación), evidencia de lluvia y mar con medidores de umbral y gráficas
 // desplegables (la de lluvia, con la marea y las zonas de la escala), nota del
 // criterio y predicciones de marea.
@@ -12,7 +12,7 @@ import { Fragment, useEffect, useMemo, useRef, useState, type CSSProperties, typ
 import type { SimatCriterio, SimatEstacion, SimatEvaluacion, SimatMonitoreoMarea, SimatMareografo, SimatNivelMar, SimatPronostico, SimatSerieLluvia } from "@pma/types";
 import { obtenerMareas, obtenerMareografo, obtenerPronostico } from "@/lib/simat/api";
 import { forecast, sea, tide, type SeaPoint } from "@/lib/simat/graficos";
-import { avisoMarino, extremosMarea, horaMarina, MAREOGRAFO_POR_PUERTO, observacionPuerto, prediccionesPuerto, puertosIsla } from "@/lib/simat/marinos";
+import { extremosMarea, horaMarina, MAREOGRAFO_POR_PUERTO, observacionPuerto, puertosIsla } from "@/lib/simat/marinos";
 import { duracion, fechaDia, fechaHora, medida, numero } from "@/lib/simat/formato";
 import { TODAS_LAS_ISLAS, useSimat } from "./contexto";
 import { Icono } from "./iconos";
@@ -28,13 +28,14 @@ type EstadoPronostico = SimatPronostico | "cargando" | "error";
 /* ---------- piezas ---------- */
 
 /**
- * Matriz de decisión lluvia × mar: cada fila es un tramo de lluvia de la escala
- * del sector y cada columna el estado del mar; la celda lleva el color del
- * nivel que resulta (el mar alto sube uno). Sin umbral de mar, la columna «mar
- * alto» queda atenuada porque no se aplica.
+ * Matriz de decisión: cada fila es un tramo de lluvia de la escala del sector.
+ * Con umbral de mar hay dos columnas (mar bajo / mar alto, que sube un nivel);
+ * sin umbral de mar solo se muestra el nivel por lluvia y su acción (el usuario
+ * pidió no ver la columna «mar alto · sin umbral»).
  */
 function MatrizEscala({ fila, columna, criterio }: { fila: number | null; columna: number | null; criterio?: SimatCriterio }) {
   const conMar = criterio?.marM != null;
+  const columnas = conMar ? [0, 1] : [0];
   const dos = (largo: string, corto: string) => (
     <>
       <span className="long">{largo}</span>
@@ -45,30 +46,35 @@ function MatrizEscala({ fila, columna, criterio }: { fila: number | null; column
   );
   return (
     <div className="table-wrap matrix-wrap">
-      <table className="risk-matrix escala">
+      <table className={`risk-matrix escala${conMar ? "" : " solo-lluvia"}`}>
         <thead>
           <tr>
             <th scope="col">{dos(`Lluvia${criterio ? ` · ${duracion(criterio.ventanaMin)}` : ""}`, "Lluvia")}</th>
-            <th scope="col">{dos("Nivel del mar bajo", "Mar bajo")}</th>
-            <th scope="col" className={conMar ? undefined : "col-inactiva"}>
-              {dos(conMar ? `Mar alto · ≥ ${medida(criterio!.marM)} m` : "Mar alto · sin umbral", "Mar alto")}
-            </th>
+            {conMar ? (
+              <>
+                <th scope="col">{dos("Nivel del mar bajo", "Mar bajo")}</th>
+                <th scope="col">{dos(`Mar alto · ≥ ${medida(criterio!.marM)} m`, "Mar alto")}</th>
+              </>
+            ) : (
+              <th scope="col">Nivel y acción</th>
+            )}
           </tr>
         </thead>
         <tbody>
           {ESCALA.map((fil, i) => (
             <tr key={fil.name}>
               <th scope="row">{criterio ? rangoLluvia(i, criterio.lluvia) : fil.name}</th>
-              {[0, 1].map((m) => {
+              {columnas.map((m) => {
                 const item = nivelConMar(i, m === 1);
                 const actual = fila === i && columna === m;
                 return (
-                  <td key={m} className={`matrix-cell ${item.code}${actual ? " is-current" : ""}${m === 1 && !conMar ? " inactiva" : ""}`} title={item.note}>
+                  <td key={m} className={`matrix-cell ${item.code}${actual ? " is-current" : ""}`} title={conMar ? item.note : undefined}>
                     <strong>
                       <Icono nombre={item.icon} />
                       {item.name}
                       {actual ? <span className="matrix-selected">Resultado</span> : null}
                     </strong>
+                    {conMar ? null : <p>{item.note}</p>}
                     <small>{item.decision}</small>
                   </td>
                 );
@@ -77,14 +83,14 @@ function MatrizEscala({ fila, columna, criterio }: { fila: number | null; column
           ))}
         </tbody>
       </table>
-      <p className="meta escala-mar">
-        <Icono nombre="waves" />
-        {conMar
-          ? `El mar alto (≥ ${medida(criterio!.marM)} m ${criterio!.datum}) sube un nivel.`
-          : criterio
-            ? "Sin umbral de mar en el sector: solo se aplica la columna «mar bajo»."
-            : "Configura un criterio para ver los umbrales del sector."}
-      </p>
+      {conMar ? (
+        <p className="meta escala-mar">
+          <Icono nombre="waves" />
+          {`El mar alto (≥ ${medida(criterio!.marM)} m ${criterio!.datum}) sube un nivel.`}
+        </p>
+      ) : !criterio ? (
+        <p className="meta escala-mar">Configura un criterio para ver los umbrales del sector.</p>
+      ) : null}
     </div>
   );
 }
@@ -142,7 +148,7 @@ function Decision({ result, consultado }: { result?: SimatEvaluacion; consultado
         <p className="decision-note">{`Consulta ${fechaHora(consultado)} · Galápagos. La autoridad competente emite las alertas oficiales.`}</p>
       </div>
       <div className="decision-matrix">
-        <h3>Matriz de decisión · lluvia × mar</h3>
+        <h3>{conMar ? "Matriz de decisión · lluvia × mar" : "Matriz de decisión · lluvia"}</h3>
         <MatrizEscala fila={fila} columna={columna} criterio={profile} />
       </div>
     </div>
@@ -569,11 +575,9 @@ export default function VistaRiesgo() {
   const latest = lluvia?.latest;
   const rain = result?.lluvia ?? { valor: raw?.intensity ?? null, fecha: latest?.time ?? null, fuente: latest?.source ?? null, intervalos: raw?.valid ?? null, esperados: raw?.expected ?? null };
   const marObservado = profile ? result.mar : (observacionPuerto(marinos, puerto) ?? null);
-  const predicciones = prediccionesPuerto(marinos, puerto);
   const limiteMar = profile ? (profile.marM != null ? `${medida(profile.marM)} m · ${profile.datum} (sube un nivel)` : "Sin umbral: no modifica el nivel") : "Por calibrar";
   const limiteLluvia = profile ? `${medida(profile.lluvia.vigilancia)} · ${medida(profile.lluvia.preparacion)} · ${medida(profile.lluvia.respuesta)} mm/h` : "Por calibrar";
   const marComparable = !!profile && profile.marM != null && !!marObservado && marObservado.unidad === "m" && String(marObservado.referencia).trim().toLowerCase() === profile.datum.toLowerCase();
-  const aviso = avisoMarino(result, predicciones);
 
   /* mareas */
   const extremos = extremosMarea(marinos, puerto);
@@ -720,27 +724,7 @@ export default function VistaRiesgo() {
         ) : null}
       </div>
 
-      <section className={`card wide risk-result ${aviso.tone}`} id="marine-advisory">
-        <div className="risk-result-main">
-          <span className="risk-result-icon">
-            <Icono nombre={aviso.tone === "caution" ? "alert" : "waves"} />
-          </span>
-          <div>
-            <div className="eyebrow">Aviso por nivel del mar · {nombrePuerto}</div>
-            <h2>{aviso.title}</h2>
-            {aviso.row ? (
-              <p>
-                <strong>
-                  {medida(aviso.row.valor)} {aviso.row.unidad}
-                </strong>{" "}
-                · {aviso.row.referencia} · {horaMarina(aviso.row)} · {aviso.row.fuente}
-              </p>
-            ) : null}
-            <p>{aviso.detail}</p>
-          </div>
-        </div>
-      </section>
-
+      {/* El aviso por nivel del mar se quitó a pedido del usuario. */}
       <section className="card wide decision-card">
         <div className="decision-top">
           <h2 style={{ fontSize: 15.5, fontWeight: 600, display: "flex", alignItems: "center", gap: 8 }}>
