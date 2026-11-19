@@ -228,10 +228,6 @@ function Medicion({
             </span>
             {titulo}
           </span>
-          <a className="risk-chart-chevron" href={`#${kind}-history`}>
-            Ver gráfica
-            <Icono nombre="down" />
-          </a>
         </span>
       </h2>
       <div className="risk-measure-value">

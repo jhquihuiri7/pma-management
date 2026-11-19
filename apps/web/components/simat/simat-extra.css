@@ -22,7 +22,6 @@
 .simat .section-head .meta{margin-top:3px}
 .simat .risk-measure.fija{cursor:default}
 .simat .risk-measure.fija:hover{border-color:var(--line);box-shadow:none}
-.simat .risk-measure.fija .risk-chart-chevron{text-decoration:none}
 
 /* Escala de riesgo por lluvia (0044): tabla del sector y niveles orientativos
    (umbrales experimentales), que se distinguen del nivel oficial. */

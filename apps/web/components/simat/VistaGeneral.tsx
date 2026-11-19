@@ -429,10 +429,6 @@ export default function VistaGeneral({ riesgo }: { riesgo?: ReactNode }) {
             ) : null}
           </div>
         </div>
-        <a className="button secondary" href="#riesgo-sector">
-          Ver escala y evidencia
-          <Icono nombre="arrow" />
-        </a>
       </section>
 
       {riesgo}
