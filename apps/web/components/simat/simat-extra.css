@@ -68,6 +68,25 @@
 .simat .percentiles-marea .pct-fila b{font-size:14px;color:#6d28d9;font-variant-numeric:tabular-nums}
 .simat .percentiles-marea .meta{margin-top:6px;font-size:11.5px;line-height:1.45}
 
+/* Lluvia medida dentro de la evaluación del sector y tarjeta del nivel del mar
+   a todo el ancho (datos | monitoreo y percentiles). */
+.simat .decision-lluvia{margin:0 20px 14px;padding:12px 14px;border:1px solid var(--line-2);border-radius:var(--radius);background:var(--surface-2)}
+.simat .decision-lluvia .dl-top{display:flex;align-items:center;gap:9px;font-size:13px;font-weight:600;color:var(--ink-2)}
+.simat .decision-lluvia .dl-top strong{margin-left:auto;font-size:22px;font-weight:700;letter-spacing:-.02em;color:var(--ink)}
+.simat .decision-lluvia .dl-top strong small{font-size:13px;font-weight:600;color:var(--ink-3)}
+.simat .decision-lluvia .threshold-meter{margin:10px 0 0}
+.simat .decision-lluvia .meta{margin-top:8px;font-size:12px}
+.simat .marine-wide{display:block}
+.simat .risk-measure.ancho .rm-cols{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr);align-items:start}
+.simat .risk-measure.ancho .rm-pie{padding:6px 0 0}
+.simat .risk-measure.ancho .rm-datos > .meta{padding:4px 18px 0}
+.simat .risk-measure.ancho .monitoreo-marea dl{margin:0;padding-top:0;border-top:0}
+.simat .risk-measure.ancho .rm-pie > :first-child{margin-top:16px}
+@media (max-width:860px){
+  .simat .risk-measure.ancho .rm-cols{grid-template-columns:1fr}
+  .simat .decision-lluvia{margin:0 14px 12px}
+}
+
 /* Monitoreo de marea (evaluar_marea) al pie de la tarjeta del nivel del mar. */
 .simat .monitoreo-marea{margin:12px 18px 0;padding:11px 13px;border:1px solid var(--line-2);border-radius:var(--radius);background:var(--surface-2)}
 .simat .monitoreo-marea .mm-top{display:flex;align-items:center;justify-content:space-between;gap:10px;margin-bottom:6px}

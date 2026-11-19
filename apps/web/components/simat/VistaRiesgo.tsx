@@ -96,7 +96,16 @@ function MatrizEscala({ fila, columna, criterio }: { fila: number | null; column
 }
 
 /** Evaluación automática del sector (el modo de simulación se quitó a pedido del usuario). */
-function Decision({ result, consultado }: { result?: SimatEvaluacion; consultado: string }) {
+/** Lluvia medida en la ventana del criterio (lo que decide el nivel). */
+interface LluviaVentana {
+  valor: number | null;
+  fecha: string | null;
+  fuente: string | null;
+  intervalos: number | null;
+  esperados: number | null;
+}
+
+function Decision({ result, consultado, lluvia, ventanaMin }: { result?: SimatEvaluacion; consultado: string; lluvia: LluviaVentana; ventanaMin: number }) {
   const profile = result?.criterio;
   const conMar = profile?.marM != null;
   const oficial = result?.nivel ? ESCALA[indiceNivel(result.nivel)] : undefined;
@@ -132,7 +141,6 @@ function Decision({ result, consultado }: { result?: SimatEvaluacion; consultado
             {profile ? (
               <p className="meta">
                 {profile.sector} · {profile.puerto}
-                {result?.lluvia.valor != null ? ` · ${medida(result.lluvia.valor)} mm/h en ${duracion(profile.ventanaMin)}` : ""}
                 {profile.estadoValidacion === "experimental" ? " · umbrales experimentales" : ""}
               </p>
             ) : null}
@@ -144,6 +152,23 @@ function Decision({ result, consultado }: { result?: SimatEvaluacion; consultado
               </ul>
             ) : null}
           </div>
+        </div>
+        <div className="decision-lluvia">
+          <div className="dl-top">
+            <span className="measure-icon">
+              <Icono nombre="rain" />
+            </span>
+            <span>Lluvia en {duracion(ventanaMin)}</span>
+            <strong>
+              {lluvia.valor == null ? "Sin dato" : medida(lluvia.valor)}
+              {lluvia.valor == null ? null : <small> mm/h</small>}
+            </strong>
+          </div>
+          {profile ? <MedidorEscala valor={lluvia.valor} criterio={profile} /> : null}
+          <p className="meta">
+            {lluvia.fecha ? `Cierre ${fechaHora(lluvia.fecha)}` : "Sin intervalo cerrado"} · {lluvia.fuente || "sin fuente"}
+            {lluvia.esperados ? ` · ${lluvia.intervalos} / ${lluvia.esperados} intervalos válidos` : ""}
+          </p>
         </div>
         <p className="decision-note">{`Consulta ${fechaHora(consultado)} · Galápagos. La autoridad competente emite las alertas oficiales.`}</p>
       </div>
@@ -207,6 +232,7 @@ function Medicion({
   lineas,
   extra,
   pie,
+  ancho = false,
 }: {
   kind: "rain" | "gauge";
   titulo: string;
@@ -216,10 +242,12 @@ function Medicion({
   extra?: ReactNode;
   /** Bloque al final de la tarjeta, después de los datos. */
   pie?: ReactNode;
+  /** A todo el ancho: datos a la izquierda y el pie a la derecha. */
+  ancho?: boolean;
 }) {
   const m = /^(.*) (mm\/h|m)$/.exec(valor);
-  return (
-    <section className="card risk-measure fija" data-risk-chart={kind}>
+  const cuerpo = (
+    <>
       <h2>
         <span className="risk-measure-toggle">
           <span>
@@ -249,7 +277,21 @@ function Medicion({
           </Fragment>
         ))}
       </dl>
-      {pie}
+    </>
+  );
+  return (
+    <section className={`card risk-measure fija${ancho ? " ancho" : ""}`} data-risk-chart={kind}>
+      {ancho ? (
+        <div className="rm-cols">
+          <div className="rm-datos">{cuerpo}</div>
+          <div className="rm-pie">{pie}</div>
+        </div>
+      ) : (
+        <>
+          {cuerpo}
+          {pie}
+        </>
+      )}
       <div className="measure-foot" />
     </section>
   );
@@ -618,7 +660,6 @@ export default function VistaRiesgo() {
   const rain = result?.lluvia ?? { valor: raw?.intensity ?? null, fecha: latest?.time ?? null, fuente: latest?.source ?? null, intervalos: raw?.valid ?? null, esperados: raw?.expected ?? null };
   const marObservado = profile ? result.mar : (observacionPuerto(marinos, puerto) ?? null);
   const limiteMar = profile ? (profile.marM != null ? `${medida(profile.marM)} m · ${profile.datum} (sube un nivel)` : "Sin umbral: no modifica el nivel") : "Por calibrar";
-  const limiteLluvia = profile ? `${medida(profile.lluvia.vigilancia)} · ${medida(profile.lluvia.preparacion)} · ${medida(profile.lluvia.respuesta)} mm/h` : "Por calibrar";
   const marComparable = !!profile && profile.marM != null && !!marObservado && marObservado.unidad === "m" && String(marObservado.referencia).trim().toLowerCase() === profile.datum.toLowerCase();
 
   /* mareas */
@@ -682,6 +723,7 @@ export default function VistaRiesgo() {
           ["Uso en la escala", "Sube un nivel solo con umbral de mar en el sector, lectura validada y datum compatible."],
         ]}
         pie={pieMar}
+        ancho
       />
     );
   } else {
@@ -698,6 +740,7 @@ export default function VistaRiesgo() {
           ["Umbral de mar", limiteMar],
         ]}
         pie={pieMar}
+        ancho
         extra={
           <>
             {marComparable ? <MedidorUmbral valor={marObservado?.valor} limite={profile?.marM ?? null} unidad="m" /> : null}
@@ -789,25 +832,13 @@ export default function VistaRiesgo() {
           </span>
         </div>
         <div id="risk-decision">
-          <Decision result={result} consultado={estado.generadoEn} />
+          <Decision result={result} consultado={estado.generadoEn} lluvia={rain} ventanaMin={rwin} />
         </div>
       </section>
 
-      <div className="grid risk-evidence">
-        <Medicion
-          kind="rain"
-          titulo="Intensidad de precipitación"
-          valor={rain.valor == null ? "Sin dato" : `${medida(rain.valor)} mm/h`}
-          resumen={`Promedio del intervalo de ${duracion(rwin)}`}
-          lineas={[
-            ["Fin del intervalo", rain.fecha ? `${fechaHora(rain.fecha)} · Galápagos` : "—"],
-            ["Fuente", rain.fuente || "—"],
-            ["Intervalos válidos", rain.esperados ? `${rain.intervalos} / ${rain.esperados}` : "—"],
-            ["Umbrales de lluvia", limiteLluvia],
-          ]}
-          extra={profile ? <MedidorEscala valor={rain.valor} criterio={profile} /> : null}
-        />
-        <div id="marine-observed">{medicionMar}</div>
+      {/* La lluvia medida va dentro de la evaluación del sector; el nivel del mar, a todo el ancho. */}
+      <div id="marine-observed" className="marine-wide">
+        {medicionMar}
       </div>
 
       <div id="rain-history" className="ancla">
