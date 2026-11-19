@@ -16,7 +16,6 @@ const SECCIONES: { id: string; label: string; icono: NombreIcono }[] = [
   { id: "resumen", label: "Resumen", icono: "gauge" },
   { id: "riesgo-sector", label: "Riesgo por sector", icono: "alert" },
   { id: "rain-history", label: "Lluvia y marea", icono: "rain" },
-  { id: "gauge-history", label: "Mareógrafo", icono: "waves" },
   { id: "mareas", label: "Predicciones de marea", icono: "activity" },
   { id: "estaciones", label: "Lluvia acumulada y estaciones", icono: "tower" },
 ];

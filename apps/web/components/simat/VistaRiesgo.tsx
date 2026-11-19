@@ -11,7 +11,7 @@
 import { Fragment, useEffect, useMemo, useRef, useState, type CSSProperties, type ReactNode } from "react";
 import type { SimatCriterio, SimatEstacion, SimatEvaluacion, SimatMonitoreoMarea, SimatUmbralMarea, SimatMareografo, SimatNivelMar, SimatPronostico, SimatSerieLluvia } from "@pma/types";
 import { obtenerMareas, obtenerMareografo, obtenerPronostico } from "@/lib/simat/api";
-import { forecast, sea, tide, type RangoTiempo, type SeaPoint, type TideExtreme } from "@/lib/simat/graficos";
+import { forecast, tide, type RangoTiempo, type TideExtreme } from "@/lib/simat/graficos";
 import { clasificarPercentil, comparacionDatum, extremosMarea, horaMarina, MAREOGRAFO_POR_PUERTO, observacionPuerto, puertosIsla } from "@/lib/simat/marinos";
 import { duracion, fechaDia, fechaHora, medida, numero } from "@/lib/simat/formato";
 import { TODAS_LAS_ISLAS, useSimat } from "./contexto";
@@ -350,68 +350,6 @@ function PercentilesMarea({ u, comparable, proxima }: { u: SimatUmbralMarea; com
         Datum {datum} · periodo {u.periodo} · método {u.metodo.replace(/_/g, " ")}. {u.alertasOficiales ? "" : "Sin alertas oficiales: "}son percentiles de las pleamares, no un umbral de inundación.
       </p>
     </div>
-  );
-}
-
-function tendencia(points: SeaPoint[], edad: number) {
-  const last = points[points.length - 1];
-  const sinTendencia = { title: "Tendencia reciente no disponible", tone: "steady" as const, detail: "Se requieren lecturas recientes y continuas para comparar los últimos 15 minutos." };
-  if (!last) return sinTendencia;
-  const start = last.time - 15 * 60000;
-  const recent = points.filter((p) => p.time >= start && p.time <= last.time);
-  if (edad > 30 || recent.length < 2 || recent[0].time !== start || recent.some((p, i) => i > 0 && p.time - recent[i - 1].time > 180000)) return sinTendencia;
-  const change = Math.round((last.level - recent[0].level) * 1e6) / 1e6;
-  const tone = change > 0 ? ("up" as const) : change < 0 ? ("down" as const) : ("steady" as const);
-  const title = { up: "Está subiendo", down: "Está bajando", steady: "Sin cambio neto" }[tone];
-  return { title, tone, detail: `${change > 0 ? "+" : ""}${medida(change)} m · últimos 15 min` };
-}
-
-function HistoriaMareografo({ m }: { m: SimatMareografo }) {
-  const points = m.serie.map((p) => ({ time: Date.parse(p.fecha), level: p.valor }));
-  const edad = Math.max(0, Math.floor((Date.now() - Date.parse(m.fecha)) / 60000));
-  const t = tendencia(points, edad);
-  const hay = points.length > 1 && points[points.length - 1].time > points[0].time;
-  const ultimo = points[points.length - 1];
-  return (
-    <section className="card wide">
-      <CardHead
-        titulo="Evolución del nivel del mar observado"
-        descripcion={`${m.estacion} · Sensor RAS · Hora de Galápagos`}
-        extra={
-          <div className={`gauge-trend ${t.tone}`}>
-            <Icono nombre={t.tone === "up" ? "up" : t.tone === "down" ? "downTrend" : "steady"} />
-            <div>
-              <strong>{t.title}</strong>
-              <span>{t.detail}</span>
-            </div>
-          </div>
-        }
-        icono="waves"
-      />
-      {hay ? (
-        <>
-          <div className="chart-body">
-            <Grafico id="gauge-chart" clave={`${m.codigo}|${m.fecha}|${points.length}`} dibujar={(el) => sea(el, { points, recentFrom: ultimo.time - 15 * 60000 })} />
-          </div>
-          <div className="chart-legend">
-            <span>
-              <i className="line" style={{ "--c": "#2a78d6" } as CSSProperties} />
-              Nivel observado
-            </span>
-            <span>
-              <i className="line" style={{ "--c": "#1c5cab", height: 4 } as CSSProperties} />
-              Últimos 15 min
-            </span>
-            <span>Los cortes indican falta de datos.</span>
-          </div>
-          <div className="card-foot meta">
-            De {fechaHora(new Date(points[0].time).toISOString())} a {fechaHora(m.fecha)} · Mediciones preliminares
-          </div>
-        </>
-      ) : (
-        <Vacio>Se necesitan al menos dos lecturas para graficar la evolución.</Vacio>
-      )}
-    </section>
   );
 }
 
@@ -891,16 +829,7 @@ export default function VistaRiesgo() {
           )}
       </div>
 
-      <div id="gauge-history" className="ancla">
-        {mareografo && typeof mareografo === "object" ? (
-            <HistoriaMareografo m={mareografo} />
-          ) : (
-            <section className="card wide">
-              <CardHead titulo="Evolución del nivel del mar observado" icono="waves" />
-              <Vacio>{codigoMareografo ? feedback || "Consultando la serie del mareógrafo…" : "No hay una serie de mareógrafo disponible para este puerto."}</Vacio>
-            </section>
-          )}
-      </div>
+      {/* El gráfico «Evolución del nivel del mar observado» se quitó a pedido del usuario. */}
 
       {profile ? (
         <section className="card wide">
