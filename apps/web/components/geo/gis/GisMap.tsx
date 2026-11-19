@@ -5,80 +5,65 @@ import L from "leaflet";
 import "@maplibre/maplibre-gl-leaflet";
 import "leaflet/dist/leaflet.css";
 import "maplibre-gl/dist/maplibre-gl.css";
-import { BASEMAPS, COLOR_RAMPS } from "./gis-data";
+import { BASEMAPS } from "./gis-data";
+import { buildSymbolizer, escapeHtml, labelAnchor, markerSvg, resolveLabelStyle, type ResolvedSymbol } from "./symbology";
 import type { Feature, Geometry, Position } from "geojson";
 import type { GisLayer, GisTool, RasterLayer, IdentifyInfo, FocusFeature } from "./types";
 
-type ColorFn = (props: Record<string, unknown>) => string;
-
 interface LayerRef {
   geo: L.GeoJSON;
+  /** Lines with a casing: the wider strokes, drawn under `geo`. */
+  casing: L.GeoJSON | null;
   geojson: GisLayer["geojson"]; // identity used to detect data changes
   styleSig: string; // JSON of style, to detect style-only changes
 }
 
-function buildColorFn(layer: GisLayer): ColorFn {
-  const { style, geojson } = layer;
-  if (style.mode === "single") return () => style.color;
+type FeatureProps = Record<string, unknown> | null | undefined;
 
-  if (style.mode === "category") {
-    const key = style.colorBy;
-    if (!key) return () => style.color;
-    const palette = COLOR_RAMPS[style.palette] || COLOR_RAMPS.categorical;
-    const uniqValues = Array.from(new Set(geojson.features.map((f) => (f.properties || {})[key])));
-    const map = new Map<unknown, string>();
-    uniqValues.forEach((v, i) => map.set(v, palette[i % palette.length]));
-    return (props) => map.get(props[key]) || "#888";
-  }
-
-  if (style.mode === "ramp") {
-    const key = style.colorBy;
-    if (!key) return () => style.color;
-    const ramp = COLOR_RAMPS[style.ramp] || COLOR_RAMPS.greens;
-    const values = geojson.features.map((f) => (f.properties || {})[key]).filter((v): v is number => typeof v === "number");
-    if (values.length === 0) return () => style.color;
-    const sorted = [...values].sort((a, b) => a - b);
-    const classes = style.classes || 5;
-    const breaks: number[] = [];
-
-    if (style.classification === "quantile" || style.classification === "jenks") {
-      for (let i = 1; i < classes; i++) breaks.push(sorted[Math.floor((sorted.length * i) / classes)]);
-    } else {
-      const min = sorted[0], max = sorted[sorted.length - 1];
-      const step = (max - min) / classes;
-      for (let i = 1; i < classes; i++) breaks.push(min + step * i);
-    }
-
-    const colors: string[] = [];
-    for (let i = 0; i < classes; i++) {
-      const t = classes === 1 ? 0 : i / (classes - 1);
-      colors.push(ramp[Math.round(t * (ramp.length - 1))]);
-    }
-
-    return (props) => {
-      const v = props[key];
-      if (typeof v !== "number") return "#888";
-      let idx = 0;
-      while (idx < breaks.length && v > breaks[idx]) idx++;
-      return colors[idx];
-    };
-  }
-
-  return () => style.color;
+function hasOutline(sym: ResolvedSymbol): boolean {
+  return !!sym.strokeColor && sym.strokeWidth > 0;
 }
 
 // Per-feature vector style for polygons/lines (points are styled on the marker).
-function pathStyleFor(layer: GisLayer, colorFn: ColorFn) {
-  return (feature?: GeoJSON.Feature): L.PathOptions => {
-    const c = colorFn((feature?.properties || {}) as Record<string, unknown>);
-    if (layer.geometry === "LineString") {
-      return { color: c, weight: layer.style.strokeWidth + 1.5, opacity: layer.style.opacity };
-    }
+function pathOptions(sym: ResolvedSymbol): L.PathOptions {
+  if (sym.geometry === "LineString") {
     return {
-      color: "#333333", weight: layer.style.strokeWidth, opacity: layer.style.opacity,
-      fillColor: c, fillOpacity: layer.style.opacity * 0.78,
+      color: sym.color, weight: sym.strokeWidth, opacity: sym.strokeOpacity,
+      dashArray: sym.dash ?? undefined, lineCap: sym.dash ? "butt" : "round", lineJoin: "round",
     };
+  }
+  return {
+    stroke: hasOutline(sym), color: sym.strokeColor ?? undefined, weight: sym.strokeWidth, opacity: sym.strokeOpacity,
+    dashArray: sym.dash ?? undefined, fill: true, fillColor: sym.color, fillOpacity: sym.fillOpacity,
   };
+}
+
+function casingOptions(sym: ResolvedSymbol): L.PathOptions {
+  return { color: sym.casingColor ?? undefined, weight: sym.casingWidth, opacity: sym.strokeOpacity, lineCap: "round", lineJoin: "round" };
+}
+
+function hasCasingSymbol(sym: ResolvedSymbol): boolean {
+  return !!sym.casingColor && sym.casingWidth > 0;
+}
+
+function pointLayer(sym: ResolvedSymbol, latlng: L.LatLng): L.Layer {
+  if (sym.marker === "circle" && !(sym.haloColor && sym.haloSize > 0)) {
+    return L.circleMarker(latlng, {
+      radius: sym.size / 2, fillColor: sym.color, fillOpacity: sym.fillOpacity,
+      stroke: hasOutline(sym), color: sym.strokeColor ?? undefined, weight: sym.strokeWidth, opacity: sym.strokeOpacity,
+    });
+  }
+  const { svg, box } = markerSvg(sym);
+  return L.marker(latlng, {
+    keyboard: false,
+    icon: L.divIcon({ html: svg, className: "gis-marker", iconSize: [box, box], iconAnchor: [box / 2, box / 2] }),
+  });
+}
+
+function haloShadow(color: string | null, width: number): string {
+  if (!color || width <= 0) return "none";
+  const w = Math.round(width * 10) / 10;
+  return `0 0 ${w}px ${color}, 0 0 ${w}px ${color}, 0 0 1px ${color}`;
 }
 
 interface Props {
@@ -98,6 +83,17 @@ interface Props {
   onDrawGeometry?: (geometry: Geometry) => void;
   onDrawCancel?: () => void;
   previewGeometry?: Geometry | null;
+}
+
+/** Shows each layer's labels only from its minimum zoom on. */
+function applyLabelZoom(map: L.Map, labelLayer: L.FeatureGroup | null, groups: Array<{ minZoom: number | null; group: L.LayerGroup }>) {
+  if (!labelLayer) return;
+  const zoom = map.getZoom();
+  for (const { minZoom, group } of groups) {
+    const show = minZoom === null || zoom >= minZoom - 1e-6;
+    if (show && !labelLayer.hasLayer(group)) labelLayer.addLayer(group);
+    else if (!show && labelLayer.hasLayer(group)) labelLayer.removeLayer(group);
+  }
 }
 
 /**
@@ -124,6 +120,8 @@ export default function GisMap({ layers, rasterLayers, basemap, tool = "pan", in
   const layerRefs = useRef<Map<string, LayerRef>>(new Map());
   const rasterRefs = useRef<Map<string, L.TileLayer>>(new Map());
   const labelLayerRef = useRef<L.FeatureGroup | null>(null);
+  // Labels per layer, shown from their minimum zoom on (applyLabelZoom).
+  const labelGroupsRef = useRef<Array<{ minZoom: number | null; group: L.LayerGroup }>>([]);
   const inspectMarkerRef = useRef<L.Marker | null>(null);
   const previewRef = useRef<L.GeoJSON | null>(null);
   const cbRef = useRef({ onIdentify, onCoordChange, onMapReady, onViewportChange, onPointInspect, onDrawGeometry, onDrawCancel, tool });
@@ -150,6 +148,7 @@ export default function GisMap({ layers, rasterLayers, basemap, tool = "pan", in
     if (rasterPane) rasterPane.style.zIndex = "250";
 
     labelLayerRef.current = L.featureGroup().addTo(map);
+    map.on("zoomend", () => applyLabelZoom(map, labelLayerRef.current, labelGroupsRef.current));
 
     map.on("mousemove", (e: L.LeafletMouseEvent) => cbRef.current.onCoordChange?.([e.latlng.lat, e.latlng.lng]));
     // Report viewport on user-driven pan/zoom so the editor can remember it.
@@ -217,41 +216,52 @@ export default function GisMap({ layers, rasterLayers, basemap, tool = "pan", in
   // Reconcile layers incrementally: only rebuild what actually changed.
   useEffect(() => {
     const map = mapRef.current;
-    if (!map || !labelLayerRef.current) return;
+    const labelLayer = labelLayerRef.current;
+    if (!map || !labelLayer) return;
 
+    const drop = (ref: LayerRef) => {
+      map.removeLayer(ref.geo);
+      if (ref.casing) map.removeLayer(ref.casing);
+    };
     const ids = new Set(layers.map((l) => l.id));
     Array.from(layerRefs.current.entries()).forEach(([id, ref]) => {
-      if (!ids.has(id)) { map.removeLayer(ref.geo); layerRefs.current.delete(id); }
+      if (!ids.has(id)) { drop(ref); layerRefs.current.delete(id); }
     });
 
-    labelLayerRef.current.clearLayers();
+    labelLayer.clearLayers();
+    labelGroupsRef.current = [];
 
     layers.forEach((layer) => {
       const ref = layerRefs.current.get(layer.id);
 
       // Hidden → drop any existing rendering.
       if (!layer.visible) {
-        if (ref) { map.removeLayer(ref.geo); layerRefs.current.delete(layer.id); }
+        if (ref) { drop(ref); layerRefs.current.delete(layer.id); }
         return;
       }
 
-      const colorFn = buildColorFn(layer);
+      const symbolizer = buildSymbolizer(layer);
+      const symbolOf = (feature?: Feature) => symbolizer.symbolFor((feature?.properties || {}) as FeatureProps);
       const styleSig = JSON.stringify(layer.style);
-      const styleFn = pathStyleFor(layer, colorFn);
+      const styleFn = (feature?: Feature) => pathOptions(symbolOf(feature));
 
-      const dataChanged = !ref || ref.geojson !== layer.geojson;
+      // Points are markers, restyled by rebuilding them; paths restyle in place.
+      const dataChanged = !ref || ref.geojson !== layer.geojson || (layer.geometry === "Point" && ref.styleSig !== styleSig);
+      const buildCasing = () => {
+        if (layer.geometry !== "LineString" || !symbolizer.classes.some((c) => hasCasingSymbol(c.symbol))) return null;
+        return L.geoJSON(layer.geojson, {
+          interactive: false,
+          filter: (feature) => hasCasingSymbol(symbolOf(feature)),
+          style: (feature) => casingOptions(symbolOf(feature)),
+        }).addTo(map);
+      };
 
       if (dataChanged) {
-        if (ref) map.removeLayer(ref.geo);
+        if (ref) drop(ref);
+        const casing = buildCasing();
         const geo = L.geoJSON(layer.geojson, {
           style: styleFn as L.StyleFunction,
-          pointToLayer: (feature, latlng) => {
-            const c = colorFn((feature.properties || {}) as Record<string, unknown>);
-            return L.circleMarker(latlng, {
-              radius: layer.style.size, fillColor: c, color: "#ffffff",
-              weight: 1.5, opacity: layer.style.opacity, fillOpacity: layer.style.opacity,
-            });
-          },
+          pointToLayer: (feature, latlng) => pointLayer(symbolOf(feature), latlng),
           onEachFeature: (feature, lyr) => {
             lyr.on("click", (e: L.LeafletMouseEvent) => {
               // While measuring or inspecting a point, let the click bubble to the
@@ -261,61 +271,61 @@ export default function GisMap({ layers, rasterLayers, basemap, tool = "pan", in
               cbRef.current.onIdentify?.({ layerId: layer.id, layerName: layer.name, feature, latlng: e.latlng });
             });
             lyr.on("mouseover", function (this: L.Path) {
-              if (layer.geometry !== "Point") this.setStyle({ weight: (layer.style.strokeWidth || 1) + 1.5, color: "#0a0a0a" });
+              if (layer.geometry !== "Point") this.setStyle({ stroke: true, weight: symbolOf(feature).strokeWidth + 1.5, color: "#0a0a0a" });
             });
             lyr.on("mouseout", function (this: L.Path) { geo.resetStyle(this); });
           },
         });
         geo.addTo(map);
-        layerRefs.current.set(layer.id, { geo, geojson: layer.geojson, styleSig });
+        layerRefs.current.set(layer.id, { geo, casing, geojson: layer.geojson, styleSig });
       } else if (ref.styleSig !== styleSig) {
         // Style-only change: restyle in place (cheap) instead of rebuilding.
         ref.geo.options.style = styleFn as L.StyleFunction; // keep resetStyle in sync
         ref.geo.setStyle(styleFn as L.StyleFunction);
-        ref.geo.eachLayer((l) => {
-          const cm = l as L.CircleMarker & { setRadius?: (r: number) => void };
-          if (typeof cm.setRadius === "function") {
-            const c = colorFn(((l as L.Layer & { feature?: GeoJSON.Feature }).feature?.properties || {}) as Record<string, unknown>);
-            cm.setStyle({ fillColor: c, opacity: layer.style.opacity, fillOpacity: layer.style.opacity });
-            cm.setRadius(layer.style.size);
-          }
-        });
+        if (ref.casing) map.removeLayer(ref.casing);
+        ref.casing = buildCasing();
         ref.styleSig = styleSig;
       }
 
       // Labels (rebuilt each pass; cheap when disabled).
       if (layer.style.labels && layer.style.labelField) {
         const field = layer.style.labelField;
+        const ls = resolveLabelStyle(layer.style);
+        const css =
+          `font-family: var(--font-sans); font-size: ${ls.size}px; font-weight: ${ls.bold ? 600 : 400}; color: ${ls.color}; ` +
+          `text-shadow: ${haloShadow(ls.haloColor, ls.haloWidth)}; white-space: nowrap; pointer-events: none;`;
+        const group = L.layerGroup();
         layer.geojson.features.forEach((f) => {
-          let latlng: [number, number] | null = null;
-          const g = f.geometry;
-          if (g?.type === "Point") latlng = [g.coordinates[1], g.coordinates[0]];
-          else if (g?.type === "Polygon") {
-            const coords = g.coordinates[0];
-            const c = coords.reduce((a, p) => [a[0] + p[0], a[1] + p[1]], [0, 0]);
-            latlng = [c[1] / coords.length, c[0] / coords.length];
-          } else if (g?.type === "LineString") {
-            const mid = g.coordinates[Math.floor(g.coordinates.length / 2)];
-            latlng = [mid[1], mid[0]];
-          }
-          if (!latlng) return;
-          labelLayerRef.current!.addLayer(
-            L.marker(latlng, {
-              interactive: false,
-              icon: L.divIcon({
-                className: "map-label",
-                html: `<div style="font-family: var(--font-sans); font-size: 10.5px; font-weight: 600; color: #1a1a1a; text-shadow: 0 0 3px rgba(255,255,255,0.85), 0 0 3px rgba(255,255,255,0.85); white-space: nowrap; pointer-events: none; transform: translate(-50%, -50%);">${(f.properties || {})[field] ?? ""}</div>`,
-                iconSize: [0, 0],
-              }),
-            })
-          );
+          const value = (f.properties || {})[field];
+          if (value === null || value === undefined || value === "") return;
+          const sym = symbolOf(f);
+          if (!sym.labeled) return;
+          const at = labelAnchor(f.geometry);
+          if (!at) return;
+          // Point labels sit to the right of the marker; others are centred.
+          const shift = layer.geometry === "Point" ? `translate(${Math.round(sym.size / 2 + 3)}px, -50%)` : "translate(-50%, -50%)";
+          group.addLayer(L.marker(at, {
+            interactive: false,
+            keyboard: false,
+            icon: L.divIcon({
+              className: "map-label",
+              html: `<div style="${css} transform: ${shift};">${escapeHtml(value)}</div>`,
+              iconSize: [0, 0],
+            }),
+          }));
         });
+        labelGroupsRef.current.push({ minZoom: ls.minZoom, group });
       }
     });
+    applyLabelZoom(map, labelLayer, labelGroupsRef.current);
 
     // Enforce stacking order: array is top-first, so push from bottom up.
-    [...layers].reverse().forEach((l) => layerRefs.current.get(l.id)?.geo.bringToFront());
-    labelLayerRef.current.bringToFront();
+    [...layers].reverse().forEach((l) => {
+      const ref = layerRefs.current.get(l.id);
+      ref?.casing?.bringToFront();
+      ref?.geo.bringToFront();
+    });
+    labelLayer.bringToFront();
     // NOTE: no auto-fit here on purpose — style/visibility/order changes must
     // never move the user's view. First-layer framing is handled by the editor.
   }, [layers]);

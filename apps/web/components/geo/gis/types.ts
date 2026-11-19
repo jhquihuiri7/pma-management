@@ -1,5 +1,6 @@
 import type { FeatureCollection, Feature, Geometry } from "geojson";
 import type { GeoLayerAttributeSchema } from "@pma/types/geo";
+import type { StyleExtras } from "./symbology";
 
 export type GisGeometry = "Point" | "LineString" | "Polygon";
 export type GisTool = "pan" | "identify" | "measure" | "inspect" | "draw-point" | "draw-line" | "draw-polygon";
@@ -7,7 +8,8 @@ export type SymbologyMode = "single" | "category" | "ramp";
 export type Classification = "equal" | "quantile" | "jenks";
 export type ColumnType = "numeric" | "categorical" | "date" | "boolean" | "empty";
 
-export interface LayerStyle {
+/** Original symbology fields, plus the optional extras of symbology.ts. */
+export interface LayerStyle extends StyleExtras {
   mode: SymbologyMode;
   color: string;
   palette: string;

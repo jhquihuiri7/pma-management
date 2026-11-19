@@ -1,7 +1,7 @@
 import type { Geometry, Position } from "geojson";
 
 import type { GisLayer, RasterLayer } from "@/components/geo/gis/types";
-import { COLOR_RAMPS } from "@/components/geo/gis/gis-data";
+import { buildSymbolizer, type ResolvedSymbol } from "@/components/geo/gis/symbology";
 import type { GeoMap } from "@/types/geo";
 
 export interface GeoBounds {
@@ -25,7 +25,12 @@ export interface ExportLegendLayer {
   strokeWidth?: number;
   opacity?: number;
   detail?: string;
+  /** The symbol as the map draws it, for a faithful swatch. */
+  symbolSpec?: ResolvedSymbol;
 }
+
+/** Classes per layer in the export legend (the on-screen one shows 12). */
+const EXPORT_LEGEND_MAX_CLASSES = 12;
 
 export interface MapScale {
   denominator: number;
@@ -173,79 +178,27 @@ export function deriveLegend(
 ): ExportLegendLayer[] {
   const visible = deriveVisibleLayers(vectorLayers, rasterLayers);
   const vectors = visible.vectors.flatMap<ExportLegendLayer>((layer) => {
-    const base = {
-      layerId: layer.id,
-      layerLabel: layer.name,
-      symbol: vectorSymbol(layer),
-      strokeColor: layer.geometry === "Polygon" ? "#334155" : layer.style.color,
-      strokeWidth: Math.max(1, layer.style.strokeWidth),
-      opacity: layer.style.opacity,
-    } as const;
-
-    if (layer.style.mode === "category" && layer.style.colorBy) {
-      const field = layer.style.colorBy;
-      const palette = COLOR_RAMPS[layer.style.palette] ?? COLOR_RAMPS.categorical;
-      const counts = new Map<string, number>();
-      layer.geojson.features.forEach((feature) => {
-        const raw = (feature.properties ?? {})[field];
-        if (raw === null || raw === undefined || raw === "") return;
-        const label = String(raw);
-        counts.set(label, (counts.get(label) ?? 0) + 1);
-      });
-      const categories = Array.from(counts.entries()).slice(0, 8);
-      if (categories.length) {
-        return categories.map(([category, count], index) => ({
-          ...base,
-          id: `${layer.id}:category:${index}`,
-          label: `${layer.name} · ${category}`,
-          color: palette[index % palette.length],
-          fillColor: palette[index % palette.length],
-          detail: String(count),
-        }));
-      }
-    }
-
-    if (layer.style.mode === "ramp" && layer.style.colorBy) {
-      const values = layer.geojson.features
-        .map((feature) => (feature.properties ?? {})[layer.style.colorBy!])
-        .filter((value): value is number => typeof value === "number" && Number.isFinite(value))
-        .sort((first, second) => first - second);
-      if (values.length) {
-        const classCount = Math.min(12, Math.max(1, Math.round(layer.style.classes)));
-        const minimum = values[0];
-        const maximum = values.at(-1) ?? minimum;
-        const breaks: number[] = [];
-        if (layer.style.classification === "equal") {
-          const step = (maximum - minimum) / classCount;
-          for (let index = 1; index < classCount; index += 1) breaks.push(minimum + step * index);
-        } else {
-          for (let index = 1; index < classCount; index += 1) breaks.push(values[Math.floor((values.length * index) / classCount)]);
-        }
-        const bounds = [minimum, ...breaks, maximum];
-        const ramp = COLOR_RAMPS[layer.style.ramp] ?? COLOR_RAMPS.greens;
-        return Array.from({ length: classCount }, (_, index) => {
-          const colorIndex = Math.round((index / Math.max(1, classCount - 1)) * (ramp.length - 1));
-          const color = ramp[colorIndex];
-          return {
-            ...base,
-            id: `${layer.id}:ramp:${index}`,
-            label: layer.name,
-            color,
-            fillColor: color,
-            detail: `${new Intl.NumberFormat("es-EC", { maximumFractionDigits: 2 }).format(bounds[index])}–${new Intl.NumberFormat("es-EC", { maximumFractionDigits: 2 }).format(bounds[index + 1])}`,
-          };
-        });
-      }
-    }
-
-    return [{
-      ...base,
-      id: layer.id,
-      label: layer.name,
-      color: layer.style.color,
-      fillColor: layer.style.color,
-      detail: String(layer.geojson.features.length),
-    }];
+    // Same classes, order and symbols the map draws (symbology.ts).
+    const { field, classes } = buildSymbolizer(layer);
+    const shown = field ? classes.slice(0, EXPORT_LEGEND_MAX_CLASSES) : classes;
+    return shown.map((cls, index) => {
+      const sym = cls.symbol;
+      const line = sym.geometry === "LineString";
+      return {
+        id: field ? `${layer.id}:class:${index}` : layer.id,
+        layerId: layer.id,
+        layerLabel: layer.name,
+        label: field && layer.style.mode === "category" ? `${layer.name} · ${cls.label}` : layer.name,
+        symbol: vectorSymbol(layer),
+        color: sym.color,
+        fillColor: sym.color,
+        strokeColor: line ? sym.color : sym.strokeColor ?? sym.color,
+        strokeWidth: Math.max(1, sym.strokeWidth),
+        opacity: layer.style.opacity,
+        detail: field && layer.style.mode === "ramp" ? cls.label : String(cls.count),
+        symbolSpec: sym,
+      };
+    });
   });
   const rasters = visible.rasters.map<ExportLegendLayer>((layer) => ({
     id: layer.id,

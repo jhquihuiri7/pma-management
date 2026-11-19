@@ -1,6 +1,7 @@
 import type { GeoLayerVisualization, GeoVisualizationDraft } from "@pma/types/geo";
 import { GEO_CHART_AGGREGATIONS, GEO_CHART_TYPES } from "@pma/types/geo";
 import type { GisLayer, LayerStyle, RasterLayer } from "./types";
+import { parseStyleExtras, STYLE_EXTRA_KEYS, type StyleExtras } from "./symbology";
 
 export const WORKSPACE_SCHEMA = "sigtar-workspace" as const;
 export const WORKSPACE_VERSION = 2 as const;
@@ -257,8 +258,9 @@ function parseStyle(value: unknown, index: number): LayerStyle {
   const style = record(value, `El estilo de la capa ${index} no es válido`);
   onlyKeys(style, [
     "mode", "color", "palette", "ramp", "classification", "classes", "colorBy",
-    "opacity", "strokeWidth", "size", "labels", "labelField",
+    "opacity", "strokeWidth", "size", "labels", "labelField", ...STYLE_EXTRA_KEYS,
   ], `El estilo de la capa ${index} contiene campos no permitidos`);
+  const extras = parseStyleExtras(style, `la capa ${index}`);
   if (typeof style.mode !== "string" || !STYLE_MODES.has(style.mode)) throw new Error(`El modo de estilo de la capa ${index} no es válido`);
   if (typeof style.classification !== "string" || !CLASSIFICATIONS.has(style.classification)) throw new Error(`La clasificación de la capa ${index} no es válida`);
   return {
@@ -274,7 +276,12 @@ function parseStyle(value: unknown, index: number): LayerStyle {
     size: finiteNumber(style.size, `El tamaño de la capa ${index} no es válido`, 0, 100),
     labels: booleanValue(style.labels, `Las etiquetas de la capa ${index} no son válidas`),
     labelField: nullableString(style.labelField, `El atributo de etiqueta de la capa ${index} no es válido`, 200),
+    ...withoutNulls(extras),
   };
+}
+
+function withoutNulls(extras: StyleExtras): StyleExtras {
+  return Object.fromEntries(Object.entries(extras).filter(([, v]) => v !== null && v !== undefined)) as StyleExtras;
 }
 
 function record(value: unknown, message: string): Record<string, unknown> {

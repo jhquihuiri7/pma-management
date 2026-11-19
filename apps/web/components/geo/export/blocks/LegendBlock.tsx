@@ -1,5 +1,7 @@
 import { ListTree } from "lucide-react";
 import type { CSSProperties } from "react";
+import SymbolSwatch from "@/components/geo/gis/SymbolSwatch";
+import type { ResolvedSymbol } from "@/components/geo/gis/symbology";
 import type { CartographicBlockProps } from "./shared";
 import { BlockFrame, EmptyBlockState } from "./shared";
 
@@ -17,6 +19,7 @@ export interface LegendItem {
   visible?: boolean;
   excluded?: boolean;
   detail?: string;
+  symbolSpec?: ResolvedSymbol;
 }
 
 export interface LegendBlockProps extends CartographicBlockProps {
@@ -26,6 +29,7 @@ export interface LegendBlockProps extends CartographicBlockProps {
 }
 
 function LegendSwatch({ item }: { item: LegendItem }) {
+  if (item.symbolSpec) return <SymbolSwatch symbol={item.symbolSpec} width="1.15em" height="0.86em" />;
   const symbol = item.symbol ?? "polygon";
   const color = item.color ?? item.fillColor ?? "#94a3b8";
   const stroke = item.strokeColor ?? item.color ?? "#475569";

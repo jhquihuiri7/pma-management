@@ -20,9 +20,11 @@ import DashboardsPanel from "./DashboardsPanel";
 import AddFeaturePanel from "./AddFeaturePanel";
 import LayerSchemaDialog from "./LayerSchemaDialog";
 import WorkspaceLayerCatalogModal, { type WorkspaceCatalogSelection } from "./WorkspaceLayerCatalogModal";
-import { inferSchema, fmtNum, categoryCounts } from "./charts";
+import { inferSchema, fmtNum } from "./charts";
+import { buildSymbolizer } from "./symbology";
+import SymbolSwatch from "./SymbolSwatch";
 import { toDMS, toUTM, formatUTM, inspectPoint as inspectLayersAt, formatDistance, type PointHit } from "./geo-point";
-import { BASEMAPS, BASEMAP_PREVIEWS, COLOR_RAMPS } from "./gis-data";
+import { BASEMAPS, BASEMAP_PREVIEWS } from "./gis-data";
 import {
   fetchLayers, fetchLayerData, createLayerRemote, updateLayerRemote, deleteLayerRemote,
   saveViewport, bboxOf, humanSize, type LayerManifest,
@@ -176,6 +178,8 @@ export default function GisEditor({ geoMap, mapId, mapTitle, backHref, initialCe
   const [hydrated, setHydrated] = useState(false);
   const [saveState, setSaveState] = useState<"loading" | "saving" | "saved" | "error">("loading");
   const [hydrationError, setHydrationError] = useState<string | null>(null);
+  // Layers downloaded so far while the map opens (null once they have all settled).
+  const [loadProgress, setLoadProgress] = useState<{ done: number; total: number } | null>(null);
   const [deletingLayerIds, setDeletingLayerIds] = useState<Set<string>>(new Set());
   const deletingLayerIdsRef = useRef(new Set<string>());
   const [busyRasterIds, setBusyRasterIds] = useState<Set<string>>(new Set());
@@ -317,15 +321,38 @@ export default function GisEditor({ geoMap, mapId, mapTitle, backHref, initialCe
       try {
         const manifests = await fetchLayers(mapId);
         manifests.sort((a, b) => (b.zIndex ?? 0) - (a.zIndex ?? 0)); // top of stack first
-        const built = await Promise.all(
-          manifests.map(async (m) => manifestToLayer(m, await fetchLayerData(mapId, m.id, m.dataRevision)))
-        );
+        if (manifests.length) hasAutoFitted.current = true; // the map's saved view frames it
+        // Each layer is drawn as soon as its data arrives (a heavy one can take a
+        // minute on a slow connection), and one that fails doesn't empty the map.
+        // Editing stays off until every layer has settled (canMutate needs `hydrated`).
+        const order = new Map(manifests.map((m, index) => [m.id, index]));
+        const built: GisLayer[] = [];
+        const failed: string[] = [];
+        if (!cancelled) setLoadProgress({ done: 0, total: manifests.length });
+        await Promise.all(manifests.map(async (m) => {
+          try {
+            const layer = manifestToLayer(m, await fetchLayerData(mapId, m.id, m.dataRevision));
+            if (cancelled) return;
+            built.push(layer);
+            built.sort((a, b) => (order.get(a.id) ?? 0) - (order.get(b.id) ?? 0));
+            // Added to what is on screen, so a layer shown/hidden meanwhile keeps its state.
+            setLayers((current) => {
+              const next = [...current.filter((l) => l.id !== layer.id), layer]
+                .sort((a, b) => (order.get(a.id) ?? 0) - (order.get(b.id) ?? 0));
+              layersRef.current = next;
+              return next;
+            });
+          } catch (error) {
+            failed.push(m.name);
+            if (!cancelled) toast.error(`${m.name}: ${apiErrorMessage(error, "no se pudo cargar la capa")}`);
+          } finally {
+            if (!cancelled) setLoadProgress((p) => (p ? { ...p, done: p.done + 1 } : p));
+          }
+        }));
         if (!cancelled) {
-          layersRef.current = built;
           confirmedLayers.current = new Map(built.map((layer) => [layer.id, layer]));
-          setLayers(built);
           setActiveLayerId(built[0]?.id ?? null);
-          if (built.length) hasAutoFitted.current = true;
+          setLoadProgress(null);
         }
         const rasters = await fetchRasterLayers(mapId);
         if (!cancelled) {
@@ -334,8 +361,13 @@ export default function GisEditor({ geoMap, mapId, mapTitle, backHref, initialCe
           confirmedRasters.current = new Map(builtRasters.map((raster) => [raster.id, raster]));
           setRasterLayers(builtRasters);
           if (rasters.some((r) => r.status === "processed")) hasAutoFitted.current = true;
-          setHydrationError(null);
-          refreshSaveState();
+          if (failed.length) {
+            setHydrationError(`No se pudo${failed.length > 1 ? "ieron" : ""} cargar ${failed.length > 1 ? `${failed.length} capas` : "la capa"}: ${failed.join(", ")}.`);
+            setSaveState("error");
+          } else {
+            setHydrationError(null);
+            refreshSaveState();
+          }
         }
       } catch (error) {
         if (!cancelled) {
@@ -1193,8 +1225,14 @@ export default function GisEditor({ geoMap, mapId, mapTitle, backHref, initialCe
           onDrawCancel={() => setTool("pan")}
         />
 
+        {loadProgress && loadProgress.total > 0 && !hydrationError && (
+          <div style={{ position: "absolute", top: 12, left: "50%", transform: "translateX(-50%)", zIndex: 1000, padding: "6px 12px", borderRadius: 8, background: "var(--background)", border: "1px solid var(--border)", boxShadow: "var(--shadow-md)", fontSize: 12 }} role="status" aria-live="polite">
+            Cargando capas: {loadProgress.done} de {loadProgress.total}
+          </div>
+        )}
+
         {hydrationError && (
-          <div style={{ position: "absolute", top: 12, left: "50%", transform: "translateX(-50%)", zIndex: 80, maxWidth: 520, padding: "10px 12px", borderRadius: 8, background: "var(--background)", border: "1px solid #9d4636", boxShadow: "var(--shadow-md)", fontSize: 12 }} role="alert">
+          <div style={{ position: "absolute", top: 12, left: "50%", transform: "translateX(-50%)", zIndex: 1000, maxWidth: 520, padding: "10px 12px", borderRadius: 8, background: "var(--background)", border: "1px solid #9d4636", boxShadow: "var(--shadow-md)", fontSize: 12 }} role="alert">
             <span>{hydrationError}</span>{" "}
             <button className="icon-btn" onClick={() => window.location.reload()} style={{ width: "auto", paddingInline: 8 }}>Reintentar</button>
           </div>
@@ -1492,75 +1530,31 @@ function LegendCard({ layers, onClose }: { layers: GisLayer[]; onClose: () => vo
   );
 }
 
+const LEGEND_MAX_CLASSES = 12;
+
 function LegendSection({ layer }: { layer: GisLayer }) {
-  const swType = layer.geometry === "Point" ? "point" : layer.geometry === "LineString" ? "line" : "";
-
-  if (layer.style.mode === "single") {
-    return (
-      <div className="legend-section">
-        <div className="sn">{layer.name}</div>
-        <div className="legend-entry">
-          <span className={`sw ${swType}`} style={{ background: layer.style.color }} />
-          <span className="lbl">{layer.name}</span>
-          <span className="val">{layer.geojson.features.length}</span>
+  // Same classes, order and symbols the map draws (symbology.ts).
+  const { field, classes } = buildSymbolizer(layer);
+  const shown = field ? classes.slice(0, LEGEND_MAX_CLASSES) : classes;
+  return (
+    <div className="legend-section">
+      <div className="sn">{layer.name}{field ? ` · ${field}` : ""}</div>
+      {shown.map((c) => (
+        <div className="legend-entry" key={c.key}>
+          <SymbolSwatch symbol={c.symbol} />
+          <span className="lbl" title={c.label}>{field ? c.label : layer.name}</span>
+          <span className="val">{c.count}</span>
         </div>
-      </div>
-    );
-  }
-
-  if (layer.style.mode === "category" && layer.style.colorBy) {
-    const colorBy = layer.style.colorBy;
-    const palette = COLOR_RAMPS[layer.style.palette] || COLOR_RAMPS.categorical;
-    const counts = categoryCounts(layer.geojson.features.map((f) => (f.properties || {})[colorBy]));
-    return (
-      <div className="legend-section">
-        <div className="sn">{layer.name} · {colorBy}</div>
-        {counts.slice(0, 8).map((c, i) => (
-          <div className="legend-entry" key={c.label}>
-            <span className={`sw ${swType}`} style={{ background: palette[i % palette.length] }} />
-            <span className="lbl" title={c.label}>{c.label}</span>
-            <span className="val">{c.count}</span>
-          </div>
-        ))}
-      </div>
-    );
-  }
-
-  if (layer.style.mode === "ramp" && layer.style.colorBy) {
-    const colorBy = layer.style.colorBy;
-    const ramp = COLOR_RAMPS[layer.style.ramp] || COLOR_RAMPS.greens;
-    const classes = layer.style.classes;
-    const values = layer.geojson.features.map((f) => (f.properties || {})[colorBy]).filter((v): v is number => typeof v === "number");
-    if (values.length === 0) return null;
-    const sorted = [...values].sort((a, b) => a - b);
-    const min = sorted[0], max = sorted[sorted.length - 1];
-    const breaks: number[] = [];
-    if (layer.style.classification === "quantile" || layer.style.classification === "jenks") {
-      for (let i = 1; i < classes; i++) breaks.push(sorted[Math.floor((sorted.length * i) / classes)]);
-    } else {
-      const step = (max - min) / classes;
-      for (let i = 1; i < classes; i++) breaks.push(min + step * i);
-    }
-    const colors: string[] = [];
-    for (let i = 0; i < classes; i++) {
-      const t = classes === 1 ? 0 : i / (classes - 1);
-      colors.push(ramp[Math.round(t * (ramp.length - 1))]);
-    }
-    const bounds = [min, ...breaks, max];
-    return (
-      <div className="legend-section">
-        <div className="sn">{layer.name} · {colorBy}</div>
-        {colors.map((c, i) => (
-          <div className="legend-entry" key={i}>
-            <span className={`sw ${swType}`} style={{ background: c }} />
-            <span className="lbl">{fmtNum(bounds[i])} – {fmtNum(bounds[i + 1])}</span>
-          </div>
-        ))}
-      </div>
-    );
-  }
-
-  return null;
+      ))}
+      {classes.length > shown.length && (
+        <div className="legend-entry">
+          <span />
+          <span className="lbl" style={{ color: "var(--muted-fg)" }}>y {classes.length - shown.length} más</span>
+          <span />
+        </div>
+      )}
+    </div>
+  );
 }
 
 // ────────────────────────────────────────────────────────────

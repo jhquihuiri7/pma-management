@@ -58,8 +58,15 @@ export async function fetchLayers(mapId: string): Promise<LayerManifest[]> {
   return api.get<LayerManifest[]>(base(mapId));
 }
 
+/**
+ * A layer's GeoJSON can weigh several MB (contours: 6 MB compressed). Outside
+ * the office network that takes longer than the client's default 30 s, which
+ * aborted the download and left the whole map empty; it gets its own deadline.
+ */
+export const LAYER_DATA_TIMEOUT_MS = 5 * 60_000;
+
 export async function fetchLayerData(mapId: string, layerId: string, revision?: number): Promise<FeatureCollection> {
-  return api.get<FeatureCollection>(`${base(mapId)}/${layerId}/data${revision ? `/${revision}` : ""}`);
+  return api.get<FeatureCollection>(`${base(mapId)}/${layerId}/data${revision ? `/${revision}` : ""}`, { timeoutMs: LAYER_DATA_TIMEOUT_MS });
 }
 
 export interface LayerCaptureSchemaResponse {
