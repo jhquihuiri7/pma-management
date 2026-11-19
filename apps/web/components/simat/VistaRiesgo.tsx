@@ -862,18 +862,7 @@ export default function VistaRiesgo() {
 
       {/* El gráfico «Evolución del nivel del mar observado» se quitó a pedido del usuario. */}
 
-      {profile ? (
-        <section className="card wide">
-          <div className="criteria-note">
-            <Icono nombre="info" />
-            <p>
-              Criterio de {profile.sector} · vigencia máxima {duracion(profile.vigenciaMin)} · desfase máximo {duracion(profile.desfaseMin)}
-              <br />
-              Respaldo técnico y de conexión con el drenaje · {profile.respaldo}
-            </p>
-          </div>
-        </section>
-      ) : null}
+      {/* La nota del criterio (vigencia, desfase y respaldo) se quitó a pedido del usuario. */}
 
       <section className="card wide ancla" id="mareas">
         <CardHead titulo={`Predicciones de marea · ${nombrePuerto}`} descripcion="Pleamares y bajamares publicadas. La evaluación automática usa mediciones observadas." icono="waves" />
