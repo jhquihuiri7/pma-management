@@ -1,0 +1,67 @@
+{
+ "_comment": "Estilos de las capas de «Predios y Vías Rurales Críticas de San Cristóbal» traducidos a mano de los .sld de la entrega (2026-11-19). Zoom mínimo de etiquetas desde MaxScaleDenominator: 1:40.000 y 1:60.000 → 14; 1:80.000 → 13. Halo: el doble del radio del SLD. curvas_nivel_10m no fija la opacidad: conserva el 49 % que el usuario le puso el 2026-11-19.",
+ "cuencas_hidrograficas": {
+  "mode": "category", "colorBy": "tipo", "opacity": 1, "strokeWidth": 3,
+  "categories": [
+   { "value": "Cuenca", "label": "Cuenca (≥ 2 km²)", "color": "#a9f2ff", "fillOpacity": 0.031, "strokeColor": "#209e67", "strokeWidth": 3 },
+   { "value": "Áreas con cuencas menores a 2 km²", "label": "Drenaje costero menor (< 2 km²)", "color": "#969696", "fillOpacity": 0.18, "strokeColor": null }
+  ]
+ },
+ "microcuencas": {
+  "mode": "single", "color": "#e06601", "opacity": 1, "strokeWidth": 1,
+  "symbol": { "fillOpacity": 0, "strokeColor": "#e06601", "strokeWidth": 1, "dash": "4 2" },
+  "labels": true, "labelField": "codigo",
+  "labelStyle": { "color": "#b34700", "haloColor": "#ffffff", "haloWidth": 3, "size": 9, "bold": true, "minZoom": 13 }
+ },
+ "predios_rurales_criticos": {
+  "mode": "category", "colorBy": "RECLASS", "opacity": 1, "strokeWidth": 1,
+  "categories": [
+   { "value": "Agrícola", "color": "#9bbf63", "fillOpacity": 0.47, "strokeColor": "#5f7f2e", "strokeWidth": 1 },
+   { "value": "Pecuario", "color": "#e3c07a", "fillOpacity": 0.47, "strokeColor": "#a07a2e", "strokeWidth": 1 },
+   { "value": "Habitacional", "color": "#d9876a", "fillOpacity": 0.47, "strokeColor": "#9c4a30", "strokeWidth": 1 }
+  ],
+  "labels": true, "labelField": "COD_PRED",
+  "labelStyle": { "color": "#3b3b3b", "haloColor": "#ffffff", "haloWidth": 3, "size": 8, "bold": false, "minZoom": 14 }
+ },
+ "curvas_nivel_10m": {
+  "mode": "category", "colorBy": "tipo", "strokeWidth": 0,
+  "categories": [
+   { "value": "Intermedia", "label": "Curva intermedia (10 m)", "color": "#be7d46", "strokeWidth": 0.5, "noLabel": true },
+   { "value": "Índice", "label": "Curva índice (50 m)", "color": "#965523", "strokeWidth": 1 }
+  ],
+  "labels": true, "labelField": "elev_m",
+  "labelStyle": { "color": "#874619", "haloColor": "#ffffff", "haloWidth": 4, "size": 9, "bold": false, "minZoom": 14 }
+ },
+ "rios_orden_strahler": {
+  "mode": "category", "colorBy": "orden", "opacity": 1, "strokeWidth": 1,
+  "categories": [
+   { "value": "1", "label": "Río de primer orden", "color": "#008cd2", "strokeWidth": 1 },
+   { "value": "2", "label": "Río de segundo orden", "color": "#008cd2", "strokeWidth": 2 },
+   { "value": "3", "label": "Río de tercer orden", "color": "#008cd2", "strokeWidth": 3 }
+  ]
+ },
+ "vias": {
+  "mode": "category", "colorBy": "tipo_via", "opacity": 1, "strokeWidth": 1,
+  "categories": [
+   { "value": "Vía primaria", "color": "#ef5b3b", "strokeWidth": 5, "casingColor": "#8f2c18", "casingWidth": 7 },
+   { "value": "Vía secundaria", "color": "#f6a623", "strokeWidth": 4, "casingColor": "#8a5a00", "casingWidth": 7 },
+   { "value": "Vía terciaria", "color": "#f7e15c", "strokeWidth": 4, "casingColor": "#8a7a1a", "casingWidth": 6 },
+   { "value": "Vía local sin clasificar", "color": "#dfe6ea", "strokeWidth": 3, "casingColor": "#7a8a94", "casingWidth": 5 },
+   { "value": "Calle residencial", "color": "#ffffff", "strokeWidth": 2, "casingColor": "#8c979e", "casingWidth": 4 },
+   { "value": "Calle de convivencia", "color": "#ead7ee", "strokeWidth": 2, "casingColor": "#8a6f90", "casingWidth": 4 },
+   { "value": "Vía de servicio", "color": "#ffffff", "strokeWidth": 1, "casingColor": "#a0a8ad", "casingWidth": 4 },
+   { "value": "Calle peatonal", "color": "#c9a66b", "strokeWidth": 2, "dash": "4 4" },
+   { "value": "Camino rural / de tierra", "color": "#8d6e4a", "strokeWidth": 2, "dash": "14 7" }
+  ],
+  "otherSymbol": { "label": "Otras", "color": "#b0b0b0", "strokeWidth": 1 }
+ },
+ "vias_criticas": {
+  "mode": "category", "colorBy": "RIO_CLASE", "opacity": 1, "size": 7,
+  "categories": [
+   { "value": "Río de primer orden", "label": "Cruce con río de 1.er orden", "color": "#f28c28", "fillOpacity": 1, "marker": "triangle", "size": 13, "strokeColor": "#ffffff", "strokeWidth": 2, "haloColor": "#ffffff", "haloOpacity": 0.67, "haloSize": 21 },
+   { "value": "Río de segundo orden", "label": "Cruce con río de 2.º orden", "color": "#c8102e", "fillOpacity": 1, "marker": "triangle", "size": 16, "strokeColor": "#ffffff", "strokeWidth": 2, "haloColor": "#ffffff", "haloOpacity": 0.67, "haloSize": 24 }
+  ],
+  "labels": true, "labelField": "CODIGO",
+  "labelStyle": { "color": "#7a0c1c", "haloColor": "#ffffff", "haloWidth": 4, "size": 9, "bold": true, "minZoom": 14 }
+ }
+}
