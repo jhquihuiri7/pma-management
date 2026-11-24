@@ -13,7 +13,9 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
-import { PG2030_INSTITUCION_TIPO_VALUES, type Pg2030Institucion, type Pg2030InstitucionTipo } from "@/types";
+import type { Pg2030Institucion, Pg2030InstitucionTipo } from "@/types";
+
+const PG2030_INSTITUCION_TIPO_VALUES: Pg2030InstitucionTipo[] = ["Ejecutivo", "GAD", "Otro"];
 
 type Form = { nombre: string; sigla: string; tipo: Pg2030InstitucionTipo; activa: boolean };
 const emptyForm: Form = { nombre: "", sigla: "", tipo: "Ejecutivo", activa: true };

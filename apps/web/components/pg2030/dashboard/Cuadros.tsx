@@ -47,7 +47,7 @@ export function CuadroPlanificacion({ d }: { d: Pg2030Dashboard }) {
         <div>
           <p className="text-xs font-medium text-slate-500">Instituciones sin respuesta</p>
           <p className="mt-1 text-sm text-slate-700">
-            {p.institucionesSinRespuesta.map((i) => `${i.sigla} (${i.nombre})`).join(" · ")}
+            {p.institucionesSinRespuesta.map((i) => i.sigla).join(" · ")}
           </p>
         </div>
       )}

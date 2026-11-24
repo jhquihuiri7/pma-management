@@ -304,16 +304,18 @@ export async function getDashboard(
     reportadas: aReportar.filter((c) => c.calc.reportada).length,
   };
 
-  // Chart 4 — alignment by axis, counting goals that were reported.
+  // Chart 4 — alignment by axis, counting every planned goal. Classification
+  // is produced during planning, so it must remain visible even when the goal
+  // has not yet been reported in the selected cutoff.
   const contribucionDe = (c: Calc) => c.vista.clasificacion.contribucion ?? PENDIENTE;
-  const hayPendientes = cuentan.some((c) => contribucionDe(c) === PENDIENTE);
+  const hayPendientes = calcs.some((c) => contribucionDe(c) === PENDIENTE);
   const categorias = [...CONTRIBUCIONES, ...(hayPendientes ? [PENDIENTE] : [])];
   result.alineacion = {
     categorias,
     porEje: ejesCatalogo
       .filter((e) => !filtros.ejeId || e.id === filtros.ejeId)
       .map((eje) => {
-        const delEje = cuentan.filter((c) => c.row.ejeId === eje.id);
+        const delEje = calcs.filter((c) => c.row.ejeId === eje.id);
         return {
           eje,
           total: delEje.length,

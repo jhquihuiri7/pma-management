@@ -21,10 +21,10 @@ import {
 import InstitucionDetalle from "@/components/pg2030/dashboard/InstitucionDetalle";
 import InformeDialog from "@/components/pg2030/dashboard/InformeDialog";
 import { Building2, CalendarRange, Loader2, Target, TriangleAlert } from "lucide-react";
-import { PG2030_INSTITUCION_TIPO_VALUES } from "@/types";
 import type { Pg2030Dashboard, Pg2030Institucion, Pg2030InstitucionTipo, Pg2030Trimestre } from "@/types";
 
 const selectClass = "flex h-10 rounded-md border border-input bg-background px-3 py-2 text-sm";
+const PG2030_INSTITUCION_TIPO_VALUES: Pg2030InstitucionTipo[] = ["Ejecutivo", "GAD", "Otro"];
 
 type Filtros = {
   anio?: number;

@@ -110,14 +110,15 @@ test(
         assert.equal(inst(B.id).metas.find((m) => m.id === b1.id)!.cuenta, false, "an unreported goal is not counted");
       });
 
-      await t.test("alignment by axis, with the AI's pending goal in its own column (chart 4)", () => {
+      await t.test("alignment by axis counts every planned goal, the AI's pending ones in their own column (chart 4)", () => {
         assert.ok(d.alineacion.categorias.includes("Pendiente de clasificación"));
         const gob = d.alineacion.porEje.find((e) => e.eje.codigo === "GOB")!;
         const com = d.alineacion.porEje.find((e) => e.eje.codigo === "COM")!;
         assert.equal(gob.porCategoria["Contribución directa"], 1);
         assert.equal(com.porCategoria["Alineación relativa"], 1);
-        assert.equal(com.porCategoria["Pendiente de clasificación"], 1);
-        assert.equal(com.total, 2);
+        // B1 was never fully reported but was planned: it counts (classification happens at planning).
+        assert.equal(com.porCategoria["Pendiente de clasificación"], 2);
+        assert.equal(com.total, 3);
       });
 
       await t.test("physical progress: institutional averages, then their average (chart 5)", () => {
