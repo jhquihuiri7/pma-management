@@ -136,11 +136,14 @@ test(
         await updateManagedUser(reporterId, { role: "REPORTER", pg2030InstitucionId: gad.id }, adminId);
         assert.equal((await linkOf(reporterId))?.institucionId, gad.id);
 
-        await updateManagedUser(reporterId, { pg2030InstitucionId: null }, adminId);
-        assert.equal(await linkOf(reporterId), null);
+        // A reporter with PG2030 must keep an institution: it can be changed, not removed.
+        await assert.rejects(updateManagedUser(reporterId, { pg2030InstitucionId: null }, adminId), status(400));
+        assert.equal((await linkOf(reporterId))?.institucionId, gad.id);
       });
 
       await t.test("/pg2030/me tells a reporter whether they can write", async () => {
+        // A reporter left without one (e.g. from before the rule above) cannot write.
+        await db.delete(pg2030UsuarioInstitucion).where(eq(pg2030UsuarioInstitucion.userId, reporterId));
         const without = await getPg2030Me(claims(reporterId, "REPORTER"));
         assert.equal(without.institucion, null);
         assert.equal(without.puedeEscribir, false);

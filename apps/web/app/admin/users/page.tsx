@@ -593,7 +593,7 @@ export default function AdminUsersPage() {
             {editUser && needsPg2030Institucion(editForm.role, editUser.apps ?? []) && (
               renderPg2030InstitucionSelect({
                 id: "edit-pg2030-institucion",
-                required: false,
+                required: editForm.role === "REPORTER",
                 value: editForm.pg2030InstitucionId,
                 onChange: (value) => setEditForm({ ...editForm, pg2030InstitucionId: value }),
               })

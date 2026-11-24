@@ -242,10 +242,16 @@ export async function updateManagedUser(
     // After the role transition above, which already dropped any old link, so
     // a VIEWER promoted to REPORTER can get their institution in one request.
     if (updates.pg2030InstitucionId === null) {
+      if ((updates.role ?? u.role) === "REPORTER" && (await getUserAppsFrom(tx, userId)).includes("pg2030")) {
+        throw BadRequest("Un reportero con acceso a PG2030 debe tener una institución asignada");
+      }
       await clearUsuarioInstitucion(tx, userId);
     } else if (updates.pg2030InstitucionId !== undefined) {
       assertCanHaveInstitucion(updates.role ?? u.role, await getUserAppsFrom(tx, userId));
       await setUsuarioInstitucion(tx, { userId, institucionId: updates.pg2030InstitucionId, actor });
+    } else if ((updates.role ?? u.role) === "REPORTER" && (await getUserAppsFrom(tx, userId)).includes("pg2030")) {
+      const assigned = await getInstitucionesByUser(tx, [userId]);
+      if (!assigned.has(userId)) throw BadRequest("Un reportero con acceso a PG2030 debe tener una institución asignada");
     }
     return { ok: true as const, id: userId };
   });
