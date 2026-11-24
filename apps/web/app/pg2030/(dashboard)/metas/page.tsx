@@ -230,7 +230,7 @@ export default function Pg2030MetasPage() {
               ) : (
                 <div className="space-y-4">
                   {payload.metas.map((meta) => (
-                    <MetaCard key={meta.id} meta={meta} puedeEditar={payload.puedeEditar}
+                    <MetaCard key={meta.id} meta={meta} puedeEditar={payload.puedeEditar && !esReportero}
                       onReportar={(mes) => setReporte({ metaId: meta.id, mes })}
                       onEditar={() => setMetaDialog({ tipo: "editar", meta })}
                       onPlanificar={() => setPlanificandoId(meta.id)}

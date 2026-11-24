@@ -80,7 +80,7 @@ test(
       });
 
       await t.test("only changes to the model's input queue a new request", async () => {
-        await updateMeta(repId, metaId, { unidadMedida: "productores asistidos" }, abierto);
+        await updateMeta(adminId, metaId, { unidadMedida: "productores asistidos" }, abierto);
         assert.equal((await solicitudes()).length, 1, "the unit is not part of the input");
         await reportarMes(repId, metaId, 1, { fisicoEjecutado: 1, presupuestoDevengado: 0, hitosAlcanzados: "Taller 1" }, abierto);
         assert.equal((await solicitudes()).length, 2);
@@ -105,7 +105,7 @@ test(
       });
 
       await t.test("answers outside the list are retried, then the request ends without a category", async () => {
-        await updateMeta(repId, metaId, { descripcion: "Nueva descripción" }, abierto);
+        await updateMeta(adminId, metaId, { descripcion: "Nueva descripción" }, abierto);
         for (let i = 0; i < MAX_RESPUESTAS_INVALIDAS; i++) {
           // The retry waits a minute; make it due now.
           await db.update(pg2030Clasificaciones).set({ availableAt: new Date(0) }).where(eq(pg2030Clasificaciones.metaId, metaId));
@@ -118,7 +118,7 @@ test(
       });
 
       await t.test("provider failures back off and never end the request", async () => {
-        await updateMeta(repId, metaId, { descripcion: "Otra descripción" }, abierto);
+        await updateMeta(adminId, metaId, { descripcion: "Otra descripción" }, abierto);
         const result = await run(async () => { throw new ProveedorIaError("HTTP 503"); });
         assert.equal(result.erroresProveedor >= 1, true);
         const last = (await solicitudes()).at(-1)!;

@@ -111,7 +111,7 @@ function toMes(m: MesRow, ctx: Contexto, caller: Caller, institucionId: string):
 
 type Refs = {
   institucion: { id: string; nombre: string; sigla: string };
-  proyecto: { id: string; codigo: string; nombre: string; metaPlanCodigo: string };
+  proyecto: { id: string; codigo: string; nombre: string; metaPlanCodigo: string; metaPlanTexto: string };
 };
 
 function toMeta(
@@ -130,13 +130,17 @@ function toMeta(
     institucion: refs.institucion,
     proyecto: refs.proyecto,
     nombre: meta.nombre,
+    indicador: meta.indicador,
     descripcion: meta.descripcion,
     unidadMedida: meta.unidadMedida,
+    metaAnual: Number(meta.metaAnual),
+    presupuestoAnual: Number(meta.presupuestoAnual),
     fuenteFinanciamiento: meta.fuenteFinanciamiento as Pg2030FuenteFinanciamiento | null,
     beneficiariosDirectos: meta.beneficiariosDirectos,
     personalTecnico: meta.personalTecnico,
     responsablesInternos: meta.responsablesInternos,
     entidadesCoordinacion: meta.entidadesCoordinacion,
+    observaciones: meta.observaciones,
     meses: ordered.map((m) => toMes(m, ctx, caller, meta.institucionId)),
     totales: {
       fisicoPlanificado: fisico(sum((m) => m.fisicoPlanificado)),
@@ -144,6 +148,8 @@ function toMeta(
       fisicoEjecutado: fisico(sum((m) => m.fisicoEjecutado)),
       presupuestoDevengado: dinero(sum((m) => m.presupuestoDevengado)),
     },
+    validacionFisica: fisico(Number(meta.metaAnual)) === fisico(sum((m) => m.fisicoPlanificado)) ? "Verificado" : "¡Alerta: No coinciden!",
+    validacionPresupuestaria: dinero(Number(meta.presupuestoAnual)) === dinero(sum((m) => m.presupuestoPlanificado)) ? "Verificado" : "¡Alerta: No coinciden!",
     clasificacion,
     creadoPorNombre: meta.creadoPorNombre,
     createdAt: meta.createdAt.toISOString(),
@@ -165,6 +171,7 @@ async function loadRefs(db: any, metas: MetaRow[]): Promise<Map<string, Refs>> {
       codigo: pg2030Proyectos.codigo,
       nombre: pg2030Proyectos.nombre,
       metaPlanCodigo: pg2030MetasPlan.codigo,
+      metaPlanTexto: pg2030MetasPlan.texto,
     })
     .from(pg2030Proyectos)
     .innerJoin(pg2030MetasPlan, eq(pg2030MetasPlan.id, pg2030Proyectos.metaPlanId))
@@ -277,13 +284,17 @@ export async function listMetas(
 
 export type MetaCampos = {
   nombre: string;
+  indicador?: string;
   descripcion?: string | null;
   unidadMedida: string;
+  metaAnual?: number;
+  presupuestoAnual?: number;
   fuenteFinanciamiento?: Pg2030FuenteFinanciamiento | null;
   beneficiariosDirectos?: string | null;
   personalTecnico?: string | null;
   responsablesInternos?: string | null;
   entidadesCoordinacion?: string | null;
+  observaciones?: string | null;
 };
 
 export type PlanMes = { mes: number; fisico: number; presupuesto: number };
@@ -346,6 +357,10 @@ export async function createMeta(
       throw Conflict(`Los meses ${mesesTexto(cerrados)} ya están cerrados: déjalos en 0 o pide una reapertura`);
     }
     assertFuente(input.fuenteFinanciamiento, [...plan.values()].reduce((s, p) => s + p.presupuesto, 0));
+    const totalFisico = fisico([...plan.values()].reduce((s, p) => s + p.fisico, 0));
+    const totalPresupuesto = dinero([...plan.values()].reduce((s, p) => s + p.presupuesto, 0));
+    if (input.metaAnual !== undefined && fisico(input.metaAnual) !== totalFisico) throw BadRequest("La meta anual debe coincidir con la suma de enero a diciembre");
+    if (input.presupuestoAnual !== undefined && dinero(input.presupuestoAnual) !== totalPresupuesto) throw BadRequest("El presupuesto anual debe coincidir con la suma de enero a diciembre");
 
     const [meta] = await tx
       .insert(pg2030MetasInstitucionales)
@@ -354,13 +369,17 @@ export async function createMeta(
         institucionId: input.institucionId,
         proyectoId: input.proyectoId,
         nombre: input.nombre,
+        indicador: input.indicador ?? input.nombre,
         descripcion: input.descripcion ?? null,
         unidadMedida: input.unidadMedida,
+        metaAnual: String(input.metaAnual ?? totalFisico),
+        presupuestoAnual: String(input.presupuestoAnual ?? totalPresupuesto),
         fuenteFinanciamiento: input.fuenteFinanciamiento ?? null,
         beneficiariosDirectos: input.beneficiariosDirectos ?? null,
         personalTecnico: input.personalTecnico ?? null,
         responsablesInternos: input.responsablesInternos ?? null,
         entidadesCoordinacion: input.entidadesCoordinacion ?? null,
+        observaciones: input.observaciones ?? null,
         creadoPor: writer.id,
         creadoPorNombre: writer.name,
       })
@@ -393,13 +412,17 @@ export type ActualizarMetaInput = Partial<MetaCampos> & { proyectoId?: string };
 const CAMPOS_META: Array<keyof ActualizarMetaInput> = [
   "proyectoId",
   "nombre",
+  "indicador",
   "descripcion",
   "unidadMedida",
+  "metaAnual",
+  "presupuestoAnual",
   "fuenteFinanciamiento",
   "beneficiariosDirectos",
   "personalTecnico",
   "responsablesInternos",
   "entidadesCoordinacion",
+  "observaciones",
 ];
 
 /**
@@ -418,6 +441,7 @@ export async function updateMeta(
     const writer = await lockPg2030Writer(tx, actorId);
     const { meta, meses } = await lockMeta(tx, id);
     assertPuedeTrabajarCon(writer, meta.institucionId);
+    if (writer.role === "REPORTER") throw Forbidden("Los reporteros no pueden modificar una planificación existente");
     const ctx = await loadContexto(tx, meta.anio, meta.institucionId, now);
 
     const changed = CAMPOS_META.filter((k) => patch[k] !== undefined && patch[k] !== (meta as Record<string, unknown>)[k]);
@@ -434,6 +458,10 @@ export async function updateMeta(
     }
     const presupuestoTotal = meses.reduce((s, m) => s + Number(m.presupuestoPlanificado), 0);
     assertFuente(patch.fuenteFinanciamiento !== undefined ? patch.fuenteFinanciamiento : meta.fuenteFinanciamiento, presupuestoTotal);
+    const fisicoTotal = fisico(meses.reduce((s, m) => s + Number(m.fisicoPlanificado), 0));
+    const presupuestoTotalRedondeado = dinero(presupuestoTotal);
+    if (patch.metaAnual !== undefined && fisico(patch.metaAnual) !== fisicoTotal) throw BadRequest("La meta anual debe coincidir con la suma mensual");
+    if (patch.presupuestoAnual !== undefined && dinero(patch.presupuestoAnual) !== presupuestoTotalRedondeado) throw BadRequest("El presupuesto anual debe coincidir con la suma mensual");
 
     const [updated] = await tx
       .update(pg2030MetasInstitucionales)
@@ -476,6 +504,7 @@ export async function updatePlanificacion(
     const writer = await lockPg2030Writer(tx, actorId);
     const { meta, meses } = await lockMeta(tx, id);
     assertPuedeTrabajarCon(writer, meta.institucionId);
+    if (writer.role === "REPORTER") throw Forbidden("Los reporteros no pueden modificar una planificación existente");
     const ctx = await loadContexto(tx, meta.anio, meta.institucionId, now);
 
     const plan = new Map(planificacion.map((p) => [p.mes, { fisico: fisico(p.fisico), presupuesto: dinero(p.presupuesto) }]));
@@ -492,6 +521,8 @@ export async function updatePlanificacion(
       throw Conflict(`Los meses ${mesesTexto(cerrados)} están cerrados y su planificación no se puede cambiar`);
     }
     assertFuente(meta.fuenteFinanciamiento, [...MESES].reduce((s, mes) => s + (plan.get(mes)?.presupuesto ?? 0), 0));
+    const metaAnual = fisico([...plan.values()].reduce((s, p) => s + p.fisico, 0));
+    const presupuestoAnual = dinero([...plan.values()].reduce((s, p) => s + p.presupuesto, 0));
 
     for (const c of cambios) {
       await tx
@@ -504,10 +535,17 @@ export async function updatePlanificacion(
       antes: { fisicoPlanificado: c.prev.fisico, presupuestoPlanificado: c.prev.presupuesto },
       despues: { fisicoPlanificado: c.next.fisico, presupuestoPlanificado: c.next.presupuesto },
     })));
+    // Answer with the row as updated: the one locked above still has the old
+    // annual totals, which made the response flag a mismatch that was not there.
+    let actual = meta;
     if (cambios.length > 0) {
-      await tx.update(pg2030MetasInstitucionales).set({ updatedAt: new Date() }).where(eq(pg2030MetasInstitucionales.id, id));
+      [actual] = await tx
+        .update(pg2030MetasInstitucionales)
+        .set({ metaAnual: String(metaAnual), presupuestoAnual: String(presupuestoAnual), updatedAt: new Date() })
+        .where(eq(pg2030MetasInstitucionales.id, id))
+        .returning();
     }
-    return mapMeta(tx, meta, ctx, callerOf(writer));
+    return mapMeta(tx, actual, ctx, callerOf(writer));
   });
 }
 
@@ -620,6 +658,7 @@ export async function deleteMeta(
     const writer = await lockPg2030Writer(tx, actorId);
     const { meta, meses } = await lockMeta(tx, id);
     assertPuedeTrabajarCon(writer, meta.institucionId);
+    if (writer.role === "REPORTER") throw Forbidden("Los reporteros no pueden eliminar una planificación existente");
     const ctx = await loadContexto(tx, meta.anio, meta.institucionId, now);
 
     const locked = mesesBloqueadosConDatos(ctx, meses);

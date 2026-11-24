@@ -38,13 +38,17 @@ export const planificacionSchema = z
 
 const camposMeta = {
   nombre: requiredText(500),
+  indicador: requiredText(500),
   descripcion: optionalText(5_000),
   unidadMedida: requiredText(100),
+  metaAnual: fisico,
+  presupuestoAnual: dinero,
   fuenteFinanciamiento: fuente,
   beneficiariosDirectos: optionalText(2_000),
   personalTecnico: optionalText(2_000),
   responsablesInternos: optionalText(2_000),
   entidadesCoordinacion: optionalText(2_000),
+  observaciones: optionalText(5_000),
 };
 
 export const crearMetaSchema = z.object({
@@ -58,13 +62,17 @@ export const crearMetaSchema = z.object({
 export const actualizarMetaSchema = z.object({
   proyectoId: z.string().uuid().optional(),
   nombre: camposMeta.nombre.optional(),
+  indicador: camposMeta.indicador.optional(),
   descripcion: camposMeta.descripcion,
   unidadMedida: camposMeta.unidadMedida.optional(),
+  metaAnual: camposMeta.metaAnual.optional(),
+  presupuestoAnual: camposMeta.presupuestoAnual.optional(),
   fuenteFinanciamiento: camposMeta.fuenteFinanciamiento,
   beneficiariosDirectos: camposMeta.beneficiariosDirectos,
   personalTecnico: camposMeta.personalTecnico,
   responsablesInternos: camposMeta.responsablesInternos,
   entidadesCoordinacion: camposMeta.entidadesCoordinacion,
+  observaciones: camposMeta.observaciones,
 }).strict().refine((body) => Object.keys(body).length > 0, "Debes enviar al menos un campo");
 
 export const ejecucionSchema = z.object({

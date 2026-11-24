@@ -87,10 +87,18 @@ export default function MetaCard({
           <p className="text-xs text-slate-500">
             <span className="font-mono font-semibold text-teal-700">{meta.proyecto.codigo}</span>
             <span className="mx-1">·</span>
-            Meta del Plan {meta.proyecto.metaPlanCodigo}
+            Meta del Plan {meta.proyecto.metaPlanCodigo}: {meta.proyecto.metaPlanTexto}
           </p>
           <p className="font-semibold text-slate-900">{meta.nombre}</p>
+          <p className="text-sm text-slate-600"><span className="font-medium">Indicador:</span> {meta.indicador}</p>
           {meta.descripcion && <p className="text-sm text-slate-600">{meta.descripcion}</p>}
+          <p className="text-xs text-slate-500">Meta anual: {formatNumero(meta.metaAnual)} · Presupuesto anual: {formatUsd(meta.presupuestoAnual)}</p>
+          <div className="mt-1 flex flex-wrap gap-1.5 text-xs">
+            <Badge variant="outline">E: {meta.proyecto.metaPlanCodigo}</Badge>
+            <Badge variant="outline">G: {meta.proyecto.codigo}</Badge>
+            <Badge variant={meta.validacionFisica === "Verificado" ? "secondary" : "destructive"}>Físico: {meta.validacionFisica}</Badge>
+            <Badge variant={meta.validacionPresupuestaria === "Verificado" ? "secondary" : "destructive"}>Presupuesto: {meta.validacionPresupuestaria}</Badge>
+          </div>
           <div className="mt-1 flex flex-wrap gap-1.5">
             <Badge variant="outline">{meta.unidadMedida}</Badge>
             {meta.fuenteFinanciamiento && <Badge variant="secondary">{meta.fuenteFinanciamiento}</Badge>}

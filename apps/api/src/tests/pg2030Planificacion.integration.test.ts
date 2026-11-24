@@ -146,24 +146,29 @@ test(
       });
 
       await t.test("when the load ends, its months lock for everyone", async () => {
-        await assert.rejects(updatePlanificacion(repAId, metaId, plan({ 5: { fisico: 2 } }), diciembre), status(409));
+        // Once planned, a goal's plan is the administrator's to change (2027 planning rule).
+        await assert.rejects(updatePlanificacion(repAId, metaId, plan({ 12: { fisico: 4 } }), diciembre), status(403));
+        await assert.rejects(deleteMeta(repAId, metaId, diciembre), status(403));
+        await assert.rejects(updatePlanificacion(adminId, metaId, plan({ 5: { fisico: 2 } }), diciembre), status(409));
         await assert.rejects(reportarMes(repAId, metaId, 5, { fisicoEjecutado: 2, presupuestoDevengado: 0 }, diciembre), status(409));
         await assert.rejects(reportarMes(adminId, metaId, 2, { fisicoEjecutado: 0, presupuestoDevengado: 0 }, diciembre), status(409));
         // T4 is still open.
         const octubreMes = await reportarMes(repAId, metaId, 10, { fisicoEjecutado: 1, presupuestoDevengado: 0 }, diciembre);
         assert.equal(octubreMes.meta.meses[9].reportadoAt !== null, true);
         // Future months' plan stays editable; closed ones must come back unchanged.
-        const replanned = await updatePlanificacion(repAId, metaId, plan({ 12: { fisico: 4 } }), diciembre);
+        const replanned = await updatePlanificacion(adminId, metaId, plan({ 12: { fisico: 4 } }), diciembre);
         assert.equal(replanned.totales.fisicoPlanificado, 12);
+        assert.equal(replanned.metaAnual, 12, "the annual target follows the monthly plan");
         // Values in locked months block deleting the goal or moving its project.
-        await assert.rejects(deleteMeta(repAId, metaId, diciembre), status(409));
-        await assert.rejects(updateMeta(repAId, metaId, { proyectoId: otroProyecto.id }, diciembre), status(409));
+        await assert.rejects(deleteMeta(adminId, metaId, diciembre), status(409));
+        await assert.rejects(updateMeta(adminId, metaId, { proyectoId: otroProyecto.id }, diciembre), status(409));
         // The load cannot be extended once over.
         await assert.rejects(ampliarCarga(adminId, Y, `${Y}-12-31`, diciembre), status(409));
       });
 
       await t.test("texts stay editable after closing, and each change is logged", async () => {
-        const updated = await updateMeta(repAId, metaId, { descripcion: "Capacitación en oficios" }, diciembre);
+        await assert.rejects(updateMeta(repAId, metaId, { descripcion: "x" }, diciembre), status(403));
+        const updated = await updateMeta(adminId, metaId, { descripcion: "Capacitación en oficios" }, diciembre);
         assert.equal(updated.descripcion, "Capacitación en oficios");
         const [entrada] = await listBitacora(Y, instA.id);
         assert.equal(entrada.accion, "meta_modificada");

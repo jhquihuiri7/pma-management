@@ -330,6 +330,13 @@
       "when": 1792977600000,
       "tag": "0046_simat_umbrales_marea",
       "breakpoints": true
+    },
+    {
+      "idx": 47,
+      "version": "7",
+      "when": 1793077600000,
+      "tag": "0047_pg2030_planificacion_2027",
+      "breakpoints": true
     }
   ]
 }

@@ -663,15 +663,19 @@ export interface Pg2030MetaInstitucional {
   id: string;
   anio: number;
   institucion: Pg2030InstitucionRef;
-  proyecto: { id: string; codigo: string; nombre: string; metaPlanCodigo: string };
+  proyecto: { id: string; codigo: string; nombre: string; metaPlanCodigo: string; metaPlanTexto: string };
   nombre: string;
+  indicador: string;
   descripcion: string | null;
   unidadMedida: string;
+  metaAnual: number;
+  presupuestoAnual: number;
   fuenteFinanciamiento: Pg2030FuenteFinanciamiento | null;
   beneficiariosDirectos: string | null;
   personalTecnico: string | null;
   responsablesInternos: string | null;
   entidadesCoordinacion: string | null;
+  observaciones: string | null;
   meses: Pg2030MetaMes[];
   /** Sums of the twelve months; an unreported month counts as 0. */
   totales: {
@@ -680,6 +684,8 @@ export interface Pg2030MetaInstitucional {
     fisicoEjecutado: number;
     presupuestoDevengado: number;
   };
+  validacionFisica: "Verificado" | "¡Alerta: No coinciden!";
+  validacionPresupuestaria: "Verificado" | "¡Alerta: No coinciden!";
   /** AI classification in force (plan §8): read-only, nobody edits it. */
   clasificacion: Pg2030Clasificacion;
   creadoPorNombre: string;
