@@ -56,7 +56,8 @@ export function aiApiKey(): string {
 export function upstreamChatUrl(baseUrl = env.WORKSPACE_AI_BASE_URL, allowedHosts = env.WORKSPACE_AI_ALLOWED_HOSTS): URL {
   const base = new URL(baseUrl);
   const allowed = allowedHosts.split(",").map((h) => h.trim().toLowerCase()).filter(Boolean);
-  if (base.protocol !== "https:") throw new Error("WORKSPACE_AI_BASE_URL must use https");
+  const localHttp = base.protocol === "http:" && ["localhost", "127.0.0.1", "ollama"].includes(base.hostname.toLowerCase());
+  if (base.protocol !== "https:" && !localHttp) throw new Error("WORKSPACE_AI_BASE_URL must use https unless using the internal Ollama service");
   if (!allowed.includes(base.hostname.toLowerCase())) throw new Error(`WORKSPACE_AI_BASE_URL host ${base.hostname} is not in WORKSPACE_AI_ALLOWED_HOSTS`);
   return new URL(`${base.pathname.replace(/\/+$/, "")}/chat/completions`, base.origin);
 }

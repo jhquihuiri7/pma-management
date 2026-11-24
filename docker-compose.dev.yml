@@ -14,7 +14,8 @@ services:
       POSTGRES_USER: ${DB_USER:-postgres}
       POSTGRES_PASSWORD: ${DB_PASSWORD:-postgres}
     ports:
-      - "5432:5432"
+      # 5432 is already used by the local Previene database.
+      - "55435:5432"
     volumes:
       - postgres_data:/var/lib/postgresql/data
     healthcheck:
@@ -46,7 +47,7 @@ services:
       DATABASE_URL: postgresql://${DB_USER:-postgres}:${DB_PASSWORD:-postgres}@postgres:5432/${DB_NAME:-pma_db}
       PORT: 3001
       COOKIE_SECURE: "false"
-      FRONTEND_ORIGIN: http://localhost:3000
+      FRONTEND_ORIGIN: https://sigtar.gobiernogalapagos.gob.ec
       STORAGE_ROOT: /data/storage
       STORAGE_PUBLIC_BASE_URL: http://localhost:3001/storage
       TITILER_DATA_ROOT: /data/storage
@@ -58,6 +59,15 @@ services:
       # Read by the api to decide when the cache counts as stale; without it the
       # degraded banner is timed off zod's default instead of the real interval.
       PREVIENE_SYNC_INTERVAL_MS: ${PREVIENE_SYNC_INTERVAL_MS:-120000}
+      # Process the PG2030 AI classification queue in the worker.
+      PG2030_JOBS_ENABLED: "true"
+      NVIDIA_API_KEY: ${NVIDIA_API_KEY:-}
+      NVIDIA_BASE_URL: ${NVIDIA_BASE_URL:-http://ollama:11434/v1}
+      NVIDIA_MODEL: ${NVIDIA_MODEL:-qwen3.5:2b-q4_K_M}
+      # PG2030 Word report: its own provider (e.g. OpenRouter). Empty = NVIDIA_* above.
+      PG2030_INFORME_IA_BASE_URL: ${PG2030_INFORME_IA_BASE_URL:-}
+      PG2030_INFORME_IA_MODEL: ${PG2030_INFORME_IA_MODEL:-}
+      PG2030_INFORME_IA_API_KEY: ${PG2030_INFORME_IA_API_KEY:-}
     extra_hosts:
       - "host.docker.internal:host-gateway"
     ports:
@@ -70,6 +80,9 @@ services:
         condition: service_healthy
       migrate:
         condition: service_completed_successfully
+    networks:
+      - default
+      - sigtar-previene-link
     restart: unless-stopped
 
   web:
@@ -124,6 +137,18 @@ services:
       PREVIENE_API_BASE_URL: ${PREVIENE_API_BASE_URL:-http://host.docker.internal:8080}
       PREVIENE_API_KEY: ${PREVIENE_API_KEY:-}
       PREVIENE_SYNC_INTERVAL_MS: ${PREVIENE_SYNC_INTERVAL_MS:-120000}
+      PG2030_JOBS_ENABLED: "true"
+      NVIDIA_API_KEY: ${NVIDIA_API_KEY:-}
+      NVIDIA_BASE_URL: ${NVIDIA_BASE_URL:-http://ollama:11434/v1}
+      NVIDIA_MODEL: ${NVIDIA_MODEL:-qwen3.5:2b-q4_K_M}
+      # SIMAT-GAL: same as the production worker. When this stack is the one
+      # serving the site (as since 2026-11-23), nothing else pulls the
+      # meteorological/sea-level sources: without this SIMAT went stale.
+      SIMAT_SYNC_ENABLED: "true"
+      SIMAT_INAMHI_SERIES: ${SIMAT_INAMHI_SERIES:-1}
+      SIMAT_INAMHI_ORIGIN: ${SIMAT_INAMHI_ORIGIN:-https://inamhi.gob.ec}
+      SIMAT_INAMHI_REFERER: ${SIMAT_INAMHI_REFERER:-https://inamhi.gob.ec/info/}
+      SIMAT_INAMHI_TOKEN: ${SIMAT_INAMHI_TOKEN:-}
     extra_hosts:
       - "host.docker.internal:host-gateway"
     volumes:
@@ -134,6 +159,9 @@ services:
         condition: service_healthy
       migrate:
         condition: service_completed_successfully
+    networks:
+      - default
+      - sigtar-previene-link
     restart: unless-stopped
 
   # Internal COG tile server (dev). No published port; reads the NAS storage the
@@ -150,3 +178,7 @@ services:
 
 volumes:
   postgres_data:
+
+networks:
+  sigtar-previene-link:
+    external: true

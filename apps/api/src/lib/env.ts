@@ -72,13 +72,24 @@ const schema = z.object({
   // share one database, so a dev stack must never run code under development
   // against it. docker-compose.yml turns it on for the production worker only.
   PG2030_JOBS_ENABLED: z.preprocess((v) => v === true || v === "true" || v === "1", z.boolean()),
-  // NVIDIA's OpenAI-compatible endpoint. The key never reaches the browser:
-  // only the worker calls the model.
+  // NVIDIA's OpenAI-compatible endpoint (or the local Ollama). The key never
+  // reaches the browser: the worker classifies goals, and the API writes the
+  // analysis of the quarterly Word report.
   NVIDIA_API_KEY: z.string().default(""),
   NVIDIA_BASE_URL: z.string().default("https://integrate.api.nvidia.com/v1"),
-  NVIDIA_MODEL: z.string().default("deepseek-ai/deepseek-v4.1-flash"),
+  NVIDIA_MODEL: z.string().default("qwen3.5:2b"),
   PG2030_IA_TIMEOUT_MS: z.coerce.number().int().positive().default(60_000),
   PG2030_IA_MAX_TOKENS: z.coerce.number().int().positive().default(2_048),
+  // The report's analysis paragraphs: a few sentences each, on a CPU-bound
+  // local model that writes about 3 tokens/s (2 CPUs), hence the long timeout.
+  PG2030_INFORME_IA_TIMEOUT_MS: z.coerce.number().int().positive().default(240_000),
+  PG2030_INFORME_IA_MAX_TOKENS: z.coerce.number().int().positive().default(200),
+  // Optional provider just for the report (e.g. OpenRouter,
+  // https://openrouter.ai/api/v1, with a free model). Empty: the report uses
+  // the classification provider above. Classification never uses this one.
+  PG2030_INFORME_IA_BASE_URL: z.string().default(""),
+  PG2030_INFORME_IA_MODEL: z.string().default(""),
+  PG2030_INFORME_IA_API_KEY: z.string().default(""),
 
   // Workspace con RustGIS (docs/plan-integracion-rustgis.md). "legacy" deja el
   // Workspace anterior para todos; "pilot" muestra RustGIS solo a los usuarios
@@ -100,7 +111,7 @@ const schema = z.object({
   WORKSPACE_AI_ENABLED: z.preprocess((v) => v === true || v === "true" || v === "1", z.boolean()),
   WORKSPACE_AI_API_KEY: z.string().default(""),
   WORKSPACE_AI_BASE_URL: z.string().url().default("https://integrate.api.nvidia.com/v1"),
-  WORKSPACE_AI_ALLOWED_HOSTS: z.string().default("integrate.api.nvidia.com"),
+  WORKSPACE_AI_ALLOWED_HOSTS: z.string().default("integrate.api.nvidia.com,ollama"),
   // Modelo real. RustGIS lo pide con el alias, así cambiar de modelo no exige recompilarlo.
   WORKSPACE_AI_MODEL: z.string().min(1).default("minimaxai/minimax-m3.1-flash"),
   WORKSPACE_AI_MODEL_ALIAS: z.string().min(1).default("sigtar-asistente"),

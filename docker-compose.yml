@@ -5,6 +5,28 @@ x-api-image: &api-image
     dockerfile: apps/api/Dockerfile
 
 services:
+  ollama:
+    image: ollama/ollama:latest
+    container_name: pma-ollama
+    # This host has 8 vCPUs and about 11 GiB RAM shared with PostgreSQL,
+    # TiTiler and the GIS workers. Keep local inference bounded.
+    cpus: "2.0"
+    mem_limit: "4g"
+    environment:
+      OLLAMA_KEEP_ALIVE: ${OLLAMA_KEEP_ALIVE:-10m}
+      OLLAMA_NUM_PARALLEL: ${OLLAMA_NUM_PARALLEL:-1}
+      OLLAMA_MAX_LOADED_MODELS: ${OLLAMA_MAX_LOADED_MODELS:-1}
+    volumes:
+      - ollama_models:/root/.ollama
+    expose:
+      - "11434"
+    healthcheck:
+      test: ["CMD", "ollama", "list"]
+      interval: 10s
+      timeout: 5s
+      retries: 12
+    restart: unless-stopped
+
   postgres:
     image: postgres:16-alpine
     container_name: pma-postgres
@@ -96,9 +118,21 @@ services:
       # (never in the browser); without WORKSPACE_AI_API_KEY the API uses the
       # NVIDIA key already configured for PG2030.
       WORKSPACE_AI_ENABLED: ${WORKSPACE_AI_ENABLED:-false}
-      WORKSPACE_AI_API_KEY: ${WORKSPACE_AI_API_KEY:-${NVIDIA_API_KEY:-}}
-      WORKSPACE_AI_BASE_URL: ${WORKSPACE_AI_BASE_URL:-https://integrate.api.nvidia.com/v1}
-      WORKSPACE_AI_MODEL: ${WORKSPACE_AI_MODEL:-minimaxai/minimax-m3.1-flash}
+      # Ollama is local and does not require a provider key. The proxy still
+      # expects a non-empty server-side credential, so use a local sentinel.
+      WORKSPACE_AI_API_KEY: ${WORKSPACE_AI_API_KEY:-local-ollama}
+      WORKSPACE_AI_BASE_URL: ${WORKSPACE_AI_BASE_URL:-http://ollama:11434/v1}
+      WORKSPACE_AI_MODEL: ${WORKSPACE_AI_MODEL:-qwen3.5:2b-q4_K_M}
+      # PG2030 Word report: the API writes the analysis paragraphs with the same
+      # provider the worker classifies goals with (the local Ollama).
+      NVIDIA_API_KEY: ${NVIDIA_API_KEY:-local-ollama}
+      NVIDIA_BASE_URL: ${NVIDIA_BASE_URL:-http://ollama:11434/v1}
+      NVIDIA_MODEL: ${NVIDIA_MODEL:-qwen3.5:2b-q4_K_M}
+      # Optional provider just for the report (e.g. OpenRouter with a free
+      # model). Empty: the report uses the NVIDIA_* provider above.
+      PG2030_INFORME_IA_BASE_URL: ${PG2030_INFORME_IA_BASE_URL:-}
+      PG2030_INFORME_IA_MODEL: ${PG2030_INFORME_IA_MODEL:-}
+      PG2030_INFORME_IA_API_KEY: ${PG2030_INFORME_IA_API_KEY:-}
     # The Galápagos Previene API is reached over `previene-link`, NOT over the
     # host: it binds 127.0.0.1:8080, which host.docker.internal (the bridge
     # gateway) cannot reach. See the networks block at the bottom of this file
@@ -117,6 +151,8 @@ services:
         condition: service_healthy
       migrate:
         condition: service_completed_successfully
+      ollama:
+        condition: service_healthy
     restart: unless-stopped
     healthcheck:
       test: ["CMD-SHELL", "wget -qO- http://127.0.0.1:3001/health || exit 1"]
@@ -203,8 +239,13 @@ services:
       # key stays in .env and never reaches the API or the browser; without it
       # the requests wait in the queue.
       PG2030_JOBS_ENABLED: "true"
-      NVIDIA_API_KEY: ${NVIDIA_API_KEY:-}
-      NVIDIA_MODEL: ${NVIDIA_MODEL:-deepseek-ai/deepseek-v4.1-flash}
+      # PG2030 puede reutilizar la misma credencial del asistente IA del Geoportal.
+      # Local Ollama ignores this value; the sentinel keeps the worker's
+      # startup guard from treating the local provider as unavailable.
+      NVIDIA_API_KEY: ${NVIDIA_API_KEY:-local-ollama}
+      NVIDIA_BASE_URL: ${NVIDIA_BASE_URL:-http://ollama:11434/v1}
+      NVIDIA_MODEL: ${NVIDIA_MODEL:-qwen3.5:2b-q4_K_M}
+      PG2030_IA_MAX_TOKENS: ${PG2030_IA_MAX_TOKENS:-256}
       # SIMAT-GAL: only the production worker pulls the meteorological/sea-level
       # sources into the database, including the public INAMHI viewer series.
       SIMAT_SYNC_ENABLED: "true"
@@ -221,6 +262,8 @@ services:
       - /mnt/synology_smb/sistema-ambiental:/data/storage
     depends_on:
       postgres:
+        condition: service_healthy
+      ollama:
         condition: service_healthy
       migrate:
         condition: service_completed_successfully
@@ -242,6 +285,7 @@ services:
     restart: unless-stopped
 
 volumes:
+  ollama_models:
   postgres_data:
 
 networks:
