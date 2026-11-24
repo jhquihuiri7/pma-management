@@ -37,11 +37,14 @@ export function AvanceFisicoChart({
   promedio,
   leyenda,
   onSelect,
+  estatico = false,
 }: {
   filas: Array<{ id: string; sigla: string; valor: number; semaforo: Pg2030Semaforo }>;
   promedio: number | null;
   leyenda: Pg2030Leyenda;
   onSelect: (id: string) => void;
+  /** No animation: the Word report captures the chart as soon as it is drawn. */
+  estatico?: boolean;
 }) {
   const data = filas.map((f) => ({ ...f, pct: f.valor * 100 }));
   const height = Math.max(160, data.length * 34 + 60);
@@ -59,7 +62,8 @@ export function AvanceFisicoChart({
               cursor={{ fill: "#f1f5f9" }}
               formatter={(_v, _n, item) => [formatPct(item.payload.valor), leyenda.semaforo[item.payload.semaforo as Pg2030Semaforo].label]}
             />
-            <Bar dataKey="pct" barSize={18} radius={[0, 4, 4, 0]} onClick={(d) => onSelect((d as unknown as { id: string }).id)} cursor="pointer">
+            <Bar dataKey="pct" barSize={18} radius={[0, 4, 4, 0]} onClick={(d) => onSelect((d as unknown as { id: string }).id)} cursor="pointer"
+              isAnimationActive={!estatico}>
               {data.map((d) => <Cell key={d.id} fill={leyenda.semaforo[d.semaforo].color} />)}
               <LabelList dataKey="valor" position="right" formatter={(v) => formatPct(Number(v))} style={{ fill: INK.primary, fontSize: 11 }} />
             </Bar>
@@ -83,10 +87,12 @@ export function AlineacionChart({
   filas,
   categorias,
   leyenda,
+  estatico = false,
 }: {
   filas: Array<{ eje: string; total: number; porCategoria: Record<string, number> }>;
   categorias: string[];
   leyenda: Pg2030Leyenda;
+  estatico?: boolean;
 }) {
   const colores = new Map(leyenda.contribucion.map((c) => [c.key, c.color]));
   const data = filas.map((f) => ({ eje: f.eje, ...f.porCategoria }));
@@ -101,7 +107,8 @@ export function AlineacionChart({
             <YAxis type="category" dataKey="eje" width={56} tick={axisTick} axisLine={false} tickLine={false} />
             <Tooltip {...tooltipStyle} cursor={{ fill: "#f1f5f9" }} />
             {categorias.map((c) => (
-              <Bar key={c} dataKey={c} stackId="a" fill={colores.get(c) ?? INK.muted} stroke={INK.surface} strokeWidth={2} barSize={20} />
+              <Bar key={c} dataKey={c} stackId="a" fill={colores.get(c) ?? INK.muted} stroke={INK.surface} strokeWidth={2} barSize={20}
+                isAnimationActive={!estatico} />
             ))}
           </BarChart>
         </ResponsiveContainer>
@@ -114,9 +121,11 @@ export function AlineacionChart({
 export function DineroChart({
   filas,
   leyenda,
+  estatico = false,
 }: {
   filas: Array<{ nombre: string; planificado: number; computable: number; avance: number | null }>;
   leyenda: Pg2030Leyenda;
+  estatico?: boolean;
 }) {
   return (
     <div className="space-y-2">
@@ -136,7 +145,7 @@ export function DineroChart({
               formatter={(v, n) => [formatUsd(Number(v)), n === "planificado" ? "Planificado" : "Devengado"]}
             />
             {/* The computable accrued never exceeds the plan, so the pair's progress sits centered above the planned bar. */}
-            <Bar dataKey="planificado" fill={leyenda.serie.planificado} barSize={22} radius={[4, 4, 0, 0]}>
+            <Bar dataKey="planificado" fill={leyenda.serie.planificado} barSize={22} radius={[4, 4, 0, 0]} isAnimationActive={!estatico}>
               <LabelList dataKey="avance" content={(props) => {
                 const { x, y, width, value } = props;
                 if (value === null || value === undefined) return null;
@@ -147,7 +156,7 @@ export function DineroChart({
                 );
               }} />
             </Bar>
-            <Bar dataKey="computable" fill={leyenda.serie.devengado} barSize={22} radius={[4, 4, 0, 0]} />
+            <Bar dataKey="computable" fill={leyenda.serie.devengado} barSize={22} radius={[4, 4, 0, 0]} isAnimationActive={!estatico} />
           </BarChart>
         </ResponsiveContainer>
       </div>
@@ -179,7 +188,7 @@ export function CoherenciaChart({
       ]} />
       <div style={{ height: 340 }}>
         <ResponsiveContainer width="100%" height="100%">
-          <ComposedChart data={banda} margin={{ top: 16, right: 24, left: 8, bottom: 24 }}>
+          <ComposedChart data={banda} margin={{ top: 24, right: 24, left: 8, bottom: 24 }}>
             <CartesianGrid stroke={INK.grid} />
             <XAxis type="number" dataKey="x" domain={[0, 100]} ticks={[0, 20, 40, 60, 80, 100]} tick={axisTick} tickFormatter={pctTick}
               label={{ value: "Avance físico", position: "insideBottom", offset: -14, fill: INK.secondary, fontSize: 11 }} />

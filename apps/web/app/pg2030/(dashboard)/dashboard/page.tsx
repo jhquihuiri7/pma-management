@@ -19,6 +19,7 @@ import {
   CuadroPresupuesto,
 } from "@/components/pg2030/dashboard/Cuadros";
 import InstitucionDetalle from "@/components/pg2030/dashboard/InstitucionDetalle";
+import InformeDialog from "@/components/pg2030/dashboard/InformeDialog";
 import { Building2, CalendarRange, Loader2, Target, TriangleAlert } from "lucide-react";
 import { PG2030_INSTITUCION_TIPO_VALUES } from "@/types";
 import type { Pg2030Dashboard, Pg2030Institucion, Pg2030InstitucionTipo, Pg2030Trimestre } from "@/types";
@@ -210,6 +211,7 @@ export default function PG2030DashboardPage() {
                     </>
                   )}
                   {loading && <Loader2 className="h-4 w-4 animate-spin text-slate-400" aria-label="Cargando" />}
+                  {!esReportero && <InformeDialog d={d} tipoInstitucion={filtros.tipoInstitucion} />}
                 </div>
                 <CorteBanner d={d} />
               </CardContent>

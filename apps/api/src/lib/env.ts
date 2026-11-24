@@ -87,6 +87,9 @@ const schema = z.object({
   // Optional provider just for the report (e.g. OpenRouter,
   // https://openrouter.ai/api/v1, with a free model). Empty: the report uses
   // the classification provider above. Classification never uses this one.
+  // The report's Word template is an internal document and the repository is
+  // public: it lives in storage. Empty: <STORAGE_ROOT>/PG2030/plantilla-informe.docx.
+  PG2030_INFORME_PLANTILLA: z.string().default(""),
   PG2030_INFORME_IA_BASE_URL: z.string().default(""),
   PG2030_INFORME_IA_MODEL: z.string().default(""),
   PG2030_INFORME_IA_API_KEY: z.string().default(""),
