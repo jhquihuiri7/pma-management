@@ -12,6 +12,7 @@ import {
   MousePointer, MapPin, FileDown, FileUp, LogIn,
 } from "lucide-react";
 import { toast } from "sonner";
+import JSZip from "jszip";
 import { api, apiErrorMessage } from "@/lib/api-client";
 import LayersPanel from "./LayersPanel";
 import UploadModal from "./UploadModal";
@@ -929,6 +930,66 @@ export default function GisEditor({ geoMap, mapId, mapTitle, backHref, initialCe
     toast.success("Workspace descargado correctamente");
   };
 
+  const downloadAllLayers = async () => {
+    if (layers.length === 0 && rasterLayers.length === 0) {
+      toast.info("Este mapa no tiene capas para descargar.");
+      return;
+    }
+
+    try {
+      const zip = new JSZip();
+      const safeName = (value: string) => value.trim().replace(/[^a-zA-Z0-9áéíóúÁÉÍÓÚñÑ_-]+/g, "_").replace(/^_+|_+$/g, "") || "capa";
+      const usedNames = new Map<string, number>();
+      const layerName = (name: string) => {
+        const base = safeName(name);
+        const count = (usedNames.get(base) ?? 0) + 1;
+        usedNames.set(base, count);
+        return count === 1 ? base : `${base}_${count}`;
+      };
+
+      layers.forEach((layer) => {
+        const folder = zip.folder(`capas/${layerName(layer.name)}`)!;
+        folder.file(`${safeName(layer.name)}.geojson`, JSON.stringify(layer.geojson, null, 2));
+        folder.file("metadata.json", JSON.stringify({
+          nombre: layer.name,
+          geometria: layer.geometry,
+          crs: layer.crs ?? "EPSG:4326",
+          entidades: layer.geojson.features.length,
+          revision: layer.dataRevision ?? null,
+        }, null, 2));
+      });
+
+      const rasterManifest = rasterLayers.map((layer) => ({
+        nombre: layer.name,
+        estado: layer.status,
+        bbox: layer.bbox,
+        urlTeselas: layer.tileUrl,
+        nota: "Las capas ráster se publican como teselas; el ZIP incluye su referencia y metadatos.",
+      }));
+      zip.file("mapa.json", JSON.stringify({
+        titulo: mapTitle,
+        fechaDescarga: new Date().toISOString(),
+        capasVectoriales: layers.length,
+        capasRaster: rasterLayers.length,
+        capasRasterDetalle: rasterManifest,
+      }, null, 2));
+
+      const blob = await zip.generateAsync({ type: "blob", compression: "DEFLATE" });
+      const url = URL.createObjectURL(blob);
+      const anchor = window.document.createElement("a");
+      anchor.href = url;
+      anchor.download = `${safeName(mapTitle || "mapa")}-capas.zip`;
+      window.document.body.appendChild(anchor);
+      anchor.click();
+      anchor.remove();
+      window.setTimeout(() => URL.revokeObjectURL(url), 0);
+      toast.success("Todas las capas fueron descargadas en un ZIP.");
+    } catch (error) {
+      console.error(error);
+      toast.error("No se pudieron preparar todas las capas para la descarga.");
+    }
+  };
+
   const restoreWorkspace = async (document: WorkspaceDocument) => {
     const catalog = await api.get<GeoWorkspaceCatalogMap[]>("/geo/workspace/catalog");
     const catalogByKey = new Map<string, { map: GeoWorkspaceCatalogMap; layer: GeoWorkspaceCatalogMap["layers"][number] }>();
@@ -1164,6 +1225,15 @@ export default function GisEditor({ geoMap, mapId, mapTitle, backHref, initialCe
           >
             <Download className="h-3.5 w-3.5" />
             Exportar mapa
+          </button>
+          <button
+            type="button"
+            onClick={() => void downloadAllLayers()}
+            className="inline-flex h-8 flex-shrink-0 items-center gap-1.5 rounded-lg border border-teal-200 bg-white px-3 text-[13px] font-medium text-teal-700 transition-colors hover:bg-teal-50"
+            title="Descargar todas las capas del mapa en un archivo ZIP"
+          >
+            <FileDown className="h-3.5 w-3.5" />
+            Descargar capas
           </button>
           {canMutate && (
             <button className="tb-btn primary" onClick={() => setShowUpload(true)}><Upload size={14} /> Agregar capa</button>
