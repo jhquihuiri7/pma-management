@@ -45,6 +45,14 @@ next-env.d.ts
 /respaldo_*.sql
 /6.1 Informe PG2030 2026 1T vf 10abr26.docx
 /resultado_final.xlsx
+# Insumos subidos a la raíz para cargas y pruebas (planificación 2027, capas, vistas previas)
+/1.1 PG2030_*.xlsx
+/Instructivo planificación *.docx
+/PG2030_Pruebas_*
+/Hidrología_*.zip
+/Santa_Cruz_shapefiles.zip
+/SIMAT-GAL*.zip
+/WhatsApp Video *.mp4
 
 # RustGIS: directorio de trabajo de infra/rustgis/build.sh
 infra/rustgis/.build/
