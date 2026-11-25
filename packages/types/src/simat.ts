@@ -183,6 +183,8 @@ export interface SimatCriterio {
   id: string;
   /** null: el sector aún no tiene estación de lluvia y no se evalúa. */
   estacion: string | null;
+  /** Da la lluvia cuando la estación principal no tiene una ventana válida y vigente. */
+  estacionRespaldo: string | null;
   isla: SimatIsla;
   puerto: string;
   datum: string;
@@ -206,6 +208,8 @@ export interface SimatCriterio {
 export interface SimatCriterioEntrada {
   id?: string;
   estacion: string | null;
+  /** Sin el campo, una edición conserva el respaldo que tenía el criterio. */
+  estacionRespaldo?: string | null;
   puerto: string;
   datum: string;
   sector: string;
@@ -235,6 +239,10 @@ export interface SimatEvaluacion {
   motivos: string[];
   /** Notas que no impiden el nivel (p. ej. falta el dato de mar). */
   avisos: string[];
+  /** Estación cuya lluvia se evaluó (la principal o, si esta no sirve, la de respaldo). */
+  estacionUsada: string | null;
+  /** true si el nivel sale de la estación de respaldo. */
+  enRespaldo: boolean;
   lluvia: {
     valor: number | null;
     fecha: string | null;

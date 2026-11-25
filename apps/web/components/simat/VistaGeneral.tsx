@@ -151,6 +151,7 @@ export default function VistaGeneral({ riesgo }: { riesgo?: ReactNode }) {
   // Nivel oficial (criterios activos) y, si no hay, el orientativo de los
   // criterios experimentales, que el panel muestra marcado como no oficial.
   const evaluados = resultados.filter((r) => r.nivel);
+  const conRespaldo = evaluados.filter((r) => r.enRespaldo).length;
   const peor = evaluados.reduce((max, r) => Math.max(max, indiceNivel(r.nivel)), -1);
   const nivelPeor = ESCALA[peor];
   const orientativos = resultados.filter((r) => !r.nivel && r.nivelOrientativo);
@@ -299,7 +300,7 @@ export default function VistaGeneral({ riesgo }: { riesgo?: ReactNode }) {
           valor={nivelPeor?.name ?? (resultados.length ? "Sin nivel oficial" : "Sin evaluación")}
           detalle={
             evaluados.length
-              ? `${evaluados.length} de ${resultados.length} sectores evaluados`
+              ? `${evaluados.length} de ${resultados.length} sectores evaluados${conRespaldo ? ` · ${conRespaldo} con estación de respaldo` : ""}`
               : orientativos.length
                 ? `${orientativos.length} de ${resultados.length} sectores con nivel orientativo (experimental)`
                 : resultados.length

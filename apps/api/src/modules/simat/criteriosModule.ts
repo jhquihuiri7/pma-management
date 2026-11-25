@@ -12,6 +12,7 @@ function aCriterio(row: CriterioRow): SimatCriterio {
   return {
     id: row.id,
     estacion: row.estacionId,
+    estacionRespaldo: row.estacionRespaldoId,
     isla: row.isla as SimatIsla,
     puerto: row.puerto,
     datum: row.datum,
@@ -43,15 +44,28 @@ export async function listarCriterios(): Promise<SimatCriterio[]> {
 export async function guardarCriterio(entrada: SimatCriterioEntrada, usuario: { id: string; name: string }): Promise<SimatCriterio> {
   const estacion = entrada.estacion ? await obtenerEstacion(entrada.estacion) : null;
   if (entrada.estacion && !estacion) throw NotFound("Seleccione una estación del inventario.");
+  // Sin el campo (un cliente anterior), la edición conserva el respaldo que había.
+  let idRespaldo = entrada.estacionRespaldo;
+  if (idRespaldo === undefined && entrada.id) {
+    const [actual] = await getDb()
+      .select({ estacionRespaldoId: simatCriterios.estacionRespaldoId })
+      .from(simatCriterios)
+      .where(eq(simatCriterios.id, entrada.id))
+      .limit(1);
+    idRespaldo = actual?.estacionRespaldoId ?? null;
+  }
+  const estacionRespaldo = idRespaldo ? await obtenerEstacion(idRespaldo) : null;
+  if (idRespaldo && !estacionRespaldo) throw NotFound("Seleccione una estación de respaldo del inventario.");
   let validado;
   try {
-    validado = construirCriterio(entrada, estacion);
+    validado = construirCriterio(entrada, estacion, estacionRespaldo);
   } catch (err) {
     throw BadRequest(err instanceof Error ? err.message : "Criterio inválido.");
   }
   const ahora = new Date();
   const valores = {
     estacionId: validado.estacion,
+    ...(idRespaldo === undefined ? {} : { estacionRespaldoId: validado.estacionRespaldo }),
     isla: validado.isla,
     puerto: validado.puerto,
     datum: validado.datum,

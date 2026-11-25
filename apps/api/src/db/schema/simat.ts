@@ -78,6 +78,8 @@ export const simatCriterios = pgTable(
     id: uuid("id").primaryKey().defaultRandom(),
     /** Estación de lluvia; nula en sectores que aún no tienen una (no se evalúan). */
     estacionId: text("estacion_id").references(() => simatEstaciones.id, { onDelete: "cascade" }),
+    /** Estación de respaldo: da la lluvia cuando la principal no tiene una ventana válida y vigente (0048). */
+    estacionRespaldoId: text("estacion_respaldo_id").references(() => simatEstaciones.id, { onDelete: "set null" }),
     isla: text("isla").notNull(),
     puerto: text("puerto").notNull(),
     datum: text("datum").notNull(),

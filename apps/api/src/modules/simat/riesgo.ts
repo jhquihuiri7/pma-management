@@ -5,6 +5,8 @@
 // mar observado lo alcanza, el nivel sube uno. El nivel oficial exige el
 // criterio activo; desactivado (experimental) se calcula como orientativo.
 // Si faltan datos de lluvia vigentes no hay nivel y `motivos` explica por qué.
+// Con estación de respaldo (0048), si la principal no da una ventana válida y
+// vigente, la lluvia sale del respaldo y `avisos` lo dice.
 
 import type {
   SimatCriterio,
@@ -82,34 +84,80 @@ export function nivelEscala(indice: number, marAlto: boolean | null): SimatNivel
   return NIVELES_RIESGO[Math.min(3, indice + (marAlto ? 1 : 0))];
 }
 
+/** Una estación con su serie de lluvia, tal como la recibe `evaluar`. */
+export interface FuenteLluvia {
+  estacion: SimatEstacion | undefined;
+  rain: SimatSerieLluvia | null;
+}
+
+type FallaLluvia = "inactiva" | "sin_ventana" | "vencida";
+
+const MOTIVO_FALLA: Record<FallaLluvia, string> = {
+  inactiva: "La estación no está activa.",
+  sin_ventana: "Falta una ventana de lluvia completa y válida.",
+  vencida: "La ventana de lluvia está fuera de vigencia.",
+};
+
+/** Por qué una estación no da la lluvia del criterio; null si su ventana es válida y vigente. */
+function fallaLluvia(fuente: FuenteLluvia, ventanaMin: number, vigente: (t: number | null) => boolean): FallaLluvia | null {
+  if (!fuente.estacion || !fuente.estacion.activa) return "inactiva";
+  const window = fuente.rain?.windows.find((w) => w.minutes === ventanaMin);
+  if (!window || window.intensity == null) return "sin_ventana";
+  const latest = fuente.rain?.latest;
+  if (!vigente(latest ? Date.parse(latest.time) : null)) return "vencida";
+  return null;
+}
+
+/** «CHARLES DARWIN 1 no está activa», para el aviso de que se usa el respaldo. */
+function faltaPrincipal(falla: FallaLluvia, nombre: string): string {
+  if (falla === "inactiva") return `La estación principal ${nombre} no está activa`;
+  if (falla === "sin_ventana") return `La estación principal ${nombre} no tiene una ventana de lluvia completa y válida`;
+  return `El dato de la estación principal ${nombre} está fuera de vigencia`;
+}
+
 export function evaluar(
   criterio: SimatCriterio,
   estacion: SimatEstacion | undefined,
-  rain: SimatSerieLluvia | null,
+  rainPrincipal: SimatSerieLluvia | null,
   marine: SimatNivelMar[],
   clock: Date,
+  respaldo?: FuenteLluvia,
 ): SimatEvaluacion {
-  const latest = rain?.latest ?? null;
-  const window = rain?.windows.find((w) => w.minutes === criterio.ventanaMin);
   const sea = nivelObservado(marine, criterio.puerto, criterio.datum);
   const motivos: string[] = [];
   const avisos: string[] = [];
   const edadMs = criterio.vigenciaMin * 60_000;
   const desfaseMs = criterio.desfaseMin * 60_000;
-  const rainTime = latest ? Date.parse(latest.time) : null;
-  const seaTime = sea ? Date.parse(sea.instante) : null;
   const vigente = (t: number | null) => t != null && clock.getTime() - t >= 0 && clock.getTime() - t <= edadMs;
 
-  // Lluvia: sin ella no hay nivel.
+  // Lluvia: sin ella no hay nivel. Si la principal no sirve, la de respaldo.
+  let rain = rainPrincipal;
+  let enRespaldo = false;
   if (!criterio.estacion) {
     motivos.push("El sector no tiene estación de lluvia asignada.");
-  } else if (!estacion || !estacion.activa) {
-    motivos.push("La estación no está activa.");
-  } else if (!window || window.intensity == null) {
-    motivos.push("Falta una ventana de lluvia completa y válida.");
-  } else if (!vigente(rainTime)) {
-    motivos.push("La ventana de lluvia está fuera de vigencia.");
+  } else {
+    const falla = fallaLluvia({ estacion, rain: rainPrincipal }, criterio.ventanaMin, vigente);
+    if (falla) {
+      const conRespaldo = criterio.estacionRespaldo != null && respaldo != null;
+      const fallaRespaldo = conRespaldo ? fallaLluvia(respaldo, criterio.ventanaMin, vigente) : null;
+      const nombreRespaldo = respaldo?.estacion?.nombre ?? criterio.estacionRespaldo ?? "";
+      if (conRespaldo && !fallaRespaldo) {
+        rain = respaldo.rain;
+        enRespaldo = true;
+        avisos.push(`${faltaPrincipal(falla, estacion?.nombre ?? criterio.estacion)}: el nivel se calcula con la estación de respaldo ${nombreRespaldo}.`);
+      } else {
+        motivos.push(MOTIVO_FALLA[falla]);
+        if (conRespaldo && fallaRespaldo) {
+          const motivo = MOTIVO_FALLA[fallaRespaldo];
+          motivos.push(`Estación de respaldo ${nombreRespaldo}: ${motivo.charAt(0).toLowerCase()}${motivo.slice(1)}`);
+        }
+      }
+    }
   }
+  const latest = rain?.latest ?? null;
+  const window = rain?.windows.find((w) => w.minutes === criterio.ventanaMin);
+  const rainTime = latest ? Date.parse(latest.time) : null;
+  const seaTime = sea ? Date.parse(sea.instante) : null;
   const lluviaLista = motivos.length === 0 && window?.intensity != null;
   const indice = lluviaLista ? indiceLluvia(window!.intensity!, criterio.lluvia) : null;
 
@@ -146,6 +194,8 @@ export function evaluar(
     marAlto,
     motivos,
     avisos,
+    estacionUsada: enRespaldo ? criterio.estacionRespaldo : criterio.estacion,
+    enRespaldo,
     lluvia: {
       valor: window?.intensity ?? null,
       fecha: latest?.time ?? null,
@@ -159,6 +209,7 @@ export function evaluar(
 
 export interface CriterioValidado {
   estacion: string | null;
+  estacionRespaldo: string | null;
   isla: SimatIsla;
   puerto: string;
   datum: string;
@@ -184,7 +235,8 @@ export function islaDePuerto(puerto: string): SimatIsla | null {
  * Valida un criterio. Portado de build_criteria: la ventana debe ser una de
  * riesgo y compatible con la cadencia de la estación, y el puerto, de la isla
  * de la estación. Sin estación, la isla es la del puerto. Los umbrales de
- * lluvia deben ir de menor a mayor; el de mar es opcional.
+ * lluvia deben ir de menor a mayor; el de mar es opcional. La estación de
+ * respaldo (opcional) exige una principal, distinta, y cumple lo mismo que ella.
  */
 export function construirCriterio(
   entrada: {
@@ -202,6 +254,7 @@ export function construirCriterio(
     activo: boolean;
   },
   estacion: SimatEstacion | null,
+  estacionRespaldo: SimatEstacion | null = null,
 ): CriterioValidado {
   const etiqueta = (valor: string, limite: number, nombre: string): string => {
     const v = (valor ?? "").trim();
@@ -224,6 +277,16 @@ export function construirCriterio(
     throw new Error("La ventana debe ser compatible con la resolución de la estación.");
   }
   const puerto = etiqueta(entrada.puerto, 100, "puerto");
+  if (estacionRespaldo) {
+    if (!estacion) throw new Error("La estación de respaldo requiere una estación principal.");
+    if (estacionRespaldo.id === estacion.id) throw new Error("La estación de respaldo debe ser distinta de la principal.");
+    if (ventanaMin % estacionRespaldo.pasoMin !== 0) {
+      throw new Error("La ventana debe ser compatible con la resolución de la estación de respaldo.");
+    }
+    if (!puertoCoincideIsla(puerto, estacionRespaldo.isla)) {
+      throw new Error("La estación de respaldo debe estar en la isla del puerto de referencia.");
+    }
+  }
   let isla: SimatIsla;
   if (estacion) {
     if (!puertoCoincideIsla(puerto, estacion.isla)) {
@@ -244,6 +307,7 @@ export function construirCriterio(
   if (!(ESTADOS_VALIDACION as readonly string[]).includes(entrada.estadoValidacion)) throw new Error("Revise el estado de validación.");
   return {
     estacion: estacion?.id ?? null,
+    estacionRespaldo: estacionRespaldo?.id ?? null,
     isla,
     puerto,
     datum: etiqueta(entrada.datum, 80, "datum"),

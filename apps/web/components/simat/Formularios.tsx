@@ -10,9 +10,9 @@ import { Modal } from "./piezas";
 
 const VENTANAS = [5, 15, 30, 60, 180, 360, 720];
 
-/** Ventanas de intensidad compatibles con la resolución de la estación (todas sin estación). */
-export function ventanasCompatibles(estacion: SimatEstacion | undefined | null) {
-  return estacion ? VENTANAS.filter((w) => w % estacion.pasoMin === 0) : VENTANAS;
+/** Ventanas de intensidad compatibles con la resolución de las estaciones dadas (todas sin estación). */
+export function ventanasCompatibles(...estaciones: Array<SimatEstacion | undefined | null>) {
+  return VENTANAS.filter((w) => estaciones.every((e) => !e || w % e.pasoMin === 0));
 }
 
 /** Estaciones que pueden dar la lluvia de un criterio: con precipitación y sub-diarias. */
@@ -42,8 +42,11 @@ export function CriterioModal({
   onCerrar: () => void;
 }) {
   const [estacionId, setEstacionId] = useState<string>(criterio ? (criterio.estacion ?? "") : (estacionInicial ?? ""));
+  const [respaldoId, setRespaldoId] = useState<string>(criterio?.estacionRespaldo ?? "");
   const estacion = estaciones.find((e) => e.id === estacionId) ?? null;
-  const ventanas = ventanasCompatibles(estacion);
+  // El respaldo exige una estación principal distinta.
+  const respaldo = (estacionId && respaldoId !== estacionId && estaciones.find((e) => e.id === respaldoId)) || null;
+  const ventanas = ventanasCompatibles(estacion, respaldo);
   const ventanaInicial = criterio && ventanas.includes(criterio.ventanaMin) ? criterio.ventanaMin : ventanas.includes(60) ? 60 : ventanas[0];
   return (
     <Modal
@@ -56,6 +59,7 @@ export function CriterioModal({
         await guardarCriterio({
           id: criterio?.id,
           estacion: estacionId || null,
+          estacionRespaldo: respaldo?.id ?? null,
           puerto: p,
           datum: texto(d, "datum"),
           sector,
@@ -78,7 +82,7 @@ export function CriterioModal({
     >
       <p className="meta">
         Cada umbral de lluvia (mm/h en la ventana) da su nivel: desde vigilancia es Vigilancia, desde preparación es Preparación y desde respuesta es Respuesta. Si el sector desagua al mar, el mar alto sube un nivel; deja el
-        umbral de mar vacío si no influye.
+        umbral de mar vacío si no influye. Si la estación principal no tiene un dato válido y vigente, el nivel se calcula con la de respaldo.
       </p>
       <div className="field-grid">
         <label>
@@ -101,8 +105,21 @@ export function CriterioModal({
           </select>
         </label>
         <label>
+          Estación de respaldo · opcional
+          <select value={respaldo?.id ?? ""} disabled={!estacionId} onChange={(e) => setRespaldoId(e.target.value)}>
+            <option value="">Sin respaldo</option>
+            {estaciones
+              .filter((e) => e.id !== estacionId)
+              .map((e) => (
+                <option key={e.id} value={e.id}>
+                  {e.nombre} · cada {e.pasoMin < 60 ? `${e.pasoMin} min` : `${e.pasoMin / 60} h`}
+                </option>
+              ))}
+          </select>
+        </label>
+        <label>
           Ventana de intensidad (min)
-          <select key={estacionId} name="ventana_min" defaultValue={String(ventanaInicial)}>
+          <select key={`${estacionId}|${respaldo?.id ?? ""}`} name="ventana_min" defaultValue={String(ventanaInicial)}>
             {ventanas.map((w) => (
               <option key={w} value={w}>
                 {w}

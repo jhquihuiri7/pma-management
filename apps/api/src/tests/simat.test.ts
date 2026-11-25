@@ -140,7 +140,7 @@ const ESTACION: SimatEstacion = {
 };
 
 const CRITERIO: SimatCriterio = {
-  id: "c1", estacion: ESTACION.id, isla: "Santa Cruz", puerto: "Isla Santa Cruz", datum: "MLWS",
+  id: "c1", estacion: ESTACION.id, estacionRespaldo: null, isla: "Santa Cruz", puerto: "Isla Santa Cruz", datum: "MLWS",
   sector: "Malecón", respaldo: "Estudio de drenaje", ventanaMin: 60, vigenciaMin: 60, desfaseMin: 30,
   lluvia: { vigilancia: 5, preparacion: 15, respuesta: 25 }, marM: 2, estadoValidacion: "validado",
   alertasPublicas: false, activo: true, actualizadoPor: "técnico", actualizadoEn: "2026-11-17T15:00:00Z",
@@ -230,6 +230,62 @@ test("criteria: window compatible with the station and port on its island", () =
   assert.throws(() => construirCriterio({ ...base, puerto: "Puerto Inventado" }, null), /inventario/);
   assert.ok(puertoCoincideIsla("Baltra", "Santa Cruz"));
   assert.ok(!puertoCoincideIsla("Baltra", "San Cristóbal"));
+});
+
+test("backup station: used only when the main one gives no valid, current window", () => {
+  const PRINCIPAL: SimatEstacion = { ...ESTACION, id: "INAMHI-64210", fuente: "INAMHI", nombre: "CHARLES DARWIN 1", pasoMin: 60 };
+  const RESPALDO: SimatEstacion = { ...ESTACION, id: "IERSE-n_glps09", codigo: "n_glps09", nombre: "Santa Rosa" };
+  const conRespaldo: SimatCriterio = { ...CRITERIO, estacion: PRINCIPAL.id, estacionRespaldo: RESPALDO.id, vigenciaMin: 180, marM: null };
+  const respaldo = (intensidad: number, fin?: string) => ({ estacion: RESPALDO, rain: lluvia(intensidad, fin) });
+
+  // Main station fine: the backup is ignored.
+  const normal = evaluar(conRespaldo, PRINCIPAL, lluvia(2), [], RELOJ, respaldo(30));
+  assert.equal(normal.nivel, "Normal");
+  assert.equal(normal.enRespaldo, false);
+  assert.equal(normal.estacionUsada, PRINCIPAL.id);
+  assert.deepEqual(normal.avisos, []);
+
+  // Main station not transmitting: the level comes from the backup, with a note.
+  const caida = evaluar(conRespaldo, { ...PRINCIPAL, activa: false }, lluvia(2), [], RELOJ, respaldo(16));
+  assert.equal(caida.nivel, "Preparación");
+  assert.equal(caida.enRespaldo, true);
+  assert.equal(caida.estacionUsada, RESPALDO.id);
+  assert.equal(caida.lluvia.valor, 16);
+  assert.deepEqual(caida.motivos, []);
+  assert.match(caida.avisos.join(" "), /CHARLES DARWIN 1 no está activa.*respaldo Santa Rosa/);
+
+  // Main station active but stale (3 days old): backup too.
+  const vieja = evaluar(conRespaldo, PRINCIPAL, lluvia(2, "2026-11-14T15:00:00Z"), [], RELOJ, respaldo(5));
+  assert.equal(vieja.nivel, "Vigilancia");
+  assert.match(vieja.avisos.join(" "), /fuera de vigencia/);
+
+  // Both fail: no level, and both reasons.
+  const ambas = evaluar(conRespaldo, { ...PRINCIPAL, activa: false }, null, [], RELOJ, { estacion: { ...RESPALDO, activa: false }, rain: lluvia(5) });
+  assert.equal(ambas.nivel, null);
+  assert.equal(ambas.enRespaldo, false);
+  assert.equal(ambas.estacionUsada, PRINCIPAL.id);
+  assert.deepEqual(ambas.motivos, ["La estación no está activa.", "Estación de respaldo Santa Rosa: la estación no está activa."]);
+
+  // Without a backup configured, the old behaviour.
+  const sinRespaldo = evaluar({ ...conRespaldo, estacionRespaldo: null }, { ...PRINCIPAL, activa: false }, null, [], RELOJ, respaldo(16));
+  assert.equal(sinRespaldo.nivel, null);
+  assert.deepEqual(sinRespaldo.motivos, ["La estación no está activa."]);
+});
+
+test("criteria: the backup station needs a main one, distinct, on the port's island, with a compatible window", () => {
+  const base = {
+    puerto: "Isla Santa Cruz", datum: "MLWS", sector: "Malecón", respaldo: "Estudio",
+    ventanaMin: 60, vigenciaMin: 180, desfaseMin: 60, lluvia: { vigilancia: 5, preparacion: 15, respuesta: 25 },
+    marM: null, estadoValidacion: "validado" as const, alertasPublicas: false, activo: true,
+  };
+  const PRINCIPAL: SimatEstacion = { ...ESTACION, id: "INAMHI-64210", pasoMin: 60 };
+  const RESPALDO: SimatEstacion = { ...ESTACION, id: "IERSE-n_glps09" };
+  assert.equal(construirCriterio(base, PRINCIPAL, RESPALDO).estacionRespaldo, RESPALDO.id);
+  assert.equal(construirCriterio(base, PRINCIPAL).estacionRespaldo, null);
+  assert.throws(() => construirCriterio(base, null, RESPALDO), /requiere una estación principal/);
+  assert.throws(() => construirCriterio(base, PRINCIPAL, PRINCIPAL), /distinta/);
+  assert.throws(() => construirCriterio(base, PRINCIPAL, { ...RESPALDO, isla: "San Cristóbal" }), /isla del puerto/);
+  assert.throws(() => construirCriterio({ ...base, ventanaMin: 15 }, RESPALDO, { ...PRINCIPAL, id: "X" }), /respaldo/);
 });
 
 // ── Tide monitoring (port of evaluar_marea) ──────────────────────────────────

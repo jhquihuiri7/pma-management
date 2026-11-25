@@ -9,8 +9,8 @@
 // criterio y predicciones de marea.
 
 import { Fragment, useEffect, useMemo, useRef, useState, type CSSProperties, type ReactNode } from "react";
-import type { SimatCriterio, SimatEstacion, SimatEvaluacion, SimatMonitoreoMarea, SimatUmbralMarea, SimatMareografo, SimatNivelMar, SimatPronostico, SimatSerieLluvia } from "@pma/types";
-import { obtenerMareas, obtenerMareografo, obtenerPronostico } from "@/lib/simat/api";
+import type { SimatCriterio, SimatEstacion, SimatEstado, SimatEvaluacion, SimatMonitoreoMarea, SimatUmbralMarea, SimatMareografo, SimatNivelMar, SimatPronostico, SimatSerieLluvia } from "@pma/types";
+import { obtenerMareas, obtenerMareografo, obtenerPronostico, obtenerSerieLluvia } from "@/lib/simat/api";
 import { forecast, tide, type RangoTiempo, type TideExtreme } from "@/lib/simat/graficos";
 import { clasificarPercentil, comparacionDatum, extremosMarea, horaMarina, MAREOGRAFO_POR_PUERTO, observacionPuerto, puertosIsla } from "@/lib/simat/marinos";
 import { duracion, fechaDia, fechaHora, medida, numero } from "@/lib/simat/formato";
@@ -105,7 +105,20 @@ interface LluviaVentana {
   esperados: number | null;
 }
 
-function Decision({ result, consultado, lluvia, ventanaMin }: { result?: SimatEvaluacion; consultado: string; lluvia: LluviaVentana; ventanaMin: number }) {
+function Decision({
+  result,
+  consultado,
+  lluvia,
+  ventanaMin,
+  estacionLluvia,
+}: {
+  result?: SimatEvaluacion;
+  consultado: string;
+  lluvia: LluviaVentana;
+  ventanaMin: number;
+  /** Estación cuya lluvia se evaluó (la de respaldo si la principal no sirvió). */
+  estacionLluvia?: SimatEstacion;
+}) {
   const profile = result?.criterio;
   const conMar = profile?.marM != null;
   const oficial = result?.nivel ? ESCALA[indiceNivel(result.nivel)] : undefined;
@@ -166,7 +179,9 @@ function Decision({ result, consultado, lluvia, ventanaMin }: { result?: SimatEv
           </div>
           {profile ? <MedidorEscala valor={lluvia.valor} criterio={profile} /> : null}
           <p className="meta">
-            {lluvia.fecha ? `Cierre ${fechaHora(lluvia.fecha)}` : "Sin intervalo cerrado"} · {lluvia.fuente || "sin fuente"}
+            {lluvia.fecha ? `Cierre ${fechaHora(lluvia.fecha)}` : "Sin intervalo cerrado"} ·{" "}
+            {estacionLluvia ? `${estacionLluvia.nombre}${result?.enRespaldo ? " (estación de respaldo)" : ""} · ` : ""}
+            {lluvia.fuente || "sin fuente"}
             {lluvia.esperados ? ` · ${lluvia.intervalos} / ${lluvia.esperados} intervalos válidos` : ""}
           </p>
         </div>
@@ -426,10 +441,13 @@ function HistoriaLluvia({
   codigoMareografo,
   pronostico,
   rango,
+  respaldo = false,
 }: {
   estacion: SimatEstacion;
   lluvia: SimatSerieLluvia | null;
   criterio: SimatCriterio | null;
+  /** La serie es la de la estación de respaldo del sector. */
+  respaldo?: boolean;
   marea: MareaExplorador | null;
   codigoMareografo?: string;
   pronostico: EstadoPronostico;
@@ -473,7 +491,7 @@ function HistoriaLluvia({
       <section className="card wide rain-explorer" id="rain-explorer">
         <CardHead
           titulo={criterio ? `Lluvia, marea y riesgo · ${criterio.sector}` : "Evolución de la lluvia y la marea"}
-          descripcion={`${estacion.nombre} · ${duracion(estacion.pasoMin)} por intervalo · Hora de Galápagos · Serie registrada${typeof pronostico === "object" ? " y pronóstico" : ""}`}
+          descripcion={`${estacion.nombre}${respaldo ? " (estación de respaldo)" : ""} · ${duracion(estacion.pasoMin)} por intervalo · Hora de Galápagos · Serie registrada${typeof pronostico === "object" ? " y pronóstico" : ""}`}
           icono="activity"
         />
         {lluvia && tieneLluviaValida ? (
@@ -586,6 +604,17 @@ function PanelPronostico({ estacion, lluvia, data, rango }: { estacion: SimatEst
 
 /* ---------- vista ---------- */
 
+/**
+ * Sectores del puerto para la estación elegida (los sin estación, p. ej.
+ * Isabela, Floreana o Baltra, se listan con cualquier estación) y el elegido.
+ */
+function sectorElegido(estado: SimatEstado, isla: string, estacionId: string | null, puerto: string, sector: string | null) {
+  const perfiles = estado.riesgo.filter(
+    (r) => (isla === TODAS_LAS_ISLAS || r.criterio.isla === isla) && (r.criterio.estacion === estacionId || r.criterio.estacion === null) && r.criterio.puerto === puerto,
+  );
+  return { perfiles, result: perfiles.find((r) => r.criterio.sector === sector) ?? perfiles[0] };
+}
+
 export default function VistaRiesgo() {
   const { estado, isla, estacionId, estacion, lluvia, refrescar, notificar } = useSimat();
   const [puerto, setPuerto] = useState("");
@@ -593,9 +622,29 @@ export default function VistaRiesgo() {
   const [modal, setModal] = useState<"criterio" | "agregar" | "observado" | null>(null);
   const [marinos, setMarinos] = useState<SimatNivelMar[]>([]);
   const [mareografo, setMareografo] = useState<EstadoMareografo>(null);
+  // Si el sector se evalúa con su estación de respaldo, la serie y el
+  // pronóstico de la sección son los de esa estación.
+  const idRespaldo = useMemo(() => {
+    if (!estado) return null;
+    const { result } = sectorElegido(estado, isla, estacionId, puerto, sector);
+    return result?.enRespaldo && result.estacionUsada && result.estacionUsada !== estacionId ? result.estacionUsada : null;
+  }, [estado, isla, estacionId, puerto, sector]);
+  const [lluviaRespaldo, setLluviaRespaldo] = useState<SimatSerieLluvia | null>(null);
+  useEffect(() => {
+    if (!idRespaldo || !estado) {
+      setLluviaRespaldo(null);
+      return;
+    }
+    const ctrl = new AbortController();
+    obtenerSerieLluvia(idRespaldo, ctrl.signal).then(
+      (s) => !ctrl.signal.aborted && setLluviaRespaldo(s),
+      () => !ctrl.signal.aborted && setLluviaRespaldo(null),
+    );
+    return () => ctrl.abort();
+  }, [idRespaldo, estado]);
   // Pronóstico de lluvia de la estación: lo usan el explorador, el panel del
   // modelo y, por su periodo, el eje de tiempo del gráfico de mareas.
-  const pronostico = usePronostico(estacion?.id);
+  const pronostico = usePronostico(idRespaldo ?? estacion?.id);
   const islaPrevia = useRef<string | undefined>(undefined);
 
   const islaRiesgo = isla === TODAS_LAS_ISLAS ? estacion?.isla : isla;
@@ -648,15 +697,17 @@ export default function VistaRiesgo() {
     ? { start: Date.parse(horasPronostico[0].inicio), end: Date.parse(horasPronostico[horasPronostico.length - 1].fin) }
     : { start: horaActual, end: horaActual + 24 * 3600e3 };
 
-  const mismaArea = (r: SimatEvaluacion) => isla === TODAS_LAS_ISLAS || r.criterio.isla === isla;
-  // Los sectores sin estación (p. ej. Isabela, Floreana, Baltra) se listan con cualquier estación.
-  const perfiles = estado.riesgo.filter((r) => mismaArea(r) && (r.criterio.estacion === estacionId || r.criterio.estacion === null) && r.criterio.puerto === puerto);
-  const result = perfiles.find((r) => r.criterio.sector === sector) ?? perfiles[0];
+  const { perfiles, result } = sectorElegido(estado, isla, estacionId, puerto, sector);
   const profile = result?.criterio;
+  const estacionLluvia = result?.estacionUsada ? estado.estaciones.find((e) => e.id === result.estacionUsada) : undefined;
+  const estacionRespaldo = idRespaldo ? estado.estaciones.find((e) => e.id === idRespaldo) : undefined;
+  const serieRespaldo = !!estacionRespaldo && lluviaRespaldo?.estacion === idRespaldo;
+  const estacionSerie = serieRespaldo ? estacionRespaldo : estacion;
+  const lluviaSerie = serieRespaldo ? lluviaRespaldo : lluvia;
   const nombrePuerto = puertos.get(puerto) ?? puerto;
   const rwin = profile?.ventanaMin ?? 60;
-  const raw = lluvia?.windows.find((w) => w.minutes === rwin);
-  const latest = lluvia?.latest;
+  const raw = lluviaSerie?.windows.find((w) => w.minutes === rwin);
+  const latest = lluviaSerie?.latest;
   const rain = result?.lluvia ?? { valor: raw?.intensity ?? null, fecha: latest?.time ?? null, fuente: latest?.source ?? null, intervalos: raw?.valid ?? null, esperados: raw?.expected ?? null };
   const marObservado = profile ? result.mar : (observacionPuerto(marinos, puerto) ?? null);
   const limiteMar = profile ? (profile.marM != null ? `${medida(profile.marM)} m · ${profile.datum} (sube un nivel)` : "Sin umbral: no modifica el nivel") : "Por calibrar";
@@ -832,7 +883,7 @@ export default function VistaRiesgo() {
           </span>
         </div>
         <div id="risk-decision">
-          <Decision result={result} consultado={estado.generadoEn} lluvia={rain} ventanaMin={rwin} />
+          <Decision result={result} consultado={estado.generadoEn} lluvia={rain} ventanaMin={rwin} estacionLluvia={estacionLluvia} />
         </div>
       </section>
 
@@ -842,10 +893,11 @@ export default function VistaRiesgo() {
       </div>
 
       <div id="rain-history" className="ancla">
-        {estacion ? (
+        {estacionSerie ? (
             <HistoriaLluvia
-              estacion={estacion}
-              lluvia={lluvia}
+              estacion={estacionSerie}
+              lluvia={lluviaSerie}
+              respaldo={serieRespaldo}
               criterio={profile ?? null}
               marea={extremos.length >= 2 ? { extremos, observados: observadosMarea, percentiles } : null}
               codigoMareografo={codigoMareografo}

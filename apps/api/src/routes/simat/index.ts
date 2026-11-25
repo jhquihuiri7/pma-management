@@ -24,6 +24,7 @@ const criterioSchema = z
   .object({
     id: z.string().uuid().optional(),
     estacion: z.string().min(1).max(60).nullable(),
+    estacionRespaldo: z.string().min(1).max(60).nullable().optional(),
     puerto: z.string().min(1).max(100),
     datum: z.string().min(1).max(80),
     sector: z.string().min(1).max(120),

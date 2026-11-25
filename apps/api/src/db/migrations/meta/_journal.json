@@ -337,6 +337,13 @@
       "when": 1793077600000,
       "tag": "0047_pg2030_planificacion_2027",
       "breakpoints": true
+    },
+    {
+      "idx": 48,
+      "version": "7",
+      "when": 1793177600000,
+      "tag": "0048_simat_estacion_respaldo",
+      "breakpoints": true
     }
   ]
 }
