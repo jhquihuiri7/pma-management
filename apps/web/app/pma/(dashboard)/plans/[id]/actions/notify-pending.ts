@@ -40,6 +40,7 @@ export interface SendPendingNotificationsInput {
   ccEmails: string[];
   subject: string;
   body: string;
+  responsibleByReporter: Record<string, string>;
 }
 
 /**

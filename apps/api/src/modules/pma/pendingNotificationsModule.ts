@@ -1,8 +1,9 @@
-import { eq, inArray } from "drizzle-orm";
+import { and, eq, inArray } from "drizzle-orm";
 import { getDb } from "../../db/client.js";
 import {
   pmaEvidences,
   pmaItemAssignments,
+  pmaPlanAssignments,
   pmaPendingNotificationLog,
   pmaPeriodCompliance,
   pmaPlanItems,
@@ -155,11 +156,12 @@ async function collectPendingOccurrences(plan: PlanRow, calendar: PlanCalendar) 
     return {
       occurrences: [] as PendingOccurrence[],
       reporters: new Map<string, { name: string; email: string }>(),
+      planViewers: [] as Array<{ userId: string; name: string }>,
     };
   }
 
   const itemIds = items.map((item) => item.id);
-  const [assignmentRows, evidenceRows, complianceRows] = await Promise.all([
+  const [assignmentRows, evidenceRows, complianceRows, planViewers] = await Promise.all([
     db
       .select({
         planItemId: pmaItemAssignments.planItemId,
@@ -185,6 +187,15 @@ async function collectPendingOccurrences(plan: PlanRow, calendar: PlanCalendar) 
       })
       .from(pmaPeriodCompliance)
       .where(inArray(pmaPeriodCompliance.planItemId, itemIds)),
+    db
+      .select({ userId: users.id, name: users.name })
+      .from(pmaPlanAssignments)
+      .innerJoin(users, eq(users.id, pmaPlanAssignments.userId))
+      .where(and(
+        eq(pmaPlanAssignments.planId, plan.id),
+        eq(pmaPlanAssignments.explicitAccess, true),
+        eq(users.role, "VIEWER"),
+      )),
   ]);
 
   const reporters = new Map<string, { name: string; email: string }>();
@@ -250,7 +261,7 @@ async function collectPendingOccurrences(plan: PlanRow, calendar: PlanCalendar) 
     }
   }
 
-  return { occurrences, reporters };
+  return { occurrences, reporters, planViewers };
 }
 
 function buildPeriodCounts(
@@ -275,6 +286,7 @@ function groupByReporter(
   occurrences: PendingOccurrence[],
   blockIndex: number,
   reporters: Map<string, { name: string; email: string }>,
+  planViewers: Array<{ userId: string; name: string }>,
 ): PendingReporter[] {
   const byReporter = new Map<string, PendingActivity[]>();
   for (const occurrence of occurrences) {
@@ -302,6 +314,7 @@ function groupByReporter(
       reporterId,
       name: reporter.name,
       email: reporter.email,
+      responsibleOptions: planViewers,
       direccion: direcciones.join(" / "),
       activities,
     });
@@ -333,7 +346,7 @@ export async function getPendingByReporter(
     // emails would chase reporters for months the calendar no longer shows.
     endDate: plan.endDate,
   });
-  const { occurrences, reporters } = await collectPendingOccurrences(plan, calendar);
+  const { occurrences, reporters, planViewers } = await collectPendingOccurrences(plan, calendar);
   const periods = buildPeriodCounts(calendar, occurrences);
 
   const resolvedKey = periodKey ?? periods[periods.length - 1]?.key ?? getPeriodKey(calendar, 0);
@@ -345,7 +358,7 @@ export async function getPendingByReporter(
     planTitle: plan.title,
     periodKey: resolvedKey,
     periods: periods.map(({ key, label, pending }) => ({ key, label, pending })),
-    reporters: groupByReporter(occurrences, period.blockIndex, reporters),
+    reporters: groupByReporter(occurrences, period.blockIndex, reporters, planViewers),
   };
 }
 
@@ -357,6 +370,7 @@ export type SendPendingNotificationsInput = {
   ccEmails: string[];
   subject: string;
   body: string;
+  responsibleByReporter: Record<string, string>;
 };
 
 /**
@@ -415,6 +429,15 @@ export async function sendPendingNotifications(
     throw BadRequest("Alguno de los reporteros seleccionados ya no tiene actividades pendientes en este periodo");
   }
 
+  const selectedResponsible = new Map<string, string>();
+  for (const reporter of targets) {
+    const requestedResponsible = input.responsibleByReporter[reporter.reporterId];
+    const responsible = reporter.responsibleOptions.find((candidate) => candidate.userId === requestedResponsible)
+      ?? (reporter.responsibleOptions.length === 1 ? reporter.responsibleOptions[0] : undefined);
+    if (!responsible) throw BadRequest(`Selecciona el técnico responsable para ${reporter.name}`);
+    selectedResponsible.set(reporter.reporterId, responsible.name);
+  }
+
   const db = getDb();
   const ccEmails = normalizeCcEmails(input.ccEmails);
 
@@ -429,6 +452,7 @@ export async function sendPendingNotifications(
       planTitle: pending.planTitle,
       periodKey: pending.periodKey,
       message: expandRecipientTokens(body, reporter.name),
+      responsibleName: selectedResponsible.get(reporter.reporterId)!,
       activities: reporter.activities,
       link,
     });

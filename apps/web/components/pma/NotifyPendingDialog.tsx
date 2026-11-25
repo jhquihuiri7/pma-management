@@ -91,6 +91,7 @@ export function NotifyPendingDialog({
   /** Reporters the operator turned OFF; everyone pending is selected by default. */
   const [deselected, setDeselected] = useState<Record<string, boolean>>({});
   const [expanded, setExpanded] = useState<Record<string, boolean>>({});
+  const [responsibleByReporter, setResponsibleByReporter] = useState<Record<string, string>>({});
   const [ccEmails, setCcEmails] = useState<string[]>([]);
   /** What is in the input but not yet committed to a chip. */
   const [ccDraft, setCcDraft] = useState("");
@@ -117,6 +118,13 @@ export function NotifyPendingDialog({
         setPeriodKey(data.periodKey);
         setDeselected({});
         setExpanded({});
+        setResponsibleByReporter(
+          Object.fromEntries(
+            data.reporters
+              .filter((reporter) => reporter.responsibleOptions.length === 1)
+              .map((reporter) => [reporter.reporterId, reporter.responsibleOptions[0].userId]),
+          ),
+        );
         setSubject(defaultSubject(data.planTitle, data.periodKey));
         if (!bodySeededRef.current) {
           setBody(defaultBody(data.planTitle));
@@ -227,6 +235,7 @@ export function NotifyPendingDialog({
         ccEmails: cc,
         subject,
         body,
+        responsibleByReporter,
       });
       setResult(sendResult);
       if (sendResult.sent === sendResult.total) {
@@ -412,6 +421,27 @@ export function NotifyPendingDialog({
                             <span className="whitespace-nowrap rounded-full bg-amber-100 px-2.5 py-[3px] text-xs font-semibold text-amber-700">
                               {reporter.activities.length} pendientes
                             </span>
+                            {reporter.responsibleOptions.length > 0 && (
+                              <select
+                                value={responsibleByReporter[reporter.reporterId] ?? ""}
+                                disabled={reporter.responsibleOptions.length === 1 || sending}
+                                onChange={(event) =>
+                                  setResponsibleByReporter((prev) => ({
+                                    ...prev,
+                                    [reporter.reporterId]: event.target.value,
+                                  }))
+                                }
+                                className="max-w-[170px] rounded-lg border border-slate-200 bg-white px-2 py-1.5 text-[11px] text-slate-700 disabled:bg-slate-50 disabled:text-slate-500"
+                                aria-label={`Técnico responsable de seguimiento de ${reporter.name}`}
+                              >
+                                {reporter.responsibleOptions.length > 1 && <option value="">Elegir responsable…</option>}
+                                {reporter.responsibleOptions.map((responsible) => (
+                                  <option key={responsible.userId} value={responsible.userId}>
+                                    {responsible.name}
+                                  </option>
+                                ))}
+                              </select>
+                            )}
                             <button
                               type="button"
                               aria-expanded={isExpanded}

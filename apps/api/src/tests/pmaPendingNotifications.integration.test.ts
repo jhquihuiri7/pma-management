@@ -260,6 +260,7 @@ test(
               ccEmails: [],
               subject: "Pendientes",
               body: "",
+              responsibleByReporter: {},
             },
             admin
           ),
@@ -279,6 +280,7 @@ test(
           ccEmails: ["Auditor@Externo.example", "auditor@externo.example"],
           subject: "Actividades pendientes",
           body: "Por favor cargar las evidencias.",
+          responsibleByReporter: { [ids.reporterA]: ids.reporterA },
         },
         admin
       );
@@ -317,6 +319,7 @@ test(
                 ccEmails: [bad],
                 subject: "Pendientes",
                 body: "",
+                responsibleByReporter: { [ids.reporterA]: ids.reporterA },
               },
               admin
             ),

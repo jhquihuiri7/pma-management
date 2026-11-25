@@ -1,6 +1,7 @@
 "use client";
 
 import dynamic from "next/dynamic";
+import { useAuth } from "@/lib/auth-context";
 
 const GisEditor = dynamic(() => import("@/components/geo/gis/GisEditor"), {
   ssr: false,
@@ -17,6 +18,8 @@ const GisEditor = dynamic(() => import("@/components/geo/gis/GisEditor"), {
  * it stays reachable while the pilot runs (docs/plan-integracion-rustgis.md §9).
  */
 export default function ClassicWorkspacePage() {
+  const { user, status } = useAuth();
+
   return (
     <GisEditor
       mode="workspace"
@@ -26,6 +29,8 @@ export default function ClassicWorkspacePage() {
       initialZoom={9}
       canEdit
       canDelete
+      signedIn={status === "authenticated" && !!user}
+      loginHref="/login?next=%2Fgeo%2Fworkspace%2Fclasico"
     />
   );
 }

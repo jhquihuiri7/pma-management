@@ -133,6 +133,7 @@ type PendingActivitiesArgs = {
   message: string;
   activities: PendingActivityRow[];
   link: string;
+  responsibleName: string;
 };
 
 /**
@@ -200,6 +201,7 @@ export function pendingActivitiesEmail(args: PendingActivitiesArgs): EmailConten
                 <p style="margin:18px 0 6px 0;color:#a7d8b8;font-size:12px;font-weight:700;letter-spacing:.08em;text-transform:uppercase;">Actividades pendientes</p>
                 <h1 style="margin:0;font-size:24px;line-height:1.25;font-weight:800;">${escapeHtml(args.planTitle)}</h1>
                 <p style="margin:10px 0 0 0;font-size:14px;color:#c8e6d3;">Periodo de reporte ${escapeHtml(args.periodKey)}</p>
+                <p style="margin:18px 0 0 0;background:#ffffff;color:#11392d;padding:10px 14px;font-size:13px;font-weight:700;">Técnico responsable de seguimiento: ${escapeHtml(args.responsibleName)}</p>
               </td>
             </tr>
             <tr>
@@ -253,6 +255,7 @@ export function pendingActivitiesEmail(args: PendingActivitiesArgs): EmailConten
   const text = [
     args.message.trim() || `Hola ${safeName},`,
     `Actividades pendientes de ${args.planTitle} — periodo ${args.periodKey}:`,
+    `Técnico responsable de seguimiento: ${args.responsibleName}`,
     textRows,
     `Ver el plan: ${args.link}`,
   ]

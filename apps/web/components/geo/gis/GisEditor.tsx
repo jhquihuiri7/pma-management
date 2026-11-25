@@ -931,6 +931,11 @@ export default function GisEditor({ geoMap, mapId, mapTitle, backHref, initialCe
   };
 
   const downloadAllLayers = async () => {
+    if (!signedIn) {
+      toast.info("Inicia sesión para descargar las capas del mapa.");
+      return;
+    }
+
     if (layers.length === 0 && rasterLayers.length === 0) {
       toast.info("Este mapa no tiene capas para descargar.");
       return;
@@ -1226,15 +1231,17 @@ export default function GisEditor({ geoMap, mapId, mapTitle, backHref, initialCe
             <Download className="h-3.5 w-3.5" />
             Exportar mapa
           </button>
-          <button
-            type="button"
-            onClick={() => void downloadAllLayers()}
-            className="inline-flex h-8 flex-shrink-0 items-center gap-1.5 rounded-lg border border-teal-200 bg-white px-3 text-[13px] font-medium text-teal-700 transition-colors hover:bg-teal-50"
-            title="Descargar todas las capas del mapa en un archivo ZIP"
-          >
-            <FileDown className="h-3.5 w-3.5" />
-            Descargar capas
-          </button>
+          {signedIn && (
+            <button
+              type="button"
+              onClick={() => void downloadAllLayers()}
+              className="inline-flex h-8 flex-shrink-0 items-center gap-1.5 rounded-lg border border-teal-200 bg-white px-3 text-[13px] font-medium text-teal-700 transition-colors hover:bg-teal-50"
+              title="Descargar todas las capas del mapa en un archivo ZIP"
+            >
+              <FileDown className="h-3.5 w-3.5" />
+              Descargar capas
+            </button>
+          )}
           {canMutate && (
             <button className="tb-btn primary" onClick={() => setShowUpload(true)}><Upload size={14} /> Agregar capa</button>
           )}

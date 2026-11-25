@@ -31,6 +31,7 @@ const sendSchema = z
     // The operator writes this; an empty message is allowed — the table and the
     // link are the point of the email.
     body: z.string().max(MAX_BODY_LENGTH).default(""),
+    responsibleByReporter: z.record(z.string().uuid(), z.string().uuid()).default({}),
   })
   .strict();
 

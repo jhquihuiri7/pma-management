@@ -396,6 +396,7 @@ export interface PendingReporter {
   reporterId: string;
   name: string;
   email: string;
+  responsibleOptions: Array<{ userId: string; name: string }>;
   /** Direcciones of the reporter's pending items, joined with " / ". */
   direccion: string;
   activities: PendingActivity[];
