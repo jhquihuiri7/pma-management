@@ -52,6 +52,8 @@ export async function pg2030InformeRoutes(app: FastifyInstance) {
     if (trabajoActivoDe(user.sub)) throw Conflict("Ya estás generando un informe; espera a que termine.");
     const graficos: Partial<Record<ClaveGrafico, Buffer>> = {};
     for (const [clave, dataUrl] of Object.entries(s.graficos)) {
+      // Charts that left the report; a page loaded before that still sends them.
+      if (["alineacion", "avanceFisico", "presupuesto", "inversion"].includes(clave)) continue;
       if (!(CLAVES_GRAFICO as readonly string[]).includes(clave)) throw BadRequest(`Gráfico desconocido: ${clave}`);
       graficos[clave as ClaveGrafico] = png(dataUrl, clave);
     }

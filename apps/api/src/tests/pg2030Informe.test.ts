@@ -3,6 +3,7 @@ import { existsSync, writeFileSync } from "node:fs";
 import test from "node:test";
 import { fileURLToPath } from "node:url";
 import { armarInforme, fijarRutaPlantilla, plantilla } from "../modules/pg2030/informe/documento.js";
+import { ICONOS_EJES } from "../modules/pg2030/informe/iconosEjes.js";
 import { leerHechos, pct, usd } from "../modules/pg2030/informe/hechos.js";
 import { redactarAnalisis, type Redactor } from "../modules/pg2030/informe/informeModule.js";
 import { reemplazar, textoDe } from "../modules/pg2030/informe/ooxml.js";
@@ -118,7 +119,7 @@ test("the report keeps the template and writes the cutoff's figures", conPlantil
   assert.match(textos.interpretaciones.get("avanceFisico")!, /^Si bien este resultado/, "rule-breaking answer → fallback");
   assert.equal(pasos[pasos.length - 1], "Armando el documento");
 
-  const docx = armarInforme(h, CAMPOS, textos, { alineacion: PNG, avanceFisico: PNG, presupuesto: PNG, coherencia: PNG, inversion: PNG });
+  const docx = armarInforme(h, CAMPOS, textos, { coherencia: PNG });
   if (process.env.PG2030_INFORME_SALIDA) writeFileSync(process.env.PG2030_INFORME_SALIDA, docx);
   const archivos = leerZip(docx);
   const doc = archivos.get("word/document.xml")!.toString("utf8");
@@ -136,9 +137,7 @@ test("the report keeps the template and writes the cutoff's figures", conPlantil
     `El avance físico institucional promedio alcanzó un ${pct(0.8)}`,
     `asciende a ${usd(300000)} frente a una planificación de ${usd(500000)}`,
     "Cumplimiento del reporte de avances",
-    "Presupuesto por tipo de inversión",
-    "Gráfico 5: Presupuesto planificado y devengado por tipo de inversión – Primer trimestre 2026",
-    "Tabla 7: Presupuesto por tipo de inversión – Primer trimestre 2026",
+    "Gráfico 1: Avance físico frente a avance presupuestario por institución – Primer trimestre 2026",
     "La institución ALFA remitió la matriz sin la programación mensual de 3 metas, lo que impidió evaluar su cumplimiento.",
     "Matriz consolidada “PG2030_Consolidado metas año 2026 T1”",
     "https://drive.example.org/matriz",
@@ -146,6 +145,9 @@ test("the report keeps the template and writes the cutoff's figures", conPlantil
   ]) {
     assert.ok(texto.includes(esperado), `falta: ${esperado}`);
   }
+  // The alignment table comes before the compliance one, as in the template.
+  assert.ok(texto.includes("Tabla 2: Resumen de metas, contribución y alineación por eje"), "alineación = Tabla 2");
+  assert.ok(texto.includes("Tabla 3: Cumplimiento del reporte de avances por institución"), "cumplimiento = Tabla 3");
   // The legal framework and methodology are the template's text.
   assert.ok(texto.includes("El Código Orgánico Administrativo en el artículo 28"));
   assert.ok(texto.includes("Contribución directa (Alineación total):"));
@@ -156,16 +158,23 @@ test("the report keeps the template and writes the cutoff's figures", conPlantil
   for (const m of inicios) assert.ok(fines.has(m[1]), `marcador sin cierre: ${m[2]}`);
   const nombres = new Set(inicios.map((m) => m[2]));
   const anclas = [...doc.matchAll(/w:anchor="([^"]+)"/g)].map((m) => m[1]);
-  assert.equal(anclas.length, 18, "TOC: title, 10 sections, 2 + 5 subsections");
+  assert.equal(anclas.length, 17, "TOC: title, 10 sections, 2 + 4 subsections");
   for (const a of anclas) assert.ok(nombres.has(a), `el índice apunta a ${a}, que no existe`);
   const rels = archivos.get("word/_rels/document.xml.rels")!.toString("utf8");
-  for (let n = 1; n <= 5; n++) {
+  for (let n = 1; n <= 1; n++) {
     assert.ok(rels.includes(`Id="rIdPG${n}"`));
     assert.ok(archivos.has(`word/media/pg2030_grafico${n}.png`));
   }
+  // Every axis row carries its icon; Gobernanza has no goals here, so no row and no icon.
+  for (const l of ["C", "N", "E", "H"]) {
+    assert.ok(archivos.has(`word/media/pg2030_eje_${l.toLowerCase()}.png`), `falta el ícono del eje ${l}`);
+    assert.ok(doc.includes(`r:embed="rIdEje${l}"`) && rels.includes(`Id="rIdEje${l}"`));
+  }
+  assert.ok(!archivos.has("word/media/pg2030_eje_g.png"));
+  assert.ok(ICONOS_EJES.G, "Gobernanza has its own icon for when it has goals");
   assert.ok(rels.includes('Target="https://drive.example.org/matriz"'));
   assert.match(archivos.get("word/settings.xml")!.toString("utf8"), /<w:updateFields w:val="true"\/><w:hdrShapeDefaults/);
-  assert.equal((doc.match(/<w:tbl>/g) ?? []).length + (doc.match(/<w:tbl [^>]*>/g) ?? []).length, 8, "tabla 1 + 6 tables + signatures");
+  assert.equal((doc.match(/<w:tbl>/g) ?? []).length + (doc.match(/<w:tbl [^>]*>/g) ?? []).length, 7, "tabla 1 + 5 tables + signatures");
 });
 
 test("a cutoff with nothing reported still produces the report", conPlantilla, async () => {

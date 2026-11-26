@@ -17,11 +17,9 @@ import {
   pedidoAvanceFisico,
   pedidoCoherencia,
   pedidoConclusiones,
-  pedidoInversion,
   pedidoObservaciones,
   pedidoPresupuesto,
   textoCoherencia,
-  textoInversion,
   textosAlineacion,
   textosAvanceFisico,
   textosPresupuesto,
@@ -117,8 +115,6 @@ export async function redactarAnalisis(
     const coherencia = textoCoherencia(h);
     if (coherencia) pedidos.push({ pedido: pedidoCoherencia(h, coherencia), maxTokens: base });
   }
-  const inversion = textoInversion(h);
-  if (inversion) pedidos.push({ pedido: pedidoInversion(h, inversion), maxTokens: base });
   const lista = conclusiones(h);
   const pedidoFinal = lista.length ? pedidoConclusiones(h, lista) : null;
 

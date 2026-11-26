@@ -11,13 +11,13 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import type { Pg2030Dashboard, Pg2030InstitucionTipo } from "@/types";
-import { AlineacionChart, AvanceFisicoChart, CoherenciaChart, DineroChart } from "./graficos";
+import { CoherenciaChart } from "./graficos";
 
 const fieldClass = "flex w-full rounded-md border border-input bg-background px-3 py-2 text-sm";
 const TIPOS: Pg2030InstitucionTipo[] = ["Ejecutivo", "GAD", "Otro"];
 const CLAVE_LOCAL = "pg2030.informe.campos";
 
-type ClaveGrafico = "alineacion" | "avanceFisico" | "presupuesto" | "coherencia" | "inversion";
+type ClaveGrafico = "coherencia";
 
 type Campos = {
   numeroInforme: string;
@@ -77,36 +77,15 @@ const esperar = (ms: number) => new Promise((r) => setTimeout(r, ms));
  */
 export function GraficosInforme({ d, nodos }: { d: Pg2030Dashboard; nodos: React.MutableRefObject<Partial<Record<ClaveGrafico, HTMLDivElement | null>>> }) {
   const nada = () => {};
-  const avance = d.instituciones
-    .filter((i) => i.cuenta && i.fisico.valor !== null && i.fisico.semaforo !== null)
-    .sort((a, b) => b.fisico.valor! - a.fisico.valor! || a.institucion.sigla.localeCompare(b.institucion.sigla));
-  const fuentes = d.presupuesto.porFuente.filter((f) => f.dinero.planificado > 0 || f.dinero.devengado > 0);
   const puntos = d.instituciones.filter((i) => i.cuenta && i.coherencia !== "no_aplica" && i.fisico.valor !== null && i.presupuesto.valor !== null);
-  const tipos = d.inversion.filter((t) => t.total.planificado > 0 || t.total.devengado > 0);
   const marco = (clave: ClaveGrafico, hijo: React.ReactNode) => (
     <div ref={(n) => { nodos.current[clave] = n; }} style={{ width: 600, padding: 12, background: "#ffffff" }}>{hijo}</div>
   );
   return (
     <div aria-hidden style={{ position: "fixed", left: -10000, top: 0, width: 600, pointerEvents: "none" }}>
-      {d.alineacion.porEje.some((e) => e.total > 0) && marco("alineacion", (
-        <AlineacionChart estatico leyenda={d.leyenda} categorias={d.alineacion.categorias}
-          filas={d.alineacion.porEje.map((e) => ({ eje: e.eje.codigo, total: e.total, porCategoria: e.porCategoria }))} />
-      ))}
-      {avance.length > 0 && marco("avanceFisico", (
-        <AvanceFisicoChart estatico leyenda={d.leyenda} promedio={d.avanceFisico.valor} onSelect={nada}
-          filas={avance.map((i) => ({ id: i.institucion.id, sigla: i.institucion.sigla, valor: i.fisico.valor!, semaforo: i.fisico.semaforo! }))} />
-      ))}
-      {avance.length > 0 && fuentes.length > 0 && marco("presupuesto", (
-        <DineroChart estatico leyenda={d.leyenda}
-          filas={fuentes.map((f) => ({ nombre: f.fuente, planificado: f.dinero.planificado, computable: f.dinero.computable, avance: f.dinero.avance }))} />
-      ))}
-      {avance.length > 0 && puntos.length > 0 && marco("coherencia", (
+      {puntos.length > 0 && marco("coherencia", (
         <CoherenciaChart leyenda={d.leyenda} onSelect={nada}
           puntos={puntos.map((i) => ({ id: i.institucion.id, sigla: i.institucion.sigla, fisico: i.fisico.valor!, presupuesto: i.presupuesto.valor!, coherencia: i.coherencia }))} />
-      ))}
-      {tipos.length > 0 && marco("inversion", (
-        <DineroChart estatico leyenda={d.leyenda}
-          filas={tipos.map((t) => ({ nombre: t.tipo, planificado: t.total.planificado, computable: t.total.computable, avance: t.total.avance }))} />
       ))}
     </div>
   );

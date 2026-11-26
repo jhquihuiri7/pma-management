@@ -501,31 +501,6 @@ export function pedidoCoherencia(h: Hechos, hallazgo: string): PedidoIa {
 }
 
 // ---------------------------------------------------------------------------
-// 6 e) Budget by investment type (new section)
-
-export function textoInversion(h: Hechos): string | null {
-  const tipos = h.d.inversion.filter((t) => t.total.planificado > 0).sort((a, b) => b.total.planificado - a.total.planificado);
-  if (!tipos.length) return null;
-  const describe = (t: (typeof tipos)[number]) => `«${t.tipo}» (${usd(t.total.planificado)} planificados; ${pct(t.total.avance)} de ejecución)`;
-  return (
-    `Según la clasificación automática del tipo de inversión de cada meta, el presupuesto planificado al corte se distribuye en ${cuantas(tipos.length, "tipo", "tipos")}. ` +
-    `La mayor asignación corresponde a ${describe(tipos[0])}${tipos[1] ? `, seguida de ${describe(tipos[1])}` : ""}.`
-  );
-}
-
-export function pedidoInversion(h: Hechos, hallazgo: string): PedidoIa {
-  return pedidoInterpretacion(
-    h,
-    "inversion",
-    "Tipo de inversión",
-    "el presupuesto de las metas según su tipo de inversión",
-    [hallazgo],
-    valoracionDe(h.d.presupuesto.total.semaforo),
-    "La distribución del presupuesto por tipo de inversión permite identificar en qué rubros se concentra la gestión pública vinculada al Plan Galápagos 2030 y orientar el seguimiento a aquellos con menor ejecución.",
-  );
-}
-
-// ---------------------------------------------------------------------------
 // 7. Conclusions: a sentence with the figures + one sentence of implication.
 
 export interface Conclusion {

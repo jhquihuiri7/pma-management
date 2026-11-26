@@ -31,13 +31,13 @@ import {
   type Trozo,
 } from "./ooxml.js";
 import { fechaLarga, letraEje, pct, usd, type Hechos } from "./hechos.js";
+import { ICONOS_EJES, TAMANO_ICONO_EJE } from "./iconosEjes.js";
 import {
   conclusiones,
   lineasCumplimiento,
   lineasMetas,
   textoCoherencia,
   textoCumplimiento,
-  textoInversion,
   textoProgramacion,
   textosAlineacion,
   textosAvanceFisico,
@@ -60,7 +60,7 @@ import {
  *   docker cp modelo.docx pma-api:/data/storage/PG2030/plantilla-informe.docx
  */
 
-export const CLAVES_GRAFICO = ["alineacion", "avanceFisico", "presupuesto", "coherencia", "inversion"] as const;
+export const CLAVES_GRAFICO = ["coherencia"] as const;
 export type ClaveGrafico = (typeof CLAVES_GRAFICO)[number];
 
 export interface CamposInforme {
@@ -159,10 +159,6 @@ export function plantilla(): Plantilla {
   return lista;
 }
 
-/** Template icons of the axes, by the letter in their name (table 2 of the template). */
-const ICONOS: Record<string, string> = { C: "rId8", N: "rId9", E: "rId10", H: "rId11" };
-const TAMANO_ICONO = { ancho: 456565, alto: 449580 };
-
 const ESTADO_REPORTE: Record<string, { label: string; color: string }> = {
   cumplio: { label: "Cumplió", color: "0CA30C" },
   parcial: { label: "Cumplimiento parcial", color: "FAB219" },
@@ -223,6 +219,14 @@ export function armarInforme(
     const rId = `rIdPG${nGrafico}`;
     imagenes.push({ rId, ruta: `media/pg2030_grafico${nGrafico}.png`, png });
     cuerpo.push(leyenda("Gráfico", nGrafico, `${titulo} – ${p.trimestreTitulo}`), parrafoImagen(imagen(rId, tamanoPng(png), 15)), fuente(p.anio), vacio());
+  };
+  // Each axis icon goes into the package once, however many rows use it.
+  const iconoEje = (l: string | null): string | null => {
+    const png = l ? ICONOS_EJES[l] : undefined;
+    if (!l || !png) return null;
+    const rId = `rIdEje${l}`;
+    if (!imagenes.some((i) => i.rId === rId)) imagenes.push({ rId, ruta: `media/pg2030_eje_${l.toLowerCase()}.png`, png: Buffer.from(png, "base64") });
+    return rId;
   };
   const analisis = (clave: string) => {
     const texto = textos.interpretaciones.get(clave);
@@ -314,33 +318,7 @@ export function armarInforme(
   if (observaciones) cuerpo.push(vacio(), parrafo([observaciones], pPrDe(E(143)), rPrDe(E(143))));
   cuerpo.push(vacio());
 
-  // b) Reporting compliance
-  nuevoSubtitulo("Cumplimiento del reporte de avances");
-  cuerpo.push(vacio(), parrafo(textoCumplimiento(h)), vacio());
-  if (h.obligadas.length) {
-    cuerpo.push(parrafo("A continuación, se presenta el detalle del cumplimiento del reporte por institución:"));
-    const c = d.cumplimiento;
-    nuevaTabla(
-      "Cumplimiento del reporte de avances por institución",
-      tabla(
-        [
-          { titulo: "INSTITUCIÓN", ancho: 1900 },
-          { titulo: "Metas a reportar", ancho: 1450, alinear: "center" },
-          { titulo: "Metas reportadas", ancho: 1450, alinear: "center" },
-          { titulo: "Cumplimiento del reporte", ancho: 1700, alinear: "center" },
-          { titulo: "Estado", ancho: 1994 },
-        ],
-        h.obligadas.map((i) => {
-          const estado = ESTADO_REPORTE[i.estadoReporte];
-          return [i.institucion.sigla, String(i.aReportar), String(i.reportadas), pct(i.cumplimiento), estado ? [{ punto: estado.color }, " ", estado.label] : ""];
-        }),
-        ["Total", String(c.aReportar), String(c.reportadas), pct(c.aReportar ? c.reportadas / c.aReportar : null), ""],
-        { sz: 20 },
-      ),
-    );
-  }
-
-  // c) Alignment
+  // b) Alignment (before compliance: its table keeps the template's Tabla 2)
   subtituloLiteral(reemplazar(E(147), "Primer trimestre 2026", p.trimestreTitulo));
   cuerpo.push(vacio());
   const alineacion = textosAlineacion(h);
@@ -364,8 +342,8 @@ export function armarInforme(
           ...categorias.map((c) => ({ titulo: c, ancho: anchoNum, alinear: "center" as const, vertical: true })),
         ],
         ejes.map((e) => {
-          const letra = letraEje(e.eje.nombre);
-          const icono = letra && ICONOS[letra] ? [{ xml: imagen(ICONOS[letra], TAMANO_ICONO, 1.1) }, { salto: true as const }] : [];
+          const rIdIcono = iconoEje(letraEje(e.eje.nombre));
+          const icono = rIdIcono ? [{ xml: imagen(rIdIcono, TAMANO_ICONO_EJE, 1.1) }, { salto: true as const }] : [];
           return [
             [...icono, e.eje.nombre],
             h.objetivos.get(e.eje.id) ?? "",
@@ -377,7 +355,32 @@ export function armarInforme(
         { sz: 18, altoEncabezado: 2100 },
       ),
     );
-    figura("alineacion", "Metas por eje del Plan Galápagos 2030 según su contribución");
+  }
+
+  // c) Reporting compliance
+  nuevoSubtitulo("Cumplimiento del reporte de avances");
+  cuerpo.push(vacio(), parrafo(textoCumplimiento(h)), vacio());
+  if (h.obligadas.length) {
+    cuerpo.push(parrafo("A continuación, se presenta el detalle del cumplimiento del reporte por institución:"));
+    const c = d.cumplimiento;
+    nuevaTabla(
+      "Cumplimiento del reporte de avances por institución",
+      tabla(
+        [
+          { titulo: "INSTITUCIÓN", ancho: 1900 },
+          { titulo: "Metas a reportar", ancho: 1450, alinear: "center" },
+          { titulo: "Metas reportadas", ancho: 1450, alinear: "center" },
+          { titulo: "Cumplimiento del reporte", ancho: 1700, alinear: "center" },
+          { titulo: "Estado", ancho: 1994 },
+        ],
+        h.obligadas.map((i) => {
+          const estado = ESTADO_REPORTE[i.estadoReporte];
+          return [i.institucion.sigla, String(i.aReportar), String(i.reportadas), pct(i.cumplimiento), estado ? [{ punto: estado.color }, " ", estado.label] : ""];
+        }),
+        ["Total", String(c.aReportar), String(c.reportadas), pct(c.aReportar ? c.reportadas / c.aReportar : null), ""],
+        { sz: 20 },
+      ),
+    );
   }
 
   // d) Physical progress, budget and coherence
@@ -405,7 +408,6 @@ export function armarInforme(
         { sz: 22 },
       ),
     );
-    figura("avanceFisico", "Avance físico acumulado por institución");
 
     const presupuesto = textosPresupuesto(h)!;
     cuerpo.push(parrafo([...semaforo(d.presupuesto.total.semaforo), { t: " Ejecución presupuestaria", b: true }]), vacio());
@@ -440,7 +442,6 @@ export function armarInforme(
         { sz: 22 },
       ),
     );
-    figura("presupuesto", "Presupuesto planificado y devengado por fuente de financiamiento");
 
     cuerpo.push(parrafo([{ t: "Análisis comparativo entre el avance físico y presupuestario por institución", b: true }]), vacio());
     cuerpo.push(parrafo(textoCoherencia(h) ?? ""), vacio());
@@ -474,38 +475,6 @@ export function armarInforme(
       ),
     );
     figura("coherencia", "Avance físico frente a avance presupuestario por institución");
-  }
-
-  // e) Budget by investment type
-  const inversion = textoInversion(h);
-  if (inversion) {
-    nuevoSubtitulo("Presupuesto por tipo de inversión");
-    cuerpo.push(vacio(), parrafo(inversion), vacio());
-    analisis("inversion");
-    const tipos = d.inversion.filter((x) => x.total.planificado > 0 || x.total.devengado > 0).sort((a, b) => b.total.planificado - a.total.planificado);
-    const t = d.presupuesto.total;
-    nuevaTabla(
-      "Presupuesto por tipo de inversión",
-      tabla(
-        [
-          { titulo: "Tipo de inversión", ancho: 2300 },
-          { titulo: "Metas", ancho: 900, alinear: "center" },
-          { titulo: "Presupuesto planificado", ancho: 1800, alinear: "center" },
-          { titulo: "Presupuesto devengado", ancho: 1800, alinear: "center" },
-          { titulo: "Avance presupuestario", ancho: 1694, alinear: "center" },
-        ],
-        tipos.map((x) => [
-          x.tipo,
-          String(x.total.metas),
-          usd(x.total.planificado),
-          usd(x.total.computable),
-          x.total.planificado > 0 ? conPunto(x.total.semaforo, pct(x.total.avance)) : "No aplica",
-        ]),
-        ["TOTAL", String(t.metas), usd(t.planificado), usd(t.computable), t.planificado > 0 ? conPunto(t.semaforo, pct(t.avance)) : "No aplica"],
-        { sz: 20 },
-      ),
-    );
-    figura("inversion", "Presupuesto planificado y devengado por tipo de inversión");
   }
 
   // ---- 7. Conclusiones
