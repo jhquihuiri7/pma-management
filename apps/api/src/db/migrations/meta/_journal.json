@@ -344,6 +344,13 @@
       "when": 1793177600000,
       "tag": "0048_simat_estacion_respaldo",
       "breakpoints": true
+    },
+    {
+      "idx": 49,
+      "version": "7",
+      "when": 1793277600000,
+      "tag": "0049_coe_reporte_module",
+      "breakpoints": true
     }
   ]
 }

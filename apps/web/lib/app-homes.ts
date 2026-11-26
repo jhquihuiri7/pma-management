@@ -19,4 +19,5 @@ export const APP_HOME: Readonly<Record<AppKey, string>> = {
   riesgos: "/riesgos/admin",
   protocolo_limpieza: "/protocolo-limpieza",
   simat: "/simat",
+  coe_reporte: "/coe-reporte/tablero",
 };

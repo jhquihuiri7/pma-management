@@ -1,7 +1,8 @@
 export type UserRole = 'ADMIN' | 'REPORTER' | 'VIEWER';
-export type AppKey = "pma" | "rgdp" | "geo" | "previene" | "pg2030" | "plan_familiar" | "riesgos" | "protocolo_limpieza" | "simat";
+export type AppKey = "pma" | "rgdp" | "geo" | "previene" | "pg2030" | "plan_familiar" | "riesgos" | "protocolo_limpieza" | "simat" | "coe_reporte";
 
 export * from "./simat.js";
+export * from "./coeReporte.js";
 
 export type FamilyPlanPriority = "Alta" | "Media" | "Baja";
 export type FamilyPlanMoment = "Antes" | "Durante" | "Después";

@@ -44,7 +44,15 @@ const PUBLIC_PREFIX_PATHS = ["/geo", "/protocolo-limpieza", "/simat"];
 // Exact public pages. Keep the results subtree protected: using the prefix
 // matcher for /plan-familiar would also expose /plan-familiar/resultados, and
 // for /riesgos it would expose /riesgos/admin. Only the two forms are open.
-const PUBLIC_EXACT_PATHS = ["/plan-familiar", "/riesgos", "/riesgos/recursos", "/riesgos/delegados"];
+const PUBLIC_EXACT_PATHS = [
+  "/plan-familiar",
+  "/riesgos",
+  "/riesgos/recursos",
+  "/riesgos/delegados",
+  // Reporte territorial COE: only the report form; /coe-reporte/tablero stays gated.
+  "/coe-reporte",
+  "/coe-reporte/reporte",
+];
 
 function matchesPrefix(pathname: string, prefixes: string[]) {
   return prefixes.some((p) => pathname === p || pathname.startsWith(`${p}/`));

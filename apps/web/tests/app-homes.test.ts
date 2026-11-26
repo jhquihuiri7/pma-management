@@ -29,7 +29,7 @@ test("every app's home is a page that exists", () => {
 });
 
 test("every app has a home, so no single-app user is sent to a guessed URL", () => {
-  const apps: AppKey[] = ["pma", "rgdp", "geo", "previene", "pg2030", "plan_familiar", "riesgos", "protocolo_limpieza", "simat"];
+  const apps: AppKey[] = ["pma", "rgdp", "geo", "previene", "pg2030", "plan_familiar", "riesgos", "protocolo_limpieza", "simat", "coe_reporte"];
   assert.deepEqual(Object.keys(APP_HOME).sort(), [...apps].sort());
   // The three that never lived at /<app>/dashboard.
   assert.equal(APP_HOME.previene, "/previene");

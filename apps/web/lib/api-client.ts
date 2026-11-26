@@ -73,7 +73,8 @@ function apiUrl(input: string): string {
     input.startsWith("/plan-familiar/") ||
     input.startsWith("/riesgos/") ||
     input.startsWith("/protocolo-limpieza/") ||
-    input.startsWith("/simat/")
+    input.startsWith("/simat/") ||
+    input.startsWith("/coe-reporte/")
   ) {
     return `${BASE_URL}${input}`;
   }

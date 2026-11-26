@@ -15,6 +15,7 @@ import { previeneRoutes } from "./routes/previene/index.js";
 import { pg2030Routes } from "./routes/pg2030/index.js";
 import { planFamiliarRoutes } from "./routes/planFamiliar/index.js";
 import { riesgosRoutes } from "./routes/riesgos/index.js";
+import { coeReporteRoutes } from "./routes/coeReporte/index.js";
 import { protocoloLimpiezaRoutes } from "./routes/protocoloLimpieza/index.js";
 import { simatRoutes } from "./routes/simat/index.js";
 import { closeDb } from "./db/client.js";
@@ -94,6 +95,8 @@ async function start() {
   await app.register(protocoloLimpiezaRoutes, { prefix: "/protocolo-limpieza" });
   // Public read; configuring criteria and registering levels need the module.
   await app.register(simatRoutes, { prefix: "/simat" });
+  // Public report (anonymous history code) and a protected results board.
+  await app.register(coeReporteRoutes, { prefix: "/coe-reporte" });
 
   let shuttingDown = false;
   const shutdown = async (signal: string) => {

@@ -4,7 +4,7 @@ import { useRouter } from "next/navigation";
 import { useEffect } from "react";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
-import { Leaf, Shield, LogOut, Map, Users, Siren, Target, Home, LifeBuoy, CloudRain } from "lucide-react";
+import { Leaf, Shield, LogOut, Map, Users, Siren, Target, Home, LifeBuoy, CloudRain, ClipboardCheck } from "lucide-react";
 import { IconoLluvia } from "@/components/protocolo-limpieza/IconoLluvia";
 import { useAuth } from "@/lib/auth-context";
 import { APP_HOME } from "@/lib/app-homes";
@@ -99,6 +99,16 @@ const SUBSYSTEM_APPS = [
     color: "text-teal-700",
     border: "border-teal-200 hover:border-teal-400",
     bg: "hover:bg-teal-50",
+  },
+  {
+    key: "coe_reporte",
+    label: "Reporte territorial COE",
+    description: "Programación (08h00) y resultados (19h00) de las actividades territoriales del COE Provincial.",
+    href: APP_HOME.coe_reporte,
+    icon: ClipboardCheck,
+    color: "text-cyan-800",
+    border: "border-cyan-200 hover:border-cyan-400",
+    bg: "hover:bg-cyan-50",
   },
 ] as const;
 

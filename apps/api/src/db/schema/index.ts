@@ -9,3 +9,4 @@ export * from "./planFamiliar.js";
 export * from "./riesgos.js";
 export * from "./protocoloLimpieza.js";
 export * from "./simat.js";
+export * from "./coeReporte.js";
