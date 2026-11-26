@@ -2,7 +2,7 @@
 
 **COE Provincial de Galápagos · Programación (corte 08h00) y resultados (corte 19h00) de las actividades territoriales**
 
-> **Estado (2026-11-26):** **implementado y verificado** contra una base desechable (pruebas unitarias y de integración, y recorrido en navegador en escritorio, móvil y con sesión). Sin commit y **sin desplegar**: falta el respaldo y la migración 0049 en la base compartida (§7). Las decisiones de §8 las tomó el usuario el 2026-11-26.
+> **Estado (2026-11-26):** **en producción.** Implementado, verificado contra una base desechable (pruebas unitarias, de integración y recorrido en navegador) y desplegado el 2026-11-26 (commit `0e158a6`, migración 0049 aplicada). Respaldo previo: `~/Documentos/pma_db-backup-20261126-114001-pre-coe-reporte-0049.sql`. Las decisiones de §8 las tomó el usuario el 2026-11-26.
 >
 > **Origen:** `COE_Galapagos_Proyecto.zip` (15 archivos). Es una app de Vercel sin framework: HTML + JS sin dependencias en `public/`, funciones serverless en `api/` y `lib/`, y todos los datos en **Vercel Blob** como archivos JSON (sin base de datos).
 > **Repositorio:** `pma-management`, rama `dev-migration`.
@@ -29,7 +29,7 @@ Crear el módulo **Reporte territorial COE** (`app_key` `coe_reporte`, ruta `/co
 |---|---|---|
 | Código de historial | Al abrir la página se genera un código aleatorio de 43 caracteres (32 bytes en base64url) que se guarda en `localStorage`. Sirve de identidad anónima: la API guarda solo su SHA-256. Desde *Mi historial* se copia o se recupera en otro dispositivo. | `public/app.js` (`memberCode`) |
 | Evento | Se elige uno o se crea con un nombre. El código es `EVT-<año>-<16 hex del SHA-256 del nombre normalizado>`, así que el mismo nombre en el mismo año da el mismo evento. | `lib/reports.js` (`createEvent`) |
-| Programación (08h00) | Evento, fecha, isla (5 + «Otra isla»), sector, institución (42 en 7 grupos + «OTRO»), instancia de coordinación (MTT 1–7, GT 1–3 o acción directa) y descripción. Queda con estado `pending`. | `saveRow` |
+| Programación (08h00) | Evento, fecha, isla (5 + «Otra isla»), sector, institución (39 en 7 grupos + «OTRO»), instancia de coordinación (MTT 1–7, GT 1–3 o acción directa) y descripción. Queda con estado `pending`. | `saveRow` |
 | Resultado (19h00) | Para cada actividad pendiente: ¿se cumplió? Sí → `done`; No → `partial` o `missed` con motivo obligatorio. Descripción del resultado e indicadores numéricos (indicador, cantidad ≥ 0, unidad; hasta 16). Una vez registrado, no se puede cambiar. | `saveResult` |
 | No programada | Actividad que se registra ya con su resultado (`extra`). | `saveRow` con `status: "extra"` |
 | Evidencias | Fotos y videos (hasta 5, 15 MB cada uno) **programados pero desactivados**: `api/reports.js` responde 403 a cualquier carga. | `uploadLinks` |
