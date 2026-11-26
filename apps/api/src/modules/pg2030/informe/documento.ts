@@ -159,12 +159,6 @@ export function plantilla(): Plantilla {
   return lista;
 }
 
-const ESTADO_REPORTE: Record<string, { label: string; color: string }> = {
-  cumplio: { label: "Cumplió", color: "0CA30C" },
-  parcial: { label: "Cumplimiento parcial", color: "FAB219" },
-  no_cumplio: { label: "No cumplió", color: "D03B3B" },
-};
-
 /** Column order of the template's alignment table. */
 const ORDEN_CATEGORIAS = ["Alineación relativa", "Contribución complementaria", "Contribución directa", "Sin alineación", "Pendiente de clasificación"];
 
@@ -360,28 +354,6 @@ export function armarInforme(
   // c) Reporting compliance
   nuevoSubtitulo("Cumplimiento del reporte de avances");
   cuerpo.push(vacio(), parrafo(textoCumplimiento(h)), vacio());
-  if (h.obligadas.length) {
-    cuerpo.push(parrafo("A continuación, se presenta el detalle del cumplimiento del reporte por institución:"));
-    const c = d.cumplimiento;
-    nuevaTabla(
-      "Cumplimiento del reporte de avances por institución",
-      tabla(
-        [
-          { titulo: "INSTITUCIÓN", ancho: 1900 },
-          { titulo: "Metas a reportar", ancho: 1450, alinear: "center" },
-          { titulo: "Metas reportadas", ancho: 1450, alinear: "center" },
-          { titulo: "Cumplimiento del reporte", ancho: 1700, alinear: "center" },
-          { titulo: "Estado", ancho: 1994 },
-        ],
-        h.obligadas.map((i) => {
-          const estado = ESTADO_REPORTE[i.estadoReporte];
-          return [i.institucion.sigla, String(i.aReportar), String(i.reportadas), pct(i.cumplimiento), estado ? [{ punto: estado.color }, " ", estado.label] : ""];
-        }),
-        ["Total", String(c.aReportar), String(c.reportadas), pct(c.aReportar ? c.reportadas / c.aReportar : null), ""],
-        { sz: 20 },
-      ),
-    );
-  }
 
   // d) Physical progress, budget and coherence
   subtituloLiteral(E(160));

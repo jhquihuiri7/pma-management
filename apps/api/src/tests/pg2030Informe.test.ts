@@ -145,9 +145,10 @@ test("the report keeps the template and writes the cutoff's figures", conPlantil
   ]) {
     assert.ok(texto.includes(esperado), `falta: ${esperado}`);
   }
-  // The alignment table comes before the compliance one, as in the template.
+  // Alignment is Tabla 2; the compliance section is text only, so physical progress follows as Tabla 3.
   assert.ok(texto.includes("Tabla 2: Resumen de metas, contribución y alineación por eje"), "alineación = Tabla 2");
-  assert.ok(texto.includes("Tabla 3: Cumplimiento del reporte de avances por institución"), "cumplimiento = Tabla 3");
+  assert.ok(!texto.includes("Cumplimiento del reporte de avances por institución"), "sin tabla de cumplimiento");
+  assert.ok(texto.includes("Tabla 3: Avance físico acumulado por institución"), "avance físico = Tabla 3");
   // The legal framework and methodology are the template's text.
   assert.ok(texto.includes("El Código Orgánico Administrativo en el artículo 28"));
   assert.ok(texto.includes("Contribución directa (Alineación total):"));
@@ -174,7 +175,7 @@ test("the report keeps the template and writes the cutoff's figures", conPlantil
   assert.ok(ICONOS_EJES.G, "Gobernanza has its own icon for when it has goals");
   assert.ok(rels.includes('Target="https://drive.example.org/matriz"'));
   assert.match(archivos.get("word/settings.xml")!.toString("utf8"), /<w:updateFields w:val="true"\/><w:hdrShapeDefaults/);
-  assert.equal((doc.match(/<w:tbl>/g) ?? []).length + (doc.match(/<w:tbl [^>]*>/g) ?? []).length, 7, "tabla 1 + 5 tables + signatures");
+  assert.equal((doc.match(/<w:tbl>/g) ?? []).length + (doc.match(/<w:tbl [^>]*>/g) ?? []).length, 6, "tabla 1 + 4 tables + signatures");
 });
 
 test("a cutoff with nothing reported still produces the report", conPlantilla, async () => {
