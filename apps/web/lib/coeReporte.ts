@@ -105,13 +105,22 @@ export function hoyGalapagos(): string {
 
 export const ORDEN_ESTADOS: CoeEstado[] = ["done", "pending", "partial", "missed", "extra"];
 
-/** Colors of the original board (style.css), one per state. */
+/** One color per state, from the Tailwind palette the other dashboards use. */
 export const COLOR_ESTADO: Record<CoeEstado, string> = {
-  done: "#086b61",
-  pending: "#ab610b",
-  partial: "#225aa1",
-  missed: "#a3334c",
-  extra: "#5c4d87",
+  done: "#059669", // emerald-600
+  pending: "#d97706", // amber-600
+  partial: "#0284c7", // sky-600
+  missed: "#e11d48", // rose-600
+  extra: "#7c3aed", // violet-600
+};
+
+/** Badge classes per state, like the outline badges of PG2030. */
+export const INSIGNIA_ESTADO: Record<CoeEstado, string> = {
+  done: "border-emerald-200 bg-emerald-50 text-emerald-700",
+  pending: "border-amber-200 bg-amber-50 text-amber-700",
+  partial: "border-sky-200 bg-sky-50 text-sky-700",
+  missed: "border-rose-200 bg-rose-50 text-rose-700",
+  extra: "border-violet-200 bg-violet-50 text-violet-700",
 };
 
 export const ETIQUETA_TABLERO: Record<CoeEstado, string> = {

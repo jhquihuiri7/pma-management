@@ -1,7 +1,7 @@
 "use client";
 
 import type { CoeMetrica } from "@/types";
-import { EditorMetricas, control, etiqueta, metricasCompletas } from "./estilos";
+import { EditorMetricas, areaTexto, control, etiqueta, metricasCompletas } from "./estilos";
 
 // The result of an activity (19h00 cut): whether it was done, the reason when
 // it was not, a description and optional numeric results. For a programmed
@@ -92,16 +92,16 @@ export default function CamposResultado({
           {valor.cumplida === "no" && (
             <label className={`${etiqueta} sm:col-span-2`}>
               Motivo
-              <textarea className={`${control} min-h-20`} required maxLength={2500} value={valor.motivo} onChange={(e) => poner("motivo", e.target.value)} />
+              <textarea className={areaTexto} required maxLength={2500} value={valor.motivo} onChange={(e) => poner("motivo", e.target.value)} />
             </label>
           )}
         </div>
       )}
       <label className={etiqueta}>
         Descripción del resultado
-        <textarea className={`${control} min-h-24`} required maxLength={2500} value={valor.resultado} onChange={(e) => poner("resultado", e.target.value)} />
+        <textarea className={areaTexto} required maxLength={2500} value={valor.resultado} onChange={(e) => poner("resultado", e.target.value)} />
       </label>
-      <fieldset className="space-y-3 rounded-lg border border-slate-200 p-4">
+      <fieldset className="space-y-3 rounded-xl border border-slate-100 bg-slate-50/60 p-4">
         <legend className="px-1 text-sm font-semibold text-slate-700">Resultados numéricos (opcional)</legend>
         {metas.map((m, i) => (
           <label key={i} className={etiqueta}>

@@ -14,7 +14,8 @@ import {
 import type { CoeActividad, CoeEvento } from "@/types";
 import FormularioActividad from "./FormularioActividad";
 import TarjetaActividad from "./TarjetaActividad";
-import { boton, botonSecundario, control, etiqueta, tarjeta } from "./estilos";
+import { ClipboardList, History } from "lucide-react";
+import { Contenido, Encabezado, aviso, boton, botonSecundario, control, etiqueta, tarjeta, tituloTarjeta } from "./estilos";
 
 type Pestana = "plan" | "resultados";
 
@@ -70,29 +71,52 @@ export default function ReporteVista() {
 
   const visibles = mias.filter((a) => (!filtroDia || a.dia === filtroDia) && (!filtroEvento || a.evento === filtroEvento));
 
-  if (error) return <p className="text-sm text-destructive">{error}</p>;
-  if (!catalogos || !codigo) return <p className="text-sm text-muted-foreground">Cargando…</p>;
+  const encabezado = (
+    <Encabezado
+      icono={ClipboardList}
+      titulo="Reporte territorial diario"
+      descripcion="Registra a las 08h00 las actividades programadas de tu institución y a las 19h00 sus resultados. No necesitas cuenta."
+    />
+  );
+  if (error || !catalogos || !codigo) {
+    return (
+      <>
+        {encabezado}
+        <Contenido>
+          <div className={`${tarjeta} text-sm ${error ? "text-red-600" : "text-slate-500"}`}>{error ?? "Cargando…"}</div>
+        </Contenido>
+      </>
+    );
+  }
 
   return (
-    <div className="space-y-5">
-      <p role="status" aria-live="polite" className={nota ? "rounded-lg border border-teal-200 bg-teal-50 px-4 py-2 text-sm text-teal-900" : "sr-only"}>
+    <>
+      {encabezado}
+      <Contenido>
+      <div className="flex flex-wrap items-center justify-between gap-3">
+        <nav aria-label="Cortes del reporte" className="flex w-full rounded-xl border border-slate-100 bg-white p-1 shadow-sm sm:inline-flex sm:w-auto">
+          {([["plan", "08h00 · Programación"], ["resultados", "19h00 · Resultados"]] as const).map(([clave, texto]) => (
+            <button
+              key={clave}
+              type="button"
+              aria-pressed={pestana === clave}
+              className={`flex-1 whitespace-nowrap rounded-lg px-3 py-2 text-sm font-medium transition-colors sm:flex-none sm:px-4 ${
+                pestana === clave ? "bg-teal-600 text-white shadow-sm" : "text-slate-600 hover:bg-slate-50 hover:text-slate-900"
+              }`}
+              onClick={() => { setPestana(clave); setNota(""); setExtra(null); }}
+            >
+              {texto}
+            </button>
+          ))}
+        </nav>
+        <button type="button" className={`${botonSecundario} shadow-sm`} onClick={() => setHistorial(true)}>
+          <History className="h-4 w-4" /> Mi historial
+        </button>
+      </div>
+
+      <p role="status" aria-live="polite" className={nota ? aviso : "sr-only"}>
         {nota}
       </p>
-
-      <nav aria-label="Cortes del reporte" className="flex flex-wrap gap-2">
-        {([["plan", "08h00 · Programación"], ["resultados", "19h00 · Resultados"]] as const).map(([clave, texto]) => (
-          <button
-            key={clave}
-            type="button"
-            aria-pressed={pestana === clave}
-            className={pestana === clave ? boton : botonSecundario}
-            onClick={() => { setPestana(clave); setNota(""); setExtra(null); }}
-          >
-            {texto}
-          </button>
-        ))}
-        <button type="button" className={botonSecundario} onClick={() => setHistorial(true)}>Mi historial</button>
-      </nav>
 
       {pestana === "plan" && (
         <FormularioActividad
@@ -118,7 +142,7 @@ export default function ReporteVista() {
       {pestana === "resultados" && (
         <div className="space-y-4">
           <section className={tarjeta}>
-            <h2 className="mb-4 text-lg font-semibold text-[#113349]">Resultados del día</h2>
+            <h2 className={`${tituloTarjeta} mb-4`}>Resultados del día</h2>
             <div className="grid gap-4 sm:grid-cols-2">
               <label className={etiqueta}>
                 Fecha
@@ -176,7 +200,7 @@ export default function ReporteVista() {
                 avisar={setNota}
               />
             ))}
-            {visibles.length === 0 && <p className={`${tarjeta} text-sm text-slate-600`}>No hay actividades para esta selección.</p>}
+            {visibles.length === 0 && <p className={`${tarjeta} py-8 text-center text-sm text-slate-500`}>No hay actividades para esta selección.</p>}
           </div>
         </div>
       )}
@@ -197,7 +221,8 @@ export default function ReporteVista() {
           }}
         />
       )}
-    </div>
+      </Contenido>
+    </>
   );
 }
 
@@ -253,15 +278,15 @@ function DialogoHistorial({
   }
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/50 p-4" onClick={onCerrar}>
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/40 p-4 backdrop-blur-sm" onClick={onCerrar}>
       <div
         role="dialog"
         aria-modal="true"
         aria-labelledby="coe-historial-titulo"
-        className="w-full max-w-lg space-y-4 rounded-xl bg-white p-6 shadow-xl"
+        className="w-full max-w-lg space-y-4 rounded-2xl border border-slate-100 bg-white p-6 shadow-xl"
         onClick={(e) => e.stopPropagation()}
       >
-        <h2 id="coe-historial-titulo" className="text-lg font-semibold text-[#113349]">Mi historial</h2>
+        <h2 id="coe-historial-titulo" className="text-lg font-semibold text-slate-900">Mi historial</h2>
         <p className="text-sm text-slate-600">
           Guarda este código en privado. Te permite recuperar tus actividades si cambias de navegador o dispositivo.
         </p>
@@ -270,7 +295,7 @@ function DialogoHistorial({
           <input id="coe-codigo-actual" className={`${control} font-mono`} readOnly value={codigo} autoComplete="off" />
         </label>
         <button type="button" className={botonSecundario} onClick={copiar}>Copiar código</button>
-        <form onSubmit={recuperar} className="space-y-3 border-t border-slate-200 pt-4">
+        <form onSubmit={recuperar} className="space-y-3 border-t border-slate-100 pt-4">
           <label className={etiqueta}>
             Recuperar historial con un código
             <input

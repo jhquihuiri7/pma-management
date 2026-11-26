@@ -7,7 +7,8 @@ import { claveInstitucion } from "@/lib/coeReporte";
 // one row per institution within each event, curves weighted by the number of
 // activities, and the exact quantities in a table below.
 
-const COLORES = ["#08766a", "#3f65a2", "#a45c14", "#7a4d91", "#8b455f", "#206e8a"];
+// teal-600, sky-600, amber-600, violet-600, rose-600, emerald-600
+const COLORES = ["#0d9488", "#0284c7", "#d97706", "#7c3aed", "#e11d48", "#059669"];
 const numero = new Intl.NumberFormat("es-EC");
 
 interface Institucion {
@@ -33,7 +34,7 @@ export default function DiagramaConexiones({
   eventos: Map<string, string>;
   onElegirEvento: (id: string) => void;
 }) {
-  if (!filas.length) return <p className="text-sm text-slate-500">Sin conexiones para estos filtros.</p>;
+  if (!filas.length) return <p className="py-6 text-center text-sm text-slate-500">Sin conexiones para estos filtros.</p>;
 
   const porEvento = new Map<string, Evento>();
   const porIsla = new Map<string, number>();
@@ -97,13 +98,13 @@ export default function DiagramaConexiones({
     );
   };
   const etiqueta = (nombre: string, cuenta: number, x: number, y: number, max: number) => (
-    <text x={x} y={y} dominantBaseline="middle" fill="#17354b" fontWeight={650} fontSize={14}>
+    <text x={x} y={y} dominantBaseline="middle" fill="#0f172a" fontWeight={650} fontSize={14}>
       {recortar(nombre, max)}
       <title>{`${nombre} · ${numero.format(cuenta)}`}</title>
     </text>
   );
   const cifra = (cuenta: number, x: number, y: number) => (
-    <text x={x} y={y} textAnchor="end" dominantBaseline="middle" fill="#405c70" fontWeight={700} fontSize={14}>
+    <text x={x} y={y} textAnchor="end" dominantBaseline="middle" fill="#475569" fontWeight={700} fontSize={14}>
       {numero.format(cuenta)}
     </text>
   );
@@ -118,7 +119,7 @@ export default function DiagramaConexiones({
           aria-label="Conexiones entre eventos, instituciones e islas. Las cantidades exactas están en la tabla debajo del diagrama."
         >
           {([[17, "EVENTO"], [436, "INSTITUCIÓN"], [1007, "ISLA"]] as const).map(([x, t]) => (
-            <text key={t} x={x} y={23} fill="#456578" fontSize={11} fontWeight={750} letterSpacing="0.08em">{t}</text>
+            <text key={t} x={x} y={23} fill="#64748b" fontSize={11} fontWeight={750} letterSpacing="0.08em">{t}</text>
           ))}
           {medio.map((item, i) =>
             curva(254, centro(item.evento.id), 419, item.y, item.cuenta, item.color, `${item.evento.nombre} → ${item.nombre}`, `a${i}`))}
@@ -144,7 +145,7 @@ export default function DiagramaConexiones({
           ))}
           {Array.from(islas.values()).map(({ nombre, cuenta, y }) => (
             <g key={nombre}>
-              <circle cx={990} cy={y} r={5} fill="#21566c" />
+              <circle cx={990} cy={y} r={5} fill="#475569" />
               {etiqueta(nombre, cuenta, 1007, y, 24)}
               {cifra(cuenta, 1223, y)}
             </g>
@@ -165,7 +166,7 @@ export default function DiagramaConexiones({
             </thead>
             <tbody>
               {aristas.map(({ item, destino, cuenta }, i) => (
-                <tr key={i} className="border-t border-slate-100">
+                <tr key={i} className="border-t border-slate-100 hover:bg-slate-50">
                   <td className="py-2 pr-3">
                     <button type="button" className="text-left font-medium text-teal-700 hover:underline" onClick={() => onElegirEvento(item.evento.id)}>
                       {item.evento.nombre}

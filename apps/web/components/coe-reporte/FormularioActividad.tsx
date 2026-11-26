@@ -5,7 +5,7 @@ import { apiErrorMessage } from "@/lib/api-client";
 import { coeApi, nuevoId } from "@/lib/coeReporte";
 import type { CoeActividad, CoeCatalogos, CoeEvento, CoeInstancia, CoeMetrica } from "@/types";
 import CamposResultado, { leerResultado, resultadoVacio } from "./CamposResultado";
-import { EditorMetricas, boton, botonSecundario, control, etiqueta, metricasCompletas, tarjeta } from "./estilos";
+import { EditorMetricas, areaTexto, boton, botonSecundario, control, etiqueta, metricasCompletas, tarjeta, tituloTarjeta } from "./estilos";
 
 const OTRA = "__otra__";
 
@@ -124,7 +124,7 @@ export default function FormularioActividad({
   return (
     <section className={tarjeta}>
       <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
-        <h2 className="text-lg font-semibold text-[#113349]">
+        <h2 className={tituloTarjeta}>
           {extra ? "Registrar actividad no programada" : "Registrar actividad programada"}
         </h2>
         {!creandoEvento && (
@@ -135,7 +135,7 @@ export default function FormularioActividad({
       </div>
 
       {creandoEvento && (
-        <form onSubmit={crearEvento} className="mb-5 space-y-3 rounded-lg border border-teal-200 bg-teal-50/50 p-4">
+        <form onSubmit={crearEvento} className="mb-5 space-y-3 rounded-xl border border-teal-100 bg-teal-50/60 p-4">
           <label className={etiqueta}>
             Nombre del nuevo evento
             <input className={control} required maxLength={150} value={tituloEvento} onChange={(e) => setTituloEvento(e.target.value)} autoFocus />
@@ -228,10 +228,10 @@ export default function FormularioActividad({
         </div>
         <label className={etiqueta}>
           Descripción de la actividad
-          <textarea className={`${control} min-h-24`} required maxLength={2500} value={descripcion} onChange={(e) => setDescripcion(e.target.value)} />
+          <textarea className={areaTexto} required maxLength={2500} value={descripcion} onChange={(e) => setDescripcion(e.target.value)} />
         </label>
         {!extra && (
-          <fieldset className="space-y-3 rounded-lg border border-slate-200 p-4">
+          <fieldset className="space-y-3 rounded-xl border border-slate-100 bg-slate-50/60 p-4">
             <legend className="px-1 text-sm font-semibold text-slate-700">Metas (opcional)</legend>
             <p className="text-xs text-muted-foreground">Al registrar el resultado se pedirá la cantidad alcanzada de cada meta.</p>
             <EditorMetricas valor={metas} onChange={setMetas} textoAgregar="Agregar meta" />

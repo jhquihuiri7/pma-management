@@ -2,7 +2,7 @@
 
 import { useState } from "react";
 import { apiErrorMessage } from "@/lib/api-client";
-import { COLOR_ESTADO, coeApi, formatoMetricas, nombreEquipo, nuevoId } from "@/lib/coeReporte";
+import { COLOR_ESTADO, INSIGNIA_ESTADO, coeApi, formatoMetricas, nombreEquipo, nuevoId } from "@/lib/coeReporte";
 import type { CoeActividad, CoeCatalogos } from "@/types";
 import CamposResultado, { leerResultado, resultadoVacio } from "./CamposResultado";
 import { boton, botonSecundario } from "./estilos";
@@ -10,12 +10,8 @@ import { boton, botonSecundario } from "./estilos";
 const fechaCorta = new Intl.DateTimeFormat("es-EC", { day: "numeric", month: "short", year: "numeric", timeZone: "UTC" });
 
 export function Insignia({ actividad, catalogos }: { actividad: CoeActividad; catalogos: CoeCatalogos | null }) {
-  const color = COLOR_ESTADO[actividad.estado];
   return (
-    <span
-      className="inline-flex shrink-0 items-center rounded-full px-2.5 py-0.5 text-xs font-semibold"
-      style={{ color, backgroundColor: `${color}14`, border: `1px solid ${color}40` }}
-    >
+    <span className={`inline-flex shrink-0 items-center rounded-full border px-2.5 py-0.5 text-xs font-medium ${INSIGNIA_ESTADO[actividad.estado]}`}>
       {catalogos?.estados[actividad.estado] ?? actividad.estado}
     </span>
   );
@@ -74,33 +70,33 @@ export default function TarjetaActividad({
   }
 
   return (
-    <article className="rounded-xl border border-[#dbe6ed] bg-white p-4 shadow-sm" style={{ borderLeft: `4px solid ${COLOR_ESTADO[r.estado]}` }}>
+    <article className="rounded-2xl border border-slate-100 bg-white p-5 shadow-sm" style={{ borderLeft: `4px solid ${COLOR_ESTADO[r.estado]}` }}>
       <div className="flex flex-wrap items-start justify-between gap-2">
         {tablero ? (
           <div className="min-w-0">
-            <h4 className="font-semibold text-[#113349]">{titulo}</h4>
-            <p className="text-sm text-slate-600">{r.institucion}</p>
+            <h4 className="font-semibold text-slate-900">{titulo}</h4>
+            <p className="text-sm text-slate-500">{r.institucion}</p>
           </div>
         ) : (
-          <span className="font-mono text-xs font-semibold text-slate-600">{r.evento}</span>
+          <span className="font-mono text-xs font-medium text-teal-700">{r.evento}</span>
         )}
         <Insignia actividad={r} catalogos={catalogos} />
       </div>
-      <p className="mt-1 text-sm text-slate-600">
+      <p className="mt-1 text-sm text-slate-500">
         {(tablero
           ? [r.isla, r.sector, Number.isNaN(fecha) ? r.dia : fechaCorta.format(fecha), r.equipo]
           : [r.sector, r.isla, r.equipo, r.dia]
         ).filter(Boolean).join(" · ")}
       </p>
 
-      <button type="button" className="mt-2 text-sm font-medium text-teal-700 hover:underline" aria-expanded={abierto} onClick={() => setAbierto(!abierto)}>
+      <button type="button" className="mt-2 text-sm font-medium text-teal-700 underline-offset-4 hover:underline" aria-expanded={abierto} onClick={() => setAbierto(!abierto)}>
         {abierto ? "Ocultar detalles" : "Ver detalles"}
       </button>
       {abierto && (
-        <div className="mt-2 space-y-1.5 text-sm text-slate-800">
+        <div className="mt-3 space-y-1.5 rounded-xl bg-slate-50 p-4 text-sm text-slate-700">
           {tablero ? <p className="font-mono text-xs text-slate-500">{r.evento}</p> : (
             <>
-              <h3 className="font-semibold text-[#113349]">{titulo}</h3>
+              <h3 className="font-semibold text-slate-900">{titulo}</h3>
               <p className="text-slate-600">{r.institucion}</p>
             </>
           )}
@@ -123,7 +119,7 @@ export default function TarjetaActividad({
         </button>
       )}
       {editando && (
-        <form onSubmit={guardar} className="mt-4 space-y-4 border-t border-slate-200 pt-4">
+        <form onSubmit={guardar} className="mt-4 space-y-4 border-t border-slate-100 pt-4">
           <CamposResultado valor={resultado} onChange={setResultado} metas={r.metas} esExtra={false} />
           <div className="flex flex-wrap gap-2">
             <button className={boton} disabled={guardando}>Guardar resultado</button>

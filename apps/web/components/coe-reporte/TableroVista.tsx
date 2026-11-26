@@ -17,7 +17,8 @@ import {
 import type { CoeActividad, CoeCatalogos, CoeDirectorio, CoeEstado, CoeEvento } from "@/types";
 import DiagramaConexiones from "./DiagramaConexiones";
 import TarjetaActividad from "./TarjetaActividad";
-import { boton, botonSecundario, control, etiqueta, tarjeta } from "./estilos";
+import { CheckCircle2, ClipboardList, Clock, Download, LayoutDashboard, RefreshCw, TrendingUp } from "lucide-react";
+import { Contenido, Encabezado, aviso, boton, botonSecundario, control, etiqueta, tarjeta, tituloTarjeta } from "./estilos";
 
 const numero = new Intl.NumberFormat("es-EC");
 const porcentaje = new Intl.NumberFormat("es-EC", { style: "percent", maximumFractionDigits: 1 });
@@ -65,22 +66,33 @@ export default function TableroVista() {
 
   const nombresEventos = useMemo(() => new Map(eventos.map((e) => [e.id, e.titulo])), [eventos]);
 
-  if (status === "loading") return <Skeleton className="h-96 w-full" />;
+  const marco = (contenido: React.ReactNode) => (
+    <>
+      <Encabezado
+        icono={LayoutDashboard}
+        titulo="Tablero de actividad territorial"
+        descripcion={<>Programación y resultados reportados al COE Provincial.{user?.name ? ` Bienvenido, ${user.name}.` : ""}</>}
+      />
+      <Contenido>{contenido}</Contenido>
+    </>
+  );
+
+  if (status === "loading") return marco(<Skeleton className="h-96 w-full rounded-2xl" />);
   if (!user) {
-    return (
-      <p className="text-sm text-muted-foreground">
+    return marco(
+      <p className={`${tarjeta} text-sm text-slate-600`}>
         Inicie sesión para ver el tablero.{" "}
         <a href="/login?next=/coe-reporte/tablero" className="font-medium text-teal-700 underline-offset-4 hover:underline">Ingresar</a>
-      </p>
+      </p>,
     );
   }
-  if (errorCatalogos) return <p className="text-sm text-destructive">{errorCatalogos}</p>;
+  if (errorCatalogos) return marco(<p className={`${tarjeta} text-sm text-red-600`}>{errorCatalogos}</p>);
   if (!filas || !catalogos) {
-    return (
+    return marco(
       <div className="space-y-3">
-        {nota && <p className="text-sm text-destructive">{nota}</p>}
-        <Skeleton className="h-96 w-full" />
-      </div>
+        {nota && <p className={`${tarjeta} text-sm text-red-600`}>{nota}</p>}
+        <Skeleton className="h-96 w-full rounded-2xl" />
+      </div>,
     );
   }
 
@@ -99,19 +111,23 @@ export default function TableroVista() {
   const filtrado = Object.values(filtros).some(Boolean);
   const poner = (campo: keyof Filtros, valor: string) => setFiltros((f) => ({ ...f, [campo]: valor }));
 
-  return (
-    <div className="space-y-6">
-      {nota && <p role="status" className="rounded-lg border border-teal-200 bg-teal-50 px-4 py-2 text-sm text-teal-900">{nota}</p>}
+  return marco(
+    <>
+      {nota && <p role="status" className={aviso}>{nota}</p>}
 
       <section className={`${tarjeta} space-y-4`} aria-labelledby="coe-territorio">
         <div className="flex flex-wrap items-start justify-between gap-3">
           <div>
-            <h2 id="coe-territorio" className="text-lg font-semibold text-[#113349]">Actividad territorial</h2>
-            <p className="text-sm text-slate-600">Programación y resultados de los reportes del COE.</p>
+            <h2 id="coe-territorio" className={tituloTarjeta}>Filtros</h2>
+            <p className="text-sm text-slate-500">Se actualiza cada 30 segundos.</p>
           </div>
           <div className="flex flex-wrap gap-2">
-            <button type="button" className={botonSecundario} onClick={() => descargarCsv(visibles, nombresEventos, catalogos)}>Descargar CSV</button>
-            <button type="button" className={botonSecundario} onClick={() => void cargar()}>Actualizar</button>
+            <button type="button" className={botonSecundario} onClick={() => descargarCsv(visibles, nombresEventos, catalogos)}>
+              <Download className="h-4 w-4" /> Descargar CSV
+            </button>
+            <button type="button" className={botonSecundario} onClick={() => void cargar()}>
+              <RefreshCw className="h-4 w-4" /> Actualizar
+            </button>
           </div>
         </div>
         <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-5">
@@ -160,8 +176,8 @@ export default function TableroVista() {
       <Resumen filas={visibles} />
 
       <section className={`${tarjeta} space-y-3`} aria-labelledby="coe-conexiones">
-        <h3 id="coe-conexiones" className="font-semibold text-[#113349]">Conexiones por evento, institución e isla</h3>
-        <p className="text-sm text-slate-600">
+        <h3 id="coe-conexiones" className={tituloTarjeta}>Conexiones por evento, institución e isla</h3>
+        <p className="text-sm text-slate-500">
           Cada línea agrupa actividades registradas. Selecciona un evento en la tabla para ver sus actividades en el tablero.
         </p>
         <DiagramaConexiones filas={visibles} eventos={nombresEventos} onElegirEvento={(id) => poner("evento", id)} />
@@ -169,8 +185,8 @@ export default function TableroVista() {
 
       <section aria-labelledby="coe-detalle" className="space-y-3">
         <div className="flex items-center justify-between">
-          <h3 id="coe-detalle" className="font-semibold text-[#113349]">Detalle de actividades</h3>
-          <span role="status" className="text-sm text-slate-600">
+          <h3 id="coe-detalle" className="text-lg font-semibold text-slate-900">Detalle de actividades</h3>
+          <span role="status" className="text-sm text-slate-500">
             {numero.format(visibles.length)} {visibles.length === 1 ? "actividad" : "actividades"}
           </span>
         </div>
@@ -179,11 +195,11 @@ export default function TableroVista() {
             <TarjetaActividad key={f.id} actividad={f} catalogos={catalogos} eventos={nombresEventos} tablero />
           ))}
         </div>
-        {visibles.length === 0 && <p className={`${tarjeta} text-sm text-slate-600`}>No hay actividades para esta selección.</p>}
+        {visibles.length === 0 && <p className={`${tarjeta} py-8 text-center text-sm text-slate-500`}>No hay actividades para esta selección.</p>}
       </section>
 
       <Directorio catalogos={catalogos} puedeEditar={user.role === "ADMIN" || user.role === "REPORTER"} />
-    </div>
+    </>,
   );
 }
 
@@ -206,27 +222,33 @@ function Resumen({ filas }: { filas: CoeActividad[] }) {
   const islas = Array.from(porIsla).sort(([a, n], [b, m]) => m - n || a.localeCompare(b, "es"));
 
   const indicadores = [
-    { titulo: "Actividades", valor: numero.format(total), pie: "En la selección", color: "#113349" },
-    { titulo: "Cumplidas", valor: numero.format(cuenta.done), pie: `${numero.format(programadas)} ${programadas === 1 ? "programada" : "programadas"}`, color: COLOR_ESTADO.done },
-    { titulo: "Pendientes de reporte", valor: numero.format(cuenta.pending), pie: "Por completar", color: COLOR_ESTADO.pending },
-    { titulo: "Cumplimiento", valor: programadas ? porcentaje.format(cuenta.done / programadas) : "—", pie: "Sobre las programadas", color: COLOR_ESTADO.partial },
+    { titulo: "Actividades", valor: numero.format(total), pie: "En la selección", icono: ClipboardList, fondo: "from-teal-400 to-teal-600" },
+    { titulo: "Cumplidas", valor: numero.format(cuenta.done), pie: `De ${numero.format(programadas)} ${programadas === 1 ? "programada" : "programadas"}`, icono: CheckCircle2, fondo: "from-emerald-400 to-emerald-600" },
+    { titulo: "Pendientes de reporte", valor: numero.format(cuenta.pending), pie: "Por completar", icono: Clock, fondo: "from-amber-400 to-amber-600" },
+    { titulo: "Cumplimiento", valor: programadas ? porcentaje.format(cuenta.done / programadas) : "—", pie: "Sobre las programadas", icono: TrendingUp, fondo: "from-sky-400 to-sky-600" },
   ];
 
   return (
     <>
-      <section className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4" aria-label="Resumen de actividades">
-        {indicadores.map((k) => (
-          <div key={k.titulo} className={tarjeta} style={{ borderTop: `4px solid ${k.color}` }}>
-            <p className="text-sm font-medium text-slate-600">{k.titulo}</p>
-            <p className="mt-1 text-3xl font-bold" style={{ color: k.color }}>{k.valor}</p>
-            <p className="text-xs text-slate-500">{k.pie}</p>
-          </div>
-        ))}
+      <section className="grid grid-cols-1 gap-6 sm:grid-cols-2 xl:grid-cols-4" aria-label="Resumen de actividades">
+        {indicadores.map((k) => {
+          const Icono = k.icono;
+          return (
+            <div key={k.titulo} className="rounded-2xl border border-slate-100 bg-white p-5 shadow-xl">
+              <div className="flex items-center justify-between pb-3">
+                <p className="text-sm font-semibold uppercase tracking-wider text-slate-500">{k.titulo}</p>
+                <Icono className={`h-12 w-12 shrink-0 rounded-xl bg-gradient-to-br ${k.fondo} p-3 text-white shadow-sm`} />
+              </div>
+              <p className="text-3xl font-bold text-slate-900">{k.valor}</p>
+              <p className="mt-1 text-xs text-slate-500">{k.pie}</p>
+            </div>
+          );
+        })}
       </section>
 
       <div className="grid gap-4 lg:grid-cols-2">
         <section className={tarjeta} aria-labelledby="coe-estados">
-          <h3 id="coe-estados" className="mb-4 font-semibold text-[#113349]">Estado de las actividades</h3>
+          <h3 id="coe-estados" className={`${tituloTarjeta} mb-4`}>Estado de las actividades</h3>
           <div className="flex flex-wrap items-center gap-6">
             <div
               aria-hidden="true"
@@ -235,7 +257,7 @@ function Resumen({ filas }: { filas: CoeActividad[] }) {
             >
               <div className="grid size-28 place-items-center rounded-full bg-white text-center">
                 <div>
-                  <strong className="block text-2xl text-[#113349]">{numero.format(total)}</strong>
+                  <strong className="block text-2xl text-slate-900">{numero.format(total)}</strong>
                   <span className="text-xs text-slate-500">Actividades</span>
                 </div>
               </div>
@@ -252,7 +274,7 @@ function Resumen({ filas }: { filas: CoeActividad[] }) {
           </div>
         </section>
         <section className={tarjeta} aria-labelledby="coe-islas">
-          <h3 id="coe-islas" className="mb-4 font-semibold text-[#113349]">Actividades por isla</h3>
+          <h3 id="coe-islas" className={`${tituloTarjeta} mb-4`}>Actividades por isla</h3>
           {islas.length === 0 ? (
             <p className="text-sm text-slate-500">Sin actividades para estos filtros.</p>
           ) : (
@@ -264,7 +286,7 @@ function Resumen({ filas }: { filas: CoeActividad[] }) {
                     <strong className="text-slate-900">{numero.format(n)}</strong>
                   </div>
                   <div aria-hidden="true" className="mt-1 h-2.5 rounded-full bg-slate-100">
-                    <div className="h-2.5 rounded-full bg-[#21566c]" style={{ width: `${(n / islas[0][1]) * 100}%` }} />
+                    <div className="h-2.5 rounded-full bg-gradient-to-r from-teal-500 to-emerald-500" style={{ width: `${(n / islas[0][1]) * 100}%` }} />
                   </div>
                 </li>
               ))}
@@ -307,8 +329,8 @@ function Directorio({ catalogos, puedeEditar }: { catalogos: CoeCatalogos; puede
   return (
     <div className="grid gap-4 lg:grid-cols-2">
       <section className={`${tarjeta} space-y-4`} aria-labelledby="coe-destinatarios">
-        <h2 id="coe-destinatarios" className="text-lg font-semibold text-[#113349]">Destinatarios de reportes automáticos</h2>
-        <p className="text-sm text-slate-600">
+        <h2 id="coe-destinatarios" className={tituloTarjeta}>Destinatarios de reportes automáticos</h2>
+        <p className="text-sm text-slate-500">
           {datos.correoConfigurado
             ? "Se enviará un correo por cada programación o resultado guardado."
             : "El servidor de correo no está configurado: los avisos quedan en espera."}
@@ -349,8 +371,8 @@ function Directorio({ catalogos, puedeEditar }: { catalogos: CoeCatalogos; puede
       </section>
 
       <section className={`${tarjeta} space-y-4`} aria-labelledby="coe-delegados">
-        <h2 id="coe-delegados" className="text-lg font-semibold text-[#113349]">Directorio de delegados</h2>
-        <p className="text-sm text-slate-600">
+        <h2 id="coe-delegados" className={tituloTarjeta}>Directorio de delegados</h2>
+        <p className="text-sm text-slate-500">
           Delegados de las instituciones. Registrarlos aquí no les da acceso al tablero: los accesos se gestionan en la administración del SIGTAR.
         </p>
         {puedeEditar && (
