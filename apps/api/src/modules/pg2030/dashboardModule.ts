@@ -151,8 +151,8 @@ export async function getDashboard(
   const trimestre = filtros.trimestre ?? porDefecto;
   const habilitado = corteHabilitado(cfg, trimestre);
   const cerrado = corteCerrado(cfg, trimestre, now);
-  const hasta = !habilitado ? 0 : cerrado ? 3 * trimestre : Math.min(3 * trimestre, terminado);
-  const exigidos = mesesDeTrimestre(trimestre).filter((m) => m <= hasta);
+  let hasta = !habilitado ? 0 : cerrado ? 3 * trimestre : Math.min(3 * trimestre, terminado);
+  let exigidos = mesesDeTrimestre(trimestre).filter((m) => m <= hasta);
 
   // Institutions in scope: the reporter's own, or the filters'.
   let institucionId = filtros.institucionId;
@@ -201,6 +201,29 @@ export async function getDashboard(
     metaIds.length === 0 ? [] : db.select().from(pg2030MetaMeses).where(inArray(pg2030MetaMeses.metaId, metaIds)),
     solicitudesDe(db, metaIds),
   ]);
+
+  // During the initial load, a future year's execution may already have been
+  // entered (for example, 2027 data loaded before 2027 starts). The planning
+  // screen shows that data, so the dashboard must be able to preview it too.
+  // Use the latest reported month as the visible horizon, capped by the
+  // selected quarter. This does not change ordinary calendar-year behavior.
+  const anticipado = anio > now.getUTCFullYear();
+  if (anticipado && habilitado && !cerrado) {
+    const ultimoReportado = mesesRows.reduce(
+      (max, m) => (m.reportadoAt !== null && m.mes > max ? m.mes : max),
+      0,
+    );
+    if (ultimoReportado > 0) {
+      hasta = Math.min(3 * trimestre, ultimoReportado);
+      exigidos = mesesDeTrimestre(trimestre).filter((m) => m <= hasta);
+    }
+  }
+  // Keep the cutoff metadata consistent with the preview horizon above. The
+  // UI uses `corte.hasta` to enable the report action, and the report route
+  // validates the same value before creating the Word job.
+  if (result.corte && result.corte.hasta !== hasta) {
+    result.corte = { ...result.corte, hasta };
+  }
   const mesesPorMeta = new Map<string, typeof mesesRows>();
   for (const m of mesesRows) mesesPorMeta.set(m.metaId, [...(mesesPorMeta.get(m.metaId) ?? []), m]);
 
@@ -242,7 +265,8 @@ export async function getDashboard(
       reportado: m.reportadoAt !== null,
     }));
     const calc = metaAlCorte(meses, hasta, exigidos);
-    const cuenta = calc.aReportar && calc.reportada;
+    const tieneReporte = meses.some((m) => m.reportado);
+    const cuenta = calc.aReportar && (calc.reportada || (anticipado && tieneReporte));
     return {
       row,
       calc,
