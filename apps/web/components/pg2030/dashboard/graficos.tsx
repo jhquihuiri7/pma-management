@@ -164,6 +164,60 @@ export function DineroChart({
   );
 }
 
+/** Closest two dots may sit, in percentage points (≈ the width of an acronym at the chart's size). */
+const SEPARACION = 6;
+
+type Lado = "arriba" | "derecha" | "izquierda";
+
+/**
+ * Jitter that never stacks: dots closer than SEPARACION push each other apart
+ * just enough, inside 0–100, so every acronym can be read. Identical points
+ * split along the diagonal, keeping a coherent pair on the line. Deterministic,
+ * so the panel and the Word show the same picture. Each label goes on the side
+ * away from its nearest neighbour.
+ */
+export function separarPuntos(puntos: Array<{ x: number; y: number }>): Array<{ x: number; y: number; lado: Lado; movido: boolean }> {
+  const pos = puntos.map((p) => ({ x: p.x, y: p.y }));
+  const dentro = (v: number) => Math.min(100, Math.max(0, v));
+  for (let vuelta = 0; vuelta < 200; vuelta++) {
+    let tocan = false;
+    for (let i = 0; i < pos.length; i++) {
+      for (let j = i + 1; j < pos.length; j++) {
+        let dx = pos[j].x - pos[i].x;
+        let dy = pos[j].y - pos[i].y;
+        let d = Math.hypot(dx, dy);
+        if (d >= SEPARACION - 1e-6) continue;
+        tocan = true;
+        if (d < 1e-6) {
+          // Same spot: the later one goes down the diagonal (up it at the origin).
+          const s = pos[i].x + pos[i].y > 100 ? -1 : 1;
+          [dx, dy, d] = [s, s, Math.SQRT2];
+        }
+        const empuje = (SEPARACION - d) / 2 + 0.01;
+        const ux = dx / d;
+        const uy = dy / d;
+        pos[i] = { x: dentro(pos[i].x - ux * empuje), y: dentro(pos[i].y - uy * empuje) };
+        pos[j] = { x: dentro(pos[j].x + ux * empuje), y: dentro(pos[j].y + uy * empuje) };
+      }
+    }
+    if (!tocan) break;
+  }
+  return pos.map((p, i) => {
+    let vecino: { x: number; y: number } | null = null;
+    let cerca = SEPARACION * 2;
+    pos.forEach((q, j) => {
+      const d = Math.hypot(q.x - p.x, q.y - p.y);
+      if (j !== i && d < cerca) [vecino, cerca] = [q, d];
+    });
+    const v = vecino as { x: number; y: number } | null;
+    let lado: Lado = !v ? "arriba" : v.x < p.x || (v.x === p.x && v.y < p.y) ? "derecha" : "izquierda";
+    // At the edges a side label would hit the Y axis ticks or be cut off.
+    if (lado === "izquierda" && p.x < 8) lado = "derecha";
+    if (lado === "derecha" && p.x > 92) lado = "arriba";
+    return { ...p, lado, movido: Math.hypot(p.x - puntos[i].x, p.y - puntos[i].y) > 0.05 };
+  });
+}
+
 /** Chart 7: physical vs budget progress per institution, with the ±5-point coherence band. */
 export function CoherenciaChart({
   puntos,
@@ -178,7 +232,9 @@ export function CoherenciaChart({
     const x = i * 5;
     return { x, banda: [Math.max(0, x - 5), Math.min(100, x + 5)], diagonal: x };
   });
-  const data = puntos.map((p) => ({ ...p, x: p.fisico * 100, y: p.presupuesto * 100 }));
+  const separados = separarPuntos(puntos.map((p) => ({ x: p.fisico * 100, y: p.presupuesto * 100 })));
+  const data = puntos.map((p, i) => ({ ...p, x: separados[i].x, y: separados[i].y, lado: separados[i].lado }));
+  const hayMovidos = separados.some((s) => s.movido);
   return (
     <div className="space-y-2">
       {/* The coherence colors are named by the counts row above the chart; this adds the guides. */}
@@ -188,7 +244,7 @@ export function CoherenciaChart({
       ]} />
       <div style={{ height: 340 }}>
         <ResponsiveContainer width="100%" height="100%">
-          <ComposedChart data={banda} margin={{ top: 24, right: 24, left: 8, bottom: 24 }}>
+          <ComposedChart data={banda} margin={{ top: 24, right: 44, left: 8, bottom: 24 }}>
             <CartesianGrid stroke={INK.grid} />
             <XAxis type="number" dataKey="x" domain={[0, 100]} ticks={[0, 20, 40, 60, 80, 100]} tick={axisTick} tickFormatter={pctTick}
               label={{ value: "Avance físico", position: "insideBottom", offset: -14, fill: INK.secondary, fontSize: 11 }} />
@@ -213,19 +269,29 @@ export function CoherenciaChart({
               }}
             />
             <Scatter data={data} dataKey="y" isAnimationActive={false} onClick={(d) => onSelect((d as unknown as { id: string }).id)} cursor="pointer"
-              shape={(props: { cx?: number; cy?: number; payload?: (typeof data)[number] }) => (
-                <g>
-                  {/* A transparent 24px hit area around the 10px dot. */}
-                  <circle cx={props.cx} cy={props.cy} r={12} fill="transparent" />
-                  <circle cx={props.cx} cy={props.cy} r={5} fill={props.payload ? leyenda.coherencia[props.payload.coherencia].color : INK.muted}
-                    stroke={INK.surface} strokeWidth={2} />
-                </g>
-              )}>
-              <LabelList dataKey="sigla" position="top" style={{ fill: INK.secondary, fontSize: 10 }} />
-            </Scatter>
+              shape={(props: { cx?: number; cy?: number; payload?: (typeof data)[number] }) => {
+                const { cx = 0, cy = 0, payload } = props;
+                const lado = payload?.lado ?? "arriba";
+                const texto =
+                  lado === "arriba" ? { x: cx, y: cy - 9, textAnchor: "middle" as const }
+                  : lado === "derecha" ? { x: cx + 9, y: cy + 3.5, textAnchor: "start" as const }
+                  : { x: cx - 9, y: cy + 3.5, textAnchor: "end" as const };
+                return (
+                  <g>
+                    {/* A transparent 24px hit area around the 10px dot. */}
+                    <circle cx={cx} cy={cy} r={12} fill="transparent" />
+                    <circle cx={cx} cy={cy} r={5} fill={payload ? leyenda.coherencia[payload.coherencia].color : INK.muted}
+                      stroke={INK.surface} strokeWidth={2} />
+                    {payload && <text {...texto} fill={INK.secondary} fontSize={10}>{payload.sigla}</text>}
+                  </g>
+                );
+              }} />
           </ComposedChart>
         </ResponsiveContainer>
       </div>
+      {hayMovidos && (
+        <p className="text-[11px] text-slate-500">Los puntos muy cercanos se separan ligeramente para que se lean las siglas; los valores exactos están en la tabla.</p>
+      )}
     </div>
   );
 }
