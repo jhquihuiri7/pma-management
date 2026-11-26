@@ -140,6 +140,9 @@ services:
     networks:
       - default
       - previene-link
+    dns:
+      - 1.1.1.1
+      - 8.8.8.8
     extra_hosts:
       - "host.docker.internal:host-gateway"
     expose:
@@ -256,6 +259,9 @@ services:
     networks:
       - default
       - previene-link
+    dns:
+      - 1.1.1.1
+      - 8.8.8.8
     extra_hosts:
       - "host.docker.internal:host-gateway"
     volumes:
